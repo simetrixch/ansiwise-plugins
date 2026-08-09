@@ -219,6 +219,81 @@ void main() {
       );
     });
   });
+
+  group('the invocation, which the probes above do not reach', () {
+    // The real-tools group already plants a fault and watches the analyzer report it — but what it
+    // plants is an assignment of text to an int, and that is an ERROR. An error is reported whatever
+    // flags the run carries, so every one of those probes stays green with `--fatal-infos` removed.
+    // And removing it is exactly the edit that matters: strict casts, strict inference and strict
+    // raw types all report at INFO, so without the flag the whole strictness setting of this
+    // repository is advisory and nothing anywhere says so.
+    //
+    // So the fault planted here reports at info, and the same tree is judged TWICE — with the flag
+    // and without. "It went red" proves nothing until the weakened invocation is shown to go green
+    // on the very same tree.
+
+    late Directory onlyAnInfo;
+
+    setUpAll(() {
+      onlyAnInfo = Directory.systemTemp.createTempSync('hostyour-cloud-info-');
+      Directory('${onlyAnInfo.path}/lib').createSync(recursive: true);
+      File('${onlyAnInfo.path}/pubspec.yaml').writeAsStringSync('name: planted_info\n');
+      // One lint, enabled outright, so the planted package needs no dependency in order to resolve.
+      // A lint reports at info, which is the level this repository's strictness settings report at.
+      File(
+        '${onlyAnInfo.path}/analysis_options.yaml',
+      ).writeAsStringSync('linter:\n  rules:\n    - prefer_single_quotes\n');
+      File(
+        '${onlyAnInfo.path}/lib/planted.dart',
+      ).writeAsStringSync('const String planted = "double";\n');
+    });
+
+    tearDownAll(() => onlyAnInfo.deleteSync(recursive: true));
+
+    test('a fault that only reports at info turns the analyzer red', () async {
+      final ToolRun run = await const RealDartToolchain().analyze(directory: onlyAnInfo.path);
+      expect(
+        run.exitCode,
+        isNot(0),
+        reason:
+            'this is the fault class strict casts, strict inference and strict raw types all '
+            'produce, and the one the flag exists for',
+      );
+    });
+
+    test('and the same tree passes once --fatal-infos is taken away', () async {
+      final Process weakened = await Process.start(Platform.resolvedExecutable, <String>[
+        for (final String argument in RealDartToolchain.analyzerArgv)
+          if (argument != '--fatal-infos') argument,
+      ], workingDirectory: onlyAnInfo.path);
+      await weakened.stdout.drain<void>();
+      await weakened.stderr.drain<void>();
+      expect(
+        await weakened.exitCode,
+        0,
+        reason:
+            'one flag fewer and the fault is gone from the verdict — which is why dropping it is a '
+            'silent edit, and why nothing above could have caught it',
+      );
+    });
+
+    test('the analyzer really is started with both flags', () {
+      expect(
+        RealDartToolchain.analyzerArgv,
+        containsAll(<String>['--fatal-infos', '--fatal-warnings']),
+      );
+    });
+
+    test('the formatter writes nothing and reports a difference', () {
+      expect(
+        RealDartToolchain.formatterArgv,
+        containsAll(<String>['--output=none', '--set-exit-if-changed']),
+        reason:
+            'a check that repaired what it measures would be green the second time for having '
+            'changed the thing it judged',
+      );
+    });
+  });
 }
 
 Directory _scratch(String name) {

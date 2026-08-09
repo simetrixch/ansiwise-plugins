@@ -23,17 +23,37 @@ final class RealDartToolchain implements DartToolchain {
   Future<ToolRun> pubGet({required String directory}) =>
       _capture(<String>['pub', 'get'], directory: directory);
 
-  @override
-  Future<ToolRun> analyze({required String directory}) =>
-      _capture(<String>['analyze', '--fatal-infos', '--fatal-warnings'], directory: directory);
+  /// How the analyzer is started, and why the flags are a value rather than a literal.
+  ///
+  /// `--fatal-infos` is not a preference. This repository's analysis options turn on strict casts,
+  /// strict inference and strict raw types, and every one of them reports at INFO — so a run without
+  /// the flag reports success over exactly the fault class those settings exist to catch. Dropping
+  /// it leaves every test green and the gate blind, because nothing is wrong with the OUTPUT for a
+  /// parser to notice; the invocation is what changed.
+  ///
+  /// Named so a check can drive it. test/checks/analysis_check_test.dart judges one planted tree
+  /// twice — with the flag and without — because "it went red" proves nothing until the weakened
+  /// invocation is shown to go green on the very same tree.
+  static const List<String> analyzerArgv = <String>['analyze', '--fatal-infos', '--fatal-warnings'];
 
-  @override
-  Future<ToolRun> format({required String directory}) => _capture(<String>[
+  /// How the formatter is started.
+  ///
+  /// `--output=none` so a red run leaves the tree exactly as it found it: a check that repaired what
+  /// it measures would be green the second time for having changed the thing it judged.
+  static const List<String> formatterArgv = <String>[
     'format',
     '--output=none',
     '--set-exit-if-changed',
     '.',
-  ], directory: directory);
+  ];
+
+  @override
+  Future<ToolRun> analyze({required String directory}) =>
+      _capture(analyzerArgv, directory: directory);
+
+  @override
+  Future<ToolRun> format({required String directory}) =>
+      _capture(formatterArgv, directory: directory);
 
   @override
   Future<int> runTests({required String directory}) =>

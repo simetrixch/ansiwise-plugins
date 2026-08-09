@@ -19,6 +19,9 @@
 # Every path of the audited tree is what branch-classes.yaml says it is, and the stampers really
 # write what the declaration says they write.
 branch-class: test/branch_class_test.dart
+# The analyzer invocation goes red on an info, --fatal-infos is what catches it, and a directory
+# with no Dart in it is refused instead of reported clean.
+analysis-invocation: test/analysis_invocation_test.dart
 # This file agrees with the suite on disk, and the refusal that enforces it can really go red.
 declared-checks: test/declared_checks_test.dart
 # The channel ceiling table is stated in exactly one file of the values chain.
