@@ -122,10 +122,23 @@ final class ValueStack {
   ///
   /// A chart with no stage of its own is rendered once; everything else once per stage, because the
   /// stage file is a position in its stack and the three do not carry the same keys.
+  ///
+  /// READ FROM THE TREE, not from the constant the audit is driven by. `platform/values-<stage>.yaml`
+  /// is how a stage says it exists here. A count derived from the same constant as the loop falls
+  /// WITH the loop: collapse the constant from three stages to one and both the work and the
+  /// expectation shrink together, leaving an equality that holds while two thirds of the coverage
+  /// is gone. A tree cannot be collapsed by editing one line — the files are there or they are not.
   List<String> get stagesRendered => switch (family) {
-    ChartFamily.bare || ChartFamily.quota => const <String>['dev'],
-    _ => stages,
+    ChartFamily.bare || ChartFamily.quota => stagesInTree.take(1).toList(),
+    _ => stagesInTree,
   };
+
+  /// The stages this tree carries; the declared stages when it carries none.
+  ///
+  /// The fallback is for a tree that says nothing about stages at all. Answering with an empty list
+  /// there would render nothing, and no renders reads as a chart that needs no stage rather than as
+  /// a tree nobody asked.
+  List<String> get stagesInTree => tree.stagesCarried.isEmpty ? stages : tree.stagesCarried;
 
   /// The sizing presets `apps/[app]` carries, or a single null where it carries none.
   List<String?> sizesOf(String app) {

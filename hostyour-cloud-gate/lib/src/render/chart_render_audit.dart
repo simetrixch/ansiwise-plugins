@@ -44,20 +44,11 @@ final class ChartRenderAudit {
 
   /// The stages this TREE carries, read from the per-stage values files under platform/.
   ///
-  /// Read from the tree and not from the constant the renders are driven by, and that difference is
-  /// the whole reason this exists. A denominator derived from the same constant as the loop falls
-  /// with it: collapse the constant from three stages to one and both the work and the expectation
-  /// halve, leaving a check that passes while two thirds of its coverage is gone. The tree cannot
-  /// be collapsed by editing one line — the files are either there or they are not.
-  List<String> get stagesDeclared {
-    final List<String> found = <String>[
-      for (final String name in tree.namesDirectlyUnder('platform'))
-        if (_stageValues.firstMatch(name)?.group(1) case final String stage)
-          if (stage != 'common') stage,
-    ];
-    found.sort();
-    return found;
-  }
+  /// The same answer the renders are driven by, and that is the point: [SourceTree.stagesCarried] is
+  /// what [ValueStack] asks too, so the work and the expectation cannot come from different places
+  /// and disagree. What this name is still for is saying so in a test — a reader holding the render
+  /// count against something wants to see where the number came from.
+  List<String> get stagesDeclared => tree.stagesCarried;
 
   /// How many renders this tree ASKS for: every chart, for every stage it is rendered at, at every
   /// size it carries.
@@ -80,53 +71,6 @@ final class ChartRenderAudit {
     }
     return wanted;
   }
-
-  /// The values files the catalog generator of [stage] names, in the order it names them.
-  ///
-  /// Read out of `argocd/<stage>/apps/applicationset.yaml` rather than restated. What a stack is
-  /// FOR is being the chain a cluster actually layers, and a restatement of that chain is a second
-  /// copy of it: reorder the generator and the restatement stays as it was, so this audit goes on
-  /// proving a stack no cluster uses — green, and about the wrong thing.
-  ///
-  /// The two markers the generator carries are filled here: `$values/` is how ArgoCD names its
-  /// values-only source and means the repository root, and `{{ .name }}` is the application the
-  /// generator is rendering. Nothing else in the list is templated.
-  List<String> generatorStack(String stage, {required String app}) {
-    final String? manifest = tree.textOf('argocd/$stage/apps/applicationset.yaml');
-    if (manifest == null) {
-      // Not an empty answer dressed as one: a stage whose generator is not in the tree has no chain
-      // to compare against, and a caller reading an empty list would take that for agreement.
-      throw StateError('argocd/$stage/apps/applicationset.yaml is not in this tree');
-    }
-    final List<String> named = <String>[];
-    bool inside = false;
-    for (final String line in manifest.split('\n')) {
-      if (_valueFilesKey.hasMatch(line)) {
-        inside = true;
-        continue;
-      }
-      if (!inside) {
-        continue;
-      }
-      final Match? entry = _valueFileEntry.firstMatch(line);
-      if (entry == null) {
-        // The first line that is not an entry of this list ends it. Reading to the end of the file
-        // would collect the entries of every other generator in it.
-        break;
-      }
-      named.add(entry.group(1)!.trim().replaceAll('{{ .name }}', app));
-    }
-    return named;
-  }
-
-  /// The key whose list is the chain a cluster layers.
-  static final RegExp _valueFilesKey = RegExp(r'^\s*valueFiles:\s*$');
-
-  /// One entry of it, comment lines and blank lines excluded by not matching.
-  static final RegExp _valueFileEntry = RegExp(r'^\s*-\s+(\S.*?)\s*$');
-
-  /// `platform/values-<stage>.yaml`, which is how a stage says it exists in this tree.
-  static final RegExp _stageValues = RegExp(r'^values-([a-z]+)\.yaml$');
 
   /// Every chart directory under apps/, sorted.
   List<String> get charts => tree.namesDirectlyUnder('apps');

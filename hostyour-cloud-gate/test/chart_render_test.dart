@@ -163,6 +163,34 @@ void main() {
       installationValues: installationValues.path,
     );
 
+    test('the denominator falls when a stage leaves the tree', () {
+      // What the equality above is worth depends entirely on this. `rendersExpected` counts stages
+      // times sizes, and the whole point of reading the stages off the TREE was that the count
+      // cannot be collapsed by editing one constant — so the count has to be shown to MOVE when the
+      // tree does. Without this, an expectation that always answered the same number would satisfy
+      // the equality for ever and prove nothing.
+      final SourceTree threeStages = probe;
+      final SourceTree twoStages = _plantedRepository(probeRoot, 'one-stage-fewer');
+      File(twoStages.nativePathOf('platform/values-prod.yaml')).deleteSync();
+      final SourceTree afterwards = SourceTree.readingFrom(
+        Directory('${probeRoot.path}${Platform.pathSeparator}one-stage-fewer'),
+        <String>[
+          for (final String path in twoStages.paths)
+            if (path != 'platform/values-prod.yaml') path,
+        ],
+      );
+
+      expect(auditOf(threeStages).stagesDeclared, hasLength(3));
+      expect(auditOf(afterwards).stagesDeclared, hasLength(2));
+      expect(
+        auditOf(afterwards).rendersExpected,
+        lessThan(auditOf(threeStages).rendersExpected),
+        reason:
+            'a stage removed from the tree has to cost renders in the expectation as well as in '
+            'the work, or the equality is between two numbers that fall together and says nothing',
+      );
+    });
+
     test('a catalog entry with no chart directory is reported', () {
       expect(
         auditOf(probe).catalogEntriesWithoutACharts(),

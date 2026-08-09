@@ -101,6 +101,28 @@ final class SourceTree {
     return sorted;
   }
 
+  /// The stages THIS tree carries, sorted, read from `platform/values-<stage>.yaml`.
+  ///
+  /// A stage says it exists by having a values file, and that is a fact about the tree rather than
+  /// about anything reading it. Everything that counts stages asks here, because a count derived
+  /// from the same constant as the work it measures falls with that work: collapse the constant from
+  /// three stages to one and both halve, leaving a check that passes over two thirds of its coverage
+  /// having quietly gone. A tree cannot be collapsed by editing one line.
+  ///
+  /// `values-common.yaml` is not a stage. It is what the three layer on top of.
+  List<String> get stagesCarried {
+    final List<String> found = <String>[
+      for (final String name in namesDirectlyUnder('platform'))
+        if (_stageValues.firstMatch(name)?.group(1) case final String stage)
+          if (stage != 'common') stage,
+    ];
+    found.sort();
+    return found;
+  }
+
+  /// `values-<stage>.yaml`, which is how a stage says it exists.
+  static final RegExp _stageValues = RegExp(r'^values-([a-z]+)\.yaml$');
+
   /// The paths in [directory] and under it, sorted.
   List<String> pathsUnder(String directory) {
     final String prefix = '$directory/';
