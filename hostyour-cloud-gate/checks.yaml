@@ -1,0 +1,42 @@
+# Every check this gate makes, and the file that carries it.
+#
+# WHY THIS FILE EXISTS. `dart test` discovers whatever is on disk and reports whether any of it
+# failed. Delete a test file and nothing fails: the check is simply not there, and the run prints
+# that every check is green. It is worse than a missing test, because a check and its counter-probe
+# live in the same file — the thing that would have noticed goes with the thing it was watching.
+#
+# So the gate does not ask the disk what it checks. It is told here, and it refuses to start when a
+# declared check is not on disk, naming the one that vanished. The verdict then says how many ran,
+# which is a number a reader can hold the word "every" against.
+#
+# FORMAT. `<check>: <file, relative to this file>`, one per line, the reason on the comment line
+# directly above it. tool/ci.dart reads it line by line and imports nothing but dart:io — the gate
+# has to be able to start on a fresh clone where no package has been resolved.
+#
+# ADDING A CHECK MEANS ADDING A LINE. A test file that is not declared here is reported too: an
+# undeclared check is one nobody agreed to, and it is how a suite grows a file that judges nothing.
+
+# Every path of the audited tree is what branch-classes.yaml says it is, and the stampers really
+# write what the declaration says they write.
+branch-class: test/branch_class_test.dart
+# This file agrees with the suite on disk, and the refusal that enforces it can really go red.
+declared-checks: test/declared_checks_test.dart
+# The channel ceiling table is stated in exactly one file of the values chain.
+channel-table: test/channel_table_test.dart
+# Every chart renders, at every stage and every size, the way the reconciler renders it.
+chart-render: test/chart_render_test.dart
+# Every Dart directive of this package spells the path it names byte for byte.
+directive-case: test/directive_case_test.dart
+# What .gitattributes declares LF is LF in the working copy, six Tekton scripts among them.
+line-endings: test/line_endings_test.dart
+# No abolished word stands in a file name or a directory name.
+naming: test/naming_test.dart
+# Every ExternalSecret of the audited tree carries the platform-wide delivery rule.
+secret-delivery: test/secret_delivery_test.dart
+# The pinned Dart and the pinned helm are what the checks are answered under.
+toolchain-guard: test/toolchain_guard_test.dart
+# Every values file an ApplicationSet names is really in the tree, which ignoreMissingValueFiles
+# would otherwise swallow.
+value-files: test/value_files_test.dart
+# Every version the tree pins is stated in platform/versions.yaml and nowhere else.
+version-pins: test/version_pins_test.dart

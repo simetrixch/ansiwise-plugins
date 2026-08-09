@@ -36,6 +36,7 @@ library;
 
 import 'dart:io';
 
+import 'declared_checks.dart';
 import 'toolchain_guard.dart';
 
 /// THE PINS. Each was read from the source named beside it, on the date given. A version recalled
@@ -70,7 +71,31 @@ Future<void> main(List<String> arguments) async {
   final String package = _package.path;
   final List<String> failed = <String>[];
 
-  // `pub get` first and on its own: nothing below can say anything true without a resolved package
+  // BEFORE ANYTHING RUNS, because a suite cannot report a check that is not in it. `dart test`
+  // discovers what is on disk: delete a file and nothing fails, since the check is not there to
+  // fail, and a check takes its own counter-probe with it. So the declaration is read first and the
+  // disk is held against it, and the run stops naming what vanished.
+  stdout.writeln('\n########## declared checks ##########');
+  final File declaration = File('$package/$checksFile');
+  if (!declaration.existsSync()) {
+    stderr.writeln('ci: FAIL — $checksFile is not there, so this gate cannot say what it checks');
+    exit(1);
+  }
+  final List<DeclaredCheck> declared = parseChecks(declaration.readAsStringSync());
+  final List<String> mismatches = disagreements(
+    declared: declared,
+    testFilesOnDisk: testFilesUnder(_package),
+  );
+  if (mismatches.isNotEmpty) {
+    for (final String mismatch in mismatches) {
+      stderr.writeln('  $mismatch');
+    }
+    stderr.writeln('ci: FAIL — declared checks');
+    exit(1);
+  }
+  stdout.writeln('declared checks: ${declared.length}, all present');
+
+  // `pub get` next and on its own: nothing below can say anything true without a resolved package
   // config — the analyzer reports every import as unresolved and the failure reads as a package
   // full of defects.
   stdout.writeln('\n########## dart pub get ##########');
@@ -96,8 +121,11 @@ Future<void> main(List<String> arguments) async {
     stderr.writeln('ci: FAIL — ${failed.join(' ')}');
     exit(1);
   }
-  stdout.writeln('ci: OK — every check green for hostyour_cloud_gate');
+  stdout.writeln('ci: OK — all ${declared.length} declared checks green for hostyour_cloud_gate');
 }
+
+/// Where this gate declares what it checks, relative to the package root.
+const String checksFile = 'checks.yaml';
 
 /// Runs `dart [argv]` in [workingDirectory], showing its output as it happens.
 ///
