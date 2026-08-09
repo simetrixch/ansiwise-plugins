@@ -176,8 +176,14 @@ const String implementsAnInterface = 'implements';
 ///
 /// `final class <Name> <declaredWith>` and nothing looser. A step is a final class extending one of
 /// the three kinds and a predicate is a final class implementing `Predicate`, so this is the whole
-/// shape of the line; matching a bare `class <Name>` would accept the doc comment above it, and
-/// matching the name alone would accept any line that mentions it.
+/// shape of the declaration; matching a bare `class <Name>` would accept the doc comment above it,
+/// and matching the name alone would accept any line that mentions it.
+///
+/// The `extends` may stand on the FOLLOWING line, because `dart format` moves it there once the
+/// class name and its type argument no longer fit in one line — `ConfigureSlaveApiserverOidcTrust`
+/// captures a record of two things and does not fit. Which line it lands on is the formatter's
+/// decision and says nothing about the code, so a check that failed on it would be reporting the
+/// line width.
 bool declaresClass(
   SourceTree tree, {
   required String path,
@@ -194,7 +200,15 @@ bool declaresClass(
     return false;
   }
   // Leading whitespace off, so a class that is one day nested reads the same as one at the margin.
-  return lines[line - 1].trimLeft().startsWith('final class $className $declaredWith');
+  final String declaration = lines[line - 1].trimLeft();
+  if (declaration.startsWith('final class $className $declaredWith')) {
+    return true;
+  }
+  // The wrapped form, and only where the name stands alone on the line — `final class Foo` must not
+  // be accepted as the declaration of `FooBar`.
+  return declaration == 'final class $className' &&
+      line < lines.length &&
+      lines[line].trimLeft().startsWith('$declaredWith ');
 }
 
 /// Every step class declared under [under] in [tree], sorted by where it sits.

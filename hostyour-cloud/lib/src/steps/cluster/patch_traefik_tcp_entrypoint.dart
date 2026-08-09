@@ -16,7 +16,7 @@ import 'patch_traefik_cross_namespace.dart';
 ///
 /// This is a single-node exposure: the port on the pod is the port on the machine, and nothing in
 /// front of it balances anything. An empty list is a step with nothing to do.
-final class PatchTraefikTcpEntrypoint extends ReversibleStep {
+final class PatchTraefikTcpEntrypoint extends ReversibleStep<List<String>> {
   /// Adds a listener for each of [entrypoints] to [daemonSet] in [namespace].
   const PatchTraefikTcpEntrypoint({
     required this.entrypoints,
@@ -157,8 +157,29 @@ final class PatchTraefikTcpEntrypoint extends ReversibleStep {
     }
   }
 
+  /// The arguments of the asked-for entry points the controller does not carry yet.
+  ///
+  /// Those are the ones the apply appends, and the ones the undo takes out again. An entry point
+  /// that was already declared belongs to whoever declared it, and removing it would take the
+  /// listener away from every route that names it.
   @override
-  Future<void> undo(StepContext context) async {
+  Future<List<String>> capture(StepContext context) async {
+    final List<String>? declared = await PatchTraefikCrossNamespace.declaredArguments(
+      context,
+      namespace: namespace,
+      daemonSet: daemonSet,
+    );
+    if (declared == null) {
+      return const <String>[];
+    }
+    return <String>[
+      for (final _Entrypoint entrypoint in _read(entrypoints))
+        if (!declared.contains(entrypoint.argument)) entrypoint.argument,
+    ];
+  }
+
+  @override
+  Future<void> undo(StepContext context, List<String> captured) async {
     final List<String>? declared = await PatchTraefikCrossNamespace.declaredArguments(
       context,
       namespace: namespace,
@@ -167,11 +188,13 @@ final class PatchTraefikTcpEntrypoint extends ReversibleStep {
     if (declared == null) {
       return;
     }
-    // Highest position first, so removing one does not move the next one out from under its own
-    // index.
+    // WHICH arguments come out is what the capture decided; WHERE they sit is read now. An append
+    // leaves an argument wherever the list has grown to since, so a remembered index would take out
+    // whatever moved into that place. Highest position first, so removing one does not move the next
+    // one out from under its own index.
     final List<int> positions = <int>[
-      for (final _Entrypoint entrypoint in _read(entrypoints))
-        if (declared.contains(entrypoint.argument)) declared.indexOf(entrypoint.argument),
+      for (final String argument in captured)
+        if (declared.contains(argument)) declared.indexOf(argument),
     ]..sort((int a, int b) => b.compareTo(a));
     if (positions.isEmpty) {
       return;

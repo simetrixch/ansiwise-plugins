@@ -208,21 +208,29 @@ void main() {
 
     test('taking it back removes a map nothing held before', () async {
       final FakeFiles files = FakeFiles();
-      final FakeShell shell = FakeShell()
-        ..fails('git -C $repository ls-files --error-unmatch -- $mapPath');
+      final StepContext context = contextOn(files: files);
 
-      await writeMap.apply(contextOn(shell: shell, files: files));
-      await writeMap.undo(contextOn(shell: shell, files: files));
+      final String? before = await writeMap.capture(context);
+      await writeMap.apply(context);
+      await writeMap.undo(context, before);
       expect(files.contents.containsKey(mapPath), isFalse);
     });
 
-    test('taking it back restores a map that was already versioned', () async {
-      final FakeFiles files = FakeFiles();
-      final FakeShell shell = FakeShell()
-        ..answers('git -C $repository ls-files --error-unmatch -- $mapPath', '$mapPath\n');
+    test('taking it back restores the map byte for byte, including what was never committed', () async {
+      // What the capture read goes back, and it is read off the file rather than out of git. A map
+      // an operator had edited and not committed comes back with that edit; asking git for it would
+      // have handed back the committed text and thrown the edit away, in the middle of cleaning up
+      // after a failure.
+      const String edited = 'clusters:\n  - fqdn: m1.example.com # an operator typed this\n';
+      final FakeFiles files = FakeFiles(<String, String>{mapPath: edited});
+      final StepContext context = contextOn(files: files);
 
-      await writeMap.undo(contextOn(shell: shell, files: files));
-      expect(shell.ran, contains('git -C $repository checkout -- $mapPath'));
+      final String? before = await writeMap.capture(context);
+      await writeMap.apply(context);
+      expect(files.contents[mapPath], isNot(edited), reason: 'the apply really did overwrite it');
+
+      await writeMap.undo(context, before);
+      expect(files.contents[mapPath], edited);
       expect(files.deleted, isEmpty);
     });
   });
@@ -421,8 +429,9 @@ void main() {
       final FakeShell shell = listing(tracked);
       final StepContext context = contextOn(shell: shell, files: files);
 
+      final List<String> removed = await roleStep.capture(context);
       await roleStep.apply(context);
-      await roleStep.undo(context);
+      await roleStep.undo(context, removed);
 
       final String restore = shell.ran.firstWhere(
         (String each) => each.contains('checkout --'),

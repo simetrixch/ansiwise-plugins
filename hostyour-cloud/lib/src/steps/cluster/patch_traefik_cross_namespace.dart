@@ -16,7 +16,7 @@ import 'package:ansiwise_api/ansiwise_api.dart';
 ///
 /// **A missing controller is a skip and not a failure.** This runs after the ingress addon is
 /// enabled; on a machine where it is not, there is nothing to patch and nothing wrong.
-final class PatchTraefikCrossNamespace extends ReversibleStep {
+final class PatchTraefikCrossNamespace extends ReversibleStep<bool> {
   /// Adds the flag to [daemonSet] in [namespace].
   const PatchTraefikCrossNamespace({required this.namespace, required this.daemonSet});
 
@@ -145,8 +145,26 @@ final class PatchTraefikCrossNamespace extends ReversibleStep {
     }
   }
 
+  /// Whether the controller is declared with the flag already.
+  ///
+  /// A controller that carried it before this ran was patched by something else, and taking the flag
+  /// out would make every route behind the login lose its middleware reference — silently, since the
+  /// route goes on answering without asking anybody who they are.
   @override
-  Future<void> undo(StepContext context) async {
+  Future<bool> capture(StepContext context) async {
+    final List<String>? declared = await declaredArguments(
+      context,
+      namespace: namespace,
+      daemonSet: daemonSet,
+    );
+    return declared?.contains(flag) ?? false;
+  }
+
+  @override
+  Future<void> undo(StepContext context, bool captured) async {
+    if (captured) {
+      return;
+    }
     // The position is read now rather than remembered: a patch that appended the flag at the end
     // leaves it wherever the list has grown to since, and removing by a remembered index would take
     // out whatever moved into that place.

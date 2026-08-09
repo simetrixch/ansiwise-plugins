@@ -146,8 +146,11 @@ void main() {
   });
 
   test('the undo removes the map and tolerates it being gone', () async {
+    // False is what the capture answers for a namespace that did not already carry the ConfigMap,
+    // which is the only case where taking the run back means deleting it. Passed rather than
+    // captured so the single command below is the delete and not a `kubectl get` in front of it.
     final FakeShell shell = diffing(0);
-    await step.undo(contextOn(shell).context);
+    await step.undo(contextOn(shell).context, false);
     expect(shell.commands.single.argv, <String>[
       'kubectl',
       'delete',

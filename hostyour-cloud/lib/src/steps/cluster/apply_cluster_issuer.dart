@@ -6,7 +6,7 @@ import 'delete_existing_cluster_issuer.dart';
 ///
 /// Whether it can then actually issue anything is a different question, asked by the step after
 /// this: the object is accepted long before the account behind it is registered.
-final class ApplyClusterIssuer extends ReversibleStep {
+final class ApplyClusterIssuer extends ReversibleStep<bool> {
   /// Applies the issuer [name] rendered into [stateDirectory].
   const ApplyClusterIssuer({required this.name, required this.stateDirectory});
 
@@ -67,8 +67,19 @@ final class ApplyClusterIssuer extends ReversibleStep {
     }
   }
 
+  /// Whether the issuer is in the cluster already.
+  ///
+  /// The undo deletes it, and an issuer that was there before this ran is one every certificate on
+  /// the cluster is issued by — deleting it would take the account key's registration out of use
+  /// while cleaning up after something else.
   @override
-  Future<void> undo(StepContext context) async {
+  Future<bool> capture(StepContext context) => DeleteExistingClusterIssuer.exists(context, name);
+
+  @override
+  Future<void> undo(StepContext context, bool captured) async {
+    if (captured) {
+      return;
+    }
     await context.shell.run(
       Command('microk8s', <String>['kubectl', 'delete', 'clusterissuer', name]),
     );

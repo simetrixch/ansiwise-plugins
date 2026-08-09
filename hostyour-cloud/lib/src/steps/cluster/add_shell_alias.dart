@@ -8,7 +8,7 @@ import '../host/install_authorized_key.dart';
 /// file into an account that deliberately has none, and everything that account's shell then does
 /// would be decided by a file this program wrote. So a missing one is skipped, and the account keeps
 /// whatever shell arrangement it had.
-final class AddShellAlias extends ReversibleStep {
+final class AddShellAlias extends ReversibleStep<List<String>> {
   /// Makes [alias] run [command] for the operator's account.
   const AddShellAlias({required this.alias, required this.command, required this.rcFiles});
 
@@ -98,13 +98,25 @@ final class AddShellAlias extends ReversibleStep {
     }
   }
 
+  /// The startup files that do not carry the line yet, which are the ones the apply writes into.
+  ///
+  /// The undo takes the line out of exactly these. A file that already carried it was written by
+  /// something else, and stripping the line there would take away an alias this run never added.
   @override
-  Future<void> undo(StepContext context) async {
+  Future<List<String>> capture(StepContext context) async {
     final String? home = await homeOf(context, InstallAuthorizedKey.userIn(context));
     if (home == null) {
-      return;
+      return const <String>[];
     }
-    for (final String path in await _present(context, home)) {
+    return _missing(context, await _present(context, home));
+  }
+
+  @override
+  Future<void> undo(StepContext context, List<String> captured) async {
+    for (final String path in captured) {
+      if (!await context.files.exists(path)) {
+        continue;
+      }
       final String current = await context.files.read(path);
       if (!current.contains(line)) {
         continue;

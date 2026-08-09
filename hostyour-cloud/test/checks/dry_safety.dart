@@ -4,6 +4,11 @@
 /// hundreds of places that could change a machine, and no amount of review could show that none of
 /// them fires when somebody asks for a dry run. Here it is decided by running every step.
 ///
+/// WHAT IS DRIVEN. A step's `check`, its `plan`, and — for a reversible one — its `capture`. The
+/// third is the one nobody would think to look at: it runs in every mode, because an undo has to be
+/// handed what was there whether or not the run turns out to need it, and it is preparation for
+/// taking work back rather than the work itself.
+///
 /// THE GUARANTEE RESTS ON TWO INDEPENDENT THINGS, and this check drives the second. The engine calls
 /// a step's `plan` and never its `apply`; and the ports a step is given under a dry run —
 /// `PlanningShell`, `PlanningFiles`, `PlanningHttp` — throw [MutationRefused] on anything the step did
@@ -201,6 +206,23 @@ Future<DryRunOutcome> askWhatItWouldDo(
       what = refusal.what;
     } on Object catch (failure) {
       what = 'its plan threw $failure';
+    }
+  }
+
+  // The capture too, and it is the one nobody would suspect. It runs in EVERY mode, including the
+  // two that change nothing, because an undo has to be handed what was there whether or not the run
+  // turns out to need it. A capture that reached for something — read a file by writing a temporary
+  // one, asked a tool that mutates on its way to answering — would break the dry-run guarantee at
+  // the one place nobody looks, because it is not the step's own work but the preparation for
+  // taking that work back.
+  if (!refused && step is ReversibleStep<Object?>) {
+    try {
+      await step.capture(context);
+    } on MutationRefused catch (refusal) {
+      refused = true;
+      what = refusal.what;
+    } on Object catch (failure) {
+      what = 'its capture threw $failure';
     }
   }
 

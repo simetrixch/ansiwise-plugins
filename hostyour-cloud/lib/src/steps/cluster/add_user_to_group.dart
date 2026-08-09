@@ -10,7 +10,7 @@ import 'install_microk8s_snap.dart';
 ///
 /// The membership takes effect at the next login, which is why the step reports it: an operator who
 /// runs the next command in the session that is already open still meets the refusal.
-final class AddUserToGroup extends ReversibleStep {
+final class AddUserToGroup extends ReversibleStep<bool> {
   /// Puts the operator's account in [group].
   const AddUserToGroup({required this.group});
 
@@ -79,8 +79,23 @@ final class AddUserToGroup extends ReversibleStep {
     );
   }
 
+  /// Whether the account is in the group already.
+  ///
+  /// The undo takes the account out again, and an account that carried the membership before this
+  /// ran would lose one this step never gave it.
   @override
-  Future<void> undo(StepContext context) async {
+  Future<bool> capture(StepContext context) async {
+    final CommandResult groups = await context.shell.run(
+      Command.observing('groups', <String>[InstallAuthorizedKey.userIn(context)]),
+    );
+    return groups.ok && groups.stdout.split(RegExp(r'[\s:]+')).contains(group);
+  }
+
+  @override
+  Future<void> undo(StepContext context, bool captured) async {
+    if (captured) {
+      return;
+    }
     await context.shell.run(
       Command('gpasswd', <String>['--delete', InstallAuthorizedKey.userIn(context), group]),
     );

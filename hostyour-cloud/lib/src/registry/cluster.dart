@@ -119,7 +119,7 @@ const Map<StepName, RegisteredStep> clusterSteps = <StepName, RegisteredStep>{
   ),
   StepName('stamp_calico_pool_cidr_in_cni_manifest'): RegisteredStep(
     name: StepName('stamp_calico_pool_cidr_in_cni_manifest'),
-    source: 'lib/src/steps/cluster/stamp_calico_pool_cidr_in_cni_manifest.dart:19',
+    source: 'lib/src/steps/cluster/stamp_calico_pool_cidr_in_cni_manifest.dart:20',
     create: StampCalicoPoolCidrInCniManifest.fromArguments,
     arguments: StampCalicoPoolCidrInCniManifest.arguments,
   ),
@@ -200,7 +200,7 @@ const Map<StepName, RegisteredStep> clusterSteps = <StepName, RegisteredStep>{
   ),
   StepName('patch_coredns_corefile'): RegisteredStep(
     name: StepName('patch_coredns_corefile'),
-    source: 'lib/src/steps/cluster/patch_coredns_corefile.dart:25',
+    source: 'lib/src/steps/cluster/patch_coredns_corefile.dart:26',
     create: PatchCorednsCorefile.fromArguments,
     arguments: PatchCorednsCorefile.arguments,
   ),

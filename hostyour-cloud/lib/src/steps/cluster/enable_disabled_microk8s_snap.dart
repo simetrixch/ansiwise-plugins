@@ -13,7 +13,7 @@ import 'install_microk8s_snap.dart';
 /// It is deliberately not an install. The snap on the machine carries its data directory, its
 /// certificates and its cluster; installing over it would be a different and much larger act than
 /// the one the machine needs.
-final class EnableDisabledMicrok8sSnap extends ReversibleStep {
+final class EnableDisabledMicrok8sSnap extends ReversibleStep<bool> {
   /// Switches the installed snap back on.
   const EnableDisabledMicrok8sSnap();
 
@@ -50,12 +50,16 @@ final class EnableDisabledMicrok8sSnap extends ReversibleStep {
     }
   }
 
+  /// Whether the snap is on the path already, which is the state this step produces.
+  ///
+  /// A snap that was already on is one this step did not switch on, and switching it off would take
+  /// away a running cluster while the run is cleaning up after a failure somewhere else.
   @override
-  Future<void> undo(StepContext context) async {
-    // Only when the snap is on the path, which is the state this step produced. An undo runs while
-    // cleaning up after a failure, and switching off a snap that something else installed in the
-    // meantime would take away a cluster nobody asked to lose.
-    if (!await InstallMicrok8sSnap.onPath(context)) {
+  Future<bool> capture(StepContext context) => InstallMicrok8sSnap.onPath(context);
+
+  @override
+  Future<void> undo(StepContext context, bool captured) async {
+    if (captured) {
       return;
     }
     await context.shell.run(Command('snap', _disable.sublist(1)));

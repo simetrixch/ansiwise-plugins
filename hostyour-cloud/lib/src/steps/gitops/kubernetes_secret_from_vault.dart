@@ -27,7 +27,7 @@ import 'vault_api.dart';
 /// platform's own work off `kubectl exec`. The file is readable by its owner alone, stands under a
 /// directory that is a memory file system on the machines this runs on, and is removed whether the
 /// apply succeeded or not.
-final class KubernetesSecretFromVault extends ReversibleStep {
+final class KubernetesSecretFromVault extends ReversibleStep<bool> {
   /// Writes the entry at [path] into the Secret [name] in [namespace].
   const KubernetesSecretFromVault({
     required this.repository,
@@ -125,21 +125,10 @@ final class KubernetesSecretFromVault extends ReversibleStep {
 
   @override
   Future<CheckResult> check(StepContext context) async {
-    final CommandResult found = await context.shell.run(
-      Command.observing('kubectl', <String>[
-        'get',
-        'secret',
-        name,
-        '--namespace',
-        namespace,
-        '-o',
-        'name',
-      ]),
-    );
     // Whether the Secret is there, and never what it holds. Comparing would mean reading a
     // credential off the cluster to decide whether to write it again, and the store is the truth
     // either way — a Secret that disagrees with it is put right by applying, not by measuring.
-    return found.ok
+    return await _isThere(context)
         ? CheckResult.satisfied('$name is in $namespace, carrying what $path holds')
         : const CheckResult.ready();
   }
@@ -169,8 +158,23 @@ final class KubernetesSecretFromVault extends ReversibleStep {
     }
   }
 
+  /// Whether [namespace] already holds a Secret called [name].
+  ///
+  /// Read before the apply, because the delete in the undo removes the Secret whether or not this
+  /// run wrote it, and every pod that mounts it is then a pod that cannot start.
+  ///
+  /// Whether it is there, and never what it holds — the same reading the check makes, for the same
+  /// reason: taking the values off the cluster would carry a credential through this run and into
+  /// the record. So nothing captured here is secret material, and a Secret that was already there
+  /// stands, carrying what the store says.
   @override
-  Future<void> undo(StepContext context) async {
+  Future<bool> capture(StepContext context) => _isThere(context);
+
+  @override
+  Future<void> undo(StepContext context, bool captured) async {
+    if (captured) {
+      return;
+    }
     await context.shell.run(
       Command('kubectl', <String>[
         'delete',
@@ -181,6 +185,22 @@ final class KubernetesSecretFromVault extends ReversibleStep {
         '--ignore-not-found',
       ]),
     );
+  }
+
+  /// Whether the Secret this step writes stands in its namespace.
+  Future<bool> _isThere(StepContext context) async {
+    final CommandResult found = await context.shell.run(
+      Command.observing('kubectl', <String>[
+        'get',
+        'secret',
+        name,
+        '--namespace',
+        namespace,
+        '-o',
+        'name',
+      ]),
+    );
+    return found.ok;
   }
 
   /// The Secret as `kubectl` reads it.

@@ -10,7 +10,7 @@ import 'assert_cli_tool_versions.dart';
 ///
 /// **Nothing here resolves a latest release.** Two machines set up a month apart used to get
 /// different tools and neither could be built again.
-final class InstallArgocdCli extends ReversibleStep {
+final class InstallArgocdCli extends ReversibleStep<bool> {
   /// Fetches [version] into [path].
   const InstallArgocdCli({required this.version, required this.path});
 
@@ -77,8 +77,19 @@ final class InstallArgocdCli extends ReversibleStep {
     await _mustRun(context, <String>['chmod', '755', path]);
   }
 
+  /// Whether a tool is already at the path this fetches into.
+  ///
+  /// The skip is decided on the version, so this step also runs on a machine that carries the tool
+  /// at another version — and there the fetch replaces a file rather than creating one. Deleting it
+  /// at undo time would leave the machine without the tool it came with.
   @override
-  Future<void> undo(StepContext context) async {
+  Future<bool> capture(StepContext context) => context.files.exists(path);
+
+  @override
+  Future<void> undo(StepContext context, bool captured) async {
+    if (captured) {
+      return;
+    }
     await context.files.delete(path);
   }
 

@@ -22,7 +22,7 @@ import 'package:ansiwise_api/ansiwise_api.dart';
 /// and the central observability stack run where the master role is; the registry runs on the build
 /// plane; and a cluster can be one, both or neither. Deriving one from the other is how a slave ends
 /// up pointed at its own empty Vault.
-final class StampClusterProfile extends ReversibleStep with FileStep {
+final class StampClusterProfile extends ReversibleStep<String?> with FileStep {
   /// Writes the profile of the cluster this run was told about.
   const StampClusterProfile({required this.repository});
 
@@ -135,19 +135,22 @@ final class StampClusterProfile extends ReversibleStep with FileStep {
     ].join('\n');
   }
 
+  /// What the profile held before this run stamped it, which is what [undo] writes back.
+  ///
+  /// The trunk carries this file, so on a branch cut from it there is always text to put back. Null
+  /// is a branch that carried none, and that is the one case where taking the stamp back means
+  /// removing the file — a file every chart's render requires is never deleted because it happened
+  /// to be absent from a tree nobody looked at before apply.
   @override
-  Future<void> undo(StepContext context) async {
-    // The trunk carries this file, so taking the stamp back means restoring what git holds — never
-    // deleting it, which would leave the branch without a file every chart's render requires.
-    final List<String> argv = <String>['-C', repository, 'checkout', '--', pathFor(context)];
-    final CommandResult restored = await context.shell.run(Command('git', argv));
-    if (!restored.ok) {
-      throw CommandFailed(
-        argv: <String>['git', ...argv],
-        exitCode: restored.exitCode,
-        stderr: restored.stderr,
-      );
+  Future<String?> capture(StepContext context) => contentBefore(context);
+
+  @override
+  Future<void> undo(StepContext context, String? captured) async {
+    if (captured == null) {
+      await context.files.delete(pathFor(context));
+      return;
     }
+    await context.files.write(pathFor(context), captured, mode: mode);
   }
 
   /// Everything that would make an undescribable installation, all of it at once.

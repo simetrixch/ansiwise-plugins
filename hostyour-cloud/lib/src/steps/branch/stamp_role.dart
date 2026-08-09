@@ -26,7 +26,7 @@ import '../../branch/role_pruning.dart';
 /// this — and guessing wrongly deletes an installation's registrations and every cluster map it
 /// holds. So the map has to be on the branch and has to agree with what this run was told, or
 /// nothing is removed at all.
-final class StampRole extends ReversibleStep {
+final class StampRole extends ReversibleStep<List<String>> {
   /// Reduces the checkout at [repository] to the one stage and role this run was told about.
   const StampRole({required this.repository, required this.stages, required this.trunk});
 
@@ -130,18 +130,23 @@ final class StampRole extends ReversibleStep {
     }
   }
 
+  /// Which paths this run is about to remove, as the checkout names them.
+  ///
+  /// Read before apply, because afterwards they are gone and nothing on the branch says which of
+  /// them this run took away and which an earlier one had already pruned. An undo restores exactly
+  /// these, and a path this step never reached is restored to what it already held, since this step
+  /// removes files and changes the content of none.
   @override
-  Future<void> undo(StepContext context) async {
-    // Restoring the files brings back the directories they stand in, so nothing else has to be
-    // undone. A path that is still there is left alone by the checkout.
-    final List<String> removed = <String>[
-      for (final String path in await _prunable(context))
-        if (!await context.files.exists('$repository/$path')) path,
-    ];
-    if (removed.isEmpty) {
+  Future<List<String>> capture(StepContext context) => _toRemove(context);
+
+  @override
+  Future<void> undo(StepContext context, List<String> captured) async {
+    if (captured.isEmpty) {
       return;
     }
-    final List<String> argv = <String>['-C', repository, 'checkout', '--', ...removed];
+    // Restoring the files brings back the directories they stand in, so nothing else has to be
+    // undone.
+    final List<String> argv = <String>['-C', repository, 'checkout', '--', ...captured];
     final CommandResult restored = await context.shell.run(Command('git', argv));
     if (!restored.ok) {
       throw CommandFailed(

@@ -21,7 +21,7 @@ import 'filled_template.dart';
 /// **A key that already carries a value is never rewritten**, and a value still equal to the
 /// template's own counts as no value at all. Both halves are in [FilledTemplate]; the second is what
 /// keeps a file somebody copied and never filled from being read as an answered one.
-final class WriteStageConfig extends ReversibleStep {
+final class WriteStageConfig extends ReversibleStep<String?> {
   /// Writes the config of the installation generated in [repository].
   const WriteStageConfig({required this.repository});
 
@@ -167,34 +167,29 @@ final class WriteStageConfig extends ReversibleStep {
     );
   }
 
+  /// What the config held before this run filled it, which is what [undo] writes back.
+  ///
+  /// The whole file rather than the keys this step fills, because every other line of it is the
+  /// operator's or the product's and putting the captured bytes back keeps all of them exactly as
+  /// they stood. It also settles the one question the file cannot answer afterwards: a key the
+  /// operator had already answered with the same value this run was given reads identically to one
+  /// this run wrote, and only what was read before apply tells them apart.
+  ///
+  /// Null is a branch that carried no config for this stage, and that is the one case where taking
+  /// the write back means removing the file.
   @override
-  Future<void> undo(StepContext context) async {
+  Future<String?> capture(StepContext context) async {
     final String path = pathFor(context);
-    if (!await context.files.exists(path)) {
+    return await context.files.exists(path) ? context.files.read(path) : null;
+  }
+
+  @override
+  Future<void> undo(StepContext context, String? captured) async {
+    if (captured == null) {
+      await context.files.delete(pathFor(context));
       return;
     }
-
-    // Every key that now holds what this step writes goes back to what the template carries. A value
-    // somebody had already set to exactly the same thing is not told apart from one this run wrote,
-    // and putting it back is the safe direction while a failed run is being taken back: what is lost
-    // is a value the operator still has, and what is left otherwise is a value this run put there
-    // after the run was abandoned.
-    final FilledTemplate file = await _read(context);
-    final Map<String, String> wanted = valuesFrom(context);
-    final Map<String, String> restored = <String, String>{
-      for (final MapEntry<String, String> value in wanted.entries)
-        if (file.valueOf(value.key) == value.value)
-          value.key: file.templateValueOf(value.key) ?? '',
-    };
-    final String back = file.filled(restored);
-
-    // A file holding nothing but the template is the absence of an answer rather than an answered
-    // file, and it is what this step created on a branch that carried none.
-    if (back == file.template) {
-      await context.files.delete(path);
-      return;
-    }
-    await context.files.write(path, back, mode: mode);
+    await context.files.write(pathFor(context), captured, mode: mode);
   }
 
   /// The file as it stands, or the template itself when the branch carries no config yet.

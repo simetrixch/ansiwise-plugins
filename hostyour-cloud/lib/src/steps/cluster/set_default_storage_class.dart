@@ -15,7 +15,7 @@ import 'package:ansiwise_api/ansiwise_api.dart';
 /// shortly after it is switched on, so a step that looked once and moved on would leave a first
 /// install with no default at all — correct only if somebody comes back and runs the program a
 /// second time, which nothing arranges. Waiting is the deliberate departure from what this replaces.
-final class SetDefaultStorageClass extends ReversibleStep {
+final class SetDefaultStorageClass extends ReversibleStep<String?> {
   /// Waits up to [timeoutSeconds] for a class and marks the first one as the default.
   const SetDefaultStorageClass({required this.timeoutSeconds, required this.intervalSeconds});
 
@@ -94,8 +94,20 @@ final class SetDefaultStorageClass extends ReversibleStep {
     }
   }
 
+  /// The class that carries the mark already, or null when no class is the default.
+  ///
+  /// Which class this step will mark cannot be read yet — the apply waits for the volume addon to
+  /// produce one — so what is kept is whether the cluster had a default at all. A cluster that
+  /// arrived with one keeps it, and a mark read at undo time cannot say who put it there.
   @override
-  Future<void> undo(StepContext context) async {
+  Future<String?> capture(StepContext context) async =>
+      _default(await _classes(context) ?? const <String, bool>{});
+
+  @override
+  Future<void> undo(StepContext context, String? captured) async {
+    if (captured != null) {
+      return;
+    }
     final Map<String, bool> classes = await _classes(context) ?? const <String, bool>{};
     final String? marked = _default(classes);
     if (marked == null) {

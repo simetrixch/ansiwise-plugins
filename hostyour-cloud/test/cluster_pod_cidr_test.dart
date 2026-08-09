@@ -279,8 +279,9 @@ void main() {
         manifestPath: manifestPath,
       );
       final StepContext context = machine.contextFor(under);
+      final String? captured = await step.capture(context);
       await step.apply(context);
-      await step.undo(context);
+      await step.undo(context, captured);
       expect(machine.files.contents[manifestPath], before);
     });
   });

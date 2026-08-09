@@ -6,7 +6,7 @@ import 'assert_cli_tool_versions.dart';
 /// It arrives packed, so it is unpacked into place and the packed copy is removed afterwards —
 /// whether the unpacking worked or not, because a half-finished download left in the temporary
 /// directory is what the next run would find and unpack.
-final class InstallVaultCli extends ReversibleStep {
+final class InstallVaultCli extends ReversibleStep<bool> {
   /// Fetches [version] into [directory].
   const InstallVaultCli({required this.version, required this.directory});
 
@@ -81,8 +81,18 @@ final class InstallVaultCli extends ReversibleStep {
     }
   }
 
+  /// Whether the tool is already in the directory this unpacks into.
+  ///
+  /// The skip is decided on the version, so the unpacking replaces a tool that is there at another
+  /// version. Deleting it at undo time would take away the one the machine came with.
   @override
-  Future<void> undo(StepContext context) async {
+  Future<bool> capture(StepContext context) => context.files.exists('$directory/$tool');
+
+  @override
+  Future<void> undo(StepContext context, bool captured) async {
+    if (captured) {
+      return;
+    }
     await context.files.delete('$directory/$tool');
   }
 

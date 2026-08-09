@@ -16,7 +16,7 @@ import 'package:ansiwise_api/ansiwise_api.dart';
 /// **The binding is replaced rather than edited.** A binding whose subjects or role drifted is
 /// removed and written again, because the parts of it that decide who gets cluster-wide rights are
 /// exactly the parts a partial edit would leave half changed.
-final class OidcAdminsBinding extends ReversibleStep {
+final class OidcAdminsBinding extends ReversibleStep<bool> {
   /// Binds [group], as the identity provider issues it, to [clusterRole].
   const OidcAdminsBinding({
     required this.name,
@@ -125,8 +125,26 @@ final class OidcAdminsBinding extends ReversibleStep {
     }
   }
 
+  /// Whether the cluster already holds a ClusterRoleBinding called [name].
+  ///
+  /// Read before the apply, which removes the binding and writes it again — after that the name is
+  /// taken either way, and the undo would be taking away a grant that was standing before this run
+  /// started. What that binding gave to whom is not captured: putting an object back means applying
+  /// it, and this step has no file to apply, it composes its binding out of its own arguments with
+  /// `kubectl create`. So the undo removes a binding this run created, and leaves one it replaced.
   @override
-  Future<void> undo(StepContext context) async {
+  Future<bool> capture(StepContext context) async {
+    final CommandResult read = await context.shell.run(
+      Command.observing('kubectl', <String>['get', 'clusterrolebinding', name, '-o', 'name']),
+    );
+    return read.ok;
+  }
+
+  @override
+  Future<void> undo(StepContext context, bool captured) async {
+    if (captured) {
+      return;
+    }
     await context.shell.run(
       Command('kubectl', <String>['delete', 'clusterrolebinding', name, '--ignore-not-found']),
     );

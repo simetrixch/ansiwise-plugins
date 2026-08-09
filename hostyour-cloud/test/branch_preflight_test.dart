@@ -240,8 +240,10 @@ void main() {
     });
 
     test('taking it back returns to the trunk and removes the branch', () async {
+      // The captured value is what was checked out before this step cut the branch, so the undo
+      // returns there rather than to a name it composed.
       final FakeShell shell = checkout(head: fqdn);
-      await step.undo(contextOn(shell: shell));
+      await step.undo(contextOn(shell: shell), trunk);
 
       expect(shell.ran, contains('git -C $repository checkout $trunk'));
       expect(shell.ran, contains('git -C $repository branch -D $fqdn'));
@@ -249,7 +251,7 @@ void main() {
 
     test('taking it back leaves a branch this step did not produce alone', () async {
       final FakeShell shell = checkout(head: 'other-work');
-      await step.undo(contextOn(shell: shell));
+      await step.undo(contextOn(shell: shell), trunk);
 
       expect(shell.ran, isNot(contains('git -C $repository branch -D $fqdn')));
     });

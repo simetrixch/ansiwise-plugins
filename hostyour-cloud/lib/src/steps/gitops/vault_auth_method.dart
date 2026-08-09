@@ -20,7 +20,7 @@ import 'vault_api.dart';
 /// is enabled and a new one is minted when it is enabled again, so every policy that interpolates
 /// the old accessor resolves to nothing afterwards, silently. That is why the undo here is the last
 /// resort it is and why nothing re-enables a mount by turning it off first.
-final class VaultAuthMethod extends ReversibleStep {
+final class VaultAuthMethod extends ReversibleStep<bool> {
   /// Enables an auth method of [type] at [path] in the Vault the profile in [repository] names.
   const VaultAuthMethod({required this.repository, required this.type, required this.path});
 
@@ -131,8 +131,36 @@ final class VaultAuthMethod extends ReversibleStep {
     }
   }
 
+  /// Whether Vault already holds an auth mount at this path.
+  ///
+  /// Read before the enable, because disabling a mount is not the reverse of enabling one: a mount
+  /// enabled again carries a new accessor, and every policy templated on the old one then resolves
+  /// to nothing, with no error anywhere and every caller refused about its own token. So the undo
+  /// disables only a mount this run created.
+  ///
+  /// A mount path this run cannot read out of the profile, and a Vault it cannot ask, are answered
+  /// as already there: neither is a mount it may disable.
   @override
-  Future<void> undo(StepContext context) async {
+  Future<bool> capture(StepContext context) async {
+    final ClusterProfile vault = await clusterProfileFrom(context, repository);
+    final ArgumentText mount = vault.forThisInstallation(context, path);
+    if (mount.refusal == null) {
+      final RootToken token = await rootTokenFrom(
+        context,
+        vaultCredentialsPath(context, repository),
+      );
+      if (token.value case final String held) {
+        return await _mountedType(context, vault.url ?? '', held, mount.value ?? '') != null;
+      }
+    }
+    return true;
+  }
+
+  @override
+  Future<void> undo(StepContext context, bool captured) async {
+    if (captured) {
+      return;
+    }
     final ClusterProfile vault = await clusterProfileFrom(context, repository);
     final ArgumentText mount = vault.forThisInstallation(context, path);
     if (mount.refusal != null) {

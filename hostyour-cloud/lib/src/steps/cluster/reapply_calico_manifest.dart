@@ -11,7 +11,7 @@ import 'stamp_calico_pool_cidr_in_cni_manifest.dart';
 ///
 /// The pool itself is not built again here. That happens when the agent restarts, which is the step
 /// after this one, and whether it converged is the step after that.
-final class ReapplyCalicoManifest extends ReversibleStep {
+final class ReapplyCalicoManifest extends ReversibleStep<String?> {
   /// Applies the manifest at [manifestPath], which must already carry [podCidr].
   const ReapplyCalicoManifest({required this.podCidr, required this.manifestPath});
 
@@ -75,16 +75,21 @@ final class ReapplyCalicoManifest extends ReversibleStep {
     await _apply(context, manifestPath);
   }
 
+  /// The newest backup of the manifest, named before the stamped one is applied.
+  ///
+  /// The step that stamps the manifest writes a timestamped backup on every real change, so the
+  /// newest one read at undo time can be a copy a later run made — and applying that would put a
+  /// range into the cluster that nothing in this run ever had.
   @override
-  Future<void> undo(StepContext context) async {
-    final String? backup = await StampCalicoPoolCidrInCniManifest.newestBackup(
-      context,
-      manifestPath,
-    );
-    if (backup == null) {
+  Future<String?> capture(StepContext context) =>
+      StampCalicoPoolCidrInCniManifest.newestBackup(context, manifestPath);
+
+  @override
+  Future<void> undo(StepContext context, String? captured) async {
+    if (captured == null) {
       return;
     }
-    await _apply(context, backup);
+    await _apply(context, captured);
   }
 
   /// The range the network agent is declared with in the cluster, or null when it cannot be read.

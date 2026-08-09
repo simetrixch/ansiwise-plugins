@@ -16,7 +16,7 @@ import 'vault_api.dart';
 ///
 /// **An already-unsealed Vault is nothing to do.** That is what makes this safe to put in the middle
 /// of a program that also runs on a cluster which has been up for months.
-final class VaultUnsealed extends ReversibleStep {
+final class VaultUnsealed extends ReversibleStep<bool?> {
   /// Unseals the Vault the profile in [repository] names, with the quorum of this stage.
   const VaultUnsealed({required this.repository});
 
@@ -119,8 +119,29 @@ final class VaultUnsealed extends ReversibleStep {
     context.log.error('every key in $credentialsPath was offered and Vault is still sealed');
   }
 
+  /// Whether Vault said it was sealed before this ran, or null when it said nothing that answers
+  /// that.
+  ///
+  /// Read before the first key is offered, because sealing is what the undo does and a sealed Vault
+  /// is a cluster where nothing materializes a secret. Only a Vault this run found sealed is sealed
+  /// again; one that was already serving, and one whose answer did not say, are left as they are.
+  ///
+  /// The quorum itself is not captured. It is read out of the credential file each time it is
+  /// needed, and it is a credential — nothing carries it beyond the request that feeds it.
   @override
-  Future<void> undo(StepContext context) async {
+  Future<bool?> capture(StepContext context) async {
+    final ClusterProfile vault = await clusterProfileFrom(context, repository);
+    if (vault.refusal != null) {
+      return null;
+    }
+    return _sealed(context, vault.url ?? '');
+  }
+
+  @override
+  Future<void> undo(StepContext context, bool? captured) async {
+    if (captured != true) {
+      return;
+    }
     final ClusterProfile vault = await clusterProfileFrom(context, repository);
     if (vault.refusal != null) {
       return;

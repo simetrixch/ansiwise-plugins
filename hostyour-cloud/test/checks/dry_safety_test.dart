@@ -45,10 +45,11 @@ Future<void> main() async {
   );
 
   group('counter-probe', () {
-    // Four steps written here, run through the same machinery. A step that writes from its check and
-    // one that runs a changing command from its plan must both come back refused; a step that only
-    // looks must come back with a plan, because a check that reported everything would satisfy the
-    // first two alone.
+    // Four steps written here, run through the same machinery, one per method a dry run drives. A
+    // step that writes from its check, one that runs a changing command from its plan and one that
+    // writes from its CAPTURE must all three come back refused; a step that only looks must come
+    // back with a plan, because a check that reported everything would satisfy the first three
+    // alone.
 
     test('a write from inside a check is refused', () async {
       expect(
@@ -63,6 +64,28 @@ Future<void> main() async {
         await _ask(const RunsAChangingCommandFromItsPlan(), wrapInPlanningPorts: true),
         isA<RefusedByAPort>(),
         reason: 'a step planted here ran a changing command from its plan and was not stopped',
+      );
+    });
+
+    test('a write from inside a capture is refused', () async {
+      expect(
+        await _ask(const WritesFromItsCapture(), wrapInPlanningPorts: true),
+        isA<RefusedByAPort>(),
+        reason: 'a step planted here wrote a file from its capture and was not stopped',
+      );
+    });
+
+    // What says the capture is DRIVEN at all, and not merely refused-by-absence. With the planning
+    // ports off the write reaches the fake, so this is red both when the ports stop refusing and
+    // when `dry_safety.dart` stops calling `capture` — and the test above cannot tell those apart on
+    // its own, because a capture nobody calls also produces no finding.
+    test('a capture that got through is seen', () async {
+      expect(
+        await _ask(const WritesFromItsCapture(), wrapInPlanningPorts: false),
+        isA<ReachedTheMachine>(),
+        reason:
+            'the capture ran with the planning ports taken off and nothing noticed — so either the '
+            'evidence is not gathered or the capture is never driven',
       );
     });
 
@@ -110,12 +133,15 @@ Future<DryRunOutcome> _ask(Step step, {required bool wrapInPlanningPorts}) => as
 );
 
 /// A step that changes something from the one method a dry run always calls.
-final class WritesFromItsCheck extends ReversibleStep {
+final class WritesFromItsCheck extends IrreversibleStep {
   /// Creates the planted step.
   const WritesFromItsCheck();
 
   /// Where it writes, so a counter-probe can name what got through.
   static const String path = '/etc/planted';
+
+  @override
+  String get irreversibleReason => 'it is a probe and is never run against a machine';
 
   @override
   Future<CheckResult> check(StepContext context) async {
@@ -129,15 +155,15 @@ final class WritesFromItsCheck extends ReversibleStep {
 
   @override
   Future<void> apply(StepContext context) async {}
-
-  @override
-  Future<void> undo(StepContext context) async {}
 }
 
 /// A step that changes something from the method a dry run calls instead of `apply`.
-final class RunsAChangingCommandFromItsPlan extends ReversibleStep {
+final class RunsAChangingCommandFromItsPlan extends IrreversibleStep {
   /// Creates the planted step.
   const RunsAChangingCommandFromItsPlan();
+
+  @override
+  String get irreversibleReason => 'it is a probe and is never run against a machine';
 
   @override
   Future<CheckResult> check(StepContext context) async => const CheckResult.ready();
@@ -150,13 +176,51 @@ final class RunsAChangingCommandFromItsPlan extends ReversibleStep {
 
   @override
   Future<void> apply(StepContext context) async {}
+}
+
+/// A step that changes something from the method NOBODY thinks of as running under a dry run.
+///
+/// The capture is the third thing [askWhatItWouldDo] drives, and it is the one that is easy to leave
+/// out — it exists to prepare an undo, so it does not read as part of the run. This probe is what
+/// says the driving is really there: take the capture branch out of `dry_safety.dart` and the test
+/// that runs this one WITHOUT the planning ports goes red, because nothing would reach the fake.
+final class WritesFromItsCapture extends ReversibleStep<bool> {
+  /// Creates the planted step.
+  const WritesFromItsCapture();
+
+  /// Where it writes, so a counter-probe can name what got through.
+  static const String path = '/etc/planted-by-a-capture';
 
   @override
-  Future<void> undo(StepContext context) async {}
+  Future<CheckResult> check(StepContext context) async => const CheckResult.ready();
+
+  @override
+  Future<StepPlan> plan(StepContext context) async =>
+      const StepPlan.diff(path, before: '', after: 'what this step would write');
+
+  @override
+  Future<void> apply(StepContext context) async {}
+
+  /// Reads what was there by writing, which is the shape this probe exists to catch.
+  ///
+  /// A real one would be subtler — a capture that asks a tool which creates its own state file on
+  /// the way to answering — but what has to be shown is that a port refuses whatever the capture
+  /// reaches for, and one write shows that as well as a subtle one.
+  @override
+  Future<bool> capture(StepContext context) async {
+    await context.files.write(path, 'written from a capture', mode: 0x180);
+    return true;
+  }
+
+  @override
+  Future<void> undo(StepContext context, bool captured) async {}
 }
 
 /// A step that reads the machine and plans, which is what every step is meant to do.
-final class OnlyLooks extends ReversibleStep {
+///
+/// Reversible, and its capture only reads — so this also says that driving the capture does not
+/// report a step which was doing the right thing.
+final class OnlyLooks extends ReversibleStep<String?> {
   /// Creates the planted step.
   const OnlyLooks();
 
@@ -175,5 +239,9 @@ final class OnlyLooks extends ReversibleStep {
   Future<void> apply(StepContext context) async {}
 
   @override
-  Future<void> undo(StepContext context) async {}
+  Future<String?> capture(StepContext context) async =>
+      await context.files.exists('/etc/planted') ? context.files.read('/etc/planted') : null;
+
+  @override
+  Future<void> undo(StepContext context, String? captured) async {}
 }

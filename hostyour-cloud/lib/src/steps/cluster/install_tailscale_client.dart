@@ -15,7 +15,7 @@ import 'ensure_tool_prerequisites.dart';
 ///
 /// The installer is fetched to a file first rather than fed straight into a shell, so what ran is
 /// still on the machine to be looked at when something about it goes wrong.
-final class InstallTailscaleClient extends ReversibleStep {
+final class InstallTailscaleClient extends ReversibleStep<bool> {
   /// Puts the client on the machine from [installerUrl].
   const InstallTailscaleClient({required this.installerUrl, required this.installerPath});
 
@@ -84,8 +84,19 @@ final class InstallTailscaleClient extends ReversibleStep {
     );
   }
 
+  /// Whether the client is on the path already.
+  ///
+  /// The undo stops the service and removes the package. A machine that was already on a private
+  /// network when this ran would be taken off it — the credential it joined with is not on the
+  /// machine to join again.
   @override
-  Future<void> undo(StepContext context) async {
+  Future<bool> capture(StepContext context) => EnsureToolPrerequisites.onPath(context, tool);
+
+  @override
+  Future<void> undo(StepContext context, bool captured) async {
+    if (captured) {
+      return;
+    }
     await context.shell.run(const Command('systemctl', <String>['disable', '--now', service]));
     await context.shell.run(
       const Command.detailed(

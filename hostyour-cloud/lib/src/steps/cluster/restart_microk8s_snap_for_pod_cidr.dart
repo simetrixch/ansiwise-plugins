@@ -16,7 +16,7 @@ import 'wait_for_microk8s_ready.dart';
 /// **What proves it happened is the running pods, not the restart.** A rollout that was asked for
 /// and never completed reports the same zero as one that did, so this reads the range off the pods
 /// that are actually running.
-final class RestartMicrok8sSnapForPodCidr extends ReversibleStep {
+final class RestartMicrok8sSnapForPodCidr extends IrreversibleStep {
   /// Restarts the snap and rolls the network agent, then proves the pods carry [podCidr].
   const RestartMicrok8sSnapForPodCidr({
     required this.podCidr,
@@ -124,11 +124,9 @@ final class RestartMicrok8sSnapForPodCidr extends ReversibleStep {
   }
 
   @override
-  Future<void> undo(StepContext context) async {
-    // A restart leaves no state of its own to take back. What it changed is which processes are
-    // running, and by the time an undo could be called they are running again; restarting them a
-    // second time would be another restart rather than the inverse of the first.
-  }
+  String get irreversibleReason =>
+      'the cluster\'s network processes have already been restarted against the new range, and a '
+      'second restart is another restart rather than the inverse of the first';
 
   /// The range each running network-agent pod carries, or null when the pods cannot be read.
   static Future<List<String>?> runningPoolCidrs(StepContext context) async {

@@ -224,8 +224,11 @@ void main() {
       final FakeFiles files = tree();
       final StepContext context = contextOn(files);
 
+      // Capture, apply, undo — the engine's own order, so what the undo is handed is what the
+      // capture actually read rather than a value this test chose to make its assertion come out.
+      final String? before = await writeConfig.capture(context);
       await writeConfig.apply(context);
-      await writeConfig.undo(context);
+      await writeConfig.undo(context, before);
       expect(files.contents.containsKey(configPath), isFalse);
     });
 
@@ -238,8 +241,9 @@ void main() {
       );
       final StepContext context = contextOn(files);
 
+      final String? before = await writeConfig.capture(context);
       await writeConfig.apply(context);
-      await writeConfig.undo(context);
+      await writeConfig.undo(context, before);
 
       expect(files.contents.containsKey(configPath), isTrue);
       expect(files.contents[configPath], contains('ALERT_RECIPIENTS="oncall@example.com"'));
@@ -367,8 +371,9 @@ void main() {
       final FakeFiles files = tree();
       final StepContext context = contextOn(files);
 
+      final String? before = await writeSecrets.capture(context);
       await writeSecrets.apply(context);
-      await writeSecrets.undo(context);
+      await writeSecrets.undo(context, before);
       expect(files.contents.containsKey(secretsPath), isFalse);
     });
 
@@ -381,8 +386,9 @@ void main() {
       );
       final StepContext context = contextOn(files);
 
+      final String? before = await writeSecrets.capture(context);
       await writeSecrets.apply(context);
-      await writeSecrets.undo(context);
+      await writeSecrets.undo(context, before);
 
       expect(files.contents.containsKey(secretsPath), isTrue);
       expect(
@@ -438,9 +444,10 @@ void main() {
     test('taking the run back removes only the file this run left', () async {
       final FakeFiles files = tree();
       final StepContext context = contextOn(files);
+      final bool wasThere = await step.capture(context);
       await step.apply(context);
 
-      await step.undo(context);
+      await step.undo(context, wasThere);
 
       expect(files.contents.containsKey(mailDnsPath), isFalse);
     });
@@ -455,7 +462,7 @@ void main() {
       final FakeFiles files = tree()..contents[mailDnsPath] = operators;
       final StepContext context = contextOn(files);
 
-      await step.undo(context);
+      await step.undo(context, await step.capture(context));
 
       expect(files.contents[mailDnsPath], operators);
     });

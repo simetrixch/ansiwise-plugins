@@ -19,10 +19,11 @@ import 'stamp_kube_proxy_cluster_cidr.dart';
 /// addon ships next; a replacement from a template written here is the same on every version and on
 /// every machine.
 ///
-/// **A copy of what was there goes to a file first, so an undo has something to put back.** Nothing
-/// else keeps one — the object being replaced is the only copy — and an undo that claimed to restore
-/// a configuration it never captured would be a promise the step cannot keep.
-final class PatchCorednsCorefile extends ReversibleStep {
+/// **What the undo puts back is what was read before the replacement, and a copy also goes to a
+/// file.** The object being replaced is the only copy the cluster keeps, so reading it afterwards
+/// would read this step's own configuration. The file is what stays on the machine, named in the
+/// log, for whoever comes looking once the run is over.
+final class PatchCorednsCorefile extends ReversibleStep<String?> {
   /// Replaces the cluster name service's configuration, forwarding to [upstreamServers].
   const PatchCorednsCorefile({
     required this.upstreamServers,
@@ -146,12 +147,20 @@ final class PatchCorednsCorefile extends ReversibleStep {
     await _replace(context, corefile(servers, forceTcp: forceTcp));
   }
 
+  /// The configuration the cluster is running on, read before it is replaced.
+  ///
+  /// Null is the object being unreadable, which is also when there is nothing to put back. Reading
+  /// the object at undo time would read what this step wrote, and reading the file the apply leaves
+  /// behind would read whatever the last run of this step put there.
   @override
-  Future<void> undo(StepContext context) async {
-    if (!await context.files.exists(backupPath)) {
+  Future<String?> capture(StepContext context) => liveCorefile(context);
+
+  @override
+  Future<void> undo(StepContext context, String? captured) async {
+    if (captured == null) {
       return;
     }
-    await _replace(context, await context.files.read(backupPath));
+    await _replace(context, captured);
   }
 
   /// The configuration this step writes, for [servers].

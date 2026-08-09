@@ -16,7 +16,8 @@ import 'stamp_kube_proxy_cluster_cidr.dart';
 /// role stamp writes into the installation's own profile, so a cluster cannot end up trusting an
 /// identity provider that nothing else on it points at. On a branch the role stamp has not touched
 /// yet there is nothing to derive, and this correctly does nothing rather than guessing.
-final class ConfigureSlaveApiserverOidcTrust extends ReversibleStep {
+final class ConfigureSlaveApiserverOidcTrust
+    extends ReversibleStep<({String? args, bool binding})> {
   /// Points a machine at the identity provider of the cluster its profile names.
   const ConfigureSlaveApiserverOidcTrust({
     required this.repository,
@@ -201,20 +202,30 @@ final class ConfigureSlaveApiserverOidcTrust extends ReversibleStep {
     }
   }
 
+  /// The two things this step changes, read before it changes either.
+  ///
+  /// [ConfigureSlaveApiserverOidcTrust.argsPath] as it stood, or null when the file was not there,
+  /// and whether the rule granting the administrators' group its rights was already in the cluster.
+  /// Both are needed: the file is written back as it was, and a rule that was there before this ran
+  /// is one somebody else applied — deleting it would take the cluster's administrators away while
+  /// the run is cleaning up after something else.
   @override
-  Future<void> undo(StepContext context) async {
-    await context.shell.run(
-      Command('microk8s', <String>['kubectl', 'delete', 'clusterrolebinding', bindingName]),
-    );
-    if (!await context.files.exists(argsPath)) {
-      return;
+  Future<({String? args, bool binding})> capture(StepContext context) async => (
+    args: await context.files.exists(argsPath) ? await context.files.read(argsPath) : null,
+    binding: await _bindingExists(context),
+  );
+
+  @override
+  Future<void> undo(StepContext context, ({String? args, bool binding}) captured) async {
+    if (!captured.binding) {
+      await context.shell.run(
+        Command('microk8s', <String>['kubectl', 'delete', 'clusterrolebinding', bindingName]),
+      );
     }
-    String stripped = await context.files.read(argsPath);
-    for (final String name in _flags('').keys) {
-      stripped = StampKubeProxyClusterCidr.withoutFlag(stripped, name);
+    if (captured.args case final String args) {
+      await context.files.write(argsPath, args, mode: StampKubeProxyClusterCidr.mode);
+      await StampKubeProxyClusterCidr.restartKubelite(context);
     }
-    await context.files.write(argsPath, stripped, mode: StampKubeProxyClusterCidr.mode);
-    await StampKubeProxyClusterCidr.restartKubelite(context);
   }
 
   /// The address tokens are issued at, derived from the profile at [profilePath].

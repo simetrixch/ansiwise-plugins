@@ -20,7 +20,7 @@ import 'package:ansiwise_api/ansiwise_api.dart';
 /// **No credential travels here.** The blueprints reference their secrets as `${IDP_*}` and the
 /// pod resolves those from its own environment at startup — so what this puts on the cluster is
 /// declarations, and the values they name never pass through it.
-final class KubernetesConfigmapFromDirectory extends ReversibleStep {
+final class KubernetesConfigmapFromDirectory extends ReversibleStep<bool> {
   /// Makes the ConfigMap [name] in [namespace] out of [directory] under [repository].
   const KubernetesConfigmapFromDirectory({
     required this.repository,
@@ -136,8 +136,37 @@ final class KubernetesConfigmapFromDirectory extends ReversibleStep {
     }
   }
 
+  /// Whether [namespace] already holds a ConfigMap called [name].
+  ///
+  /// Read before the apply, because the delete in the undo removes the object whether or not this
+  /// run made it — and what a release mounts is that object, so removing one that was there before
+  /// takes the clients of an installation this run did not build with it.
+  ///
+  /// What the ConfigMap held before is not captured. The cluster answers with the object as it
+  /// stands, resourceVersion and all, and applying that again is refused as a conflict once anything
+  /// has changed the object since — which the apply of this step does. So a ConfigMap that was
+  /// already there keeps the keys this run composed out of [directory].
   @override
-  Future<void> undo(StepContext context) async {
+  Future<bool> capture(StepContext context) async {
+    final CommandResult found = await context.shell.run(
+      Command.observing('kubectl', <String>[
+        'get',
+        'configmap',
+        name,
+        '--namespace',
+        namespace,
+        '-o',
+        'name',
+      ]),
+    );
+    return found.ok;
+  }
+
+  @override
+  Future<void> undo(StepContext context, bool captured) async {
+    if (captured) {
+      return;
+    }
     await context.shell.run(
       Command('kubectl', <String>[
         'delete',

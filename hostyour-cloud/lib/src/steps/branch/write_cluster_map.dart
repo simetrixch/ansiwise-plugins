@@ -22,7 +22,7 @@ import 'create_install_branch.dart';
 /// that cannot resolve a build plane, or at a stage called `production` that no path anywhere
 /// matches. All of the problems are reported at once, because an operator fixing a map one refusal
 /// per run is an operator running it five times.
-final class WriteClusterMap extends ReversibleStep with FileStep {
+final class WriteClusterMap extends ReversibleStep<String?> with FileStep {
   /// Writes the map of the cluster this run was told about.
   const WriteClusterMap({required this.repository, required this.stages});
 
@@ -118,33 +118,22 @@ final class WriteClusterMap extends ReversibleStep with FileStep {
     ].join('\n');
   }
 
+  /// What the map held before this run wrote it, which is what [undo] writes back.
+  ///
+  /// It carries the release pin the answer to [_release] is read out of, so putting these bytes back
+  /// puts the pin back with them. Null is a branch that carried no map for this domain, and that is
+  /// the one case where taking the write back means removing the file.
   @override
-  Future<void> undo(StepContext context) async {
-    final String path = pathFor(context);
-    final CommandResult tracked = await context.shell.run(
-      Command.observing('git', <String>[
-        '-C',
-        repository,
-        'ls-files',
-        '--error-unmatch',
-        '--',
-        path,
-      ]),
-    );
-    if (!tracked.ok) {
+  Future<String?> capture(StepContext context) => contentBefore(context);
+
+  @override
+  Future<void> undo(StepContext context, String? captured) async {
+    if (captured == null) {
       // Nothing held this file before this run, so taking it back means removing it.
-      await context.files.delete(path);
+      await context.files.delete(pathFor(context));
       return;
     }
-    final List<String> argv = <String>['-C', repository, 'checkout', '--', path];
-    final CommandResult restored = await context.shell.run(Command('git', argv));
-    if (!restored.ok) {
-      throw CommandFailed(
-        argv: <String>['git', ...argv],
-        exitCode: restored.exitCode,
-        stderr: restored.stderr,
-      );
-    }
+    await context.files.write(pathFor(context), captured, mode: mode);
   }
 
   /// The release pin the map already carries, or null when it carries none.

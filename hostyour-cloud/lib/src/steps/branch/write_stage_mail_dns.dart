@@ -26,7 +26,7 @@ import 'package:ansiwise_api/ansiwise_api.dart';
 /// **Publishing is not part of this and is not a step anywhere.** It changes a DNS zone, which is
 /// not part of the machine an installation is deployed to; it is an operation an operator triggers
 /// when the records are to change.
-final class WriteStageMailDns extends ReversibleStep {
+final class WriteStageMailDns extends ReversibleStep<bool> {
   /// Writes the mail-DNS configuration of the installation generated in [repository].
   const WriteStageMailDns({required this.repository});
 
@@ -110,18 +110,20 @@ final class WriteStageMailDns extends ReversibleStep {
     await context.files.write(path, _content, mode: mode);
   }
 
+  /// Whether the branch already carried this file before the run.
+  ///
+  /// It is the whole of what a create-only step's undo needs: a file that was already there is the
+  /// operator's, whatever it holds, and this step wrote nothing over it. Reading the content
+  /// afterwards cannot answer that — a file an earlier run created holds exactly what this step
+  /// writes, and taking a run back is not a licence to delete a file it did not create.
   @override
-  Future<void> undo(StepContext context) async {
-    final String path = pathFor(context);
-    if (!await context.files.exists(path)) {
+  Future<bool> capture(StepContext context) => context.files.exists(pathFor(context));
+
+  @override
+  Future<void> undo(StepContext context, bool captured) async {
+    if (captured) {
       return;
     }
-    // Only the file as this step left it is removed. One that has been changed since is the
-    // operator's, and taking a run back is not a licence to delete it — the same rule the check
-    // keeps on the way in.
-    if (await context.files.read(path) != _content) {
-      return;
-    }
-    await context.files.delete(path);
+    await context.files.delete(pathFor(context));
   }
 }

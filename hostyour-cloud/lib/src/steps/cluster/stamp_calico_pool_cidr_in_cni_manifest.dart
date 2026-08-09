@@ -14,9 +14,10 @@ import 'stamp_kube_proxy_cluster_cidr.dart';
 /// and run on the old pool, and the question "has the conversion happened" is asked of the live pool
 /// rather than of this file.
 ///
-/// A copy of the file goes to a timestamped backup before each real change, and the newest backup is
-/// what an undo puts back.
-final class StampCalicoPoolCidrInCniManifest extends ReversibleStep {
+/// A copy of the file goes to a timestamped backup before each real change. What an undo puts back
+/// is the text read before the change; the backups stay on the machine, and the step that applies
+/// the manifest to the cluster is what names one of them.
+final class StampCalicoPoolCidrInCniManifest extends ReversibleStep<String?> {
   /// Puts [podCidr] into the manifest at [manifestPath].
   const StampCalicoPoolCidrInCniManifest({required this.podCidr, required this.manifestPath});
 
@@ -109,17 +110,22 @@ final class StampCalicoPoolCidrInCniManifest extends ReversibleStep {
     }
   }
 
+  /// The manifest as it was, or null when it was not there.
+  ///
+  /// The backups accumulate under names carrying the moment they were made, so the newest one at
+  /// undo time can be the copy a later run wrote — and putting that back would stamp a range this
+  /// run never had.
   @override
-  Future<void> undo(StepContext context) async {
-    final String? backup = await newestBackup(context, manifestPath);
-    if (backup == null) {
+  Future<String?> capture(StepContext context) async =>
+      await context.files.exists(manifestPath) ? context.files.read(manifestPath) : null;
+
+  @override
+  Future<void> undo(StepContext context, String? captured) async {
+    if (captured == null) {
+      // The snap writes this file when it installs. There was none, so there is nothing to put back.
       return;
     }
-    await context.files.write(
-      manifestPath,
-      await context.files.read(backup),
-      mode: StampKubeProxyClusterCidr.mode,
-    );
+    await context.files.write(manifestPath, captured, mode: StampKubeProxyClusterCidr.mode);
   }
 
   /// [manifest] with the value under [variable] replaced by [podCidr], or null when it declares none.

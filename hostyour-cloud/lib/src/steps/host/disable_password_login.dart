@@ -12,7 +12,7 @@ import 'package:ansiwise_api/ansiwise_api.dart';
 /// directory nothing includes changes nothing, and sshd says nothing about being ignored — the
 /// password simply keeps working. Asking `sshd -T` afterwards is what turns that silence into a
 /// failure.
-final class DisablePasswordLogin extends ReversibleStep {
+final class DisablePasswordLogin extends ReversibleStep<String?> {
   /// Writes the setting into [dropIn].
   const DisablePasswordLogin({required this.dropIn, required this.reload});
 
@@ -89,10 +89,22 @@ final class DisablePasswordLogin extends ReversibleStep {
     }
   }
 
+  /// What [dropIn] held before this step wrote it, or null when the file was not there.
+  ///
+  /// The apply writes over whatever stands at that path, so a machine whose administrator keeps
+  /// their own settings in a file of this name has them replaced — and after that the captured text
+  /// is the only copy left. Null is the file this step created, and that is the one case where
+  /// taking it back means removing it rather than putting something back.
   @override
-  Future<void> undo(StepContext context) async {
-    if (await context.files.exists(dropIn)) {
+  Future<String?> capture(StepContext context) async =>
+      await context.files.exists(dropIn) ? context.files.read(dropIn) : null;
+
+  @override
+  Future<void> undo(StepContext context, String? captured) async {
+    if (captured == null) {
       await context.files.delete(dropIn);
+    } else {
+      await context.files.write(dropIn, captured, mode: _configFile);
     }
     // Reloading is part of taking it back. A file removed while sshd still holds the old setting
     // leaves a machine that refuses a password for a reason nothing on disk explains any more.

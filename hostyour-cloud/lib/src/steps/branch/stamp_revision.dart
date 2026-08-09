@@ -26,7 +26,7 @@ import 'create_install_branch.dart';
 /// (`targetRevision: &branch master`). The obvious alternative — replacing the word wherever it
 /// occurs on the line — also rewrote the word inside a trailing comment, and left an installation
 /// branch explaining itself with a sentence its own code contradicted.
-final class StampRevision extends ReversibleStep {
+final class StampRevision extends ReversibleStep<List<String>> {
   /// Retargets every generator under the manifest tree from [trunk] to this run's own branch.
   const StampRevision({required this.repository, required this.trunk});
 
@@ -115,14 +115,26 @@ final class StampRevision extends ReversibleStep {
     }
   }
 
+  /// Which manifests this run is about to retarget, as the checkout names them.
+  ///
+  /// Read before apply, because afterwards no line under the tree names the trunk any more and
+  /// nothing says which files got there by this step. Restoring the whole of [tree] instead would
+  /// take back every other change standing in it — the books placeholder a later step stamps, and
+  /// anything an operator edited on the branch.
   @override
-  Future<void> undo(StepContext context) async {
-    final CommandResult restored = await context.shell.run(
-      Command('git', <String>['-C', repository, 'checkout', '--', tree]),
-    );
+  Future<List<String>> capture(StepContext context) async =>
+      (await _unstamped(context)).keys.toList();
+
+  @override
+  Future<void> undo(StepContext context, List<String> captured) async {
+    if (captured.isEmpty) {
+      return;
+    }
+    final List<String> argv = <String>['-C', repository, 'checkout', '--', ...captured];
+    final CommandResult restored = await context.shell.run(Command('git', argv));
     if (!restored.ok) {
       throw CommandFailed(
-        argv: <String>['git', '-C', repository, 'checkout', '--', tree],
+        argv: <String>['git', ...argv],
         exitCode: restored.exitCode,
         stderr: restored.stderr,
       );

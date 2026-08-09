@@ -26,7 +26,7 @@ import 'filled_template.dart';
 /// **The four of the build plane are demanded only on the cluster that carries it.** Every other
 /// cluster reads its images through that one and would never look at them, so asking there would be
 /// asking for a credential nothing on the machine ever uses.
-final class WriteStageSecrets extends ReversibleStep {
+final class WriteStageSecrets extends ReversibleStep<String?> {
   /// Writes the credentials of the installation generated in [repository].
   const WriteStageSecrets({required this.repository});
 
@@ -232,31 +232,30 @@ final class WriteStageSecrets extends ReversibleStep {
     );
   }
 
+  /// What the credential file held before this run filled it, which is what [undo] writes back.
+  ///
+  /// The whole file rather than the keys this step fills, because the file carries more than they
+  /// are: the root token and the five unseal keys of a running Vault, the generated passwords, a
+  /// rotation somebody performed by hand. Putting the captured bytes back is the only restoration
+  /// that cannot drop one of them, and it also cannot reset a key an operator had answered before
+  /// the run to the same value this run was given — the two used to be indistinguishable.
+  ///
+  /// Null is a branch that carried no such file, and that is the one case where taking the write
+  /// back means removing it, so a failed run leaves no credential on a machine whose installation
+  /// was abandoned.
   @override
-  Future<void> undo(StepContext context) async {
+  Future<String?> capture(StepContext context) async {
     final String path = pathFor(context);
-    if (!await context.files.exists(path)) {
+    return await context.files.exists(path) ? context.files.read(path) : null;
+  }
+
+  @override
+  Future<void> undo(StepContext context, String? captured) async {
+    if (captured == null) {
+      await context.files.delete(pathFor(context));
       return;
     }
-
-    // Every key that now holds what this step wrote goes back to what the template carries, so a
-    // failed run leaves no credential on a machine whose installation was abandoned. A value
-    // somebody had already set to exactly the same thing is not told apart from one this run wrote,
-    // and taking it out is the safe direction: what is lost is a value the operator still holds.
-    final FilledTemplate file = await _read(context);
-    final Map<String, String> wanted = valuesFrom(context);
-    final Map<String, String> restored = <String, String>{
-      for (final MapEntry<String, String> value in wanted.entries)
-        if (file.valueOf(value.key) == value.value)
-          value.key: file.templateValueOf(value.key) ?? '',
-    };
-    final String back = file.filled(restored);
-
-    if (back == file.template) {
-      await context.files.delete(path);
-      return;
-    }
-    await context.files.write(path, back, mode: mode);
+    await context.files.write(pathFor(context), captured, mode: mode);
   }
 
   /// The file as it stands, or the template itself when the machine carries no credentials yet.

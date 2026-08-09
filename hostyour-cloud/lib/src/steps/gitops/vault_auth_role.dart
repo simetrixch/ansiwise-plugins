@@ -21,7 +21,7 @@ import 'vault_api.dart';
 /// was written — and their secret readers are then refused with "not authorized" and no line
 /// naming why. [preserveList] is the field where that happened, read back from the live role and
 /// unioned in before the write.
-final class VaultAuthRole extends ReversibleStep {
+final class VaultAuthRole extends ReversibleStep<Map<String, Object?>?> {
   /// Writes the role [role] on auth mount [mount] of the Vault the profile in [repository] names.
   const VaultAuthRole({
     required this.repository,
@@ -180,8 +180,31 @@ final class VaultAuthRole extends ReversibleStep {
     }
   }
 
+  /// The role Vault holds at this path right now, or null when it holds none.
+  ///
+  /// Read before the write, because a write replaces the role whole — including [preserveList],
+  /// whose members something else put there. The undo writes these fields back, and deletes the role
+  /// only where Vault held none: a role that was already there is what a caller logs in against, and
+  /// removing it refuses that caller with "not authorized" and no line naming why.
+  ///
+  /// What comes back are the role's own fields — which account in which namespace gets which
+  /// policies — and no credential.
   @override
-  Future<void> undo(StepContext context) async {
+  Future<Map<String, Object?>?> capture(StepContext context) async {
+    final ClusterProfile vault = await clusterProfileFrom(context, repository);
+    final _Role written = _writtenHere(context, vault);
+    if (written.refusal != null) {
+      return null;
+    }
+    final RootToken token = await rootTokenFrom(context, vaultCredentialsPath(context, repository));
+    if (token.value case final String held) {
+      return _current(context, vault.url ?? '', held, written.path);
+    }
+    return null;
+  }
+
+  @override
+  Future<void> undo(StepContext context, Map<String, Object?>? captured) async {
     final ClusterProfile vault = await clusterProfileFrom(context, repository);
     final _Role written = _writtenHere(context, vault);
     if (written.refusal != null) {
@@ -189,7 +212,12 @@ final class VaultAuthRole extends ReversibleStep {
     }
     final RootToken token = await rootTokenFrom(context, vaultCredentialsPath(context, repository));
     if (token.value case final String held) {
-      await context.http.send(vaultDelete(vault.url ?? '', written.path, token: held));
+      final String url = vault.url ?? '';
+      if (captured == null) {
+        await context.http.send(vaultDelete(url, written.path, token: held));
+        return;
+      }
+      await context.http.send(vaultWrite(url, written.path, token: held, body: captured));
     }
   }
 

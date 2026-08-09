@@ -15,7 +15,7 @@ import 'install_microk8s_snap.dart';
 ///
 /// kube-proxy has no service of its own to restart: it runs inside kubelite, which is what the
 /// restart here names.
-final class StampKubeProxyClusterCidr extends ReversibleStep {
+final class StampKubeProxyClusterCidr extends ReversibleStep<String?> {
   /// Puts [podCidr] into the kube-proxy arguments at [argsPath].
   const StampKubeProxyClusterCidr({required this.podCidr, required this.argsPath});
 
@@ -98,13 +98,22 @@ final class StampKubeProxyClusterCidr extends ReversibleStep {
     await restartKubelite(context);
   }
 
+  /// kube-proxy's arguments as they were, or null when the file was not there.
+  ///
+  /// A file that already carried the flag with another value is what makes the whole text the thing
+  /// to keep: taking the line out at undo time would leave the machine with no range at all, where
+  /// it had one before this ran.
   @override
-  Future<void> undo(StepContext context) async {
-    if (!await context.files.exists(argsPath)) {
+  Future<String?> capture(StepContext context) async =>
+      await context.files.exists(argsPath) ? context.files.read(argsPath) : null;
+
+  @override
+  Future<void> undo(StepContext context, String? captured) async {
+    if (captured == null) {
+      // The snap writes this file when it installs. There was none, so there is nothing to put back.
       return;
     }
-    final String current = await context.files.read(argsPath);
-    await context.files.write(argsPath, withoutFlag(current, flag), mode: mode);
+    await context.files.write(argsPath, captured, mode: mode);
     await restartKubelite(context);
   }
 
@@ -129,10 +138,6 @@ final class StampKubeProxyClusterCidr extends ReversibleStep {
     final String body = current.endsWith('\n') || current.isEmpty ? current : '$current\n';
     return '$body$line\n';
   }
-
-  /// [current] with every line of [name] taken out.
-  static String withoutFlag(String current, String name) =>
-      current.split('\n').where((String line) => !line.trim().startsWith('$name=')).join('\n');
 
   Future<String> _current(StepContext context) async =>
       await context.files.exists(argsPath) ? context.files.read(argsPath) : '';

@@ -9,7 +9,7 @@ import 'package:ansiwise_api/ansiwise_api.dart';
 /// **The key is appended, never written over the file.** A machine may already carry keys that
 /// somebody else depends on, and replacing the file would take away access nobody asked to lose.
 /// That also makes the undo narrow: it removes the one line it added and leaves the rest.
-final class InstallAuthorizedKey extends ReversibleStep {
+final class InstallAuthorizedKey extends ReversibleStep<bool> {
   /// Installs the operator's key for the account the run names.
   const InstallAuthorizedKey();
 
@@ -95,8 +95,30 @@ final class InstallAuthorizedKey extends ReversibleStep {
     await _own(context, path);
   }
 
+  /// Whether the account's `authorized_keys` already carried this key before the run.
+  ///
+  /// The line is identical whoever put it there, so once the apply has appended it the file cannot
+  /// say any more which of the two it was. A key that was already in the file is somebody's working
+  /// access, and taking it out while cleaning up after a failure would lock them out of a machine
+  /// this run never let them into.
   @override
-  Future<void> undo(StepContext context) async {
+  Future<bool> capture(StepContext context) async {
+    final String? home = await _home(context);
+    if (home == null) {
+      return false;
+    }
+    final String path = '$home/.ssh/authorized_keys';
+    if (!await context.files.exists(path)) {
+      return false;
+    }
+    return _lines(await context.files.read(path)).contains(keyIn(context));
+  }
+
+  @override
+  Future<void> undo(StepContext context, bool captured) async {
+    if (captured) {
+      return;
+    }
     final String? home = await _home(context);
     if (home == null) {
       return;

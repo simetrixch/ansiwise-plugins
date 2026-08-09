@@ -11,7 +11,7 @@ import 'package:ansiwise_api/ansiwise_api.dart';
 /// **The verdict comes from the packages being installed, never from what apt returned.** The shell
 /// this replaces has a comment saying its failure branch fires "when apt did not produce the
 /// command": an install can report success and leave nothing behind.
-final class InstallPackages extends ReversibleStep {
+final class InstallPackages extends ReversibleStep<List<String>> {
   /// Installs [packages].
   const InstallPackages(this.packages);
 
@@ -78,22 +78,35 @@ final class InstallPackages extends ReversibleStep {
     }
   }
 
+  /// Which of [packages] the machine already carried before this step ran.
+  ///
+  /// This is what "was not before" is read from, and it can only be read here: after the install
+  /// every one of them is present, so the machine no longer says which of them it brought. A machine
+  /// that already carried `git` had it removed by an undo cleaning up after an unrelated failure,
+  /// because the only question being asked was whether the package was there now.
   @override
-  Future<void> undo(StepContext context) async {
+  Future<List<String>> capture(StepContext context) async => <String>[
+    for (final String package in packages)
+      if (await _isInstalled(context, package)) package,
+  ];
+
+  @override
+  Future<void> undo(StepContext context, List<String> captured) async {
     // Only what is here now and was not before. Removing everything this step names would take away
     // packages the machine already carried, which nobody asked for — and undo runs while cleaning up
     // after a failure, the worst moment for a surprise.
-    final List<String> present = <String>[
+    final List<String> installed = <String>[
       for (final String package in packages)
-        if (await _isInstalled(context, package)) package,
+        if (!captured.contains(package))
+          if (await _isInstalled(context, package)) package,
     ];
-    if (present.isEmpty) {
+    if (installed.isEmpty) {
       return;
     }
     await context.shell.run(
       Command.detailed(
         'apt-get',
-        arguments: <String>['remove', '--yes', ...present],
+        arguments: <String>['remove', '--yes', ...installed],
         environment: _quiet,
       ),
     );

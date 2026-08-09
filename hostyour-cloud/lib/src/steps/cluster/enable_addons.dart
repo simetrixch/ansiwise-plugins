@@ -14,7 +14,7 @@ import 'package:ansiwise_api/ansiwise_api.dart';
 /// **The name servers can only be given when the name addon is switched on for the first time.**
 /// After that the argument has no effect at all, and the only thing that changes them is editing the
 /// live configuration — which the step that does exactly that is for.
-final class EnableAddons extends ReversibleStep {
+final class EnableAddons extends ReversibleStep<List<String>> {
   /// Switches on each of [addons], in order.
   const EnableAddons({required this.addons, required this.dnsUpstreamServers});
 
@@ -137,16 +137,20 @@ final class EnableAddons extends ReversibleStep {
     }
   }
 
+  /// The declared addons that are off, which are the ones the apply switches on.
+  ///
+  /// The undo switches exactly these off again. An addon that was already running when this step
+  /// ran keeps running: an undo happens while cleaning up after a failure, which is the worst moment
+  /// to take away something that was there before.
   @override
-  Future<void> undo(StepContext context) async {
-    // Only the ones that are on now. Which of them this step switched on is not recorded anywhere,
-    // and an undo runs while cleaning up after a failure — the worst moment to switch off something
-    // that was already running.
-    final Set<String> on = await enabled(context) ?? const <String>{};
-    for (final String addon in addons.reversed) {
-      if (!on.contains(addon)) {
-        continue;
-      }
+  Future<List<String>> capture(StepContext context) async =>
+      _missing(await enabled(context) ?? const <String>{});
+
+  @override
+  Future<void> undo(StepContext context, List<String> captured) async {
+    // In reverse, because the order they went on in is load-bearing: the access-control addon is
+    // first, and everything switched on after it is switched off before it.
+    for (final String addon in captured.reversed) {
       await context.shell.run(Command('microk8s', <String>['disable', addon]));
     }
   }

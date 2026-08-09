@@ -19,7 +19,7 @@ import 'detect_public_nic.dart';
 /// one that sends everything else out the public gateway. The carrier-grade range is among them
 /// because the certificate service checks its own answer over exactly that path, and steering that
 /// check out the public gateway makes every certificate on the cluster fail to be issued.
-final class WriteNetplanPublicSrcRouting extends ReversibleStep {
+final class WriteNetplanPublicSrcRouting extends ReversibleStep<String?> {
   /// Writes the drop-in at [path], sending everything else through table [table].
   const WriteNetplanPublicSrcRouting({required this.path, required this.table});
 
@@ -112,11 +112,24 @@ final class WriteNetplanPublicSrcRouting extends ReversibleStep {
     await context.files.write(path, dropIn(nic, table), mode: mode);
   }
 
+  /// What the drop-in held before, or null when it was not there.
+  ///
+  /// A drop-in of this name that a previous run wrote goes back as it was, with the permission bits
+  /// the network tool insists on — a machine left with no drop-in would answer by whichever
+  /// interface holds the default route.
   @override
-  Future<void> undo(StepContext context) async {
-    // Deleting the file does not take the rules out of the kernel. Only applying the configuration
-    // again or a restart does, and the step that applies it says what that costs.
-    await context.files.delete(path);
+  Future<String?> capture(StepContext context) async =>
+      await context.files.exists(path) ? context.files.read(path) : null;
+
+  @override
+  Future<void> undo(StepContext context, String? captured) async {
+    // Neither writing nor deleting takes the rules out of the kernel. Only applying the
+    // configuration again or a restart does, and the step that applies it says what that costs.
+    if (captured == null) {
+      await context.files.delete(path);
+      return;
+    }
+    await context.files.write(path, captured, mode: mode);
   }
 
   /// The drop-in for [nic], sending everything else through [table].

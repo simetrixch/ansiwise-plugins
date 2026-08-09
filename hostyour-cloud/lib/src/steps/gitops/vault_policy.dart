@@ -30,7 +30,7 @@ import 'vault_api.dart';
 /// **The rules are compared, not assumed.** Writing a policy overwrites whatever was there, so a
 /// step that simply wrote on every run would report having changed something every time and could
 /// never say what the cluster is actually holding.
-final class VaultPolicy extends ReversibleStep {
+final class VaultPolicy extends ReversibleStep<String?> {
   /// Writes the policy [name] with [rules] into the Vault the profile in [repository] names.
   const VaultPolicy({
     required this.repository,
@@ -121,14 +121,8 @@ final class VaultPolicy extends ReversibleStep {
       return CheckResult.blocked(refusal);
     }
 
-    final HttpAnswer answer = await context.http.send(
-      vaultRead(url, 'sys/policies/acl/${named.name}', token: held),
-    );
-    if (isAbsent(answer)) {
-      return const CheckResult.ready();
-    }
-    final Object? current = decodedData(answer.body)?['policy'];
-    if (current is! String) {
+    final String? current = await _heldPolicy(context, url, held, named.name);
+    if (current == null) {
       return const CheckResult.ready();
     }
     return _same(current, wanted.text)
@@ -195,8 +189,31 @@ final class VaultPolicy extends ReversibleStep {
     }
   }
 
+  /// The policy text Vault holds under this name right now, or null when it holds none.
+  ///
+  /// Read before the write, because a write replaces a policy whole: once it has run, nothing says
+  /// what the grants were. The undo puts this text back, and deletes the policy only where Vault
+  /// held none — a policy that was already there is one some caller's token is bound to, and taking
+  /// it away refuses that caller with a message about its own token.
+  ///
+  /// What comes back is grants and paths. No credential travels here: the root token is what asks
+  /// the question and is not part of the answer.
   @override
-  Future<void> undo(StepContext context) async {
+  Future<String?> capture(StepContext context) async {
+    final ClusterProfile vault = await clusterProfileFrom(context, repository);
+    final _Names named = _namesIn(context, vault);
+    if (named.refusal != null) {
+      return null;
+    }
+    final RootToken token = await rootTokenFrom(context, vaultCredentialsPath(context, repository));
+    if (token.value case final String held) {
+      return _heldPolicy(context, vault.url ?? '', held, named.name);
+    }
+    return null;
+  }
+
+  @override
+  Future<void> undo(StepContext context, String? captured) async {
     final ClusterProfile vault = await clusterProfileFrom(context, repository);
     final _Names named = _namesIn(context, vault);
     if (named.refusal != null) {
@@ -204,10 +221,33 @@ final class VaultPolicy extends ReversibleStep {
     }
     final RootToken token = await rootTokenFrom(context, vaultCredentialsPath(context, repository));
     if (token.value case final String held) {
+      final String url = vault.url ?? '';
+      if (captured == null) {
+        await context.http.send(vaultDelete(url, 'sys/policies/acl/${named.name}', token: held));
+        return;
+      }
       await context.http.send(
-        vaultDelete(vault.url ?? '', 'sys/policies/acl/${named.name}', token: held),
+        vaultWrite(
+          url,
+          'sys/policies/acl/${named.name}',
+          token: held,
+          body: <String, Object?>{'policy': captured},
+          method: 'PUT',
+        ),
       );
     }
+  }
+
+  /// The policy text Vault at [url] holds under [policy], or null when it holds none.
+  Future<String?> _heldPolicy(StepContext context, String url, String token, String policy) async {
+    final HttpAnswer answer = await context.http.send(
+      vaultRead(url, 'sys/policies/acl/$policy', token: token),
+    );
+    if (isAbsent(answer)) {
+      return null;
+    }
+    final Object? held = decodedData(answer.body)?['policy'];
+    return held is String ? held : null;
   }
 
   /// What this policy is called here and which mount it templates on, or why neither can be known.

@@ -1,7 +1,7 @@
 import 'package:ansiwise_api/ansiwise_api.dart';
 
-/// A step that writes a file. Reversible: the undo deletes it again.
-final class WritesAFile extends ReversibleStep with FileStep {
+/// A step that writes a file. Reversible: it keeps what the file held and puts that back.
+final class WritesAFile extends ReversibleStep<String?> with FileStep {
   WritesAFile({required this.path, required this.content});
 
   final String path;
@@ -18,7 +18,12 @@ final class WritesAFile extends ReversibleStep with FileStep {
   Future<String> contentFor(StepContext context) async => content;
 
   @override
-  Future<void> undo(StepContext context) => context.files.delete(path);
+  Future<String?> capture(StepContext context) => contentBefore(context);
+
+  @override
+  Future<void> undo(StepContext context, String? captured) async => captured == null
+      ? context.files.delete(path)
+      : context.files.write(path, captured, mode: mode);
 }
 
 /// A step that runs a command it declares as changing something, and whose postcondition is a file

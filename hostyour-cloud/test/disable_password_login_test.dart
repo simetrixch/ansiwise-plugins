@@ -85,10 +85,16 @@ void main() {
   test(
     'taking it back removes the file and reloads, so sshd stops holding the old setting',
     () async {
+      // A machine that carried no drop-in, so the capture reads nothing and the undo removes what
+      // this run put there. The whole sequence is driven rather than the undo alone, because what
+      // the undo does is decided by what the capture read before the apply.
       final FakeShell shell = FakeShell()..answers('sshd -T', reported('no'));
-      final FakeFiles files = FakeFiles(<String, String>{dropIn: DisablePasswordLogin.content});
+      final FakeFiles files = FakeFiles();
+      final StepContext context = contextOn(shell, files);
 
-      await step.undo(contextOn(shell, files));
+      final String? before = await step.capture(context);
+      await step.apply(context);
+      await step.undo(context, before);
 
       expect(files.deleted, <String>[dropIn]);
       expect(shell.ran, contains('systemctl reload ssh'));

@@ -130,7 +130,7 @@ Future<Coverage> _runTwice(Step step, {Fixture? fixture}) =>
 const String _plantedPath = '/etc/planted';
 
 /// A step that writes every time it is run and never notices that it has.
-final class DoesItsWorkEveryTime extends ReversibleStep {
+final class DoesItsWorkEveryTime extends ReversibleStep<bool> {
   /// Creates the planted step.
   const DoesItsWorkEveryTime();
 
@@ -146,11 +146,18 @@ final class DoesItsWorkEveryTime extends ReversibleStep {
       context.files.write(_plantedPath, 'again', mode: 0x180);
 
   @override
-  Future<void> undo(StepContext context) async => context.files.delete(_plantedPath);
+  Future<bool> capture(StepContext context) => context.files.exists(_plantedPath);
+
+  @override
+  Future<void> undo(StepContext context, bool captured) async {
+    if (!captured) {
+      await context.files.delete(_plantedPath);
+    }
+  }
 }
 
 /// A step that writes once and answers satisfied from then on.
-final class WritesOnlyOnce extends ReversibleStep {
+final class WritesOnlyOnce extends ReversibleStep<bool> {
   /// Creates the planted step.
   const WritesOnlyOnce();
 
@@ -173,11 +180,18 @@ final class WritesOnlyOnce extends ReversibleStep {
       context.files.write(_plantedPath, 'once', mode: 0x180);
 
   @override
-  Future<void> undo(StepContext context) async => context.files.delete(_plantedPath);
+  Future<bool> capture(StepContext context) => context.files.exists(_plantedPath);
+
+  @override
+  Future<void> undo(StepContext context, bool captured) async {
+    if (!captured) {
+      await context.files.delete(_plantedPath);
+    }
+  }
 }
 
 /// A step whose postcondition a real command would leave behind, and a fake one never does.
-final class WorksThroughACommand extends ReversibleStep {
+final class WorksThroughACommand extends ReversibleStep<bool> {
   /// Creates the planted step.
   const WorksThroughACommand();
 
@@ -203,7 +217,18 @@ final class WorksThroughACommand extends ReversibleStep {
   }
 
   @override
-  Future<void> undo(StepContext context) async {
+  Future<bool> capture(StepContext context) async {
+    final CommandResult marker = await context.shell.run(
+      const Command.observing('test', <String>['-e', path]),
+    );
+    return marker.trimmed == 'there';
+  }
+
+  @override
+  Future<void> undo(StepContext context, bool captured) async {
+    if (captured) {
+      return;
+    }
     await context.shell.run(const Command('rm', <String>['-f', path]));
   }
 }

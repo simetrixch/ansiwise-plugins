@@ -10,7 +10,7 @@ import 'write_public_src_routing_unit.dart';
 /// service installs live only in the kernel, and anything that empties the machine's rule set takes
 /// them away while the service goes on reporting itself as having succeeded. So the state itself is
 /// what this reads, and finding it gone is what starts the service again.
-final class ActivatePublicSrcRouting extends ReversibleStep {
+final class ActivatePublicSrcRouting extends ReversibleStep<bool> {
   /// Switches [unitName] on, expecting the rule keyed on [mark] into table [table].
   const ActivatePublicSrcRouting({required this.unitName, required this.mark, required this.table});
 
@@ -87,8 +87,19 @@ final class ActivatePublicSrcRouting extends ReversibleStep {
     await _mustRun(context, <String>['systemctl', 'restart', unitName]);
   }
 
+  /// Whether the service already comes back after a restart, read before it is switched on.
+  ///
+  /// A machine can arrive with the service enabled and the kernel state gone, and this step is then
+  /// only the restart that puts the state back. Switching such a service off would take away
+  /// steering this run never installed.
   @override
-  Future<void> undo(StepContext context) async {
+  Future<bool> capture(StepContext context) => _answers(context, 'is-enabled', 'enabled');
+
+  @override
+  Future<void> undo(StepContext context, bool captured) async {
+    if (captured) {
+      return;
+    }
     // This is what takes the kernel state away — the service's own stopping commands remove the
     // marking rules and the rule keyed on the mark.
     await context.shell.run(Command('systemctl', <String>['disable', '--now', unitName]));

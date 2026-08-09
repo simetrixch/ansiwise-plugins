@@ -33,7 +33,7 @@ import 'create_install_branch.dart';
 /// placeholder can be in the answer, and that is a few dozen of several hundred. Testing the first
 /// line of every tracked file instead costs one open per file, and that ordering was measured at
 /// eight and a half seconds per call on Windows for a function every install and four checks run.
-final class StampFqdn extends ReversibleStep {
+final class StampFqdn extends ReversibleStep<List<String>> {
   /// Replaces the placeholder with this run's own domain everywhere in [repository] that holds it.
   const StampFqdn({required this.repository, required this.trunk});
 
@@ -127,19 +127,21 @@ final class StampFqdn extends ReversibleStep {
     }
   }
 
+  /// Which files this run is about to stamp, as the checkout names them.
+  ///
+  /// Read before apply, because afterwards they carry the domain and a search for the domain answers
+  /// with every file that carries it — the ones this step wrote and any that already held it. An
+  /// undo restores exactly the files this step rewrote and no other.
   @override
-  Future<void> undo(StepContext context) async {
-    // What this step wrote is what now carries the domain, found the same way it found what to
-    // write. Nothing on a branch freshly cut from the trunk carries it otherwise — that is what
-    // makes the trunk domain-agnostic.
-    final List<String> written = <String>[
-      for (final String path in await _search(context, CreateInstallBranch.branchIn(context)))
-        if (!selection.excludesByName(path)) path,
-    ];
-    if (written.isEmpty) {
+  Future<List<String>> capture(StepContext context) async =>
+      (await _stampable(context)).keys.toList();
+
+  @override
+  Future<void> undo(StepContext context, List<String> captured) async {
+    if (captured.isEmpty) {
       return;
     }
-    final List<String> argv = <String>['-C', repository, 'checkout', '--', ...written];
+    final List<String> argv = <String>['-C', repository, 'checkout', '--', ...captured];
     final CommandResult restored = await context.shell.run(Command('git', argv));
     if (!restored.ok) {
       throw CommandFailed(

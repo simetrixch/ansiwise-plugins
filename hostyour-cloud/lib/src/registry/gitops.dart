@@ -44,7 +44,7 @@ const Map<StepName, RegisteredStep> gitopsSteps = <StepName, RegisteredStep>{
   ),
   StepName('kubernetes_object'): RegisteredStep(
     name: StepName('kubernetes_object'),
-    source: 'lib/src/steps/gitops/kubernetes_object.dart:25',
+    source: 'lib/src/steps/gitops/kubernetes_object.dart:26',
     create: KubernetesObject.fromArguments,
     arguments: KubernetesObject.arguments,
   ),

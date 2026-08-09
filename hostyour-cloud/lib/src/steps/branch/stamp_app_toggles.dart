@@ -25,7 +25,7 @@ import 'package:ansiwise_api/ansiwise_api.dart';
 /// what the application is and when it belongs on a cluster; that paragraph is the only place an
 /// operator learns it, and a step that regenerated the file whole would replace it with whatever the
 /// step's author remembered.
-final class StampAppToggles extends ReversibleStep {
+final class StampAppToggles extends ReversibleStep<List<String>> {
   /// Rewrites the toggles of the cluster this run was told about.
   const StampAppToggles({required this.repository});
 
@@ -181,19 +181,42 @@ final class StampAppToggles extends ReversibleStep {
     }
   }
 
+  /// Which toggles this run is about to rewrite, as the checkout names them.
+  ///
+  /// A file this step leaves byte for byte as it found it is not in the list, so an undo restores
+  /// what this step wrote and nothing else in the directory. Read before apply, since afterwards
+  /// every toggle this step owns says what this cluster is and the ones it wrote cannot be told
+  /// from the ones it left alone.
+  ///
+  /// The question asked is the one the apply answers — whether [_withDeploy] would produce
+  /// different text — and not whether the `deploy:` line already means the right thing. The two
+  /// differ for a line that says the right thing in another notation, which the apply rewrites.
   @override
-  Future<void> undo(StepContext context) async {
+  Future<List<String>> capture(StepContext context) async {
+    final List<String> rewritten = <String>[];
+    for (final MapEntry<String, bool> decision in decisionsFor(context).entries) {
+      final String path = pathOf(decision.key);
+      if (!await context.files.exists(path)) {
+        continue;
+      }
+      final String before = await context.files.read(path);
+      if (_withDeploy(before, decision.value) != before) {
+        rewritten.add(pathInRepositoryOf(decision.key));
+      }
+    }
+    return rewritten;
+  }
+
+  @override
+  Future<void> undo(StepContext context, List<String> captured) async {
+    if (captured.isEmpty) {
+      return;
+    }
     // Every one of these files is on the trunk, so taking the stamp back is restoring what git
     // holds. Restoring them in one call rather than one at a time: a partial undo leaves a cluster
     // whose toggles half describe it, which is the one state neither this step nor the operator can
     // reason about.
-    final List<String> argv = <String>[
-      '-C',
-      repository,
-      'checkout',
-      '--',
-      for (final String app in decisionsFor(context).keys) 'cluster/apps/$app.yaml',
-    ];
+    final List<String> argv = <String>['-C', repository, 'checkout', '--', ...captured];
     final CommandResult restored = await context.shell.run(Command('git', argv));
     if (!restored.ok) {
       throw CommandFailed(

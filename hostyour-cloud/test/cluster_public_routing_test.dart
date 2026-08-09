@@ -311,8 +311,9 @@ void main() {
     test('an undo takes the table out of the kernel as well as off the disk', () async {
       final ClusterMachine machine = dualNic();
       final StepContext context = machine.contextFor(under);
+      final String? captured = await step.capture(context);
       await step.apply(context);
-      await step.undo(context);
+      await step.undo(context, captured);
       expect(
         machine.changing,
         contains('nft destroy table inet ${WriteConnmarkNftTable.tableName}'),
@@ -428,7 +429,8 @@ void main() {
 
     test('stopping the service is what takes the kernel state away', () async {
       final ClusterMachine machine = dualNic();
-      await step.undo(machine.contextFor(under));
+      final StepContext context = machine.contextFor(under);
+      await step.undo(context, await step.capture(context));
       expect(
         machine.changing,
         contains('systemctl disable --now ${WritePublicSrcRoutingUnit.unitName}'),

@@ -21,8 +21,9 @@ import 'package:ansiwise_api/ansiwise_api.dart';
 /// **The undo removes the objects this manifest names and nothing else.** `kubectl delete
 /// --filename` reads the same file, so what is removed is exactly what was applied — including on a
 /// manifest holding several objects, where a delete by kind and name would need the step to parse
-/// the file and would drift from it the moment somebody added a document.
-final class KubernetesObject extends ReversibleStep {
+/// the file and would drift from it the moment somebody added a document. It removes them only where
+/// [capture] found the cluster holding none of them.
+final class KubernetesObject extends ReversibleStep<bool> {
   /// Applies the manifest at [manifest], under [repository].
   const KubernetesObject({required this.repository, required this.manifest});
 
@@ -89,8 +90,29 @@ final class KubernetesObject extends ReversibleStep {
     }
   }
 
+  /// Whether the cluster already holds every object [manifest] names.
+  ///
+  /// Read before the apply, because `kubectl delete --filename` removes what the file names whether
+  /// or not this run put it there. One answer for the whole manifest, because the delete is one act
+  /// on the whole file: there is no half of it to take back.
+  ///
+  /// What those objects held before is not captured. The cluster answers with the object as it
+  /// stands, resourceVersion and all, and applying that again is refused as a conflict once anything
+  /// has changed the object since — which the apply of this step does. So an object that was already
+  /// there is left carrying what this run applied.
   @override
-  Future<void> undo(StepContext context) async {
+  Future<bool> capture(StepContext context) async {
+    final CommandResult found = await context.shell.run(
+      Command.observing('kubectl', <String>['get', '--filename', path, '-o', 'name']),
+    );
+    return found.ok;
+  }
+
+  @override
+  Future<void> undo(StepContext context, bool captured) async {
+    if (captured) {
+      return;
+    }
     await context.shell.run(
       Command('kubectl', <String>['delete', '--filename', path, '--ignore-not-found']),
     );

@@ -31,7 +31,8 @@
 ///    the root token and unseal keys of a running Vault, the generated registry passwords, a
 ///    rotation somebody performed by hand. A re-run that rewrote them would take the keys to a live
 ///    Vault away, so a key that carries anything other than the template's own value is never
-///    touched again. See [FilledTemplate.unsetKeys].
+///    touched again — the same [FilledTemplate.isUnset] decides this and the point above, so the two
+///    cannot come apart.
 library;
 
 /// One `KEY=value` file, beside the template it was made from.
@@ -54,9 +55,6 @@ final class FilledTemplate {
   /// The value [current] holds for [key], or null when it declares no such key.
   String? valueOf(String key) => _valueIn(current, key);
 
-  /// The value the template carries for [key], or null when it declares no such key.
-  String? templateValueOf(String key) => _valueIn(template, key);
-
   /// Whether [key] has never been answered.
   ///
   /// Empty, absent, or still exactly what the template carries. The last of the three is the one
@@ -70,12 +68,6 @@ final class FilledTemplate {
     }
     return held == _valueIn(template, key);
   }
-
-  /// Which of [keys] have never been answered, in the order given.
-  List<String> unsetKeys(Iterable<String> keys) => <String>[
-    for (final String key in keys)
-      if (isUnset(key)) key,
-  ];
 
   /// Which of [keys] the TEMPLATE does not declare, in the order given.
   ///

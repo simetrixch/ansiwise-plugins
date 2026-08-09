@@ -21,7 +21,7 @@ import 'preflight_docker_mirror_credential.dart';
 /// whose credential is fillable and unfilled.
 ///
 /// The file holds a live credential and is readable by its owner alone.
-final class WriteContainerdDockerMirror extends ReversibleStep {
+final class WriteContainerdDockerMirror extends ReversibleStep<String?> {
   /// Writes the mirror from the checkout at [repository].
   const WriteContainerdDockerMirror({required this.repository, required this.certsDirectory});
 
@@ -171,10 +171,23 @@ final class WriteContainerdDockerMirror extends ReversibleStep {
     }
   }
 
+  /// What the file held before, or null when it was not there.
+  ///
+  /// A machine whose pulls already went through a mirror gets that file back, credential and all,
+  /// with the same permission bits; deleting it there would put every pull on the rate-limited
+  /// public path instead of where it was.
   @override
-  Future<void> undo(StepContext context) async {
-    // Deleting it puts the pulls back on the public path, which is where they were before.
-    await context.files.delete(path);
+  Future<String?> capture(StepContext context) async =>
+      await context.files.exists(path) ? context.files.read(path) : null;
+
+  @override
+  Future<void> undo(StepContext context, String? captured) async {
+    if (captured == null) {
+      // Deleting it puts the pulls back on the public path, which is where they were before.
+      await context.files.delete(path);
+      return;
+    }
+    await context.files.write(path, captured, mode: mode);
   }
 
   /// The configuration sending [mirrored] pulls through [host] with [blob].

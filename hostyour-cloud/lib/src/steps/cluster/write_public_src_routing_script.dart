@@ -14,7 +14,7 @@ import 'write_netplan_public_src_routing.dart';
 /// **The script removes any rule already at its own number before adding one, and does it in a
 /// loop.** Adding without removing leaves a second identical rule on every run, and a single removal
 /// leaves whatever a previous run added twice.
-final class WritePublicSrcRoutingScript extends ReversibleStep {
+final class WritePublicSrcRoutingScript extends ReversibleStep<String?> {
   /// Writes the script at [path], installing the rule at [priority].
   const WritePublicSrcRoutingScript({
     required this.path,
@@ -124,10 +124,22 @@ final class WritePublicSrcRoutingScript extends ReversibleStep {
     await context.files.write(path, script, mode: mode);
   }
 
+  /// What the script file held before, or null when it was not there.
+  ///
+  /// The rule keyed on the mark comes out of the kernel either way; what goes back on disk is the
+  /// script a previous run wrote, so the service that runs it is not left pointing at nothing.
   @override
-  Future<void> undo(StepContext context) async {
+  Future<String?> capture(StepContext context) async =>
+      await context.files.exists(path) ? context.files.read(path) : null;
+
+  @override
+  Future<void> undo(StepContext context, String? captured) async {
     await context.shell.run(Command('ip', ruleArguments('del')));
-    await context.files.delete(path);
+    if (captured == null) {
+      await context.files.delete(path);
+      return;
+    }
+    await context.files.write(path, captured, mode: mode);
   }
 
   /// The arguments that [verb] the rule keyed on the mark.

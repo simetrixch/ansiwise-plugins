@@ -14,7 +14,7 @@ import 'stamp_kube_proxy_cluster_cidr.dart';
 /// **These may be written before the identity provider exists.** The API server does not fail to
 /// start on an issuer it cannot reach; it simply refuses tokens until the address answers. So
 /// nothing has to be ordered around the identity provider's own deployment.
-final class ConfigureKubeApiserverOidc extends ReversibleStep {
+final class ConfigureKubeApiserverOidc extends ReversibleStep<String?> {
   /// Points the API server at this installation's identity provider, for the client [clientId].
   const ConfigureKubeApiserverOidc({
     required this.clientId,
@@ -204,16 +204,23 @@ final class ConfigureKubeApiserverOidc extends ReversibleStep {
     await StampKubeProxyClusterCidr.restartKubelite(context);
   }
 
+  /// The API server's arguments as they were, or null when the file was not there.
+  ///
+  /// The whole file rather than the six flags, because the undo writes it back as it stood: the
+  /// snap's own arguments live in it too, and a run that unwinds does so from the newest step
+  /// backwards, so each file lands on the text the step before it left.
   @override
-  Future<void> undo(StepContext context) async {
-    if (!await context.files.exists(argsPath)) {
+  Future<String?> capture(StepContext context) async =>
+      await context.files.exists(argsPath) ? context.files.read(argsPath) : null;
+
+  @override
+  Future<void> undo(StepContext context, String? captured) async {
+    if (captured == null) {
+      // The snap writes this file when it installs. There was none, so writing one here would leave
+      // the API server started with arguments nothing on the machine put there.
       return;
     }
-    String stripped = await context.files.read(argsPath);
-    for (final String name in flagsIn(context).keys) {
-      stripped = StampKubeProxyClusterCidr.withoutFlag(stripped, name);
-    }
-    await context.files.write(argsPath, stripped, mode: StampKubeProxyClusterCidr.mode);
+    await context.files.write(argsPath, captured, mode: StampKubeProxyClusterCidr.mode);
     await StampKubeProxyClusterCidr.restartKubelite(context);
   }
 

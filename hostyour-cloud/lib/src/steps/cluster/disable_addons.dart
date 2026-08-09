@@ -14,7 +14,7 @@ import 'enable_addons.dart';
 ///
 /// Switching off an addon that is already off is accepted by the tool, so nothing here has to guard
 /// against two runs racing each other.
-final class DisableAddons extends ReversibleStep {
+final class DisableAddons extends ReversibleStep<List<String>> {
   /// Switches off each of [addons] that is on.
   const DisableAddons({required this.addons});
 
@@ -72,9 +72,18 @@ final class DisableAddons extends ReversibleStep {
     }
   }
 
+  /// The declared addons that are on, which are the ones the apply switches off.
+  ///
+  /// The undo switches exactly these back on. An addon that was already off — because the snap never
+  /// switched it on, or because a previous run switched it off — would otherwise be switched on by
+  /// an undo, and this platform declares an addon here in order not to run it.
   @override
-  Future<void> undo(StepContext context) async {
-    for (final String addon in addons) {
+  Future<List<String>> capture(StepContext context) async =>
+      _stillOn(await EnableAddons.enabled(context) ?? const <String>{});
+
+  @override
+  Future<void> undo(StepContext context, List<String> captured) async {
+    for (final String addon in captured) {
       await context.shell.run(Command('microk8s', <String>['enable', addon]));
     }
   }

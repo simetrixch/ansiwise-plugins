@@ -14,7 +14,7 @@ import 'package:ansiwise_api/ansiwise_api.dart';
 /// trunk brings back every placeholder, and the stamps are re-run in place. What this must never do
 /// is throw away an existing branch to make room for a new one, so a branch that already exists is
 /// reported rather than replaced.
-final class CreateInstallBranch extends ReversibleStep {
+final class CreateInstallBranch extends ReversibleStep<String?> {
   /// Cuts the branch of this run's domain from [trunk] in the checkout at [repository].
   const CreateInstallBranch({required this.repository, required this.trunk});
 
@@ -136,15 +136,28 @@ final class CreateInstallBranch extends ReversibleStep {
     await _mustRun(context, <String>['-C', repository, 'checkout', '-b', branchIn(context)]);
   }
 
+  /// The branch that was checked out before this step cut its own, which is where [undo] puts the
+  /// checkout back.
+  ///
+  /// Read before apply, because after it the checkout stands on the branch this step made and the
+  /// one it came from is nowhere on the machine. It is also what says this step cut anything at all:
+  /// a checkout that was already on the branch, or on none, is one an undo leaves alone.
   @override
-  Future<void> undo(StepContext context) async {
-    // Only when this branch is what is checked out. An undo runs while cleaning up after a failure,
-    // and deleting a branch that something else moved to would take away work nobody asked to lose.
+  Future<String?> capture(StepContext context) => _head(context);
+
+  @override
+  Future<void> undo(StepContext context, String? captured) async {
     final String fqdn = branchIn(context);
+    if (captured == null || captured == fqdn) {
+      return;
+    }
+    // Only when this branch is still what is checked out. An undo runs while cleaning up after a
+    // failure, and deleting a branch that something else moved to would take away work nobody asked
+    // to lose.
     if (await _head(context) != fqdn) {
       return;
     }
-    await _mustRun(context, <String>['-C', repository, 'checkout', trunk]);
+    await _mustRun(context, <String>['-C', repository, 'checkout', captured]);
     // The branch has not been pushed by anything in this program, so what is deleted here exists
     // only on this machine.
     await _mustRun(context, <String>['-C', repository, 'branch', '-D', fqdn]);

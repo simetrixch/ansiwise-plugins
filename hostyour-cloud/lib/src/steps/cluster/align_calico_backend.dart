@@ -20,7 +20,7 @@ import 'reapply_calico_manifest.dart';
 /// **Left alone means left alone.** An agent that is set to work the backend out for itself is not
 /// changed, because pinning it would be a change nobody asked for and a needless replacement of
 /// every agent pod with it.
-final class AlignCalicoBackend extends ReversibleStep {
+final class AlignCalicoBackend extends ReversibleStep<String?> {
   /// Pins the agent to the machine's backend, giving the replacement [rolloutTimeoutSeconds].
   const AlignCalicoBackend({required this.rolloutTimeoutSeconds});
 
@@ -85,9 +85,21 @@ final class AlignCalicoBackend extends ReversibleStep {
     await _rollAgent(context);
   }
 
+  /// The backend the agent is pinned to, read before it is pinned to this machine's.
+  ///
+  /// The empty string is the agent carrying no pin at all, and null is the object being unreadable.
+  /// Reading it after the apply would read the pin this step wrote.
   @override
-  Future<void> undo(StepContext context) async {
-    await _mustRun(context, _patch(auto));
+  Future<String?> capture(StepContext context) => _live(context);
+
+  @override
+  Future<void> undo(StepContext context, String? captured) async {
+    if (captured == null) {
+      return;
+    }
+    // An agent with no pin works the backend out for itself, so that is what the empty reading is
+    // put back as.
+    await _mustRun(context, _patch(captured.isEmpty ? auto : captured));
     await _rollAgent(context);
   }
 

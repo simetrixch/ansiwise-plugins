@@ -2,7 +2,7 @@ import 'package:ansiwise_api/ansiwise_api.dart';
 import 'assert_cli_tool_versions.dart';
 
 /// Fetches the structured-text tool at exactly the version this platform pins.
-final class InstallYqCli extends ReversibleStep {
+final class InstallYqCli extends ReversibleStep<bool> {
   /// Fetches [version] into [path].
   const InstallYqCli({required this.version, required this.path});
 
@@ -65,8 +65,19 @@ final class InstallYqCli extends ReversibleStep {
     await _mustRun(context, <String>['chmod', '755', path]);
   }
 
+  /// Whether a tool is already at the path this fetches into.
+  ///
+  /// The skip is decided on the version, so this step also runs where the tool is on the machine at
+  /// another version and the fetch replaces it. Deleting that file at undo time would take the tool
+  /// away from a machine that came with one.
   @override
-  Future<void> undo(StepContext context) async {
+  Future<bool> capture(StepContext context) => context.files.exists(path);
+
+  @override
+  Future<void> undo(StepContext context, bool captured) async {
+    if (captured) {
+      return;
+    }
     await context.files.delete(path);
   }
 

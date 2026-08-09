@@ -11,7 +11,7 @@ import 'configure_slave_apiserver_oidc_trust.dart';
 /// illustrations use, because the address stood in the program file and was somebody's example.
 /// It is answered now, so there is no example left to catch — and a rule that recognised an
 /// illustration would refuse the operator whose own mailbox happens to read like one.
-final class WriteClusterIssuerManifest extends ReversibleStep {
+final class WriteClusterIssuerManifest extends ReversibleStep<String?> {
   /// Renders the issuer [name] into [stateDirectory], for the mailbox this run names.
   const WriteClusterIssuerManifest({
     required this.name,
@@ -111,11 +111,22 @@ final class WriteClusterIssuerManifest extends ReversibleStep {
     await context.files.write(path, manifestFor(context), mode: mode);
   }
 
+  /// What the file held before, or null when it was not there.
+  ///
+  /// A rendered file and not state: the object in the cluster is what issues certificates, and the
+  /// step that applies it is what takes that away. What this puts back is the text a previous run
+  /// rendered, so a machine that had one is left with it rather than with nothing.
   @override
-  Future<void> undo(StepContext context) async {
-    // A rendered file and not state: the object in the cluster is what issues certificates, and the
-    // step that applies it is what takes that away.
-    await context.files.delete(path);
+  Future<String?> capture(StepContext context) async =>
+      await context.files.exists(path) ? context.files.read(path) : null;
+
+  @override
+  Future<void> undo(StepContext context, String? captured) async {
+    if (captured == null) {
+      await context.files.delete(path);
+      return;
+    }
+    await context.files.write(path, captured, mode: mode);
   }
 
   /// The manifest itself.

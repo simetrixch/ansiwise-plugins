@@ -17,7 +17,7 @@ import 'detect_public_nic.dart';
 ///
 /// **The file begins by removing the table it is about to define.** Loading it a second time then
 /// replaces what is there instead of adding to it, which is what makes reloading safe.
-final class WriteConnmarkNftTable extends ReversibleStep {
+final class WriteConnmarkNftTable extends ReversibleStep<String?> {
   /// Writes the rules at [path], marking connections with [mark].
   const WriteConnmarkNftTable({required this.path, required this.mark});
 
@@ -96,10 +96,22 @@ final class WriteConnmarkNftTable extends ReversibleStep {
     await context.files.write(path, ruleset(nic, mark), mode: mode);
   }
 
+  /// What the rules file held before, or null when it was not there.
+  ///
+  /// The undo puts that text back rather than deleting whatever is at the path, so a machine that
+  /// arrived with a rule set of this name keeps it — the table in the kernel goes either way.
   @override
-  Future<void> undo(StepContext context) async {
+  Future<String?> capture(StepContext context) async =>
+      await context.files.exists(path) ? context.files.read(path) : null;
+
+  @override
+  Future<void> undo(StepContext context, String? captured) async {
     await context.shell.run(const Command('nft', <String>['destroy', 'table', 'inet', tableName]));
-    await context.files.delete(path);
+    if (captured == null) {
+      await context.files.delete(path);
+      return;
+    }
+    await context.files.write(path, captured, mode: mode);
   }
 
   /// The rules for [nic], marking its connections with [mark].

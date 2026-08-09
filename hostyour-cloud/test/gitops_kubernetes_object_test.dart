@@ -94,8 +94,11 @@ void main() {
     // By the file and not by kind and name: a manifest holding several objects would otherwise need
     // this step to parse it, and the parse would drift from the file the day somebody adds a
     // document to it.
+    // False is what the capture answers for a cluster that held none of these objects, which is the
+    // only case where taking the run back means deleting them. It is passed rather than captured
+    // here so the single command below is the delete and not a `kubectl get` in front of it.
     final FakeShell shell = diffing(0);
-    await step.undo(contextOn(shell));
+    await step.undo(contextOn(shell), false);
     expect(shell.commands.single.argv, <String>[
       'kubectl',
       'delete',

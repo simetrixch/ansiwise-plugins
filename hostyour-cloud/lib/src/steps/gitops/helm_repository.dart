@@ -12,7 +12,7 @@ import 'package:ansiwise_api/ansiwise_api.dart';
 /// pointing somewhere else is the case worth catching: helm answers every later question about it
 /// from the wrong index, and the release that installs from it is a chart nobody chose. So the check
 /// asks what the name currently resolves to rather than whether the name is taken.
-final class HelmRepository extends ReversibleStep {
+final class HelmRepository extends ReversibleStep<String?> {
   /// Registers the chart repository at [url] under [name].
   const HelmRepository({required this.name, required this.url});
 
@@ -64,9 +64,23 @@ final class HelmRepository extends ReversibleStep {
     }
   }
 
+  /// The address helm holds [name] at right now, or null when it holds no such name.
+  ///
+  /// Read before the add, and the add is a `--force-update`: it overwrites the address a name was
+  /// already registered at, and afterwards nothing on the machine says what that address was. The
+  /// undo puts it back from here, and removes the name only where helm held none.
   @override
-  Future<void> undo(StepContext context) async {
-    await context.shell.run(Command('helm', <String>['repo', 'remove', name]));
+  Future<String?> capture(StepContext context) => _registeredUrl(context);
+
+  @override
+  Future<void> undo(StepContext context, String? captured) async {
+    if (captured == null) {
+      await context.shell.run(Command('helm', <String>['repo', 'remove', name]));
+      return;
+    }
+    await context.shell.run(
+      Command('helm', <String>['repo', 'add', name, captured, '--force-update']),
+    );
   }
 
   List<String> get _add => <String>['helm', 'repo', 'add', name, url, '--force-update'];

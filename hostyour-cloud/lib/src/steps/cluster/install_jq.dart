@@ -11,7 +11,7 @@ import 'ensure_tool_prerequisites.dart';
 /// package manager carries exactly one of these, so no re-run of this step can reach a different
 /// version — and failing on the one it carries would make an install that can never end green on a
 /// machine whose package manager disagrees with the pin.
-final class InstallJq extends ReversibleStep {
+final class InstallJq extends ReversibleStep<bool> {
   /// Puts the tool on the machine.
   const InstallJq();
 
@@ -47,8 +47,18 @@ final class InstallJq extends ReversibleStep {
     );
   }
 
+  /// Whether the tool is on the path already.
+  ///
+  /// The undo removes the package, and a machine that carried the tool before this ran would lose
+  /// it — the package manager removes what is installed, not what this step installed.
   @override
-  Future<void> undo(StepContext context) async {
+  Future<bool> capture(StepContext context) => EnsureToolPrerequisites.onPath(context, tool);
+
+  @override
+  Future<void> undo(StepContext context, bool captured) async {
+    if (captured) {
+      return;
+    }
     await context.shell.run(
       const Command.detailed(
         'apt-get',

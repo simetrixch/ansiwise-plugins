@@ -10,9 +10,9 @@ import 'package:ansiwise_api/ansiwise_api.dart';
 ///
 /// **The undo is narrow because the delete is not.** Removing a namespace takes every volume claim
 /// in it with it, and the volumes are where Vault's storage and the identity provider's database
-/// live. What makes it safe here is that the undo only ever runs for a namespace this step itself
-/// created moments earlier, which by its own check held nothing.
-final class KubernetesNamespace extends ReversibleStep {
+/// live. What makes it safe here is [capture]: it reads whether the namespace was already standing
+/// before this step ran, and the undo removes only one that was not.
+final class KubernetesNamespace extends ReversibleStep<bool> {
   /// Creates the namespace called [namespace].
   const KubernetesNamespace(this.namespace);
 
@@ -33,14 +33,9 @@ final class KubernetesNamespace extends ReversibleStep {
   final String namespace;
 
   @override
-  Future<CheckResult> check(StepContext context) async {
-    final CommandResult found = await context.shell.run(
-      Command.observing('kubectl', <String>['get', 'namespace', namespace, '-o', 'name']),
-    );
-    return found.ok
-        ? CheckResult.satisfied('the namespace $namespace is on this cluster')
-        : const CheckResult.ready();
-  }
+  Future<CheckResult> check(StepContext context) async => await _isThere(context)
+      ? CheckResult.satisfied('the namespace $namespace is on this cluster')
+      : const CheckResult.ready();
 
   @override
   Future<StepPlan> plan(StepContext context) async => StepPlan.argv(_create);
@@ -53,12 +48,31 @@ final class KubernetesNamespace extends ReversibleStep {
     }
   }
 
+  /// Whether the namespace is on this cluster already.
+  ///
+  /// Read before the create, because after it there is no telling the two apart: a namespace this
+  /// step made and one it found look the same, and the delete in the undo takes the second one's
+  /// volume claims with it.
   @override
-  Future<void> undo(StepContext context) async {
+  Future<bool> capture(StepContext context) => _isThere(context);
+
+  @override
+  Future<void> undo(StepContext context, bool captured) async {
+    if (captured) {
+      return;
+    }
     await context.shell.run(
       Command('kubectl', <String>['delete', 'namespace', namespace, '--ignore-not-found']),
     );
   }
 
   List<String> get _create => <String>['kubectl', 'create', 'namespace', namespace];
+
+  /// Whether the cluster holds this namespace.
+  Future<bool> _isThere(StepContext context) async {
+    final CommandResult found = await context.shell.run(
+      Command.observing('kubectl', <String>['get', 'namespace', namespace, '-o', 'name']),
+    );
+    return found.ok;
+  }
 }

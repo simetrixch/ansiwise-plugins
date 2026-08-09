@@ -14,7 +14,7 @@ import 'write_public_src_routing_script.dart';
 /// **Stopping the service is what removes them, which is why it says how.** Deleting the files does
 /// not: the rules are already in the kernel. So the service carries the two commands that take them
 /// out, and stopping it is the first act of any teardown.
-final class WritePublicSrcRoutingUnit extends ReversibleStep {
+final class WritePublicSrcRoutingUnit extends ReversibleStep<String?> {
   /// Writes the service at [path], running the script at [scriptPath].
   const WritePublicSrcRoutingUnit({
     required this.path,
@@ -136,12 +136,24 @@ final class WritePublicSrcRoutingUnit extends ReversibleStep {
     await context.shell.run(const Command('systemctl', <String>['daemon-reload']));
   }
 
+  /// What the service file held before, or null when it was not there.
+  ///
+  /// A machine that arrived with a service of this name gets its file back rather than losing it,
+  /// and the service manager is told to read the directory again either way.
   @override
-  Future<void> undo(StepContext context) async {
-    // Stopping it first is what takes the rules out of the kernel — deleting the file would leave
-    // them there with nothing on the machine saying they exist.
+  Future<String?> capture(StepContext context) async =>
+      await context.files.exists(path) ? context.files.read(path) : null;
+
+  @override
+  Future<void> undo(StepContext context, String? captured) async {
+    // Stopping it first is what takes the rules out of the kernel — putting the file back or
+    // deleting it would leave them there with nothing on the machine saying they exist.
     await context.shell.run(const Command('systemctl', <String>['disable', '--now', unitName]));
-    await context.files.delete(path);
+    if (captured == null) {
+      await context.files.delete(path);
+    } else {
+      await context.files.write(path, captured, mode: mode);
+    }
     await context.shell.run(const Command('systemctl', <String>['daemon-reload']));
   }
 
