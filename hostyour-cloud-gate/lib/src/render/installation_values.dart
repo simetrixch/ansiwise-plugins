@@ -12,7 +12,7 @@ import '../installation.dart';
 ///
 /// IT IS WRITTEN AT RUN TIME AND IS NEVER A FILE IN THE TREE. It carries the placeholder domain,
 /// and the domain stamp rewrites that literal in every tracked file it does not exclude by class.
-/// A fixture kept as `tools/fixtures/profile.yaml` matches none of those exclusions, so generating
+/// A fixture kept as a file of the audited tree would match none of those exclusions, so generating
 /// an installation would rewrite the gate's own fixture to that installation's real domain — and
 /// the next render would be measuring a customer.
 final class InstallationValues {

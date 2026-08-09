@@ -47,13 +47,20 @@ Future<void> main(List<String> arguments) async {
     exit(1);
   }
 
-  final Directory repository = packageOfToolScript(Platform.script);
+  // The REPOSITORY, not the package this program sits in. The two were the same directory while
+  // this repository held one package, which is why walking the package went unnoticed; the moment a
+  // second arrived the gate went on checking the first and printed `every check green` over
+  // sixty-four files it had never opened.
+  final Directory package = packageOfToolScript(Platform.script);
+  final Directory repository = repositoryOf(package);
   const GateLog log = StdoutGateLog();
   final GateVerdict verdict = await PackageGate(
     toolchain: const RealDartToolchain(),
     packages: dartPackagesIn(repository),
     log: log,
-    analysisRoot: repository.path,
+    // The analysis program is started in the package that HOLDS it, and judges the whole repository
+    // from there. Starting it at the repository root would look tidier and find no tool/ at all.
+    analysisRoot: package.path,
   ).run();
 
   log.heading('verdict');

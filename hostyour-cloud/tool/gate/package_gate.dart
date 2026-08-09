@@ -20,17 +20,36 @@ import 'gate_log.dart';
 
 /// What a gate run decided.
 final class GateVerdict {
-  /// Records the steps that went red, as `<package>/<step>`.
-  const GateVerdict(this.failures);
+  /// Records the steps that went red, as `<package>/<step>`, out of [covered] packages.
+  const GateVerdict(this.failures, {required this.covered});
 
   /// What failed, in the order it failed.
   final List<String> failures;
+
+  /// The packages this run went through, by name and in the order it took them.
+  ///
+  /// Carried into the verdict rather than left to the log above it, because the green line is the
+  /// one thing anybody reads and `every check green` says nothing about how much was looked at. This
+  /// gate has already once printed exactly that over a package it never opened, when a second one
+  /// arrived in the repository and the walk was still rooted at the first.
+  final List<String> covered;
 
   /// Whether everything passed.
   bool get green => failures.isEmpty;
 
   /// The one line the gate is read by.
-  String get line => green ? 'ci: OK — every check green' : 'ci: FAIL — ${failures.join(' ')}';
+  ///
+  /// It names what it covered, so the reader can hold the claim against a count he knows instead of
+  /// taking it. A run that covered nothing says so and is not green: there is no such thing as every
+  /// check passing when no check ran.
+  String get line {
+    if (covered.isEmpty) {
+      return 'ci: FAIL — no Dart package was found to check, so nothing was measured';
+    }
+    return green
+        ? 'ci: OK — every check green for ${covered.length} package(s): ${covered.join(', ')}'
+        : 'ci: FAIL — ${failures.join(' ')}';
+  }
 }
 
 /// The checks of every package, run in order.
@@ -94,6 +113,9 @@ final class PackageGate {
       }
     }
 
-    return GateVerdict(failures);
+    return GateVerdict(
+      failures,
+      covered: <String>[for (final DartPackage package in packages) package.name],
+    );
   }
 }

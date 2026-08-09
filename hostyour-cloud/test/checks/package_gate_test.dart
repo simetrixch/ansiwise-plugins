@@ -19,7 +19,27 @@ void main() {
   test('a green run says exactly what the gate is read by', () async {
     final GateVerdict verdict = await _gate(FakeDartToolchain(), <String>['one']).run();
     expect(verdict.green, isTrue);
-    expect(verdict.line, 'ci: OK — every check green');
+    expect(verdict.line, 'ci: OK — every check green for 1 package(s): one');
+  });
+
+  test('the green line names every package it covered', () async {
+    // The count and the names are in the line the reader takes the verdict from, not only in the
+    // log above it. This gate has already printed `every check green` over a package it never
+    // opened: a second one arrived in the repository and the walk was still rooted at the first.
+    // A number a reader knows is what turns that from invisible into obvious.
+    final GateVerdict verdict = await _gate(FakeDartToolchain(), <String>['one', 'two']).run();
+    expect(verdict.line, 'ci: OK — every check green for 2 package(s): one, two');
+  });
+
+  test('a run that found no package is not green', () async {
+    final GateVerdict verdict = await _gate(FakeDartToolchain(), <String>[]).run();
+    expect(
+      verdict.line,
+      'ci: FAIL — no Dart package was found to check, so nothing was measured',
+      reason:
+          'there is no such thing as every check passing when no check ran, and a gate pointed at '
+          'the wrong directory is exactly how that happens',
+    );
   });
 
   test('every package is resolved, analysed once, and tested', () async {

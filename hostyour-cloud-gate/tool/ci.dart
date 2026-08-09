@@ -1,4 +1,14 @@
-/// ci — the gate of this repository, on this machine.
+/// ci — the gate of THIS PACKAGE, on this machine.
+///
+/// It judges `hostyour_cloud_gate` and nothing else. The gate of the whole repository is
+/// `hostyour-cloud/tool/ci.dart`, which walks every package the repository holds and names them in
+/// its verdict. This one exists beside it because it pins HELM as well as Dart, and the checks that
+/// render charts are not true under another helm.
+///
+/// SO ITS VERDICT NAMES ITS SCOPE. A green line that reads like a verdict on the repository, out of
+/// a run that saw one package of it, is the exact shape of wrong answer this organisation has
+/// already been bitten by: the repository gate once printed `every check green` over sixty-four
+/// files it had never opened, because it walked a package where it meant a repository.
 ///
 /// Nothing runs in a hosted CI. This program IS the CI, and it is a standing rule of this project
 /// rather than a workaround: the gate is the done-criterion for every step, so it has to run where
@@ -11,10 +21,10 @@
 /// an image and started naming a requirement.
 ///
 /// WHAT THE CONTAINER ALSO GAVE, AND WHERE IT WENT. Line endings are their own check, and it runs
-/// anywhere — tools/test/line_endings_test.dart reads .gitattributes back against the bytes in the
-/// tree. Case-sensitive filenames were the one thing a Windows-only run really would have let
-/// through, and they are now decided rather than assumed: tools/test/directive_case_test.dart holds
-/// every Dart directive against the path git tracks, byte for byte.
+/// anywhere — test/line_endings_test.dart reads the audited tree's .gitattributes back against its
+/// bytes. Case-sensitive filenames were the one thing a Windows-only run really would have let
+/// through, and they are now decided rather than assumed: test/directive_case_test.dart holds every
+/// Dart directive of this package against the path git tracks, byte for byte.
 ///
 /// IT IMPORTS NOTHING BUT dart:io AND tool/toolchain_guard.dart, WHICH IMPORTS NOTHING BUT dart:io,
 /// and that is load-bearing. `dart pub get` is this gate's own first step, so the gate has to be
@@ -32,12 +42,12 @@ import 'toolchain_guard.dart';
 /// from memory is as old as whoever recalled it, which is why the source is part of the record.
 ///
 /// These are the toolchain of the GATE and not of the platform: what a cluster of this platform
-/// runs is decided in platform/versions.yaml, and tools/lib/src/pins/ audits that file.
+/// runs is decided in the audited tree's platform/versions.yaml, and lib/src/pins/ audits it.
 const String dartVersion =
     '3.12.2'; // storage.googleapis.com/dart-archive/channels/stable/release/latest/VERSION — 2026-08-07
 const String helmVersion = 'v4.2.3'; // api.github.com/repos/helm/helm/releases/latest — 2026-08-07
 
-/// The package the checks live in and run from: tools/, found from where this script sits.
+/// The package the checks live in and run from, found from where this script sits.
 Directory get _package => File.fromUri(Platform.script).parent.parent;
 
 Future<void> main(List<String> arguments) async {
@@ -86,7 +96,7 @@ Future<void> main(List<String> arguments) async {
     stderr.writeln('ci: FAIL — ${failed.join(' ')}');
     exit(1);
   }
-  stdout.writeln('ci: OK — every check green');
+  stdout.writeln('ci: OK — every check green for hostyour_cloud_gate');
 }
 
 /// Runs `dart [argv]` in [workingDirectory], showing its output as it happens.

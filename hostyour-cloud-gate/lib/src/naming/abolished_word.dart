@@ -9,7 +9,8 @@
 ///
 /// A WORD AND NOT A SUBSTRING, and that distinction is the whole check. `installation` is what this
 /// product calls one deployment of itself — the word `branch-classes.yaml`, `cluster/profile.yaml`
-/// and every chart in the tree already use — and `tools/lib/src/installation.dart` is named for it.
+/// and every chart in the tree already use — and this package's `lib/src/installation.dart` is
+/// named for it.
 /// A substring match would rename that file to something that no longer says what it is, which is
 /// the failure this exists to prevent arriving from the other side. Word boundaries are the
 /// characters a name is built from: a hyphen, an underscore, a dot, a digit.
