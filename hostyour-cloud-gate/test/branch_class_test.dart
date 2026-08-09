@@ -1,5 +1,7 @@
 import 'dart:io';
 
+import 'package:ansiwise_api/ansiwise_api.dart';
+import 'package:hostyour_cloud/hostyour_cloud.dart';
 import 'package:hostyour_cloud_gate/hostyour_cloud_gate.dart';
 import 'package:test/test.dart';
 
@@ -9,10 +11,14 @@ import 'support/repository_under_check.dart';
 ///
 /// The audit is [BranchClassAudit]; this file drives it over the repository, where its findings must
 /// be empty, and over a declaration written for the purpose that carries one instance of every
-/// defect it is supposed to find. The five mirrors it measures against — the domain stamp, the role
+/// defect it is supposed to find. The five stamps it measures against — the domain stamp, the role
 /// stamp, the revision stamp, the cluster-profile stamp and the app-toggle stamp — are driven
-/// separately over planted paths, because a mirror that has drifted from the step it mirrors would
-/// let this whole file agree with the declaration about something untrue.
+/// separately over planted paths.
+///
+/// THEY ARE NOT MIRRORS ANY MORE. Each reads the rule the step itself selects by, so a changed
+/// exclusion changes what this file measures in the same edit and there is nothing left that can
+/// silently disagree. What that leaves open is the other direction — a stamper nobody here knows
+/// about at all — and the last group in this file is what closes it.
 void main() {
   final Directory scratch = Directory.systemTemp.createTempSync('hostyour-branch-');
   final SourceTree tree = repositoryTree();
@@ -84,10 +90,11 @@ void main() {
     });
   });
 
-  group('the domain stamp mirror', () {
+  group('the domain stamp, driven over planted paths', () {
     // Everything the stamped: and never-stamp: halves decide rests on this answering the way
-    // StampFqdn answers. A mirror that has lost an exclusion reports a file that is safe; one that
-    // has gained a rule passes over installation state nobody wrote down.
+    // StampFqdn answers — and it answers by asking the very rule StampFqdn selects by. So what is
+    // proven here is not agreement between two copies, there being one; it is that the rule really
+    // holds for the paths its exclusions exist for, which no real tree is obliged to carry.
 
     const DomainStamp stamp = DomainStamp();
     late SourceTree planted;
@@ -153,9 +160,10 @@ void main() {
     });
   });
 
-  group('the role stamp mirror', () {
-    // The derived: half rests on this answering the way StampRole answers, and the difference
-    // between two of its four licences is one file: the branch's own cluster map.
+  group('the role stamp, driven over planted paths', () {
+    // The derived: half rests on this answering the way StampRole answers, and it does so by asking
+    // the rule StampRole prunes by. What is decided HERE is only which licence a removal earns, and
+    // the difference between two of them is one file: the branch's own cluster map.
 
     const String ownMap = BranchClassAudit.ownClusterMap;
     const String foreignMap = 'clusters/active/s1.$placeholderDomain.yaml';
@@ -407,6 +415,39 @@ void main() {
         reason:
             'a half that plants nothing is green for having measured nothing, which is the shape '
             'four checks in a sibling repository were silently in for weeks',
+      );
+    });
+  });
+
+  group('every stamper of a branch run is accounted for here', () {
+    // THE OTHER DIRECTION, and the one the stamps themselves cannot cover. Each of them now reads
+    // the rule its step selects by, so a changed exclusion cannot pass unnoticed. A stamper that is
+    // ADDED is a different matter: this audit would go on measuring the five it knows and report
+    // green about a branch run that does a sixth thing to the tree.
+    //
+    // The plugin's branch registry is its own statement of what a branch run does — no step reaches
+    // a program without an entry in it, and a check in that package proves the registry and the
+    // classes agree. So the registry is what is read here, and the list below is what somebody has
+    // to look at when it changes.
+    test('the branch registry names the five stampers this audit measures, and no others', () {
+      final List<String> stampers = <String>[
+        for (final StepName name in branchSteps.keys)
+          if (name.value.startsWith('stamp_')) name.value,
+      ]..sort();
+
+      expect(
+        stampers,
+        <String>[
+          'stamp_app_toggles',
+          'stamp_cluster_profile',
+          'stamp_fqdn',
+          'stamp_revision',
+          'stamp_role',
+        ],
+        reason:
+            'a stamper this audit knows nothing about writes into the tree while branch-classes.yaml '
+            'is certified against the five that came before it — so a new one stops the gate here, '
+            'and whoever added it decides what its paths are declared as',
       );
     });
   });

@@ -52,7 +52,7 @@ const Map<StepName, RegisteredStep> branchSteps = <StepName, RegisteredStep>{
   ),
   StepName('stamp_fqdn'): RegisteredStep(
     name: StepName('stamp_fqdn'),
-    source: 'lib/src/steps/branch/stamp_fqdn.dart:34',
+    source: 'lib/src/steps/branch/stamp_fqdn.dart:36',
     create: StampFqdn.fromArguments,
     arguments: StampFqdn.arguments,
     answers: StampFqdn.answers,
@@ -87,7 +87,7 @@ const Map<StepName, RegisteredStep> branchSteps = <StepName, RegisteredStep>{
   ),
   StepName('stamp_role'): RegisteredStep(
     name: StepName('stamp_role'),
-    source: 'lib/src/steps/branch/stamp_role.dart:27',
+    source: 'lib/src/steps/branch/stamp_role.dart:29',
     create: StampRole.fromArguments,
     arguments: StampRole.arguments,
     answers: StampRole.answers,

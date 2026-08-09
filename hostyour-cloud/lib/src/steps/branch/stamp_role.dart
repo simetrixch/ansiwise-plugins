@@ -1,5 +1,7 @@
 import 'package:ansiwise_api/ansiwise_api.dart';
 
+import '../../branch/role_pruning.dart';
+
 /// Reduces the branch to the one stage and the one role this installation is.
 ///
 /// The trunk is generic in two directions at once. It carries all three stages, because it is the
@@ -119,7 +121,8 @@ final class StampRole extends ReversibleStep {
       await context.files.delete('$repository/$path');
     }
 
-    for (final String other in _otherStages(context)) {
+    final String kept = context.answers.text('stage');
+    for (final String other in stages.where((String each) => each != kept)) {
       await _removeEmptied(context, 'argocd/$other');
     }
     if (context.answers.text('role') == slave) {
@@ -193,38 +196,29 @@ final class StampRole extends ReversibleStep {
   /// the same list has to come back on a second run, when the files are already gone, or the step
   /// could not tell "already done" from "nothing to do".
   Future<List<String>> _prunable(StepContext context) async {
-    final String mapPath = mapPathFor(context);
-    final List<String> tracked = await _tracked(context);
-    final List<RegExp> foreign = <RegExp>[
-      for (final String other in _otherStages(context)) ..._stagePatterns(other),
-    ];
-
+    final RolePruning rule = pruningFor(context);
     return <String>[
-      for (final String path in tracked)
-        if (foreign.any((RegExp pattern) => pattern.hasMatch(path))) path,
-      if (context.answers.text('role') == slave)
-        for (final String path in tracked)
-          if (_registration.hasMatch(path) || (_clusterMap.hasMatch(path) && path != mapPath)) path,
+      for (final String path in await _tracked(context))
+        if (rule.reasonFor(path) != null) path,
     ];
   }
 
-  /// The three shapes a stage owns: its platform values, its manifest tree, its per-app overrides.
+  /// The rule this run prunes by.
   ///
-  /// Anchored at the top of the checkout, so that the product material a chart keeps under its own
-  /// `templates/` is never one of them — that is shipped to every installation and belongs to none.
-  List<RegExp> _stagePatterns(String other) {
-    final String quoted = RegExp.escape(other);
-    return <RegExp>[
-      RegExp('^platform/values-$quoted\\.yaml\$'),
-      RegExp('^argocd/$quoted/'),
-      RegExp('^apps/[^/]+/values-$quoted\\.yaml\$'),
-    ];
-  }
+  /// The gate applies the SAME rule to a tree it walked, in order to decide whether the `derived:`
+  /// section of branch-classes.yaml names the paths a run would really resolve. It used to state
+  /// that rule a second time — in string operations where this one was regular expressions — and
+  /// nothing compared the two.
+  RolePruning pruningFor(StepContext context) => RolePruning(
+    stage: context.answers.text('stage'),
+    stages: stages,
+    isSlave: context.answers.text('role') == slave,
+    ownMap: _relativeToRepository(mapPathFor(context)),
+  );
 
-  Iterable<String> _otherStages(StepContext context) {
-    final String stage = context.answers.text('stage');
-    return stages.where((String each) => each != stage);
-  }
+  /// [full] as the checkout names it, because the pruning rule speaks in tracked paths.
+  String _relativeToRepository(String full) =>
+      full.startsWith('$repository/') ? full.substring(repository.length + 1) : full;
 
   Future<List<String>> _tracked(StepContext context) async {
     final CommandResult listed = await context.shell.run(
@@ -281,9 +275,3 @@ final class StampRole extends ReversibleStep {
     return answer.ok && answer.trimmed.isNotEmpty ? answer.trimmed : null;
   }
 }
-
-/// Anything a consumer registration is written into.
-final RegExp _registration = RegExp(r'^registrations/');
-
-/// A cluster map, of which a slave keeps only its own.
-final RegExp _clusterMap = RegExp(r'^clusters/active/[^/]+\.yaml$');

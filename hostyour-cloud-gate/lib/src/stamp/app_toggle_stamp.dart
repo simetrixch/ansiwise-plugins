@@ -1,3 +1,5 @@
+import 'package:hostyour_cloud/hostyour_cloud.dart';
+
 /// Which application toggles a branch run decides, mirrored so a declaration can be measured
 /// against it.
 ///
@@ -20,51 +22,36 @@
 /// those files that the trunk does not. Over the rest it would throw away the only statement that
 /// an operator ever made.
 ///
-/// THIS IS A MIRROR AND IT CAN DRIFT. The step is in another repository and this one cannot run it,
-/// so its three sets are restated here with the field each came from, and the branch-class audit
-/// drives the mirror over planted paths and against the toggles this tree really carries.
+/// THIS IS NO LONGER A MIRROR. It used to restate the three sets, because the step lived in another
+/// repository and this one could not reach it. It lives in this repository now, so they are READ:
+/// adding an application to any of the three changes what the gate measures in the same edit.
 final class AppToggleStamp {
   /// The stamp as the step defines it.
   const AppToggleStamp();
 
-  /// `StampAppToggles.onTheBuildPlane` — the applications that run on the build plane and nowhere
-  /// else.
+  /// The applications that run on the build plane and nowhere else, as the step names them.
   ///
   /// tekton, the registry and image-builder are the plane itself; consumer-build is one build
   /// namespace per registered unit, which only means anything where the registry and the
-  /// EventListener are; gate-runner references image-builder's shared clone Task; and the manager
-  /// is deployed beside the registry it pushes to.
-  static const List<String> onTheBuildPlane = <String>[
-    'consumer-build',
-    'gate-runner',
-    'image-builder',
-    'manager',
-    'registry',
-    'tekton',
-  ];
+  /// EventListener are; gate-runner references image-builder's shared clone Task; and the manager is
+  /// deployed beside the registry it pushes to.
+  static const List<String> onTheBuildPlane = StampAppToggles.onTheBuildPlane;
 
-  /// `StampAppToggles.whereTheMasterIs` — the applications provided once per installation, by the
-  /// cluster holding the master part.
-  static const List<String> whereTheMasterIs = <String>['tailnet-coordinator', 'observability'];
+  /// The applications provided once per installation, by the cluster holding the master part.
+  static const List<String> whereTheMasterIs = StampAppToggles.whereTheMasterIs;
 
-  /// `StampAppToggles.whereTheMasterIsNot` — the applications that run exactly where the master part
-  /// is not.
+  /// The applications that run exactly where the master part is not.
   ///
   /// One entry, and it is the mirror of `observability` above: a cluster without the master part
   /// runs the light push agent instead of the full stack, and running both would have it scraping
   /// itself and shipping the result to itself.
-  static const List<String> whereTheMasterIsNot = <String>['observability-agent'];
+  static const List<String> whereTheMasterIsNot = StampAppToggles.whereTheMasterIsNot;
 
   /// Every application whose toggle a run decides.
-  static const List<String> decided = <String>[
-    ...onTheBuildPlane,
-    ...whereTheMasterIs,
-    ...whereTheMasterIsNot,
-  ];
+  static const List<String> decided = StampAppToggles.decided;
 
-  /// `StampAppToggles.pathOf` — where the toggle of [app] lives, relative to the top of the
-  /// checkout.
-  static String pathOf(String app) => 'cluster/apps/$app.yaml';
+  /// Where the toggle of [app] lives, relative to the top of the checkout.
+  static String pathOf(String app) => StampAppToggles.pathInRepositoryOf(app);
 
   /// Whether a run writes [path] again, whatever the stage and whatever the role.
   bool regenerates(String path) => decided.any((String app) => pathOf(app) == path);

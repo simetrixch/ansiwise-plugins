@@ -1,3 +1,5 @@
+import 'package:hostyour_cloud/hostyour_cloud.dart';
+
 /// Which manifests a branch run writes again, mirrored so a declaration can be measured against it.
 ///
 /// Everything under `argocd/` names the branch it reads from. On the trunk that is the trunk
@@ -11,18 +13,18 @@
 /// `StampRole` removes the two stage trees this installation is not. Between them, nothing a branch
 /// holds under this directory survives a run that the trunk does not also hold.
 ///
-/// THIS IS A MIRROR AND IT CAN DRIFT. The step is in another repository and this one cannot run it,
-/// so the one constant it turns on is restated here with the field it came from, and the
-/// branch-class audit drives the mirror over planted paths.
+/// THIS IS NO LONGER A MIRROR. It used to restate the one constant it turns on, because the step
+/// lived in another repository and this one could not reach it. It lives in this repository now, so
+/// the constant is READ. Nothing is stated twice, so nothing can drift.
 final class RevisionStamp {
   /// The stamp as the step defines it.
   const RevisionStamp();
 
-  /// `StampRevision.tree` — the directory holding the manifests that name a branch.
+  /// The directory holding the manifests that name a branch, as the step names it.
   ///
   /// Layout of the tree being generated rather than a value of one installation: every installation
   /// keeps its generators in the same place.
-  static const String tree = 'argocd';
+  static const String tree = StampRevision.tree;
 
   /// Whether a run writes [path] again, whatever the stage and whatever the role.
   bool regenerates(String path) => path == tree || path.startsWith('$tree/');

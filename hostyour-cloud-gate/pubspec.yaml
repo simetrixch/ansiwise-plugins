@@ -25,7 +25,22 @@ dependencies:
   # `@immutable` on every finding and every value an audit takes, so the analyzer refuses a
   # field somebody would otherwise mutate under a test that has already read it.
   meta: ^1.19.0
+  # The steps whose selection rules this gate measures. It used to RESTATE them — one mirror per
+  # stamper, each carrying a comment saying the step was in another repository and could not be
+  # reached from here. It is in this one now, so the rules are read rather than restated and there
+  # is nothing left that can drift apart. The direction is deliberate: the gate is development
+  # tooling and the plugin is what ships, so the gate depends on the plugin and never the reverse.
+  hostyour_cloud:
+    path: ../hostyour-cloud
 
 dev_dependencies:
   test: ^1.31.2
+  # One check reads the plugin's own registry — the list of what a branch run does — to prove that no
+  # stamper was added that this gate knows nothing about. The registry is keyed by the framework's
+  # StepName, so the framework is named here rather than leaned on as a transitive dependency of the
+  # plugin. It is a development dependency: nothing this package ships reaches it.
+  ansiwise_api:
+    git:
+      url: https://github.com/simetrixch/ansiwise-api.git
+      ref: master
   lints: ^6.1.0

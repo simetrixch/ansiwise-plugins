@@ -1,4 +1,6 @@
 import 'package:ansiwise_api/ansiwise_api.dart';
+
+import '../../branch/fqdn_selection.dart';
 import 'create_install_branch.dart';
 
 /// Puts this installation's real domain where the trunk carries a placeholder.
@@ -56,25 +58,16 @@ final class StampFqdn extends ReversibleStep {
   /// The answers this step reads, which is what its registry entry declares.
   static const List<String> answers = <String>['fqdn'];
 
+  /// Which files this stamp rewrites, as a rule with no ports and no context.
+  ///
+  /// The gate applies the SAME object to the tree it walks, in order to decide whether
+  /// branch-classes.yaml agrees with what would really happen here. It used to restate the rule
+  /// instead, and a changed exclusion left every probe over there green while it certified a stamp
+  /// it was no longer describing.
+  static const FqdnSelection selection = FqdnSelection();
+
   /// What the trunk carries in place of a domain.
-  static const String placeholder = 'example.invalid';
-
-  /// Path segments whose contents are product material rather than installation state.
-  ///
-  /// A segment and not a prefix: a chart's `templates/` sits several levels down and is the same
-  /// kind of thing as the one at the top.
-  static const List<String> excludedSegments = <String>['docs', 'templates'];
-
-  /// The file excluded by its name, because it is the declaration of this stamp.
-  ///
-  /// It states which paths hold installation state, so it quotes the placeholder in order to explain
-  /// what is done to it. Rewritten, the one file an operator opens to learn which paths must never
-  /// be stamped would itself name a real domain, and the section listing what is never stamped would
-  /// read as its own opposite.
-  static const String excludedName = 'branch-classes.yaml';
-
-  /// The suffixes of the scripts that carry no first line to recognise them by.
-  static const List<String> scriptSuffixes = <String>['.sh', '.ps1'];
+  static const String placeholder = FqdnSelection.placeholder;
 
   /// The checkout being stamped.
   final String repository;
@@ -141,7 +134,7 @@ final class StampFqdn extends ReversibleStep {
     // makes the trunk domain-agnostic.
     final List<String> written = <String>[
       for (final String path in await _search(context, CreateInstallBranch.branchIn(context)))
-        if (!_excludedByName(path)) path,
+        if (!selection.excludesByName(path)) path,
     ];
     if (written.isEmpty) {
       return;
@@ -169,7 +162,7 @@ final class StampFqdn extends ReversibleStep {
   Future<Map<String, String>> _stampable(StepContext context) async {
     final Map<String, String> stampable = <String, String>{};
     for (final String path in await _search(context, placeholder)) {
-      if (_excludedByName(path)) {
+      if (selection.excludesByName(path)) {
         continue;
       }
       // A tracked path the search names is not necessarily a file that is there: reducing the branch
@@ -179,10 +172,11 @@ final class StampFqdn extends ReversibleStep {
         continue;
       }
       final String content = await context.files.read(full);
-      if (!content.contains(placeholder)) {
-        continue;
-      }
-      if (content.startsWith('#!')) {
+      // The whole rule, in one call. What the name test above already settled is settled again here
+      // and costs nothing; what it could not settle — the file really carrying the placeholder, and
+      // a first line that makes it a script whatever it is called — is settled by the same object
+      // the gate asks, so the two cannot answer differently.
+      if (!selection.selects(path, content)) {
         continue;
       }
       stampable[path] = content;
@@ -217,18 +211,6 @@ final class StampFqdn extends ReversibleStep {
     return found.trimmed.isEmpty
         ? const <String>[]
         : found.trimmed.split('\n').map((String line) => line.trim()).toList();
-  }
-
-  /// Whether what [path] is called already says it holds no installation state.
-  bool _excludedByName(String path) {
-    final List<String> segments = path.split('/');
-    if (segments.any(excludedSegments.contains)) {
-      return true;
-    }
-    if (segments.last == excludedName) {
-      return true;
-    }
-    return scriptSuffixes.any(path.endsWith);
   }
 
   String _stamped(String content, String fqdn) => content.replaceAll(placeholder, fqdn);

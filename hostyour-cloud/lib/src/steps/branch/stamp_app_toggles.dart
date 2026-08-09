@@ -70,11 +70,29 @@ final class StampAppToggles extends ReversibleStep {
   /// itself and shipping the result to itself.
   static const List<String> whereTheMasterIsNot = <String>['observability-agent'];
 
+  /// Every application whose toggle a run decides.
+  ///
+  /// Nine of them, and not the whole directory: every other toggle keeps whatever the trunk says,
+  /// because those are an operator's own decisions on the branch and a step that overwrote them
+  /// would undo a choice somebody made, silently, on the next run.
+  static const List<String> decided = <String>[
+    ...onTheBuildPlane,
+    ...whereTheMasterIs,
+    ...whereTheMasterIsNot,
+  ];
+
+  /// Where the toggle of [app] lives, relative to the top of the checkout.
+  ///
+  /// Separate from [pathOf], which prefixes the checkout, because the gate asks the same question of
+  /// a tree it walked and has no checkout to prefix with. It used to answer by restating the layout;
+  /// two statements of one layout can disagree, and one cannot.
+  static String pathInRepositoryOf(String app) => 'cluster/apps/$app.yaml';
+
   /// The checkout the toggles are rewritten in.
   final String repository;
 
   /// Where a toggle lives.
-  String pathOf(String app) => '$repository/cluster/apps/$app.yaml';
+  String pathOf(String app) => '$repository/${pathInRepositoryOf(app)}';
 
   /// What each toggle this step owns must say, given what this cluster is.
   Map<String, bool> decisionsFor(StepContext context) {

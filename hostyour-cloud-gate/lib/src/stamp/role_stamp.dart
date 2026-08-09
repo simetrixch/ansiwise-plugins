@@ -1,3 +1,4 @@
+import 'package:hostyour_cloud/hostyour_cloud.dart';
 import 'package:meta/meta.dart';
 
 import '../branch/derived_licence.dart';
@@ -19,6 +20,12 @@ import '../installation.dart';
 /// of every registration and of every foreign cluster map; its own map is what the pruning was
 /// decided from, so it survives, and that one exception is the whole of the difference between
 /// [DerivedLicence.booksBranchOnly] and [DerivedLicence.foreignMapOnly].
+///
+/// THIS IS NO LONGER A MIRROR. It used to decide the removal a second time — in string operations
+/// where the step is regular expressions — because the step lived in another repository and this one
+/// could not reach it. It lives in this repository now, so [RolePruning] decides, and what is left
+/// here is the one thing the step has no use for: which axis a removal came from, since that is the
+/// word a `derived:` declaration must carry.
 final class RoleStamp {
   /// The stamp applied to a branch of [stage] holding [role], whose own map is [ownMap].
   const RoleStamp({required this.stage, required this.role, required this.ownMap});
@@ -32,40 +39,21 @@ final class RoleStamp {
   /// Where the branch's own cluster map stands, relative to the top of the checkout.
   final String ownMap;
 
+  /// The rule the step prunes by, given what this branch is.
+  RolePruning get rule =>
+      RolePruning(stage: stage, stages: stages, isSlave: role == ClusterRole.slave, ownMap: ownMap);
+
   /// Whether this stamp removes [path], and under which licence.
-  PruneVerdict verdictOn(String path) {
-    for (final String other in stages) {
-      if (other == stage) {
-        continue;
-      }
-      // `StampRole._stagePatterns`, anchored at the top of the checkout so that the product
-      // material a chart keeps under its own templates/ is never one of them.
-      if (path == 'platform/values-$other.yaml' ||
-          path.startsWith('argocd/$other/') ||
-          _appStageValues(path, other)) {
-        return const Pruned(DerivedLicence.otherStages);
-      }
-    }
-    if (role == ClusterRole.slave) {
-      if (path.startsWith('registrations/')) {
-        return const Pruned(DerivedLicence.booksBranchOnly);
-      }
-      if (_clusterMap.hasMatch(path) && path != ownMap) {
-        return const Pruned(DerivedLicence.foreignMapOnly);
-      }
-    }
-    return const Kept();
-  }
-
-  /// `apps/[^/]+/values-<other>.yaml` — one level under apps/ and no deeper.
-  static bool _appStageValues(String path, String other) {
-    if (!path.startsWith('apps/') || !path.endsWith('/values-$other.yaml')) {
-      return false;
-    }
-    return path.split('/').length == 3;
-  }
-
-  static final RegExp _clusterMap = RegExp(r'^clusters/active/[^/]+\.yaml$');
+  ///
+  /// The REMOVAL is decided by the step's own rule. What is decided here is the name of the axis it
+  /// came from — the word a `derived:` declaration has to carry — which the step has no use for and
+  /// which is therefore the only thing this class still says on its own.
+  PruneVerdict verdictOn(String path) => switch (rule.reasonFor(path)) {
+    PruneReason.otherStage => const Pruned(DerivedLicence.otherStages),
+    PruneReason.registration => const Pruned(DerivedLicence.booksBranchOnly),
+    PruneReason.foreignMap => const Pruned(DerivedLicence.foreignMapOnly),
+    null => const Kept(),
+  };
 }
 
 /// What the role stamp does with a path.

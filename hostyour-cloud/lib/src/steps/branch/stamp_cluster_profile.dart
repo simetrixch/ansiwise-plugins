@@ -51,11 +51,18 @@ final class StampClusterProfile extends ReversibleStep with FileStep {
     'post_url',
   ];
 
+  /// Where the profile stands, relative to the top of the checkout.
+  ///
+  /// A constant rather than a literal inside [pathFor], because the gate asks the same question of a
+  /// tree it walked — whether a run writes this path again — and it used to answer by restating the
+  /// literal. Two statements of one path can disagree; one cannot.
+  static const String pathInRepository = 'cluster/profile.yaml';
+
   /// The checkout the profile is written in.
   final String repository;
 
   @override
-  String pathFor(StepContext context) => '$repository/cluster/profile.yaml';
+  String pathFor(StepContext context) => '$repository/$pathInRepository';
 
   /// `0644` — every chart's render reads this file.
   @override

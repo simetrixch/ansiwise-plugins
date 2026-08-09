@@ -4,6 +4,8 @@
 /// turns the tree red if that ever stops being true.
 library;
 
+export 'src/branch/fqdn_selection.dart';
+export 'src/branch/role_pruning.dart';
 export 'src/plugin.dart';
 export 'src/registry.dart';
 export 'src/registry/branch.dart';
