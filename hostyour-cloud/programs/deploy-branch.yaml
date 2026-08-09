@@ -228,47 +228,47 @@ steps:
   # whose dry run lied, having shown a plan without the installation it was about to perform.
   - step: require_commands
     commands: [git]
-    on_failure: die
+    on_failure: exit
 
   - step: require_git_identity
     repository: /srv/hostyour-cloud
-    on_failure: die
+    on_failure: exit
 
   - step: require_pushable_origin
     repository: /srv/hostyour-cloud
     trunk: master
-    on_failure: die
+    on_failure: exit
 
   - step: create_install_branch
     repository: /srv/hostyour-cloud
     trunk: master
-    on_failure: die
+    on_failure: exit
 
   - step: stamp_revision
     repository: /srv/hostyour-cloud
     trunk: master
-    on_failure: die
+    on_failure: exit
 
   - step: stamp_fqdn
     repository: /srv/hostyour-cloud
     trunk: master
-    on_failure: die
+    on_failure: exit
 
   - step: write_cluster_map
     repository: /srv/hostyour-cloud
     stages: [dev, test, prod]
-    on_failure: die
+    on_failure: exit
 
   # The two files the answers become. They come after the map because both are named for the stage
   # and both stand in a branch that has to exist, and before the role because reducing the branch is
   # the last thing this program does to it.
   - step: write_stage_config
     repository: /srv/hostyour-cloud
-    on_failure: die
+    on_failure: exit
 
   - step: write_stage_secrets
     repository: /srv/hostyour-cloud
-    on_failure: die
+    on_failure: exit
 
   # The third file of configs/ named for the stage, and the only one the trunk carries no
   # template of. It is the declarative configuration of the mail-DNS publisher, and the single row
@@ -278,20 +278,20 @@ steps:
   # sender domains on the trunk would ship to every installation.
   - step: write_stage_mail_dns
     repository: /srv/hostyour-cloud
-    on_failure: die
+    on_failure: exit
 
   - step: stamp_role
     repository: /srv/hostyour-cloud
     stages: [dev, test, prod]
     trunk: master
-    on_failure: die
+    on_failure: exit
 
   # What this installation's services are, and which of them run here. Every application loads this
   # file LAST in its values chain, so what it says wins over everything the product declares —
   # which is what lets one tree serve two companies. Two steps of deploy-cluster read it.
   - step: stamp_cluster_profile
     repository: /srv/hostyour-cloud
-    on_failure: die
+    on_failure: exit
 
   # Which applications run on THIS cluster. The build plane set runs on exactly one cluster of an
   # installation; the tailnet coordinator and the central observability are provided once, by the
@@ -299,4 +299,4 @@ steps:
   # toggle keeps what the branch says, because those are an operator's decisions.
   - step: stamp_app_toggles
     repository: /srv/hostyour-cloud
-    on_failure: die
+    on_failure: exit

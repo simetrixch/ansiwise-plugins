@@ -112,7 +112,7 @@ name: planted-unknown-step
 roles: [master]
 steps:
   - step: no_step_is_registered_under_this_name
-    on_failure: die
+    on_failure: exit
 ''';
 
 /// A program file naming the registry's own first step, with a value for every argument it declares.
@@ -125,7 +125,7 @@ String _programTextFor(RegisteredStep entry) {
     ..writeln('roles: [master]')
     ..writeln('steps:')
     ..writeln('  - step: ${entry.name.value}')
-    ..writeln('    on_failure: die');
+    ..writeln('    on_failure: exit');
   for (final ArgumentSpec spec in entry.arguments) {
     text.writeln('    ${spec.name}: ${_asYaml(given.raw(spec.name))}');
   }

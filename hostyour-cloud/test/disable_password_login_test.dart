@@ -108,7 +108,7 @@ void main() {
       reason: 'taking the password away before the key is proven locks the operator out',
     );
     expect(
-      program.steps.every((ProgramStep s) => s.onFailure == OnFailure.die),
+      program.steps.every((ProgramStep s) => s.onFailure == OnFailure.exit),
       isTrue,
       reason: 'nothing in this program may be carried past as a warning',
     );

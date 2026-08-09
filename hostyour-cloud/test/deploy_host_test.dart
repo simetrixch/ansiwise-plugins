@@ -231,8 +231,8 @@ void main() {
           );
 
       expect(record.exitCode, 1);
-      expect(record.steps.last.verdict, isA<Died>());
-      expect((record.steps.last.verdict as Died).reason, contains('4000000'));
+      expect(record.steps.last.verdict, isA<Failed>());
+      expect((record.steps.last.verdict as Failed).reason, contains('4000000'));
       expect(
         machine.shell.ran,
         isNot(contains('apt-get update')),
@@ -308,7 +308,7 @@ void main() {
           );
 
       expect(record.exitCode, 1);
-      expect((record.steps.last.verdict as Died).reason, contains('4000000'));
+      expect((record.steps.last.verdict as Failed).reason, contains('4000000'));
     });
   });
 
@@ -376,11 +376,11 @@ void main() {
       final Verdict verdict = record.steps.first.verdict;
       expect(
         verdict,
-        isA<Died>(),
+        isA<Failed>(),
         reason: 'the gate ends the run; its policy in the program is die',
       );
       expect(
-        (verdict as Died).reason,
+        (verdict as Failed).reason,
         contains('dpkg-query'),
         reason:
             'an operator reads the refusal and installs something; a message about a package query '

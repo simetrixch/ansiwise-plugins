@@ -56,23 +56,23 @@ steps:
   # whose dry run lied, having shown a plan without the installation it was about to perform.
   - step: require_commands
     commands: [helm, kubectl]
-    on_failure: die
+    on_failure: exit
 
   # --- the secret store -----------------------------------------------------------------------
   #
   # The one component whose failure stops everything: nothing else on the cluster holds a credential
   # at rest, so while this is down or sealed no workload materializes a secret. That is why its
-  # steps end the run rather than collect an issue.
+  # steps end the run rather than let it carry on.
   - step: helm_repository
     name: hashicorp
     url: https://helm.releases.hashicorp.com
     when: [vault_enabled]
-    on_failure: die
+    on_failure: exit
 
   - step: kubernetes_namespace
     namespace: vault
     when: [vault_enabled]
-    on_failure: die
+    on_failure: exit
 
   - step: helm_release
     release: vault
@@ -81,7 +81,7 @@ steps:
     namespace: vault
     values: /srv/hostyour-cloud/bootstrap/vault/values.yaml
     when: [vault_enabled]
-    on_failure: die
+    on_failure: exit
 
   # The quorum exists nowhere else and nothing else can produce it, so a run that could not mint it
   # must not go on to the steps that need it — every one of them would fail with a message about a
@@ -89,12 +89,12 @@ steps:
   - step: vault_init
     repository: /srv/hostyour-cloud
     when: [vault_enabled]
-    on_failure: die
+    on_failure: exit
 
   - step: vault_unsealed
     repository: /srv/hostyour-cloud
     when: [vault_enabled]
-    on_failure: die
+    on_failure: exit
 
   # The secret store's own three objects: its certificate, the transport Traefik reaches it over —
   # it serves TLS itself, so the route in front of it has to be told to speak TLS to the backend —
@@ -104,19 +104,19 @@ steps:
     repository: /srv/hostyour-cloud
     manifest: bootstrap/vault/certificate.yaml
     when: [vault_enabled]
-    on_failure: issue
+    on_failure: continue
 
   - step: kubernetes_object
     repository: /srv/hostyour-cloud
     manifest: bootstrap/vault/serverstransport.yaml
     when: [vault_enabled]
-    on_failure: issue
+    on_failure: continue
 
   - step: kubernetes_object
     repository: /srv/hostyour-cloud
     manifest: bootstrap/vault/ingressroute.yaml
     when: [vault_enabled]
-    on_failure: issue
+    on_failure: continue
 
   # --- the shape every workload authenticates against -----------------------------------------
   #
@@ -128,14 +128,14 @@ steps:
     repository: /srv/hostyour-cloud
     path: secret
     when: [vault_enabled]
-    on_failure: die
+    on_failure: exit
 
   - step: vault_auth_method
     repository: /srv/hostyour-cloud
     type: kubernetes
     path: <kubernetes-mount>
     when: [vault_enabled]
-    on_failure: die
+    on_failure: exit
 
   # Read-only on this cluster's application tier and nothing else. The system tier — the root token,
   # the unseal keys, the control-plane credentials — is deliberately out of reach of every workload
@@ -149,7 +149,7 @@ steps:
       path "secret/data/<stage>/slaves/*" { capabilities = ["read"] }
       path "secret/metadata/<stage>/slaves/*" { capabilities = ["read", "list"] }
     when: [vault_enabled]
-    on_failure: die
+    on_failure: exit
 
   # One literal leaf and nothing else under the build tier. It exists only where the build plane
   # runs, because a build is stage-free and its credentials live on exactly one secret store.
@@ -159,7 +159,7 @@ steps:
     rules: |
       path "secret/data/build/catalog/repo-pat" { capabilities = ["read"] }
     when: [vault_enabled, build_plane_here]
-    on_failure: die
+    on_failure: exit
 
   # One templated policy and one label-bound role cover every consumer there will ever be: the path
   # interpolates the calling account's own namespace, so a reader in namespace X can only reach that
@@ -172,7 +172,7 @@ steps:
       path "secret/data/<stage>/consumer/{{identity.entity.aliases.<accessor>.metadata.service_account_namespace}}/*" { capabilities = ["read"] }
       path "secret/metadata/<stage>/consumer/{{identity.entity.aliases.<accessor>.metadata.service_account_namespace}}/*" { capabilities = ["read", "list"] }
     when: [vault_enabled]
-    on_failure: die
+    on_failure: exit
 
   # Templated on the tenant the calling account is annotated with and not on its namespace: one
   # tenant owns several namespaces and every one of them has to reach the same entry, or the
@@ -189,7 +189,7 @@ steps:
       path "secret/metadata/<stage>/tenants/{{identity.entity.aliases.<accessor>.metadata.tenant}}/*" { capabilities = ["read", "list"] }
       path "secret/data/<stage>/app/registry" { capabilities = ["read"] }
     when: [vault_enabled]
-    on_failure: die
+    on_failure: exit
 
   # Templated on the unit, which is what stops one build namespace reading a sibling's credential —
   # and some units belong to external parties. The two literal leaves are the platform repositories
@@ -205,7 +205,7 @@ steps:
       path "secret/data/build/catalog/repo-pat" { capabilities = ["read"] }
       path "secret/data/<stage>/app/registry" { capabilities = ["read"] }
     when: [vault_enabled, build_plane_here]
-    on_failure: die
+    on_failure: exit
 
   # The cluster manager's own policy, in the two shapes a cluster can need it in. Written whole
   # either way, so the two are separate entries and only one of them ever runs.
@@ -235,7 +235,7 @@ steps:
       path "secret/data/<stage>/tenants/+" { capabilities = ["create", "update"] }
       path "secret/metadata/<stage>/tenants/+" { capabilities = ["delete"] }
     when: [vault_enabled, build_plane_here]
-    on_failure: die
+    on_failure: exit
 
   - step: vault_policy
     repository: /srv/hostyour-cloud
@@ -252,7 +252,7 @@ steps:
       path "secret/data/<stage>/tenants/+" { capabilities = ["create", "update"] }
       path "secret/metadata/<stage>/tenants/+" { capabilities = ["delete"] }
     when: [vault_enabled, build_plane_elsewhere]
-    on_failure: die
+    on_failure: exit
 
   # The master's key to itself, on a path of its own. It is root on this host and therefore on every
   # cluster, so it must not sit in the application tier that every namespace's reader can reach.
@@ -263,7 +263,7 @@ steps:
       path "secret/data/<stage>/controller-host/*" { capabilities = ["read"] }
       path "secret/metadata/<stage>/controller-host/*" { capabilities = ["read", "list"] }
     when: [vault_enabled]
-    on_failure: die
+    on_failure: exit
 
   # The role name is fixed: the chart that renders a secret store per cluster only re-points the
   # mount path and the key path, and takes the role name from its own default. Renaming it here
@@ -283,7 +283,7 @@ steps:
       "bound_service_account_namespaces":["controller","dbgate","service-provisioner","gate-runner"],
       "token_policies":["<cluster>-eso","<cluster>-deploy-pat-read"],"ttl":"24h"}
     when: [vault_enabled, build_plane_here]
-    on_failure: die
+    on_failure: exit
 
   - step: vault_auth_role
     repository: /srv/hostyour-cloud
@@ -295,7 +295,7 @@ steps:
       "bound_service_account_namespaces":["controller","dbgate","service-provisioner","gate-runner"],
       "token_policies":["<cluster>-eso"],"ttl":"24h"}
     when: [vault_enabled, build_plane_elsewhere]
-    on_failure: die
+    on_failure: exit
 
   # Three account names and never a wildcard: the namespace label is what bounds this role, and a
   # name list that admitted anything would let a consumer's own chart mint an account and read
@@ -309,7 +309,7 @@ steps:
       "bound_service_account_namespace_selector":"{\"matchLabels\":{\"digitacloud.app/consumer\":\"true\"}}",
       "token_policies":["<cluster>-consumer-read"],"ttl":"24h"}
     when: [vault_enabled]
-    on_failure: die
+    on_failure: exit
 
   - step: vault_auth_role
     repository: /srv/hostyour-cloud
@@ -320,7 +320,7 @@ steps:
       "bound_service_account_namespace_selector":"{\"matchLabels\":{\"platform/tenant-managed\":\"true\"}}",
       "token_policies":["<cluster>-tenant-read"],"ttl":"24h"}
     when: [vault_enabled]
-    on_failure: die
+    on_failure: exit
 
   # The label this role binds carries its grant only because the build plane admits it nowhere else:
   # an admission policy refuses the label on every namespace that is not a build namespace of a unit
@@ -335,7 +335,7 @@ steps:
       "bound_service_account_namespace_selector":"{\"matchLabels\":{\"digitacloud.app/build\":\"true\"}}",
       "token_policies":["<cluster>-build-read"],"ttl":"24h"}
     when: [vault_enabled, build_plane_here]
-    on_failure: die
+    on_failure: exit
 
   - step: vault_auth_role
     repository: /srv/hostyour-cloud
@@ -345,7 +345,7 @@ steps:
       {"bound_service_account_names":["controller"],"bound_service_account_namespaces":["controller"],
       "token_policies":["controller"],"ttl":"24h"}
     when: [vault_enabled]
-    on_failure: die
+    on_failure: exit
 
   # A dedicated account and not the one above: the entry it reads is the master's key to itself, and
   # the whole point of the separate path is that nothing else in that namespace reaches it.
@@ -358,7 +358,7 @@ steps:
       "bound_service_account_namespaces":["controller"],
       "token_policies":["controller-host"],"ttl":"24h"}
     when: [vault_enabled]
-    on_failure: die
+    on_failure: exit
 
   # --- the values ------------------------------------------------------------------------------
   #
@@ -382,7 +382,7 @@ steps:
       - 'postgres-admin-password=IDP_POSTGRES_ADMIN_PASSWORD'
     mint: [secret-key, postgres-password, postgres-admin-password]
     when: [vault_enabled]
-    on_failure: die
+    on_failure: exit
 
   - step: vault_kv_entry
     repository: /srv/hostyour-cloud
@@ -391,7 +391,7 @@ steps:
     fields: ['dkim-private-key=POSTFIX_DKIM_PRIVATE_KEY']
     fields_owned_elsewhere: ['dkim-private-key']
     when: [vault_enabled]
-    on_failure: die
+    on_failure: exit
 
   # Stage-free by construction: a release is one image and never one per stage, so each of the two
   # platform repositories has one credential on one secret store. Required and not optional — the
@@ -403,7 +403,7 @@ steps:
     path: build/hostyour-cloud/repo-pat
     fields: ['pat=GITOPS_REPO_PAT']
     when: [vault_enabled, build_plane_here]
-    on_failure: die
+    on_failure: exit
 
   - step: vault_kv_entry
     repository: /srv/hostyour-cloud
@@ -411,7 +411,7 @@ steps:
     path: build/catalog/repo-pat
     fields: ['pat=CATALOG_REPO_PAT']
     when: [vault_enabled, build_plane_here]
-    on_failure: die
+    on_failure: exit
 
   # --- the identity provider ------------------------------------------------------------------
   #
@@ -422,12 +422,12 @@ steps:
     name: authentik
     url: https://charts.goauthentik.io
     when: [idp_enabled]
-    on_failure: issue
+    on_failure: continue
 
   - step: kubernetes_namespace
     namespace: idp
     when: [idp_enabled]
-    on_failure: issue
+    on_failure: continue
 
   # The credentials the release below reads, put on the cluster out of the store where they came
   # into being. Four keys out of three fields, because each side was named by whoever reads it: the
@@ -452,7 +452,7 @@ steps:
     # than assumed, so what happens is a skipped row with its reason instead of a pod that starts and
     # cannot reach its database.
     when: [idp_enabled, vault_enabled]
-    on_failure: die
+    on_failure: exit
 
   # The blueprints that declare every OIDC client of this installation. Not applied — the release
   # below mounts this ConfigMap in its pod and its worker discovers whatever files it finds there,
@@ -469,7 +469,7 @@ steps:
     # what is missing without this is the declaration of its clients, so an operator meets an
     # identity provider that runs and offers a login to nothing — which is worth a named finding and
     # not worth abandoning a cluster halfway through.
-    on_failure: issue
+    on_failure: continue
 
   - step: helm_release
     release: idp
@@ -478,7 +478,7 @@ steps:
     namespace: idp
     values: /srv/hostyour-cloud/bootstrap/idp/values.yaml
     when: [idp_enabled]
-    on_failure: issue
+    on_failure: continue
 
   # The objects the identity provider's release does not carry: its public address and the
   # certificate for it, the forward-auth middleware every protected route in this installation
@@ -488,19 +488,19 @@ steps:
     repository: /srv/hostyour-cloud
     manifest: bootstrap/idp/ingressroute.yaml
     when: [idp_enabled]
-    on_failure: issue
+    on_failure: continue
 
   - step: kubernetes_object
     repository: /srv/hostyour-cloud
     manifest: bootstrap/idp/middleware-forwardauth.yaml
     when: [idp_enabled]
-    on_failure: issue
+    on_failure: continue
 
   - step: kubernetes_object
     repository: /srv/hostyour-cloud
     manifest: bootstrap/idp/cluster-rolebinding-platform-admins.yaml
     when: [idp_enabled]
-    on_failure: issue
+    on_failure: continue
 
   # The client is written on both this and the step below, and it has to be the same word: it is
   # part of the issuer address, so a gate on one client would measure an issuer the API server is
@@ -508,7 +508,7 @@ steps:
   - step: idp_discovery_reachable
     client_id: headlamp
     when: [idp_enabled]
-    on_failure: issue
+    on_failure: continue
 
   # The two halves of the cluster's own trust in the identity provider. Neither works alone: the
   # arguments make the API server accept a token, the binding says what the person behind it may do,
@@ -520,14 +520,14 @@ steps:
     client_id: headlamp
     groups_prefix: 'oidc:'
     when: [idp_enabled]
-    on_failure: warn
+    on_failure: continue
 
   - step: oidc_admins_binding
     name: oidc-platform-admins
     group: authentik Admins
     cluster_role: cluster-admin
     when: [idp_enabled]
-    on_failure: warn
+    on_failure: continue
 
   # --- browser logins into the secret store ---------------------------------------------------
   #
@@ -539,7 +539,7 @@ steps:
     type: oidc
     path: oidc
     when: [vault_enabled, idp_enabled]
-    on_failure: issue
+    on_failure: continue
 
   # Sudo-equivalent everywhere, and safe only because the role below hands it out to nobody whose
   # groups claim is missing `admins`. A user who authenticates and is not in that group matches no
@@ -553,7 +553,7 @@ steps:
         capabilities = ["create", "read", "update", "delete", "list", "sudo", "patch"]
       }
     when: [vault_enabled, idp_enabled]
-    on_failure: issue
+    on_failure: continue
 
   # The whole role as one object, because `bound_claims` is a map and a role whose map fields arrive
   # as text is refused with a message about types.
@@ -568,19 +568,19 @@ steps:
       "allowed_redirect_uris":["<vault-url>/ui/vault/auth/oidc/oidc/callback",
       "http://localhost:8250/oidc/callback"],"token_policies":["admin"]}
     when: [vault_enabled, idp_enabled]
-    on_failure: issue
+    on_failure: continue
 
   # --- the reconciler -------------------------------------------------------------------------
   - step: helm_repository
     name: argo
     url: https://argoproj.github.io/argo-helm
     when: [argocd_enabled]
-    on_failure: issue
+    on_failure: continue
 
   - step: kubernetes_namespace
     namespace: argocd
     when: [argocd_enabled]
-    on_failure: issue
+    on_failure: continue
 
   - step: helm_release
     release: argocd
@@ -589,14 +589,14 @@ steps:
     namespace: argocd
     values: /srv/hostyour-cloud/bootstrap/argocd/values.yaml
     when: [argocd_enabled]
-    on_failure: issue
+    on_failure: continue
 
   # The reconciler's own public address and its certificate.
   - step: kubernetes_object
     repository: /srv/hostyour-cloud
     manifest: bootstrap/argocd/ingressroute.yaml
     when: [argocd_enabled]
-    on_failure: issue
+    on_failure: continue
 
   # --- the handoff -----------------------------------------------------------------------------
   #
@@ -606,7 +606,7 @@ steps:
     repository: /srv/hostyour-cloud
     trunk: master
     when: [argocd_enabled]
-    on_failure: issue
+    on_failure: continue
 
 # What this program has to be told about the installation it runs on.
 #

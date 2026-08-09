@@ -503,7 +503,7 @@ void main() {
       expect(has(it.files, 'platform/values-prod.yaml'), isTrue);
       expect(
         it.record.steps.last.verdict,
-        isA<Died>(),
+        isA<Failed>(),
         reason: 'the branch was not cut, so nothing that stamps may run',
       );
     });

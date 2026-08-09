@@ -26,44 +26,44 @@ steps:
   # owns it.
   - step: require_commands
     commands: [apt-get, dpkg-query, nproc, df, getent, sshd, stat, chown]
-    on_failure: die
+    on_failure: exit
 
   - step: require_pinned_ubuntu
     release: '26.04'
-    on_failure: die
+    on_failure: exit
 
   - step: require_machine_size
     vcpu: 8
     memory_kilobytes: 15000000
-    on_failure: die
+    on_failure: exit
 
   - step: require_free_disk
     path: /
     gigabytes: 60
-    on_failure: die
+    on_failure: exit
 
   - step: install_packages
     packages: [git, openssl, curl, jq, apache2-utils]
-    on_failure: die
+    on_failure: exit
 
   - step: require_commands
     commands: [git, openssl, curl, jq, htpasswd]
-    on_failure: die
+    on_failure: exit
 
   - step: remove_unused_packages
-    on_failure: warn
+    on_failure: continue
 
   - step: clean_package_cache
-    on_failure: warn
+    on_failure: continue
 
   # The key first, then the proof that sshd would accept it. Switching the password off is a
   # separate program on purpose: this one cannot perform the login, because the private half never
   # comes here — so the operator connects with the key before anything takes the password away.
   - step: install_authorized_key
-    on_failure: die
+    on_failure: exit
 
   - step: require_key_login_possible
-    on_failure: die
+    on_failure: exit
 
 # What this program has to be told about the machine it is run against.
 #

@@ -57,7 +57,7 @@ steps:
   - step: require_commands
     commands:
       [snap, systemctl, ip, nft, netplan, resolvectl, mountpoint, readlink, chown, getent, groups, gpasswd]
-    on_failure: die
+    on_failure: exit
 
   # ---------------------------------------------------------------------------------------------
   # The snap.
@@ -68,29 +68,29 @@ steps:
   # ---------------------------------------------------------------------------------------------
   - step: remove_microk8s_snap_forced
     force: false
-    on_failure: die
+    on_failure: exit
 
   - step: enable_disabled_microk8s_snap
-    on_failure: die
+    on_failure: exit
 
   - step: refresh_microk8s_channel
     channel: 1.35/stable
-    on_failure: die
+    on_failure: exit
 
   - step: install_microk8s_snap
     channel: 1.35/stable
-    on_failure: die
+    on_failure: exit
 
   - step: wait_for_microk8s_ready
     timeout_seconds: 300
-    on_failure: die
+    on_failure: exit
 
   # ---------------------------------------------------------------------------------------------
   # The network the cluster paints its rules into, before an addon paints any.
   # ---------------------------------------------------------------------------------------------
   - step: configure_kube_proxy_nftables
     proxy_mode: nftables
-    on_failure: warn
+    on_failure: continue
 
   # ---------------------------------------------------------------------------------------------
   # The pod network. Seven ordered steps and two gates in front of them.
@@ -98,47 +98,47 @@ steps:
   - step: require_pod_cidr_free_of_reserved_ranges
     pod_cidr: 10.244.0.0/16
     service_cidr: 10.152.183.0/24
-    on_failure: die
+    on_failure: exit
 
   - step: guard_populated_cluster_pod_cidr_migration
     pod_cidr: 10.244.0.0/16
     allow_populated_migration: false
-    on_failure: die
+    on_failure: exit
 
   - step: stamp_calico_pool_cidr_in_cni_manifest
     pod_cidr: 10.244.0.0/16
-    on_failure: die
+    on_failure: exit
 
   - step: stamp_kube_proxy_cluster_cidr
     pod_cidr: 10.244.0.0/16
-    on_failure: die
+    on_failure: exit
 
   - step: delete_default_ipv4_ippool
     pod_cidr: 10.244.0.0/16
-    on_failure: die
+    on_failure: exit
 
   - step: reapply_calico_manifest
     pod_cidr: 10.244.0.0/16
-    on_failure: die
+    on_failure: exit
 
   - step: restart_microk8s_snap_for_pod_cidr
     pod_cidr: 10.244.0.0/16
     ready_timeout_seconds: 300
     rollout_timeout_seconds: 120
-    on_failure: die
+    on_failure: exit
 
   - step: verify_ippool_converged_with_self_heal
     pod_cidr: 10.244.0.0/16
     timeout_seconds: 180
     interval_seconds: 5
-    on_failure: die
+    on_failure: exit
 
-  # Last of the seven, and warn rather than fatal: the pods are rebuilt by their controllers, so a
+  # Last of the seven, and the run goes on without it: the pods are rebuilt by their controllers, so a
   # machine that did not manage it is one whose system pods come back with the right addresses on
   # their own.
   - step: recycle_kube_system_pod_ips
     pod_cidr: 10.244.0.0/16
-    on_failure: warn
+    on_failure: continue
 
   # ---------------------------------------------------------------------------------------------
   # The image mirror, before the first image is pulled.
@@ -148,11 +148,11 @@ steps:
   # ---------------------------------------------------------------------------------------------
   - step: preflight_docker_mirror_credential
     repository: /srv/hostyour-cloud
-    on_failure: die
+    on_failure: exit
 
   - step: write_containerd_docker_mirror
     repository: /srv/hostyour-cloud
-    on_failure: die
+    on_failure: exit
 
   # ---------------------------------------------------------------------------------------------
   # The addons, and the account that operates the machine.
@@ -163,49 +163,49 @@ steps:
   # ---------------------------------------------------------------------------------------------
   - step: add_user_to_group
     group: microk8s
-    on_failure: warn
+    on_failure: continue
 
   - step: enable_addons
     addons: [rbac, dns, hostpath-storage, ingress, cert-manager, metrics-server]
     dns_upstream_servers: []
-    on_failure: die
+    on_failure: exit
 
   - step: wait_for_addons_enabled
     addons: [rbac, dns, hostpath-storage, ingress, cert-manager, metrics-server]
     timeout_seconds: 300
     interval_seconds: 5
-    on_failure: warn
+    on_failure: continue
 
   # ---------------------------------------------------------------------------------------------
   # What the addons installed, corrected. All of it after the addon loop, because none of these
   # objects exists before it.
   # ---------------------------------------------------------------------------------------------
   - step: detect_host_upstream_resolvers
-    on_failure: warn
+    on_failure: continue
 
   - step: patch_coredns_corefile
     upstream_servers: []
     force_tcp: false
     rollout_timeout_seconds: 60
-    on_failure: warn
+    on_failure: continue
 
   - step: detect_host_iptables_backend
-    on_failure: warn
+    on_failure: continue
 
   - step: align_calico_backend
     rollout_timeout_seconds: 120
-    on_failure: warn
+    on_failure: continue
 
   - step: patch_traefik_cross_namespace
     namespace: ingress
     daemon_set: traefik
-    on_failure: warn
+    on_failure: continue
 
   - step: patch_traefik_tcp_entrypoint
     entrypoints: []
     namespace: ingress
     daemon_set: traefik
-    on_failure: warn
+    on_failure: continue
 
   # The declaration is patched above; this is what reaches the pod that is actually serving. On one
   # machine the replacement cannot be created while the old pod holds the machine's ports, so the
@@ -216,11 +216,11 @@ steps:
     namespace: ingress
     daemon_set: traefik
     rollout_timeout_seconds: 90
-    on_failure: warn
+    on_failure: continue
 
   - step: disable_addons
     addons: [registry]
-    on_failure: warn
+    on_failure: continue
 
   # ---------------------------------------------------------------------------------------------
   # Who the API server accepts. Safe before the identity provider exists: an issuer it cannot reach
@@ -232,12 +232,12 @@ steps:
     username_prefix: 'oidc:'
     groups_claim: groups
     groups_prefix: ''
-    on_failure: warn
+    on_failure: continue
 
   - step: configure_slave_apiserver_oidc_trust
     repository: /srv/hostyour-cloud
     client_id: headlamp
-    on_failure: warn
+    on_failure: continue
 
   # ---------------------------------------------------------------------------------------------
   # Steering replies on a machine whose public address arrives on one interface while another owns
@@ -245,49 +245,49 @@ steps:
   # the measurement in front of them is what each of them asks.
   # ---------------------------------------------------------------------------------------------
   - step: detect_public_nic
-    on_failure: warn
+    on_failure: continue
 
   - step: write_netplan_public_src_routing
-    on_failure: warn
+    on_failure: continue
 
   # Before anything is applied: a drop-in that became a second declaration of the interface rather
   # than folding into the installer's takes the interface's address configuration away the moment
   # the configuration is applied.
   - step: assert_netplan_merged
-    on_failure: warn
+    on_failure: continue
 
   - step: apply_netplan
-    on_failure: warn
+    on_failure: continue
 
   - step: write_connmark_nft_table
-    on_failure: warn
+    on_failure: continue
 
   - step: write_public_src_routing_script
-    on_failure: warn
+    on_failure: continue
 
   - step: write_public_src_routing_unit
-    on_failure: warn
+    on_failure: continue
 
   - step: activate_public_src_routing
-    on_failure: warn
+    on_failure: continue
 
   # ---------------------------------------------------------------------------------------------
   # Where the volumes land.
   # ---------------------------------------------------------------------------------------------
   - step: check_storage_mount
-    on_failure: die
+    on_failure: exit
 
   - step: create_storage_directory
-    on_failure: die
+    on_failure: exit
 
   - step: link_microk8s_storage_path
     force: false
-    on_failure: die
+    on_failure: exit
 
   - step: set_default_storage_class
     timeout_seconds: 120
     interval_seconds: 5
-    on_failure: warn
+    on_failure: continue
 
   # ---------------------------------------------------------------------------------------------
   # Certificates. Recorded rather than fatal: the rest of the cluster converges without them, and a
@@ -298,22 +298,22 @@ steps:
     namespace: cert-manager
     timeout_seconds: 300
     interval_seconds: 5
-    on_failure: issue
+    on_failure: continue
 
   - step: delete_existing_cluster_issuer
     name: letsencrypt-prod
     force: false
-    on_failure: warn
+    on_failure: continue
 
   - step: write_cluster_issuer_manifest
     name: letsencrypt-prod
     acme_server: https://acme-v02.api.letsencrypt.org/directory
     ingress_class: public
-    on_failure: issue
+    on_failure: continue
 
   - step: apply_cluster_issuer
     name: letsencrypt-prod
-    on_failure: issue
+    on_failure: continue
 
   # The first wait is warned rather than recorded, because the step after it is the one recovery
   # this gets and it can still make the issuer register. That step is where the budget ends.
@@ -321,7 +321,7 @@ steps:
     name: letsencrypt-prod
     timeout_seconds: 60
     interval_seconds: 10
-    on_failure: warn
+    on_failure: continue
 
   - step: restart_cert_manager_and_reapply_cluster_issuer
     name: letsencrypt-prod
@@ -329,7 +329,7 @@ steps:
     settle_seconds: 15
     wait_seconds: 60
     interval_seconds: 10
-    on_failure: issue
+    on_failure: continue
 
   # ---------------------------------------------------------------------------------------------
   # The tools an operator uses on this machine. Recorded rather than fatal — the cluster itself does
@@ -341,25 +341,25 @@ steps:
   # ---------------------------------------------------------------------------------------------
   - step: ensure_tool_prerequisites
     packages: [curl, unzip]
-    on_failure: issue
+    on_failure: continue
 
   - step: install_jq
-    on_failure: issue
+    on_failure: continue
 
   - step: install_argocd_cli
     version: v3.4.5
-    on_failure: issue
+    on_failure: continue
 
   - step: install_vault_cli
     version: v2.0.3
-    on_failure: issue
+    on_failure: continue
 
   - step: install_yq_cli
     version: v4.53.3
-    on_failure: issue
+    on_failure: continue
 
   - step: install_tailscale_client
-    on_failure: issue
+    on_failure: continue
 
   # Last inside the tool phase, and the only thing binding the list of tools to the steps above: a
   # tool named here with no step to fetch it is caught here and nowhere else.
@@ -371,22 +371,22 @@ steps:
       - jq=jq-1.8.2
       - tailscale=v1.98.10
     unpinnable: [jq, tailscale]
-    on_failure: issue
+    on_failure: continue
 
   - step: add_shell_alias
     alias: kubectl
     command: microk8s.kubectl
-    on_failure: warn
+    on_failure: continue
 
   - step: add_shell_alias
     alias: helm
     command: microk8s.helm3
-    on_failure: warn
+    on_failure: continue
 
   # Last of all, and the one step here that replaces a file whole: any context the operator added
   # for another cluster is gone with it.
   - step: export_kubeconfig
-    on_failure: warn
+    on_failure: continue
 
 # What this program has to be told about the installation it is bringing up.
 #
