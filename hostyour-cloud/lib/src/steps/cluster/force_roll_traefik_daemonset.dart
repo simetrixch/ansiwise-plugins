@@ -131,14 +131,14 @@ final class ForceRollTraefikDaemonset extends IrreversibleStep {
     final Map<String, List<String>> pending =
         await _podArguments(context, 'Pending') ?? const <String, List<String>>{};
     for (final String pod in pending.keys) {
-      context.log.info('$pod is stuck waiting for the ports the running pod holds — removing it');
+      context.log.debug('$pod is stuck waiting for the ports the running pod holds — removing it');
       await _mustRun(context, <String>[..._delete, pod, '--grace-period=0', '--force']);
     }
 
     final Map<String, List<String>> running =
         await _podArguments(context, 'Running') ?? const <String, List<String>>{};
     for (final String pod in _lagging(running)) {
-      context.log.info('$pod is serving with the arguments it was started with — replacing it');
+      context.log.debug('$pod is serving with the arguments it was started with — replacing it');
       await _mustRun(context, <String>[..._delete, pod, '--grace-period=10']);
     }
 

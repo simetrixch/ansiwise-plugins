@@ -311,9 +311,21 @@ void main() {
       final ({RunRecord record, FakeShell shell, FakeFiles files, MemoryRecorder recorder}) it =
           await run(Mode.dry);
 
+      // Two different places, and the difference is which of them carries the PATHS.
+      //
+      // The domain stamp's plan is a diff of the LINES that change, so the file each line belongs to
+      // is only in what the step says — which is why that line is at info and stays in a normal run.
+      // The role stamp's plan is the list of removed paths itself, so the same fact is in the plan
+      // and its per-path line is working-out that a debugging run asks for.
       expect(it.recorder.logLines, contains(contains('platform/values-dev.yaml would have')));
-      expect(it.recorder.logLines, contains('platform/values-prod.yaml would be removed'));
-      expect(it.recorder.logLines, contains('argocd/test/apps/root-app.yaml would be removed'));
+
+      final StepRecord role = it.record.steps.firstWhere(
+        (StepRecord step) => step.step == const StepName('stamp_role'),
+      );
+      final DiffPlan removed = role.plan! as DiffPlan;
+      expect(removed.before, contains('platform/values-prod.yaml'));
+      expect(removed.before, contains('argocd/test/apps/root-app.yaml'));
+      expect(removed.after, isEmpty, reason: 'what it plans is that these are no longer there');
     });
   });
 

@@ -196,7 +196,7 @@ final class WriteStageSecrets extends ReversibleStep {
     final List<String> toFill = _toFill(file, wanted);
 
     for (final String key in wanted.keys) {
-      context.log.info(
+      context.log.debug(
         toFill.contains(key)
             ? '$key would be filled in'
             : '$key already carries a value and would be left alone',

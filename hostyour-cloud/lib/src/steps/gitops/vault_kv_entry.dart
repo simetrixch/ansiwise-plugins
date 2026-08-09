@@ -172,7 +172,7 @@ final class VaultKvEntry extends IrreversibleStep {
       if (current[field.key] != field.value) {
         // The field, never the value. What is different is what an operator needs; what it is
         // different to is the credential.
-        context.log.info('$dataPath holds a different ${field.key}');
+        context.log.debug('$dataPath holds a different ${field.key}');
         return const CheckResult.ready();
       }
     }
@@ -182,7 +182,7 @@ final class VaultKvEntry extends IrreversibleStep {
       // What is asked is only whether the entry already carries it.
       final Object? held = current[field];
       if (held is! String || held.isEmpty) {
-        context.log.info('$dataPath carries no $field yet');
+        context.log.debug('$dataPath carries no $field yet');
         return const CheckResult.ready();
       }
     }
@@ -305,7 +305,7 @@ final class VaultKvEntry extends IrreversibleStep {
       }
       if (isUnfilled(value)) {
         if (ownedElsewhere) {
-          context.log.info(
+          context.log.debug(
             '$field is left out of $dataPath: $variable still holds the text that marks it '
             'unfilled, and another writer owns that field',
           );

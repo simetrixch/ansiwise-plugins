@@ -78,7 +78,7 @@ final class AlignCalicoBackend extends ReversibleStep {
   @override
   Future<void> apply(StepContext context) async {
     final String backend = await DetectHostIptablesBackend.detect(context);
-    context.log.info(
+    context.log.debug(
       'this machine filters packets with $backend — pinning the network agent to it',
     );
     await _mustRun(context, _patch(_wanted(backend)));

@@ -125,7 +125,7 @@ final class RequirePodCidrFreeOfReservedRanges extends ObservingStep {
       return CheckResult.blocked(problems.join('; '));
     }
     if (context.answers.text('lan_cidr').isEmpty) {
-      context.log.info(
+      context.log.debug(
         'no LAN was given, so the pod range was only held against the service range $serviceCidr',
       );
     }

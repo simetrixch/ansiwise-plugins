@@ -114,7 +114,7 @@ final class HelmRelease extends IrreversibleStep {
     final Object? held = installed['chart'];
     final String wanted = '$chartName-$chartVersion';
     if (held != wanted) {
-      context.log.info('the installed chart is $held and this run pins $wanted');
+      context.log.debug('the installed chart is $held and this run pins $wanted');
       return const CheckResult.ready();
     }
 
@@ -129,7 +129,7 @@ final class HelmRelease extends IrreversibleStep {
     final Object? wantedValues = _plain(loadYaml(await context.files.read(path)));
     final Object? currentValues = await _currentValues(context);
     if (jsonEncode(wantedValues) != jsonEncode(currentValues)) {
-      context.log.info('$release is at $wanted and the values it holds differ from $path');
+      context.log.debug('$release is at $wanted and the values it holds differ from $path');
       return const CheckResult.ready();
     }
     return CheckResult.satisfied('$release is deployed at $wanted with the values in $path');

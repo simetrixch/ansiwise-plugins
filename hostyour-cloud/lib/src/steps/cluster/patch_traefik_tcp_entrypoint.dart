@@ -79,7 +79,7 @@ final class PatchTraefikTcpEntrypoint extends ReversibleStep {
   Future<CheckResult> check(StepContext context) async {
     for (final String entry in entrypoints) {
       if (_Entrypoint.read(entry) == null) {
-        context.log.warn(
+        context.log.error(
           '"$entry" is not an entry point — it reads as a name, a colon and a port, such as '
           'postgres:5432 — so it is left out',
         );

@@ -74,7 +74,7 @@ final class RecycleKubeSystemPodIps extends IrreversibleStep {
   Future<void> apply(StepContext context) async {
     final List<_Pod> stale = _stale(await _pods(context) ?? const <_Pod>[]);
     for (final _Pod pod in stale) {
-      context.log.info(
+      context.log.debug(
         '${pod.name} holds ${pod.address}, which is outside $podCidr — recreating it',
       );
       final List<String> argv = <String>[..._delete, pod.name, '--wait=false'];

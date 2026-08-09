@@ -179,7 +179,7 @@ final class VaultInit extends IrreversibleStep {
       // problem an operator can solve, and a lost one is not. The check afterwards refuses it, so
       // the step still fails.
       await context.files.write(credentialsPath, answer.body, mode: credentialsMode);
-      context.log.warn(
+      context.log.error(
         'Vault answered the initialization in a shape this could not read. The answer was written '
         'verbatim to $credentialsPath (mode 600) so nothing is lost — it holds the quorum and has '
         'to be put into the "$unsealKeyLabel <n>:" and "$rootTokenLabel:" form by hand',

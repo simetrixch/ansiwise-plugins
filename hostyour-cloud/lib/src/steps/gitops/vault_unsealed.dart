@@ -116,7 +116,7 @@ final class VaultUnsealed extends ReversibleStep {
     // No throw. Whether Vault is unsealed is decided by asking Vault, which is what the check does
     // straight after this — a step that reported its own success here would be trusting the last
     // answer it happened to get.
-    context.log.warn('every key in $credentialsPath was offered and Vault is still sealed');
+    context.log.error('every key in $credentialsPath was offered and Vault is still sealed');
   }
 
   @override

@@ -106,7 +106,7 @@ final class StampRole extends ReversibleStep {
   Future<StepPlan> plan(StepContext context) async {
     final List<String> left = await _toRemove(context);
     for (final String path in left) {
-      context.log.info('$path would be removed');
+      context.log.debug('$path would be removed');
     }
     // One step here removes many files and a plan carries one path, so the path is the checkout and
     // the difference is what would no longer be in it.

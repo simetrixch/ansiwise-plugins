@@ -132,7 +132,7 @@ final class VaultAuthRole extends ReversibleStep {
     final Map<String, Object?> wanted = _merged(declared, current);
     for (final MapEntry<String, Object?> field in wanted.entries) {
       if (!sameJsonValue(current[field.key], field.value)) {
-        context.log.info('the role "${written.role}" differs from this run in ${field.key}');
+        context.log.debug('the role "${written.role}" differs from this run in ${field.key}');
         return const CheckResult.ready();
       }
     }
