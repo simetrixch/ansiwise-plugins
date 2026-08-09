@@ -85,4 +85,113 @@ void main() {
       );
     }
   });
+
+  group('every program asks for the tools it needs, at its head', () {
+    // A program that assumes a command is a program that finds out in the middle of itself.
+    // deploy-branch would fail at a git identity check with a message about configuration where the
+    // truth is a missing git; deploy-gitops at a chart repository where the truth is a missing helm.
+    // That the machine usually carries them because an earlier program installed them is a fact of
+    // the usual ORDER and not of the program being run.
+    //
+    // The gate MEASURES and installs nothing, because a program that quietly installed something is
+    // a program whose dry run lied: it showed a plan that did not include the installation it was
+    // about to perform.
+
+    for (final File file in programs.listSync().whereType<File>().where(
+      (File f) => f.path.endsWith('.yaml'),
+    )) {
+      final String name = file.uri.pathSegments.last;
+
+      ResolvedProgram resolvedProgram() => const ProgramResolver(
+        executionRegistry,
+      ).resolve(loadProgram(file.readAsStringSync(), where: name));
+
+      test('$name gates on its tools before it changes anything', () {
+        final ResolvedProgram resolved = resolvedProgram();
+        final int gate = resolved.steps.indexWhere(
+          (ResolvedStep s) => s.entry.step == const StepName('require_commands'),
+        );
+        expect(gate, isNot(-1), reason: '$name names no command it needs, so it assumes them all');
+
+        final int firstChange = resolved.steps.indexWhere(
+          (ResolvedStep s) => _built(s) is! ObservingStep,
+        );
+        if (firstChange == -1) {
+          return;
+        }
+        expect(
+          gate,
+          lessThan(firstChange),
+          reason:
+              'a gate after the first change fires with the machine already altered, which is the '
+              'situation it exists to prevent',
+        );
+      });
+
+      test('$name asks for no command a step of it never starts', () {
+        final ResolvedProgram resolved = resolvedProgram();
+        // The FIRST one only. A later `require_commands` is not a gate on what the program assumes:
+        // it is the postcondition of an install step, proving that what was installed really landed
+        // — deploy-host asks for htpasswd after installing apache2-utils, and no step of it ever
+        // starts htpasswd. Judging that one here would demand the program stop proving its own work.
+        final int gate = resolved.steps.indexWhere(
+          (ResolvedStep s) => s.entry.step == const StepName('require_commands'),
+        );
+        final Set<String> asked = <String>{
+          ..._argumentsOf(resolved.steps[gate]).textList('commands'),
+        };
+        // Read out of the sources of the steps this program names, so a command that stops being
+        // used stops being demanded. A gate asking for a tool nothing needs refuses machines for
+        // nothing, and it is the half of this that nobody would otherwise notice.
+        final Set<String> started = <String>{
+          for (final ResolvedStep step in resolved.steps)
+            ..._commandsStartedBy(step.registered.source),
+        };
+        expect(
+          asked.difference(started),
+          isEmpty,
+          reason:
+              '$name demands a command no step of it starts, and a machine refused for a tool '
+              'nothing uses is refused for nothing',
+        );
+      });
+    }
+  });
 }
+
+/// The step [resolved] builds, with the defaults its specification declares.
+///
+/// The engine fills defaults in before it builds a step, and a reader that skipped that would be
+/// refused by any step relying on one — `disable_password_login` takes its drop-in path that way.
+Step _built(ResolvedStep resolved) => resolved.registered.create(_argumentsOf(resolved));
+
+/// The arguments [resolved] runs with: what the program wrote, plus what the step declares by
+/// default.
+Arguments _argumentsOf(ResolvedStep resolved) {
+  final Map<String, Object> defaults = <String, Object>{
+    for (final ArgumentSpec spec in resolved.registered.arguments)
+      if (spec.defaultValue case final Object value) spec.name: value,
+  };
+  return defaults.isEmpty
+      ? resolved.entry.arguments
+      : resolved.entry.arguments.withDefaults(defaults);
+}
+
+/// The commands the step declared at [source] starts, read from its own file.
+///
+/// `<path>:<line>` is what a registry entry carries, and the path is what is opened here. A step
+/// composing a command name out of a variable is not seen, and that is the known limit of reading
+/// source: this catches a demand for a tool nothing uses, which is the direction that goes
+/// unnoticed, and it does not pretend to enumerate everything a run might start.
+Set<String> _commandsStartedBy(String source) {
+  final File file = File(source.split(':').first);
+  if (!file.existsSync()) {
+    return const <String>{};
+  }
+  return <String>{
+    for (final RegExpMatch match in _commandName.allMatches(file.readAsStringSync()))
+      match.group(1)!,
+  };
+}
+
+final RegExp _commandName = RegExp(r"Command(?:\.observing)?\(\s*'([a-z0-9_.-]+)'");

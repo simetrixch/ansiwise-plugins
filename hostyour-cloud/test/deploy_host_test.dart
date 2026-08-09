@@ -47,7 +47,18 @@ void main() {
     for (final String package in <String>['git', 'openssl', 'curl', 'jq', 'apache2-utils']) {
       shell.fails('dpkg-query -W -f=\${Status} $package');
     }
-    for (final String command in <String>['git', 'openssl', 'curl', 'jq', 'htpasswd']) {
+    // Two lists, and they mean different things. `toolsAssumed` is what a fresh Ubuntu already
+    // carries and this program only USES, asked for at the head before anything is written. The
+    // five after it are what this program INSTALLS, asked for again afterwards as the proof that the
+    // install really landed — an install can succeed and leave nothing behind.
+    for (final String command in <String>[
+      ...toolsAssumed,
+      'git',
+      'openssl',
+      'curl',
+      'jq',
+      'htpasswd',
+    ]) {
       shell.answers('command -v $command', '/usr/bin/$command\n');
     }
 
@@ -94,7 +105,7 @@ void main() {
   }
 
   test('the program resolves against the registry', () {
-    expect(deployHost().steps, hasLength(9));
+    expect(deployHost().steps, hasLength(10));
   });
 
   test('every value this machine states about itself is an answer, not an argument', () {
@@ -311,4 +322,86 @@ void main() {
       reason: 'a proof that runs before the thing it proves is not a proof',
     );
   });
+
+  group('a tool this program only uses, taken off the machine', () {
+    // The case the head gate exists for: an image somebody trimmed. Without it the run gets as far
+    // as the package install, writes to the machine, and then fails at a step whose message is about
+    // whatever that step was doing rather than about a command that is not there.
+
+    Future<RunRecord> runWithout(String absent) async {
+      final ({FakeShell shell, FakeFiles files}) machine = bareMachine();
+      machine.shell.fails('command -v $absent');
+      final FakeClock clock = FakeClock();
+      return Runner(
+        machine: Machine(
+          shell: machine.shell,
+          files: machine.files,
+          http: FakeHttp(),
+          clock: clock,
+          entropy: FakeEntropy(),
+        ),
+        recorder: MemoryRecorder(clock),
+        redactor: Redactor.none,
+      ).run(
+        program: deployHost(),
+        mode: Mode.run,
+        header: header(Mode.run, clock),
+        answers: answered(),
+      );
+    }
+
+    test('the run stops, and it stops at the gate', () async {
+      final RunRecord record = await runWithout('dpkg-query');
+      expect(record.exitCode, isNot(0));
+      expect(
+        record.steps.first.step,
+        const StepName('require_commands'),
+        reason: 'the gate is what ran; anything else means the run had already started working',
+      );
+    });
+
+    test('nothing was installed before it stopped', () async {
+      final RunRecord record = await runWithout('dpkg-query');
+      expect(
+        record.steps.map((StepRecord s) => s.step),
+        isNot(contains(const StepName('install_packages'))),
+        reason:
+            'this is the whole point of the gate: a machine that was never going to work is refused '
+            'before anything is written to it',
+      );
+    });
+
+    test('the refusal names the command, not the step that tripped over it', () async {
+      final RunRecord record = await runWithout('dpkg-query');
+      final Verdict verdict = record.steps.first.verdict;
+      expect(
+        verdict,
+        isA<Died>(),
+        reason: 'the gate ends the run; its policy in the program is die',
+      );
+      expect(
+        (verdict as Died).reason,
+        contains('dpkg-query'),
+        reason:
+            'an operator reads the refusal and installs something; a message about a package query '
+            'that failed sends them looking at the package manager instead',
+      );
+    });
+  });
 }
+
+/// What a fresh Ubuntu carries and this program only uses.
+///
+/// Kept beside the fixture rather than repeated in it, because it is also the list the head gate of
+/// programs/deploy-host.yaml asks for — and a fixture that answered for a different set would be a
+/// machine no operator has.
+const List<String> toolsAssumed = <String>[
+  'apt-get',
+  'dpkg-query',
+  'nproc',
+  'df',
+  'getent',
+  'sshd',
+  'stat',
+  'chown',
+];

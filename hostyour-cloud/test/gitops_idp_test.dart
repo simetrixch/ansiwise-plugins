@@ -54,7 +54,12 @@ void main() {
     test('stands, and the run stays green', () async {
       final FakeClock clock = FakeClock();
       final MemoryRecorder recorder = MemoryRecorder(clock);
-      final FakeShell shell = FakeShell();
+      // The head gate asks for the two tools this program is made of, whatever the run turns out to
+      // have to do. A machine that did not answer would stop there, and this test would then be red
+      // for a reason that has nothing to do with the identity provider.
+      final FakeShell shell = FakeShell()
+        ..answers('command -v helm', '/usr/local/bin/helm\n')
+        ..answers('command -v kubectl', '/usr/local/bin/kubectl\n');
       final FakeFiles files = FakeFiles(<String, String>{
         '/srv/hostyour-cloud/configs/config.dev': 'ENABLE_IDP=false\n',
       });

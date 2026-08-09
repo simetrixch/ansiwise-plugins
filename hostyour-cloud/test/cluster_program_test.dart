@@ -76,7 +76,7 @@ void main() {
   }
 
   test('the program resolves against the registry', () {
-    expect(deployCluster().steps, hasLength(58));
+    expect(deployCluster().steps, hasLength(59));
   });
 
   test('every value this installation states about itself is an answer, not an argument', () {

@@ -9,6 +9,25 @@
 name: deploy-host
 roles: [master, slave]
 steps:
+  # THE TOOLS THIS PROGRAM ASSUMES, BEFORE THE FIRST OF THEM IS USED. Everything below starts
+  # commands a fresh Ubuntu carries — and "a fresh Ubuntu carries it" is a fact about the usual
+  # machine, not about this program. An image somebody trimmed is the case where a run finds out
+  # halfway through, with packages already installed and a step failing on a command nobody looked
+  # for.
+  #
+  # It MEASURES and installs nothing, and that is the whole shape of it: a program that quietly
+  # installed something would be a program whose dry run lied, having shown a plan without the
+  # installation it was about to perform. Installing is a step of this program, below, and the two
+  # are kept apart precisely so a dry run can say what would be installed without installing it.
+  #
+  # What each is for: `apt-get` and `dpkg-query` are the package manager the install step drives;
+  # `nproc` and `df` answer the size and disk gates; `getent` and `sshd` decide whether a key login
+  # would work; `stat` reads the mode of the key file, and `chown` gives it back to the account that
+  # owns it.
+  - step: require_commands
+    commands: [apt-get, dpkg-query, nproc, df, getent, sshd, stat, chown]
+    on_failure: die
+
   - step: require_pinned_ubuntu
     release: '26.04'
     on_failure: die

@@ -172,9 +172,32 @@ const WriteClusterIssuerManifest clusterIssuer = WriteClusterIssuerManifest(
 /// Every one of the program's steps answers that there is nothing to do against this, which is what
 /// makes it the fixture the double-run test is written on: a run against it must write nothing and
 /// run no command that changes anything.
+/// What a fresh Ubuntu carries and `deploy-cluster` only uses, never installs.
+///
+/// The same list its head gate asks for. A fixture that did not answer for these would be a machine
+/// no operator has, and every run against it would stop at the first step.
+const List<String> clusterToolsAssumed = <String>[
+  'snap',
+  'systemctl',
+  'ip',
+  'nft',
+  'netplan',
+  'resolvectl',
+  'mountpoint',
+  'readlink',
+  'chown',
+  'getent',
+  'groups',
+  'gpasswd',
+];
+
 ClusterMachine convergedCluster() {
   final FakeShell shell = FakeShell();
   final FakeFiles files = FakeFiles();
+
+  for (final String command in clusterToolsAssumed) {
+    shell.answers('command -v $command', '/usr/bin/$command\n');
+  }
 
   // The snap: installed, on the path, on the pinned channel, and answering that it is running.
   shell

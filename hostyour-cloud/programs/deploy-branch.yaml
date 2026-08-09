@@ -218,6 +218,18 @@ answers:
       back both; they are two answers so that they can be rotated apart.
 
 steps:
+  # THE ONE TOOL THIS PROGRAM IS, ASKED FOR BEFORE ANYTHING USES IT. Every step below is git — the
+  # identity, the origin, the branch, the five stamps and the push. deploy-host installs it, and
+  # that this program usually runs after that one is a fact of the usual ORDER rather than of this
+  # program. Run on a machine deploy-host never touched, it would otherwise fail at the identity
+  # check with a message about configuration where the truth is a missing command.
+  #
+  # It measures and installs nothing: a program that quietly installed something would be a program
+  # whose dry run lied, having shown a plan without the installation it was about to perform.
+  - step: require_commands
+    commands: [git]
+    on_failure: die
+
   - step: require_git_identity
     repository: /srv/hostyour-cloud
     on_failure: die

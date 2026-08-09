@@ -53,7 +53,7 @@ void main() {
 
   /// A machine carrying a stage config that says [config], and nothing else.
   ({FakeShell shell, FakeFiles files, FakeHttp http}) machineWith(String config) => (
-    shell: FakeShell(),
+    shell: gitopsToolsPresent(),
     files: FakeFiles(<String, String>{'/srv/hostyour-cloud/configs/config.dev': config}),
     http: FakeHttp(),
   );
@@ -374,11 +374,21 @@ void main() {
 
       expect(it.record.exitCode, 0, reason: 'a component nobody asked for must not fail a run');
       for (final StepRecord step in it.record.steps) {
+        // The head gate is not under a condition and does not skip: it asks whether helm and
+        // kubectl are there, whatever this run turns out to have to do. What it must not do is
+        // change anything, and the assertions below are what hold it to that.
+        if (step.step == const StepName('require_commands')) {
+          continue;
+        }
         expect(step.verdict, isA<Skipped>(), reason: '${step.step} was not skipped');
       }
       expect(it.files.written, isEmpty);
       expect(it.files.deleted, isEmpty);
-      expect(it.shell.ran, isEmpty, reason: 'no namespace, no release, not half of one');
+      expect(
+        it.shell.commands.where((Command c) => !c.observes),
+        isEmpty,
+        reason: 'no namespace, no release, not half of one',
+      );
     });
 
     test('the plan names the condition that skipped each row', () async {
@@ -417,7 +427,7 @@ void main() {
     test('a checkout with no stage config decides nothing and does nothing', () async {
       final FakeClock clock = FakeClock();
       final MemoryRecorder recorder = MemoryRecorder(clock);
-      final FakeShell shell = FakeShell();
+      final FakeShell shell = gitopsToolsPresent();
       final FakeFiles files = FakeFiles();
 
       final RunRecord record =
@@ -450,7 +460,14 @@ void main() {
           );
 
       expect(record.exitCode, 0);
-      expect(shell.ran, isEmpty);
+      expect(
+        shell.commands.where((Command c) => !c.observes),
+        isEmpty,
+        reason:
+            'every gate of this program is off, so nothing is applied. What DOES run is the head '
+            'gate looking for helm and kubectl, and looking is not doing — a gate that measures is '
+            'the one thing allowed to run before the program decides it has nothing to do',
+      );
       expect(files.written, isEmpty);
     });
   });
@@ -488,3 +505,12 @@ void main() {
     });
   });
 }
+
+/// A machine carrying the two tools deploy-gitops is made of.
+///
+/// The head gate asks for them before anything is applied, so a fixture that did not answer would be
+/// a machine with no helm and no kubectl — every run against it stopping at the first step, which is
+/// what the gate is for and not what these fixtures are for.
+FakeShell gitopsToolsPresent() => FakeShell()
+  ..answers('command -v helm', '/usr/local/bin/helm\n')
+  ..answers('command -v kubectl', '/usr/local/bin/kubectl\n');

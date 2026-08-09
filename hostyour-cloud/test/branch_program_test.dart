@@ -148,6 +148,10 @@ void main() {
     ];
 
     final FakeShell shell = FakeShell()
+      // The one tool this program is, asked for at its head before anything is written. A fixture
+      // not answering for it would be a machine with no git, where every run stops at the first
+      // step — which is what the gate is for and not what this fixture is for.
+      ..answers('command -v git', '/usr/bin/git\n')
       ..answers('git -C $repository rev-parse --git-dir', '.git\n')
       ..answers('git -C $repository config --get user.name', 'Example Operator\n')
       ..answers('git -C $repository config --get user.email', 'operator@example.com\n')
@@ -218,7 +222,7 @@ void main() {
     // configs and secrets named for this stage, and the two that render what makes it one
     // installation — the profile every chart reads and the toggles that decide which applications
     // run here.
-    expect(deployBranch().steps, hasLength(12));
+    expect(deployBranch().steps, hasLength(13));
   });
 
   test('every value an installation states about itself is an answer, not an argument', () {
@@ -243,7 +247,7 @@ void main() {
     for (final ResolvedStep step in deployBranch().steps) {
       expect(
         step.entry.arguments.names,
-        everyElement(isIn(<String>['repository', 'trunk', 'stages'])),
+        everyElement(isIn(<String>['repository', 'trunk', 'stages', 'commands'])),
         reason:
             '${step.entry.step} is given something in the program file that names one '
             'installation, and a program file ships to every installation',

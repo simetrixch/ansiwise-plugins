@@ -36,6 +36,30 @@ name: deploy-cluster
 roles: [master, slave]
 steps:
   # ---------------------------------------------------------------------------------------------
+  # The tools this program assumes, before the first of them is used.
+  #
+  # WHAT IS NOT HERE IS AS DELIBERATE AS WHAT IS. `microk8s` is absent because THIS program installs
+  # it; requiring it at the head would refuse every machine the program exists to prepare. So are
+  # `jq`, `yq`, `argocd`, `vault` and the tailnet client, for the same reason — they are fetched in
+  # the tool phase below, and `assert_cli_tool_versions` is what holds that phase to its list.
+  #
+  # What IS here is what a fresh Ubuntu carries and this program never installs: the snap client the
+  # cluster arrives as, the service manager it is started by, the addressing and packet-filtering
+  # tools the network conversion drives, the resolver the name service is read from, the mount and
+  # link tools the storage path is decided by, and the account tools the operator is added to the
+  # cluster group with. "A fresh Ubuntu carries it" is a fact about the usual machine and not about
+  # this program: on an image somebody trimmed, a run without this gate finds out in the middle of a
+  # pod-network conversion.
+  #
+  # IT MEASURES AND INSTALLS NOTHING. A program that quietly installed something would be a program
+  # whose dry run lied, having shown a plan without the installation it was about to perform.
+  # ---------------------------------------------------------------------------------------------
+  - step: require_commands
+    commands:
+      [snap, systemctl, ip, nft, netplan, resolvectl, mountpoint, readlink, chown, getent, groups, gpasswd]
+    on_failure: die
+
+  # ---------------------------------------------------------------------------------------------
   # The snap.
   #
   # Four steps for four states a machine can be found in, and each of them answers "nothing to do"
