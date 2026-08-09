@@ -1,0 +1,40 @@
+# The hostyour-cloud plugin: what should happen to a machine that becomes a hostyour-cloud installation.
+#
+# This is the half that knows the platform — microk8s, Vault, ArgoCD, Cloudflare. The framework it
+# runs on knows none of it, the dependency points one way, and a check enforces that direction.
+#
+# It is also where the binary is built. A plugin's steps have to be compiled in, because Dart
+# ahead-of-time loads no code at run time — so the composition root lives with the plugin set it
+# composes, and `dart run tool/build.dart` produces what a machine is given.
+name: hostyour_cloud
+description: The steps, predicates and programs of a hostyour-cloud installation.
+publish_to: none
+version: 0.1.0
+
+# The name the binary carries onto a machine, and the name its own help text prints. It is the
+# framework that runs, with this plugin among the ones compiled into it.
+executables:
+  ansiwise: ansiwise
+
+environment:
+  sdk: ^3.12.0
+
+dependencies:
+  ansiwise_api:
+    git:
+      url: https://github.com/simetrixch/ansiwise-api.git
+      ref: master
+  # Two steps read YAML the platform wrote — a chart's values and a cluster profile. The framework
+  # uses it for program files; a plugin that reads its own files declares it itself rather than
+  # leaning on a transitive dependency it does not control.
+  yaml: ^3.1.3
+  # The plugin ships the command line that starts a run, and that parses arguments itself.
+  args: ^2.7.0
+
+dev_dependencies:
+  test: ^1.31.2
+  lints: ^6.1.0
+  # The checks under test/checks/ walk this tree and resolve the paths its imports name. Nothing
+  # under tool/ may reach it — the gate has to start before anything is resolved — and none of it is
+  # shipped, so it is a development dependency.
+  path: ^1.9.1

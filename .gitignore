@@ -1,0 +1,15 @@
+# Resolved, not authored.
+.dart_tool/
+pubspec.lock
+
+# The compiled binary. It is built by a plugin's tool/build.dart rather than kept here.
+build/
+
+# The path override that points at a framework checkout beside this one. Whoever has both writes
+# their own; the pubspec's git dependency is what everyone else resolves.
+pubspec_overrides.yaml
+
+# Agent instructions. Loaded from disk by whichever harness opens this repository, and never
+# tracked: they are ours, and this repository is meant to be cloned and used by anybody.
+CLAUDE.md
+AGENTS.md

@@ -1,0 +1,70 @@
+# Bringing up a machine reached with nothing but a username and a password.
+#
+# The order is the point. The cheap local measurements come first, so a machine that was never going
+# to work is refused before anything is written to it. Only then is anything installed.
+#
+# require_commands stands AFTER install_packages on purpose: it is what proves the install produced
+# the commands, rather than that the package manager returned zero. An install can succeed and leave
+# nothing behind, and the shell this replaces has a comment saying exactly that.
+name: deploy-host
+roles: [master, slave]
+steps:
+  - step: require_pinned_ubuntu
+    release: '26.04'
+    on_failure: die
+
+  - step: require_machine_size
+    vcpu: 8
+    memory_kilobytes: 15000000
+    on_failure: die
+
+  - step: require_free_disk
+    path: /
+    gigabytes: 60
+    on_failure: die
+
+  - step: install_packages
+    packages: [git, openssl, curl, jq, apache2-utils]
+    on_failure: die
+
+  - step: require_commands
+    commands: [git, openssl, curl, jq, htpasswd]
+    on_failure: die
+
+  - step: remove_unused_packages
+    on_failure: warn
+
+  - step: clean_package_cache
+    on_failure: warn
+
+  # The key first, then the proof that sshd would accept it. Switching the password off is a
+  # separate program on purpose: this one cannot perform the login, because the private half never
+  # comes here — so the operator connects with the key before anything takes the password away.
+  - step: install_authorized_key
+    on_failure: die
+
+  - step: require_key_login_possible
+    on_failure: die
+
+# What this program has to be told about the machine it is run against.
+#
+# Both belong to one installation and neither can stand in this file: an account name written here
+# would be the one the author's provider happened to make, and a key written here would be a key
+# NOBODY HOLDS — installed, then confirmed as installed, and useless to whoever ran it.
+answers:
+  - name: operator_user
+    kind: text
+    describes: >-
+      The account you will reach this machine as once the password is gone. It must already exist:
+      this program does not create it, because the machine is reached through it while it works.
+      Whoever provided the machine decided the name — on most it is "operator" or "ubuntu", and on
+      one reached as root it is "root".
+
+  - name: operator_public_key
+    kind: text
+    describes: >-
+      Your PUBLIC key, as one line of an authorized_keys file. It begins with "ssh-ed25519" or
+      "ssh-rsa" and usually ends with a comment naming whose key it is. The private half stays where
+      it is and never comes here, which is also why this program cannot perform the login itself: it
+      proves that sshd WOULD accept the key, and you prove the rest by connecting with it before
+      running disable-password-login.

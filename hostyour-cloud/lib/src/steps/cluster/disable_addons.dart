@@ -1,0 +1,86 @@
+import 'package:ansiwise_api/ansiwise_api.dart';
+import 'enable_addons.dart';
+
+/// Switches off the addons this platform does not use, whatever the snap switched on by itself.
+///
+/// **Without this pass a cluster's state depends on what the snap happened to do.** Some addons come
+/// on by themselves when the snap installs, and the one that matters is the built-in registry: it
+/// listens on a port with no authentication and no encryption, and this platform runs its own
+/// registry instead. Naming an addon here means a machine ends up in the same state whatever the
+/// snap default was and whatever a previous run did.
+///
+/// **An empty list is a step with nothing to do, not an error.** A program that declares no addon to
+/// switch off is a program that wants none switched off.
+///
+/// Switching off an addon that is already off is accepted by the tool, so nothing here has to guard
+/// against two runs racing each other.
+final class DisableAddons extends ReversibleStep {
+  /// Switches off each of [addons] that is on.
+  const DisableAddons({required this.addons});
+
+  /// Builds the step from what the program gave it.
+  factory DisableAddons.fromArguments(Arguments arguments) =>
+      DisableAddons(addons: arguments.textList('addons'));
+
+  /// What this step accepts.
+  static const List<ArgumentSpec> arguments = <ArgumentSpec>[
+    ArgumentSpec(
+      name: 'addons',
+      kind: ArgumentKind.textList,
+      describes: 'the addons that must be off on this cluster, whatever switched them on',
+      required: false,
+      defaultValue: <String>[],
+    ),
+  ];
+
+  /// The addons that must be off.
+  final List<String> addons;
+
+  @override
+  Future<CheckResult> check(StepContext context) async {
+    if (addons.isEmpty) {
+      return const CheckResult.satisfied('no addon is declared to be off');
+    }
+    final Set<String>? on = await EnableAddons.enabled(context);
+    if (on == null) {
+      return const CheckResult.blocked(
+        'the addons could not be read, so nothing says which of them are on',
+      );
+    }
+    final List<String> stillOn = _stillOn(on);
+    if (stillOn.isEmpty) {
+      return CheckResult.satisfied('${addons.join(', ')} are off');
+    }
+    return const CheckResult.ready();
+  }
+
+  @override
+  Future<StepPlan> plan(StepContext context) async {
+    final Set<String> on = await EnableAddons.enabled(context) ?? const <String>{};
+    return StepPlan.argv(<String>['microk8s', 'disable', ..._stillOn(on)]);
+  }
+
+  @override
+  Future<void> apply(StepContext context) async {
+    final Set<String> on = await EnableAddons.enabled(context) ?? const <String>{};
+    for (final String addon in _stillOn(on)) {
+      final List<String> argv = <String>['microk8s', 'disable', addon];
+      final CommandResult switched = await context.shell.run(Command(argv.first, argv.sublist(1)));
+      if (!switched.ok) {
+        throw CommandFailed(argv: argv, exitCode: switched.exitCode, stderr: switched.stderr);
+      }
+    }
+  }
+
+  @override
+  Future<void> undo(StepContext context) async {
+    for (final String addon in addons) {
+      await context.shell.run(Command('microk8s', <String>['enable', addon]));
+    }
+  }
+
+  List<String> _stillOn(Set<String> on) => <String>[
+    for (final String addon in addons)
+      if (on.contains(addon)) addon,
+  ];
+}

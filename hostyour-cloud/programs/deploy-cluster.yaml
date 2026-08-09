@@ -1,0 +1,450 @@
+# Turning a prepared machine into the single-node cluster everything else is deployed onto.
+#
+# Where this starts: a machine deploy-host has judged and provisioned, on a branch deploy-branch has
+# stamped. Where it stops: a node that answers, whose pods are on this platform's own address range,
+# whose lookups resolve from inside a pod, whose addons are on and whose unwanted addons are off,
+# whose volumes land on the data filesystem, and whose certificate issuer is registered so every
+# later address can be given a certificate.
+#
+# THE ORDER IS THE PROGRAM. Five of the constraints below are the reason this file reads the way it
+# does, and each of them is a failure that was silent when it was got wrong:
+#
+#   1. The packet-filtering backend is written BEFORE any addon is switched on. Set now, the service
+#      proxy paints native rules on its first run; set afterwards, rules already exist in the other
+#      backend and nothing here removes them.
+#   2. The pod network is converted BEFORE anything is given an address out of it. At that point a
+#      handful of system pods have to be given new ones, which is free; later it is every workload
+#      on the machine, which is why the conversion refuses a cluster that carries any.
+#   3. The image mirror is written BEFORE the first image is pulled, or the bring-up spends the
+#      public registry's allowance and stops.
+#   4. Everything that patches what an addon installed comes AFTER the addons are on. The name
+#      service's configuration only exists once the name addon is up; the network agent's settings
+#      only once the network addon is; the ingress controller only once the ingress addon is.
+#   5. The addons that must be OFF are switched off after the addons that must be on are switched
+#      on, because some of them come on by themselves when the snap installs.
+#
+# The seven steps of the pod-network conversion are ordered and not one of them may move. Deleting
+# the address pool before the manifest carries the new range brings the pool straight back on the
+# old one; skipping the full restart leaves the service proxy on what it was started with; giving
+# the pods new addresses before the pool converged hands them addresses out of the old pool again.
+#
+# WHAT THIS FILE DOES NOT DECIDE. There is no step that asks whether the conversion has already
+# happened: every step of it reads the live address pool and the service proxy's own arguments in
+# its own check, which is what makes each of them a no-op on a machine that is already converted and
+# what makes a second run of the whole program change nothing.
+name: deploy-cluster
+roles: [master, slave]
+steps:
+  # ---------------------------------------------------------------------------------------------
+  # The snap.
+  #
+  # Four steps for four states a machine can be found in, and each of them answers "nothing to do"
+  # for the three it is not: nothing installed, installed, installed and switched off, installed on
+  # another channel. The purge is the one that has to be asked for.
+  # ---------------------------------------------------------------------------------------------
+  - step: remove_microk8s_snap_forced
+    force: false
+    on_failure: die
+
+  - step: enable_disabled_microk8s_snap
+    on_failure: die
+
+  - step: refresh_microk8s_channel
+    channel: 1.35/stable
+    on_failure: die
+
+  - step: install_microk8s_snap
+    channel: 1.35/stable
+    on_failure: die
+
+  - step: wait_for_microk8s_ready
+    timeout_seconds: 300
+    on_failure: die
+
+  # ---------------------------------------------------------------------------------------------
+  # The network the cluster paints its rules into, before an addon paints any.
+  # ---------------------------------------------------------------------------------------------
+  - step: configure_kube_proxy_nftables
+    proxy_mode: nftables
+    on_failure: warn
+
+  # ---------------------------------------------------------------------------------------------
+  # The pod network. Seven ordered steps and two gates in front of them.
+  # ---------------------------------------------------------------------------------------------
+  - step: require_pod_cidr_free_of_reserved_ranges
+    pod_cidr: 10.244.0.0/16
+    service_cidr: 10.152.183.0/24
+    on_failure: die
+
+  - step: guard_populated_cluster_pod_cidr_migration
+    pod_cidr: 10.244.0.0/16
+    allow_populated_migration: false
+    on_failure: die
+
+  - step: stamp_calico_pool_cidr_in_cni_manifest
+    pod_cidr: 10.244.0.0/16
+    on_failure: die
+
+  - step: stamp_kube_proxy_cluster_cidr
+    pod_cidr: 10.244.0.0/16
+    on_failure: die
+
+  - step: delete_default_ipv4_ippool
+    pod_cidr: 10.244.0.0/16
+    on_failure: die
+
+  - step: reapply_calico_manifest
+    pod_cidr: 10.244.0.0/16
+    on_failure: die
+
+  - step: restart_microk8s_snap_for_pod_cidr
+    pod_cidr: 10.244.0.0/16
+    ready_timeout_seconds: 300
+    rollout_timeout_seconds: 120
+    on_failure: die
+
+  - step: verify_ippool_converged_with_self_heal
+    pod_cidr: 10.244.0.0/16
+    timeout_seconds: 180
+    interval_seconds: 5
+    on_failure: die
+
+  # Last of the seven, and warn rather than fatal: the pods are rebuilt by their controllers, so a
+  # machine that did not manage it is one whose system pods come back with the right addresses on
+  # their own.
+  - step: recycle_kube_system_pod_ips
+    pod_cidr: 10.244.0.0/16
+    on_failure: warn
+
+  # ---------------------------------------------------------------------------------------------
+  # The image mirror, before the first image is pulled.
+  #
+  # The credential is judged twice: once here, and once inside the step that writes the mirror, so
+  # that running this program on its own keeps the same guard.
+  # ---------------------------------------------------------------------------------------------
+  - step: preflight_docker_mirror_credential
+    repository: /srv/hostyour-cloud
+    on_failure: die
+
+  - step: write_containerd_docker_mirror
+    repository: /srv/hostyour-cloud
+    on_failure: die
+
+  # ---------------------------------------------------------------------------------------------
+  # The addons, and the account that operates the machine.
+  #
+  # Access control is FIRST in the list on purpose. Until it is on, the API server allows
+  # everything: every access rule applied afterwards is accepted, looks correct, and enforces
+  # nothing.
+  # ---------------------------------------------------------------------------------------------
+  - step: add_user_to_group
+    group: microk8s
+    on_failure: warn
+
+  - step: enable_addons
+    addons: [rbac, dns, hostpath-storage, ingress, cert-manager, metrics-server]
+    dns_upstream_servers: []
+    on_failure: die
+
+  - step: wait_for_addons_enabled
+    addons: [rbac, dns, hostpath-storage, ingress, cert-manager, metrics-server]
+    timeout_seconds: 300
+    interval_seconds: 5
+    on_failure: warn
+
+  # ---------------------------------------------------------------------------------------------
+  # What the addons installed, corrected. All of it after the addon loop, because none of these
+  # objects exists before it.
+  # ---------------------------------------------------------------------------------------------
+  - step: detect_host_upstream_resolvers
+    on_failure: warn
+
+  - step: patch_coredns_corefile
+    upstream_servers: []
+    force_tcp: false
+    rollout_timeout_seconds: 60
+    on_failure: warn
+
+  - step: detect_host_iptables_backend
+    on_failure: warn
+
+  - step: align_calico_backend
+    rollout_timeout_seconds: 120
+    on_failure: warn
+
+  - step: patch_traefik_cross_namespace
+    namespace: ingress
+    daemon_set: traefik
+    on_failure: warn
+
+  - step: patch_traefik_tcp_entrypoint
+    entrypoints: []
+    namespace: ingress
+    daemon_set: traefik
+    on_failure: warn
+
+  # The declaration is patched above; this is what reaches the pod that is actually serving. On one
+  # machine the replacement cannot be created while the old pod holds the machine's ports, so the
+  # patches above look like they succeeded and the running controller keeps the arguments it was
+  # started with.
+  - step: force_roll_traefik_daemonset
+    entrypoints: []
+    namespace: ingress
+    daemon_set: traefik
+    rollout_timeout_seconds: 90
+    on_failure: warn
+
+  - step: disable_addons
+    addons: [registry]
+    on_failure: warn
+
+  # ---------------------------------------------------------------------------------------------
+  # Who the API server accepts. Safe before the identity provider exists: an issuer it cannot reach
+  # does not stop it, it only makes token validation fail until the address answers.
+  # ---------------------------------------------------------------------------------------------
+  - step: configure_kube_apiserver_oidc
+    client_id: headlamp
+    username_claim: preferred_username
+    username_prefix: 'oidc:'
+    groups_claim: groups
+    groups_prefix: ''
+    on_failure: warn
+
+  - step: configure_slave_apiserver_oidc_trust
+    repository: /srv/hostyour-cloud
+    client_id: headlamp
+    on_failure: warn
+
+  # ---------------------------------------------------------------------------------------------
+  # Steering replies on a machine whose public address arrives on one interface while another owns
+  # the default route. Every one of these does nothing at all on a machine with a single interface;
+  # the measurement in front of them is what each of them asks.
+  # ---------------------------------------------------------------------------------------------
+  - step: detect_public_nic
+    on_failure: warn
+
+  - step: write_netplan_public_src_routing
+    on_failure: warn
+
+  # Before anything is applied: a drop-in that became a second declaration of the interface rather
+  # than folding into the installer's takes the interface's address configuration away the moment
+  # the configuration is applied.
+  - step: assert_netplan_merged
+    on_failure: warn
+
+  - step: apply_netplan
+    on_failure: warn
+
+  - step: write_connmark_nft_table
+    on_failure: warn
+
+  - step: write_public_src_routing_script
+    on_failure: warn
+
+  - step: write_public_src_routing_unit
+    on_failure: warn
+
+  - step: activate_public_src_routing
+    on_failure: warn
+
+  # ---------------------------------------------------------------------------------------------
+  # Where the volumes land.
+  # ---------------------------------------------------------------------------------------------
+  - step: check_storage_mount
+    on_failure: die
+
+  - step: create_storage_directory
+    on_failure: die
+
+  - step: link_microk8s_storage_path
+    force: false
+    on_failure: die
+
+  - step: set_default_storage_class
+    timeout_seconds: 120
+    interval_seconds: 5
+    on_failure: warn
+
+  # ---------------------------------------------------------------------------------------------
+  # Certificates. Recorded rather than fatal: the rest of the cluster converges without them, and a
+  # run that ended green without saying so would send the operator on to the deployment with every
+  # certificate hanging.
+  # ---------------------------------------------------------------------------------------------
+  - step: wait_for_cert_manager_ready
+    namespace: cert-manager
+    timeout_seconds: 300
+    interval_seconds: 5
+    on_failure: issue
+
+  - step: delete_existing_cluster_issuer
+    name: letsencrypt-prod
+    force: false
+    on_failure: warn
+
+  - step: write_cluster_issuer_manifest
+    name: letsencrypt-prod
+    acme_server: https://acme-v02.api.letsencrypt.org/directory
+    ingress_class: public
+    on_failure: issue
+
+  - step: apply_cluster_issuer
+    name: letsencrypt-prod
+    on_failure: issue
+
+  # The first wait is warned rather than recorded, because the step after it is the one recovery
+  # this gets and it can still make the issuer register. That step is where the budget ends.
+  - step: wait_cluster_issuer_ready
+    name: letsencrypt-prod
+    timeout_seconds: 60
+    interval_seconds: 10
+    on_failure: warn
+
+  - step: restart_cert_manager_and_reapply_cluster_issuer
+    name: letsencrypt-prod
+    namespace: cert-manager
+    settle_seconds: 15
+    wait_seconds: 60
+    interval_seconds: 10
+    on_failure: issue
+
+  # ---------------------------------------------------------------------------------------------
+  # The tools an operator uses on this machine. Recorded rather than fatal — the cluster itself does
+  # not need them — but a machine that quietly ends up with other versions than the platform pins is
+  # the divergence the pins exist to stop.
+  #
+  # The structured-text reader comes first among them because things later in this same run read
+  # structured output with it.
+  # ---------------------------------------------------------------------------------------------
+  - step: ensure_tool_prerequisites
+    packages: [curl, unzip]
+    on_failure: issue
+
+  - step: install_jq
+    on_failure: issue
+
+  - step: install_argocd_cli
+    version: v3.4.5
+    on_failure: issue
+
+  - step: install_vault_cli
+    version: v2.0.3
+    on_failure: issue
+
+  - step: install_yq_cli
+    version: v4.53.3
+    on_failure: issue
+
+  - step: install_tailscale_client
+    on_failure: issue
+
+  # Last inside the tool phase, and the only thing binding the list of tools to the steps above: a
+  # tool named here with no step to fetch it is caught here and nowhere else.
+  - step: assert_cli_tool_versions
+    tools:
+      - argocd=v3.4.5
+      - vault=v2.0.3
+      - yq=v4.53.3
+      - jq=jq-1.8.2
+      - tailscale=v1.98.10
+    unpinnable: [jq, tailscale]
+    on_failure: issue
+
+  - step: add_shell_alias
+    alias: kubectl
+    command: microk8s.kubectl
+    on_failure: warn
+
+  - step: add_shell_alias
+    alias: helm
+    command: microk8s.helm3
+    on_failure: warn
+
+  # Last of all, and the one step here that replaces a file whole: any context the operator added
+  # for another cluster is gone with it.
+  - step: export_kubeconfig
+    on_failure: warn
+
+# What this program has to be told about the installation it is bringing up.
+#
+# Every one of these stood in the file above as a step argument with one installation's value for
+# it — a domain, a stage, an account, a mailbox. A program file ships to every installation, so a
+# value written into it is somebody else's: this cluster would have asked a certificate authority
+# for a domain it does not answer at and pointed its dashboard at an identity provider that is not
+# its own. The names are the ones deploy-branch and deploy-host already use, so an operator answers
+# each question once.
+answers:
+  - name: fqdn
+    kind: text
+    describes: >-
+      The domain THIS cluster answers under, as it is reached from outside. Everything this program
+      writes about the cluster's own address is this value.
+
+  - name: stage
+    kind: text
+    allowed: [dev, test, prod]
+    describes: >-
+      Which of the product's three stages this installation runs. It names the secrets file this
+      program reads the registry pull credential out of.
+
+  - name: role
+    kind: text
+    allowed: [master, slave]
+    describes: >-
+      Whether this cluster holds the master part or belongs to another one. A cluster that holds it
+      runs the identity provider every cluster of the installation authenticates against; one that
+      does not is pointed at the master's.
+
+  - name: master
+    kind: text
+    required: false
+    default: ''
+    describes: >-
+      The cluster holding the master part, when this one does not. Leave it empty on a master: the
+      cluster holding it is this cluster, and this program says so rather than asking twice.
+
+  - name: build_plane
+    kind: text
+    required: false
+    default: ''
+    describes: >-
+      The cluster the image registry stands on, when it is not this one. Leave it empty where this
+      cluster hosts the registry itself — pulls then stay local and no mirror is written.
+
+  - name: operator_user
+    kind: text
+    describes: >-
+      The account that operates this machine. It is put in the group that may talk to the cluster,
+      its shell gets the two aliases, and the cluster's credentials are written into its home.
+
+  - name: letsencrypt_email
+    kind: text
+    describes: >-
+      The mailbox the certificate authority writes to before a certificate expires. Nothing here
+      judges the address — it is yours, and a rule that recognised an example would refuse an
+      operator whose own mailbox reads like one.
+
+  - name: lan_cidr
+    kind: text
+    required: false
+    default: ''
+    describes: >-
+      The network this machine shares with the other clusters, as an IPv4 range, or empty when it
+      shares none. It is refused when it overlaps the pod network, because pods on an overlapping
+      range cannot reliably reach the other machines.
+
+  - name: storage_path
+    kind: text
+    required: false
+    default: ''
+    describes: >-
+      Where this machine's separate storage is mounted, or empty when it has none. A path that is
+      named and is NOT a mount is refused: a volume written to the root disk instead of the storage
+      one fills the machine and nothing reports it.
+
+  - name: storage_directory
+    kind: text
+    required: false
+    default: ''
+    describes: >-
+      The directory under that mount which the cluster's volumes are kept in, or empty to leave
+      them where the snap puts them.

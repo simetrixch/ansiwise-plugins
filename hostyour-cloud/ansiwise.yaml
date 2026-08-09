@@ -1,0 +1,6 @@
+# Which plugins this installation turns on.
+#
+# Data and nothing else: a list of names. Every name here has to be compiled into the binary
+# that reads it, and one that is not is refused by name rather than ignored.
+plugins:
+  - hostyour-cloud

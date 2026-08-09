@@ -1,0 +1,171 @@
+import 'package:ansiwise_api/ansiwise_api.dart';
+
+/// Makes a ConfigMap out of a directory of the checkout, one key per file.
+///
+/// **What it is for.** The identity provider's blueprints declare the OIDC client of everything an
+/// operator logs in to. They are not Kubernetes objects and are not applied: the release mounts a
+/// ConfigMap at a path in its pod, and the worker discovers whatever files it finds there on
+/// startup. So what has to exist before the release is the ConfigMap, and nothing built it.
+///
+/// **A directory and not a list of files.** A blueprint added to the directory reaches the cluster
+/// without anything else being edited — no program row, no argument, no second list to keep in step
+/// with the first. A list here would be a second description of the directory, and the two would
+/// disagree the first time somebody added a file and forgot.
+///
+/// **Replaced and not merged, which is the point rather than a shortcut.** A key that stays behind
+/// after its file was deleted is a client this installation still offers and nobody meant to keep.
+/// `kubectl create --dry-run=client` composes the object from the directory as it is now, and the
+/// apply makes the cluster hold exactly that.
+///
+/// **No credential travels here.** The blueprints reference their secrets as `${IDP_*}` and the
+/// pod resolves those from its own environment at startup — so what this puts on the cluster is
+/// declarations, and the values they name never pass through it.
+final class KubernetesConfigmapFromDirectory extends ReversibleStep {
+  /// Makes the ConfigMap [name] in [namespace] out of [directory] under [repository].
+  const KubernetesConfigmapFromDirectory({
+    required this.repository,
+    required this.directory,
+    required this.name,
+    required this.namespace,
+    required this.staging,
+  });
+
+  /// Builds the step from what the program gave it.
+  factory KubernetesConfigmapFromDirectory.fromArguments(Arguments arguments) =>
+      KubernetesConfigmapFromDirectory(
+        repository: arguments.text('repository'),
+        directory: arguments.text('directory'),
+        name: arguments.text('name'),
+        namespace: arguments.text('namespace'),
+        staging: arguments.text('staging'),
+      );
+
+  /// What this step accepts.
+  static const List<ArgumentSpec> arguments = <ArgumentSpec>[
+    ArgumentSpec(
+      name: 'repository',
+      kind: ArgumentKind.text,
+      describes: 'the checkout the directory is read from',
+    ),
+    ArgumentSpec(
+      name: 'directory',
+      kind: ArgumentKind.text,
+      describes: 'the directory, as a path under that checkout — every file in it becomes a key',
+    ),
+    ArgumentSpec(name: 'name', kind: ArgumentKind.text, describes: 'the ConfigMap this writes'),
+    ArgumentSpec(
+      name: 'namespace',
+      kind: ArgumentKind.text,
+      describes: 'the namespace it is written in',
+    ),
+    ArgumentSpec(
+      name: 'staging',
+      kind: ArgumentKind.text,
+      describes: 'the directory the composed object is written in and removed from again',
+    ),
+  ];
+
+  /// The checkout.
+  final String repository;
+
+  /// The directory, relative to it.
+  final String directory;
+
+  /// The ConfigMap.
+  final String name;
+
+  /// Where it goes.
+  final String namespace;
+
+  /// Where the composed object stands while `kubectl` reads it.
+  final String staging;
+
+  /// `0644` — what this carries is declarations and no credential, so it is readable like the files
+  /// it was composed from.
+  static const int mode = 0x1a4;
+
+  /// The directory as the machine holds it.
+  String get path => '$repository/$directory';
+
+  /// Where the composed object stands.
+  String pathFor() => '$staging/$namespace-$name.yaml';
+
+  @override
+  Future<CheckResult> check(StepContext context) async {
+    if (!await context.files.exists(path)) {
+      return CheckResult.blocked('$directory is not in this checkout, so there is nothing to make');
+    }
+    if ((await context.files.list(path)).isEmpty) {
+      // An empty directory would compose a ConfigMap with no keys, and the pod would mount it and
+      // discover nothing — which looks exactly like a release that came up correctly.
+      return CheckResult.blocked('$directory holds no file, so the ConfigMap would carry no key');
+    }
+    final CommandResult found = await context.shell.run(
+      Command.observing('kubectl', <String>['diff', '--filename', pathFor()]),
+    );
+    // Asked of the file this step composes, so the answer covers the keys as well as the object:
+    // a file deleted from the directory is a key the cluster still has and the composed object no
+    // longer names, which is a difference.
+    return switch (found.exitCode) {
+      0 => CheckResult.satisfied('$name in $namespace carries what $directory holds'),
+      1 => const CheckResult.ready(),
+      _ => CheckResult.blocked('the cluster could not be asked about $name: ${found.stderr}'),
+    };
+  }
+
+  @override
+  Future<StepPlan> plan(StepContext context) async =>
+      StepPlan.argv(<String>['kubectl', 'apply', '--filename', pathFor()]);
+
+  @override
+  Future<void> apply(StepContext context) async {
+    final CommandResult composed = await context.shell.run(Command('kubectl', _compose.sublist(1)));
+    if (!composed.ok) {
+      throw CommandFailed(argv: _compose, exitCode: composed.exitCode, stderr: composed.stderr);
+    }
+    final String file = pathFor();
+    await context.files.write(file, composed.stdout, mode: mode);
+    try {
+      final List<String> argv = <String>['kubectl', 'apply', '--filename', file];
+      final CommandResult applied = await context.shell.run(Command('kubectl', argv.sublist(1)));
+      if (!applied.ok) {
+        throw CommandFailed(argv: argv, exitCode: applied.exitCode, stderr: applied.stderr);
+      }
+    } finally {
+      await context.files.delete(file);
+    }
+  }
+
+  @override
+  Future<void> undo(StepContext context) async {
+    await context.shell.run(
+      Command('kubectl', <String>[
+        'delete',
+        'configmap',
+        name,
+        '--namespace',
+        namespace,
+        '--ignore-not-found',
+      ]),
+    );
+  }
+
+  /// Composing the object from the directory, without sending anything.
+  ///
+  /// `--dry-run=client` is what makes this a composition rather than a create: `kubectl create` on
+  /// its own refuses a ConfigMap that already exists, so a second run would fail on the very thing
+  /// a second run is supposed to find already done.
+  List<String> get _compose => <String>[
+    'kubectl',
+    'create',
+    'configmap',
+    name,
+    '--namespace',
+    namespace,
+    '--from-file',
+    path,
+    '--dry-run=client',
+    '-o',
+    'yaml',
+  ];
+}

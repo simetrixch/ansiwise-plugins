@@ -1,0 +1,158 @@
+import 'package:ansiwise_api/ansiwise_api.dart';
+import 'detect_public_nic.dart';
+
+/// Writes the network drop-in that sends replies from the public address out the public gateway.
+///
+/// **The drop-in has to FOLD INTO the installer's own declaration of the interface, not sit beside
+/// it.** The network configuration is merged from every file in the directory, and two files that
+/// describe the same interface differently are two declarations rather than one — the interface then
+/// loses the address configuration the installer gave it. So this is keyed exactly the way the
+/// installer's file is keyed: on the interface's hardware address and the name it is given. The step
+/// after this one proves the fold happened before anything is applied.
+///
+/// **The file is readable by its owner and nobody else.** The network tool refuses to read a file
+/// anyone can read, and says so loudly rather than quietly ignoring it — which would leave a machine
+/// whose drop-in is present, correct and doing nothing.
+///
+/// **The four exceptions come before the catch-all, and the numbers are what decide it.** A lower
+/// number wins in the kernel, so the routes that must stay on the main table are numbered below the
+/// one that sends everything else out the public gateway. The carrier-grade range is among them
+/// because the certificate service checks its own answer over exactly that path, and steering that
+/// check out the public gateway makes every certificate on the cluster fail to be issued.
+final class WriteNetplanPublicSrcRouting extends ReversibleStep {
+  /// Writes the drop-in at [path], sending everything else through table [table].
+  const WriteNetplanPublicSrcRouting({required this.path, required this.table});
+
+  /// Builds the step from what the program gave it.
+  factory WriteNetplanPublicSrcRouting.fromArguments(Arguments arguments) =>
+      WriteNetplanPublicSrcRouting(path: arguments.text('path'), table: arguments.integer('table'));
+
+  /// What this step accepts.
+  static const List<ArgumentSpec> arguments = <ArgumentSpec>[
+    ArgumentSpec(
+      name: 'path',
+      kind: ArgumentKind.text,
+      describes: 'the drop-in that steers replies from the public address',
+      required: false,
+      defaultValue: defaultPath,
+    ),
+    ArgumentSpec(
+      name: 'table',
+      kind: ArgumentKind.integer,
+      describes: 'the routing table whose only route is the public gateway',
+      required: false,
+      defaultValue: publicTable,
+    ),
+  ];
+
+  /// Where the drop-in goes.
+  static const String defaultPath = '/etc/netplan/60-public-src-routing.yaml';
+
+  /// The table holding the public gateway, and nothing else.
+  static const int publicTable = 100;
+
+  /// The kernel's own main table, which the four exceptions stay on.
+  static const int mainTable = 254;
+
+  /// `0600` — the network tool refuses to read a file anyone can read.
+  static const int mode = 0x180;
+
+  /// The ranges that stay on the main table, and the number each is given.
+  ///
+  /// Every number here is below [catchAllPriority], which is what makes them exceptions to it.
+  static const Map<int, String> exceptions = <int, String>{
+    9000: '10.0.0.0/8',
+    9001: '100.64.0.0/10',
+    9002: '172.16.0.0/12',
+    9003: '192.168.0.0/16',
+  };
+
+  /// The number given to the rule that sends everything else out the public gateway.
+  static const int catchAllPriority = 10000;
+
+  /// The drop-in's path.
+  final String path;
+
+  /// The table holding the public gateway.
+  final int table;
+
+  @override
+  Future<CheckResult> check(StepContext context) async {
+    final PublicNic? nic = await DetectPublicNic.detect(context);
+    if (nic == null) {
+      return const CheckResult.satisfied(
+        'this machine answers by the interface its public address is on, so nothing has to be '
+        'steered',
+      );
+    }
+    if (!await context.files.exists(path)) {
+      return const CheckResult.ready();
+    }
+    return await context.files.read(path) == dropIn(nic, table)
+        ? CheckResult.satisfied('$path already holds what this step writes')
+        : const CheckResult.ready();
+  }
+
+  @override
+  Future<StepPlan> plan(StepContext context) async {
+    final PublicNic? nic = await DetectPublicNic.detect(context);
+    return StepPlan.diff(
+      path,
+      before: await context.files.exists(path) ? await context.files.read(path) : '',
+      after: nic == null ? '' : dropIn(nic, table),
+    );
+  }
+
+  @override
+  Future<void> apply(StepContext context) async {
+    final PublicNic? nic = await DetectPublicNic.detect(context);
+    if (nic == null) {
+      return;
+    }
+    await context.files.write(path, dropIn(nic, table), mode: mode);
+  }
+
+  @override
+  Future<void> undo(StepContext context) async {
+    // Deleting the file does not take the rules out of the kernel. Only applying the configuration
+    // again or a restart does, and the step that applies it says what that costs.
+    await context.files.delete(path);
+  }
+
+  /// The drop-in for [nic], sending everything else through [table].
+  static String dropIn(PublicNic nic, int table) {
+    final StringBuffer written = StringBuffer()
+      ..writeln('# Replies to traffic that arrived on ${nic.device} (${nic.address}) leave by')
+      ..writeln('# ${nic.gateway} rather than by the default route of another interface.')
+      ..writeln('#')
+      ..writeln('# Keyed on the same hardware address and name as the installer\'s own file, so')
+      ..writeln(
+        '# this folds into the one declaration of ${nic.device} instead of becoming a second.',
+      )
+      ..writeln('network:')
+      ..writeln('  version: 2')
+      ..writeln('  ethernets:')
+      ..writeln('    ${nic.device}:')
+      ..writeln('      match:')
+      ..writeln('        macaddress: "${nic.mac}"')
+      ..writeln('      set-name: ${nic.device}')
+      ..writeln('      routing-policy:');
+    for (final MapEntry<int, String> exception in exceptions.entries) {
+      written
+        ..writeln('        - from: ${nic.address}/32')
+        ..writeln('          to: ${exception.value}')
+        ..writeln('          table: $mainTable')
+        ..writeln('          priority: ${exception.key}');
+    }
+    written
+      ..writeln('        - from: ${nic.address}/32')
+      ..writeln('          table: $table')
+      ..writeln('          priority: $catchAllPriority')
+      ..writeln('      routes:')
+      ..writeln('        - to: 0.0.0.0/0')
+      ..writeln('          via: ${nic.gateway}')
+      ..writeln('          on-link: true')
+      ..writeln('          table: $table');
+    return written.toString();
+  }
+}
