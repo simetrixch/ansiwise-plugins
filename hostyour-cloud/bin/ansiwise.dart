@@ -22,7 +22,7 @@ Future<void> main(List<String> argv) async {
     ..addOption('programs', defaultsTo: 'programs', help: 'where the program files are')
     ..addOption(
       'config',
-      defaultsTo: PluginConfiguration.defaultFileName,
+      defaultsTo: Configuration.defaultFileName,
       help: 'the file naming which plugins are active',
     )
     ..addOption('runs', defaultsTo: RunDirectory.defaultRoot, help: 'where records are kept')
@@ -33,6 +33,13 @@ Future<void> main(List<String> argv) async {
           'credential must not appear in a process listing. "-" reads it from standard input, '
           'which is how a run started over the API is told, since a file of raw answers would be '
           'the one thing beside a redacted record that is not redacted',
+    )
+    ..addOption(
+      'log-level',
+      allowed: <String>['debug', 'info', 'warn', 'error'],
+      help:
+          'the quietest level this run writes; overrides log_level in the configuration, which is '
+          'where it normally stands so that handing this binary its config file is enough',
     )
     ..addOption('role', defaultsTo: 'master', help: 'what this machine is')
     ..addOption('stage', defaultsTo: 'dev')
@@ -73,8 +80,12 @@ Future<void> main(List<String> argv) async {
   // them are on, which is a fact of the installation.
   const PluginSet plugins = PluginSet(<Plugin>[HostyourCloudPlugin()]);
 
-  final String configuration = options.option('config') ?? PluginConfiguration.defaultFileName;
+  final String configuration = options.option('config') ?? Configuration.defaultFileName;
   final Registry registry;
+  // The configuration decides it and the command line overrides it, which is the ordinary
+  // precedence: the file is what this installation always wants, the flag is what this one run
+  // wants. Declared here so a refusal below cannot leave it unset.
+  LogLevel logLevel = LogLevel.info;
   try {
     if (!await machine.files.exists(configuration)) {
       throw PluginRejected(
@@ -82,14 +93,19 @@ Future<void> main(List<String> argv) async {
         'write one naming at least one of: ${plugins.names.join(', ')}',
       );
     }
-    final PluginConfiguration active = await PluginConfiguration.load(
+    final Configuration active = await Configuration.load(
       files: machine.files,
       path: configuration,
     );
     registry = plugins.activate(active.plugins);
+    logLevel = active.logLevel;
   } on PluginRejected catch (refused) {
     stderr.writeln(refused.message);
     exit(78);
+  }
+
+  if (options.option('log-level') case final String asked) {
+    logLevel = LogLevel.values.firstWhere((LogLevel each) => each.name == asked);
   }
 
   final String programs = options.option('programs') ?? 'programs';
@@ -139,6 +155,7 @@ Future<void> main(List<String> argv) async {
       options: options,
       argv: argv,
       program: ProgramName(rest.first),
+      logLevel: logLevel,
     ),
   );
 }
@@ -179,6 +196,7 @@ Future<int> _runProgram({
   required ArgResults options,
   required List<String> argv,
   required ProgramName program,
+  required LogLevel logLevel,
 }) async {
   final ResolvedProgram? resolved = catalogue.byName(program);
   if (resolved == null) {
@@ -279,6 +297,7 @@ Future<int> _runProgram({
     machine: machine,
     recorder: recorder,
     redactor: redactor,
+    logLevel: logLevel,
   ).run(program: resolved, mode: mode, header: header, answers: answers);
   await recorder.save(record);
 
