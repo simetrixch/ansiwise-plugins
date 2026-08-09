@@ -44,7 +44,7 @@ void main() {
         http: RecordingHttp(http, recorder: recorder, redactor: Redactor.none, step: name),
         clock: clock,
         entropy: FakeEntropy(),
-        log: RecordingLog(recorder: recorder, redactor: Redactor.none, step: name),
+        log: RecordingLogger(recorder: recorder, redactor: Redactor.none, step: name),
         step: name,
         arguments: Arguments.none,
         answers: answers,
@@ -206,8 +206,8 @@ void main() {
       for (final String key in <String>['k1', 'k2', 'k3', 'k4', 'k5']) {
         expect(record, isNot(contains('"$key"')));
       }
-      expect(it.recorder.notes.join('\n'), contains(credentials));
-      expect(it.recorder.notes.join('\n').toUpperCase(), contains('COPY'));
+      expect(it.recorder.logLines.join('\n'), contains(credentials));
+      expect(it.recorder.logLines.join('\n').toUpperCase(), contains('COPY'));
     });
 
     test('a second run has nothing to do', () async {
@@ -341,7 +341,7 @@ void main() {
       await step.apply(it.context);
 
       expect(offered, 3, reason: 'the seal state is read again after every key');
-      expect(it.recorder.notes.join('\n'), contains('after 3 of 5 keys'));
+      expect(it.recorder.logLines.join('\n'), contains('after 3 of 5 keys'));
       final String record = it.recorder.events
           .map((RunEvent event) => jsonEncode(const RecordCodec().event(event)))
           .join('\n');

@@ -294,12 +294,18 @@ void main() {
 }
 
 /// A log that keeps nothing: these tests assert on what the steps WRITE, not on what they say.
-final class _SilentLog implements StepLog {
+final class _SilentLog implements Logger {
   const _SilentLog();
+
+  @override
+  void debug(String message) {}
 
   @override
   void info(String message) {}
 
   @override
   void warn(String message) {}
+
+  @override
+  void error(String message) {}
 }

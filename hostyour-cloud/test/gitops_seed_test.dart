@@ -54,7 +54,7 @@ void main() {
         http: RecordingHttp(http, recorder: recorder, redactor: Redactor.none, step: name),
         clock: clock,
         entropy: FakeEntropy(),
-        log: RecordingLog(recorder: recorder, redactor: Redactor.none, step: name),
+        log: RecordingLogger(recorder: recorder, redactor: Redactor.none, step: name),
         step: name,
         arguments: Arguments.none,
         answers: answers,

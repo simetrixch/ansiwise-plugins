@@ -178,8 +178,8 @@ void main() {
           if (step.plan case final StepPlan plan) plan.summary,
       ];
       expect(planned, contains(contains('apt-get install --yes git openssl')));
-      expect(it.recorder.notes, contains('2 downloaded archives would be deleted'));
-      expect(it.recorder.notes, contains('1 package would be removed'));
+      expect(it.recorder.logLines, contains('2 downloaded archives would be deleted'));
+      expect(it.recorder.logLines, contains('1 package would be removed'));
     });
 
     test('a step that would have nothing to do plans nothing', () async {
@@ -262,7 +262,7 @@ void main() {
       );
       expect(gate.verdict, isA<Succeeded>());
       expect(
-        it.recorder.notes.join('\n'),
+        it.recorder.logLines.join('\n'),
         contains('not checked before the steps it verifies have run'),
       );
     });

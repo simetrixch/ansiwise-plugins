@@ -90,9 +90,14 @@ Step? buildStep(RegisteredStep entry, void Function(Finding failure) onFailure) 
 ///
 /// Kept rather than printed: a step's own notes would otherwise land in the middle of a test run's
 /// output and be read as its own.
-final class CollectedLog implements StepLog {
+final class CollectedLog implements Logger {
   /// Everything the step said, in order.
   final List<String> said = <String>[];
+
+  @override
+  void debug(String message) {
+    said.add(message);
+  }
 
   @override
   void info(String message) {
@@ -101,6 +106,11 @@ final class CollectedLog implements StepLog {
 
   @override
   void warn(String message) {
+    said.add(message);
+  }
+
+  @override
+  void error(String message) {
     said.add(message);
   }
 }
@@ -118,7 +128,7 @@ StepContext probeContext({
   required Http http,
   required Clock clock,
   required Entropy entropy,
-  required StepLog log,
+  required Logger log,
 }) => StepContext(
   shell: shell,
   files: files,

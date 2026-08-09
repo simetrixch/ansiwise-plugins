@@ -161,12 +161,18 @@ void main() {
 }
 
 /// A log for a test that has to build a context and has nothing to say in it.
-final class _SaysNothing implements StepLog {
+final class _SaysNothing implements Logger {
   const _SaysNothing();
+
+  @override
+  void debug(String message) {}
 
   @override
   void info(String message) {}
 
   @override
   void warn(String message) {}
+
+  @override
+  void error(String message) {}
 }

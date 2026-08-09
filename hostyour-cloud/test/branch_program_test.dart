@@ -311,9 +311,9 @@ void main() {
       final ({RunRecord record, FakeShell shell, FakeFiles files, MemoryRecorder recorder}) it =
           await run(Mode.dry);
 
-      expect(it.recorder.notes, contains(contains('platform/values-dev.yaml would have')));
-      expect(it.recorder.notes, contains('platform/values-prod.yaml would be removed'));
-      expect(it.recorder.notes, contains('argocd/test/apps/root-app.yaml would be removed'));
+      expect(it.recorder.logLines, contains(contains('platform/values-dev.yaml would have')));
+      expect(it.recorder.logLines, contains('platform/values-prod.yaml would be removed'));
+      expect(it.recorder.logLines, contains('argocd/test/apps/root-app.yaml would be removed'));
     });
   });
 
@@ -431,7 +431,7 @@ void main() {
 
       // The record is written to a file an operator reads without elevated rights, and it is
       // exported and pasted into messages when something has gone wrong.
-      for (final String note in it.recorder.notes) {
+      for (final String note in it.recorder.logLines) {
         expect(note, isNot(contains('writer-credential-0001')));
         expect(note, isNot(contains('cloudflare-credential-0001')));
       }

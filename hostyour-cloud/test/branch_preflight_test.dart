@@ -256,12 +256,18 @@ void main() {
   });
 }
 
-final class _SilentLog implements StepLog {
+final class _SilentLog implements Logger {
   const _SilentLog();
+
+  @override
+  void debug(String message) {}
 
   @override
   void info(String message) {}
 
   @override
   void warn(String message) {}
+
+  @override
+  void error(String message) {}
 }

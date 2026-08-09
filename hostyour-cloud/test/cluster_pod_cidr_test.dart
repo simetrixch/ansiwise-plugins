@@ -535,14 +535,20 @@ final class _SwallowingFiles implements Files {
   Future<void> createDirectory(String path, {required int mode}) async {}
 }
 
-final class _SilentLog implements StepLog {
+final class _SilentLog implements Logger {
   const _SilentLog(this.said);
 
   final List<String> said;
+
+  @override
+  void debug(String message) => said.add(message);
 
   @override
   void info(String message) => said.add(message);
 
   @override
   void warn(String message) => said.add(message);
+
+  @override
+  void error(String message) => said.add(message);
 }

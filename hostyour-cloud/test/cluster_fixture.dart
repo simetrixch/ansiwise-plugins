@@ -323,14 +323,20 @@ ClusterMachine convergedCluster() {
   return machine;
 }
 
-final class _CollectingLog implements StepLog {
+final class _CollectingLog implements Logger {
   const _CollectingLog(this.said);
 
   final List<String> said;
+
+  @override
+  void debug(String message) => said.add(message);
 
   @override
   void info(String message) => said.add(message);
 
   @override
   void warn(String message) => said.add(message);
+
+  @override
+  void error(String message) => said.add(message);
 }
