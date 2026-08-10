@@ -225,15 +225,6 @@ const List<String> enabledAddons = <String>[
   'metrics-server',
 ];
 
-/// The tools the program pins, with the versions its own file writes.
-const Map<String, String> pinnedTools = <String, String>{
-  'argocd': 'v3.4.5',
-  'vault': 'v2.0.3',
-  'yq': 'v4.53.3',
-  'jq': 'jq-1.8.2',
-  'tailscale': 'v1.98.10',
-};
-
 /// What `microk8s status` says on a machine whose addons are the ones the program switches on.
 ///
 /// The addon that must be OFF is written into the section that lists what is off, which is the whole

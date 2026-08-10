@@ -147,21 +147,6 @@ final class StampCalicoPoolCidrInCniManifest extends ReversibleStep<String?> {
     return stamped == 0 ? null : lines.join('\n');
   }
 
-  /// The newest timestamped backup of [path], or null when there is none.
-  static Future<String?> newestBackup(StepContext context, String path) async {
-    final int cut = path.lastIndexOf('/');
-    final String directory = cut <= 0 ? '/' : path.substring(0, cut);
-    final String name = path.substring(cut + 1);
-    if (!await context.files.exists(directory)) {
-      return null;
-    }
-    final List<String> backups = <String>[
-      for (final String entry in await context.files.list(directory))
-        if (entry.startsWith('$name.bak.')) entry,
-    ]..sort();
-    return backups.isEmpty ? null : '$directory/${backups.last}';
-  }
-
   Future<String> _current(StepContext context) async =>
       await context.files.exists(manifestPath) ? context.files.read(manifestPath) : '';
 
