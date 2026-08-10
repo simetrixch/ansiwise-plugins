@@ -1,4 +1,5 @@
 import 'package:ansiwise_api/ansiwise_api.dart';
+import 'package:ansiwise_checks/ansiwise_checks.dart';
 import 'package:hostyour_cloud/hostyour_cloud.dart';
 
 /// Where the installation this plugin deploys keeps its configuration.
@@ -28,15 +29,17 @@ export 'package:ansiwise_checks/ansiwise_checks.dart'
 /// test were made to pass by narrowing what it checks, it would prove a program correct against a
 /// set of steps nobody ships.
 ///
-/// **The active list is read from the shipped configuration and not written here.** `ansiwise.yaml`
-/// is what an installation turns on, so a plugin dropped from that file has to break the programs
-/// that use its steps — which is exactly what these tests are for.
+/// **The active list is read from the INSTALLATION and not written here.** `ansiwise.yaml` says
+/// which plugins an installation turns on, which makes it that installation's configuration and not
+/// this package's — it lives beside the programs it decides the steps for, and the binary reads it
+/// out of the directory it is run in. A plugin dropped from that file has to break the programs that
+/// use its steps, and that is exactly what these tests are for.
 Future<Registry> shippedRegistry() async {
   // The real reader, because the file being read is the one that ships. A fake here would prove a
   // composition against text a test wrote.
   final Configuration active = await Configuration.load(
     files: const RealFiles(),
-    path: Configuration.defaultFileName,
+    path: '$installationRoot/${Configuration.defaultFileName}',
   );
   return compiledPlugins.activate(active.plugins);
 }
