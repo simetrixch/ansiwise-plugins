@@ -1,4 +1,5 @@
 import 'package:ansiwise_api/ansiwise_api.dart';
+import '../template.dart';
 import 'detect_public_nic.dart';
 
 /// Writes the network drop-in that sends replies from the public address out the public gateway.
@@ -18,17 +19,36 @@ import 'detect_public_nic.dart';
 /// number wins in the kernel, so the routes that must stay on the main table are numbered below the
 /// one that sends everything else out the public gateway. The carrier-grade range is among them
 /// because the certificate service checks its own answer over exactly that path, and steering that
-/// check out the public gateway makes every certificate on the cluster fail to be issued.
-final class WriteNetplanPublicSrcRouting extends ReversibleStep<String?> with FileStep {
+/// check out the public gateway makes every certificate on the cluster fail to be issued. Which
+/// ranges those are, which numbers they carry and which table they stay on are the template's own
+/// text: they are facts of the kernel and of this platform, the same on every machine, so nothing
+/// about a run has a value to put there.
+final class WriteNetplanPublicSrcRouting extends ReversibleStep<String?>
+    with FileStep, TemplateStep {
   /// Writes the drop-in at [path], sending everything else through table [table].
-  const WriteNetplanPublicSrcRouting({required this.path, required this.table});
+  const WriteNetplanPublicSrcRouting({
+    required this.templatePath,
+    required this.path,
+    required this.table,
+  });
 
   /// Builds the step from what the program gave it.
   factory WriteNetplanPublicSrcRouting.fromArguments(Arguments arguments) =>
-      WriteNetplanPublicSrcRouting(path: arguments.text('path'), table: arguments.integer('table'));
+      WriteNetplanPublicSrcRouting(
+        templatePath: arguments.text('template'),
+        path: arguments.text('path'),
+        table: arguments.integer('table'),
+      );
 
   /// What this step accepts.
   static const List<ArgumentSpec> arguments = <ArgumentSpec>[
+    ArgumentSpec(
+      name: 'template',
+      kind: ArgumentKind.text,
+      describes:
+          'the drop-in as text, with a marked slot where each value this run holds belongs — '
+          '<device>, <address>, <mac>, <gateway> and <table>',
+    ),
     ArgumentSpec(
       name: 'path',
       kind: ArgumentKind.text,
@@ -51,24 +71,12 @@ final class WriteNetplanPublicSrcRouting extends ReversibleStep<String?> with Fi
   /// The table holding the public gateway, and nothing else.
   static const int publicTable = 100;
 
-  /// The kernel's own main table, which the four exceptions stay on.
-  static const int mainTable = 254;
-
   /// `0600` — the network tool refuses to read a file anyone can read.
   static const int fileMode = 0x180;
 
-  /// The ranges that stay on the main table, and the number each is given.
-  ///
-  /// Every number here is below [catchAllPriority], which is what makes them exceptions to it.
-  static const Map<int, String> exceptions = <int, String>{
-    9000: '10.0.0.0/8',
-    9001: '100.64.0.0/10',
-    9002: '172.16.0.0/12',
-    9003: '192.168.0.0/16',
-  };
-
-  /// The number given to the rule that sends everything else out the public gateway.
-  static const int catchAllPriority = 10000;
+  /// The drop-in as text, with a marked slot where each value belongs.
+  @override
+  final String templatePath;
 
   /// The drop-in's path.
   final String path;
@@ -95,7 +103,7 @@ final class WriteNetplanPublicSrcRouting extends ReversibleStep<String?> with Fi
             'this machine answers by the interface its public address is on, so nothing has to be '
             'steered',
           )
-        : FileContent.text(dropIn(nic, table));
+        : FileContent.text(await renderedWith(context, valuesFor(nic)));
   }
 
   /// What the drop-in held before, or null when it was not there.
@@ -117,40 +125,12 @@ final class WriteNetplanPublicSrcRouting extends ReversibleStep<String?> with Fi
     await context.files.write(path, captured, mode: mode);
   }
 
-  /// The drop-in for [nic], sending everything else through [table].
-  static String dropIn(PublicNic nic, int table) {
-    final StringBuffer written = StringBuffer()
-      ..writeln('# Replies to traffic that arrived on ${nic.device} (${nic.address}) leave by')
-      ..writeln('# ${nic.gateway} rather than by the default route of another interface.')
-      ..writeln('#')
-      ..writeln('# Keyed on the same hardware address and name as the installer\'s own file, so')
-      ..writeln(
-        '# this folds into the one declaration of ${nic.device} instead of becoming a second.',
-      )
-      ..writeln('network:')
-      ..writeln('  version: 2')
-      ..writeln('  ethernets:')
-      ..writeln('    ${nic.device}:')
-      ..writeln('      match:')
-      ..writeln('        macaddress: "${nic.mac}"')
-      ..writeln('      set-name: ${nic.device}')
-      ..writeln('      routing-policy:');
-    for (final MapEntry<int, String> exception in exceptions.entries) {
-      written
-        ..writeln('        - from: ${nic.address}/32')
-        ..writeln('          to: ${exception.value}')
-        ..writeln('          table: $mainTable')
-        ..writeln('          priority: ${exception.key}');
-    }
-    written
-      ..writeln('        - from: ${nic.address}/32')
-      ..writeln('          table: $table')
-      ..writeln('          priority: $catchAllPriority')
-      ..writeln('      routes:')
-      ..writeln('        - to: 0.0.0.0/0')
-      ..writeln('          via: ${nic.gateway}')
-      ..writeln('          on-link: true')
-      ..writeln('          table: $table');
-    return written.toString();
-  }
+  /// What goes in each slot of the drop-in, for the interface [nic] describes.
+  Map<String, String> valuesFor(PublicNic nic) => <String, String>{
+    'device': nic.device,
+    'address': nic.address,
+    'mac': nic.mac,
+    'gateway': nic.gateway,
+    'table': '$table',
+  };
 }

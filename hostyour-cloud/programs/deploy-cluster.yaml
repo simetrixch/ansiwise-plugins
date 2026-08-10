@@ -105,8 +105,10 @@ steps:
   # ---------------------------------------------------------------------------------------------
   # The network the cluster paints its rules into, before an addon paints any.
   # ---------------------------------------------------------------------------------------------
-  - step: configure_kube_proxy_nftables
-    proxy_mode: nftables
+  - step: set_process_flag
+    args_path: /var/snap/microk8s/current/args/kube-proxy
+    flag: '--proxy-mode'
+    value: nftables
     on_failure: continue
 
   # ---------------------------------------------------------------------------------------------
@@ -126,8 +128,10 @@ steps:
     pod_cidr: 10.244.0.0/16
     on_failure: exit
 
-  - step: stamp_kube_proxy_cluster_cidr
-    pod_cidr: 10.244.0.0/16
+  - step: set_process_flag
+    args_path: /var/snap/microk8s/current/args/kube-proxy
+    flag: '--cluster-cidr'
+    value: 10.244.0.0/16
     on_failure: exit
 
   - step: delete_default_ipv4_ippool
@@ -292,6 +296,7 @@ steps:
     on_failure: continue
 
   - step: write_netplan_public_src_routing
+    template: templates/cluster/netplan-public-src-routing.tpl
     on_failure: continue
 
   # Before anything is applied: a drop-in that became a second declaration of the interface rather
@@ -304,12 +309,15 @@ steps:
     on_failure: continue
 
   - step: write_connmark_nft_table
+    template: templates/cluster/connmark-nft-table.tpl
     on_failure: continue
 
   - step: write_public_src_routing_script
+    template: templates/cluster/public-src-routing-script.tpl
     on_failure: continue
 
   - step: write_public_src_routing_unit
+    template: templates/cluster/public-src-routing-unit.tpl
     on_failure: continue
 
   - step: activate_public_src_routing
@@ -365,6 +373,7 @@ steps:
     on_failure: continue
 
   - step: write_cluster_issuer_manifest
+    template: templates/cluster/cluster-issuer-manifest.tpl
     name: letsencrypt-prod
     acme_server: https://acme-v02.api.letsencrypt.org/directory
     ingress_class: public

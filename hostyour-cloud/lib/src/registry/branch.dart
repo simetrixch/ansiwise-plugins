@@ -2,10 +2,9 @@ import 'package:ansiwise_api/ansiwise_api.dart';
 import '../steps/branch/create_install_branch.dart';
 import '../steps/branch/require_git_identity.dart';
 import '../steps/branch/require_pushable_origin.dart';
-import '../steps/branch/stamp_fqdn.dart';
-import '../steps/branch/stamp_revision.dart';
 import '../steps/branch/stamp_app_toggles.dart';
 import '../steps/branch/stamp_cluster_profile.dart';
+import '../steps/branch/stamp_placeholder_in_tracked_files.dart';
 import '../steps/branch/stamp_role.dart';
 import '../steps/branch/write_cluster_map.dart';
 import '../steps/branch/write_stage_config.dart';
@@ -43,19 +42,12 @@ const Map<StepName, RegisteredStep> branchSteps = <StepName, RegisteredStep>{
     arguments: CreateInstallBranch.arguments,
     answers: CreateInstallBranch.answers,
   ),
-  StepName('stamp_revision'): RegisteredStep(
-    name: StepName('stamp_revision'),
-    source: 'lib/src/steps/branch/stamp_revision.dart:29',
-    create: StampRevision.fromArguments,
-    arguments: StampRevision.arguments,
-    answers: StampRevision.answers,
-  ),
-  StepName('stamp_fqdn'): RegisteredStep(
-    name: StepName('stamp_fqdn'),
-    source: 'lib/src/steps/branch/stamp_fqdn.dart:36',
-    create: StampFqdn.fromArguments,
-    arguments: StampFqdn.arguments,
-    answers: StampFqdn.answers,
+  StepName('stamp_placeholder_in_tracked_files'): RegisteredStep(
+    name: StepName('stamp_placeholder_in_tracked_files'),
+    source: 'lib/src/steps/branch/stamp_placeholder_in_tracked_files.dart:60',
+    create: StampPlaceholderInTrackedFiles.fromArguments,
+    arguments: StampPlaceholderInTrackedFiles.arguments,
+    answers: StampPlaceholderInTrackedFiles.answers,
   ),
   StepName('write_cluster_map'): RegisteredStep(
     name: StepName('write_cluster_map'),

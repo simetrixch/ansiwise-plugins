@@ -17,6 +17,8 @@
 /// here may make a step look covered that was not.
 library;
 
+import 'dart:io';
+
 import 'package:ansiwise_api/testing.dart';
 import 'package:ansiwise_checks/ansiwise_checks.dart';
 import 'package:hostyour_cloud/hostyour_cloud.dart';
@@ -181,7 +183,28 @@ final Map<String, Fixture> stepFixtures = <String, Fixture>{
       'VAULT_ROOT_TOKEN=""',
     ]);
   },
+
+  // The snap writes an argument file when it installs, and this step refuses a machine that has
+  // none rather than writing one — so a blank fake leaves it blocked before it starts. An empty
+  // file is that machine arranged: the flag is missing, the apply appends it, and the check reads
+  // it back out of the file rather than out of the write having returned.
+  'set_process_flag': (FakeShell shell, FakeFiles files, FakeHttp http) {
+    files.contents[_plausibleText] = '';
+  },
+
+  // The template the manifest is written from, at the path the probe hands the step. Without it the
+  // step is blocked — correctly, because a machine carrying no template cannot be told what its file
+  // should hold — and a blocked step is never applied, so nothing about its second run is measured.
+  //
+  // Read off the tree rather than written out here. A copy could name a slot the step does not fill
+  // or lose one it does, and the probe would then measure the copy instead of the file that ships.
+  'write_cluster_issuer_manifest': (FakeShell shell, FakeFiles files, FakeHttp http) {
+    files.contents[_plausibleText] = File(_clusterIssuerTemplate).readAsStringSync();
+  },
 };
+
+/// The template the certificate issuer's manifest is written from, as it ships.
+const String _clusterIssuerTemplate = 'templates/cluster/cluster-issuer-manifest.tpl';
 
 /// [lines] as the text of a file, ending in a newline the way every file these steps read does.
 String _lines(List<String> lines) => '${lines.join('\n')}\n';

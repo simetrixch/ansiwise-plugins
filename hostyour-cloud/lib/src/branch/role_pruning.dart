@@ -84,6 +84,15 @@ final class RolePruning {
   /// Where an onboarded unit's registrations stand.
   static const String registrations = 'registrations/';
 
+  /// The directory holding the manifests that name the branch they are read from.
+  ///
+  /// Layout of the tree being generated rather than a value of one installation: every installation
+  /// keeps its generators in the same place, so anything that could point elsewhere would only be
+  /// able to point somewhere wrong. The stage patterns below reduce it to one stage, the gate reads
+  /// it to decide which paths a run writes again, and the program row that stamps the branch names
+  /// the same directory.
+  static const String generatorTree = 'argocd';
+
   /// One cluster's map, and no directory below it.
   static final RegExp clusterMap = RegExp(r'^clusters/active/[^/]+\.yaml$');
 
@@ -95,7 +104,7 @@ final class RolePruning {
     final String quoted = RegExp.escape(stage);
     return <RegExp>[
       RegExp('^platform/values-$quoted\\.yaml\$'),
-      RegExp('^argocd/$quoted/'),
+      RegExp('^$generatorTree/$quoted/'),
       RegExp('^apps/[^/]+/values-$quoted\\.yaml\$'),
     ];
   }

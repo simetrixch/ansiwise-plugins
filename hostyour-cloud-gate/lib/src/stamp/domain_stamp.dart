@@ -8,7 +8,7 @@ import '../tree/source_tree.dart';
 /// Generating an installation means replacing the placeholder with that installation's fqdn in every
 /// file where the placeholder IS installation state — and in none of the files where it is a guard,
 /// a fixture, an illustration or the documentation of the stamp itself. The step that does it is
-/// `StampFqdn`, and the rule it selects by is [FqdnSelection].
+/// `StampPlaceholderInTrackedFiles`, and the rule it selects by is [FqdnSelection].
 ///
 /// THIS IS NO LONGER A MIRROR. It used to restate the step's rule, because the step lived in another
 /// repository and this one could not reach it. It lives in this repository now, so the rule is READ:
@@ -23,7 +23,7 @@ final class DomainStamp {
   const DomainStamp();
 
   /// The rule itself, as the step selects by it.
-  static const FqdnSelection rule = StampFqdn.selection;
+  static const FqdnSelection rule = StampPlaceholderInTrackedFiles.selection;
 
   /// What the trunk says where an installation says its own name.
   static const String placeholder = FqdnSelection.placeholder;

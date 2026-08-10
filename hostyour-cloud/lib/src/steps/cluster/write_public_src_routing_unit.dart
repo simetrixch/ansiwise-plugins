@@ -1,4 +1,5 @@
 import 'package:ansiwise_api/ansiwise_api.dart';
+import '../template.dart';
 import 'detect_public_nic.dart';
 import 'write_connmark_nft_table.dart';
 import 'write_netplan_public_src_routing.dart';
@@ -14,12 +15,12 @@ import 'write_public_src_routing_script.dart';
 /// **Stopping the service is what removes them, which is why it says how.** Deleting the files does
 /// not: the rules are already in the kernel. So the service carries the two commands that take them
 /// out, and stopping it is the first act of any teardown.
-final class WritePublicSrcRoutingUnit extends ReversibleStep<String?> with FileStep {
+final class WritePublicSrcRoutingUnit extends ReversibleStep<String?> with FileStep, TemplateStep {
   /// Writes the service at [path], running the script at [scriptPath].
   const WritePublicSrcRoutingUnit({
+    required this.templatePath,
     required this.path,
     required this.scriptPath,
-    required this.rulesPath,
     required this.mark,
     required this.table,
     required this.priority,
@@ -27,9 +28,9 @@ final class WritePublicSrcRoutingUnit extends ReversibleStep<String?> with FileS
 
   /// Builds the step from what the program gave it.
   factory WritePublicSrcRoutingUnit.fromArguments(Arguments arguments) => WritePublicSrcRoutingUnit(
+    templatePath: arguments.text('template'),
     path: arguments.text('path'),
     scriptPath: arguments.text('script_path'),
-    rulesPath: arguments.text('rules_path'),
     mark: arguments.text('mark'),
     table: arguments.integer('table'),
     priority: arguments.integer('priority'),
@@ -37,6 +38,13 @@ final class WritePublicSrcRoutingUnit extends ReversibleStep<String?> with FileS
 
   /// What this step accepts.
   static const List<ArgumentSpec> arguments = <ArgumentSpec>[
+    ArgumentSpec(
+      name: 'template',
+      kind: ArgumentKind.text,
+      describes:
+          'the service file as text, with a marked slot where each value this run holds belongs — '
+          '<script-path>, <table-name>, <mark>, <table> and <priority>',
+    ),
     ArgumentSpec(
       name: 'path',
       kind: ArgumentKind.text,
@@ -50,13 +58,6 @@ final class WritePublicSrcRoutingUnit extends ReversibleStep<String?> with FileS
       describes: 'the script the service runs',
       required: false,
       defaultValue: WritePublicSrcRoutingScript.defaultPath,
-    ),
-    ArgumentSpec(
-      name: 'rules_path',
-      kind: ArgumentKind.text,
-      describes: 'the marking rules, named here because stopping the service removes them',
-      required: false,
-      defaultValue: WriteConnmarkNftTable.defaultPath,
     ),
     ArgumentSpec(
       name: 'mark',
@@ -90,14 +91,15 @@ final class WritePublicSrcRoutingUnit extends ReversibleStep<String?> with FileS
   /// `0644` — a service file the service manager reads.
   static const int fileMode = 0x1a4;
 
+  /// The service file as text, with a marked slot where each value belongs.
+  @override
+  final String templatePath;
+
   /// The service file's path.
   final String path;
 
   /// The script it runs.
   final String scriptPath;
-
-  /// The marking rules stopping it removes.
-  final String rulesPath;
 
   /// The mark the rule is keyed on.
   final String mark;
@@ -124,7 +126,7 @@ final class WritePublicSrcRoutingUnit extends ReversibleStep<String?> with FileS
       ? const FileContent.nothing(
           'nothing is steered on this machine, so there is no service to install',
         )
-      : FileContent.text(unit);
+      : FileContent.text(await renderedWith(context, values));
 
   @override
   Future<void> apply(StepContext context) async {
@@ -154,31 +156,16 @@ final class WritePublicSrcRoutingUnit extends ReversibleStep<String?> with FileS
     await context.shell.run(const Command('systemctl', <String>['daemon-reload']));
   }
 
-  /// The service file itself.
-  String get unit {
-    final String rule = WritePublicSrcRoutingScript(
-      path: scriptPath,
-      rulesPath: rulesPath,
-      mark: mark,
-      table: table,
-      priority: priority,
-    ).ruleArguments('del').join(' ');
-    return '[Unit]\n'
-        'Description=Steer replies to traffic that arrived on the public address\n'
-        '# The rules are installed on the interfaces, so nothing may run before they are up.\n'
-        'After=network-online.target\n'
-        'Wants=network-online.target\n'
-        '\n'
-        '[Service]\n'
-        'Type=oneshot\n'
-        'RemainAfterExit=yes\n'
-        'ExecStart=$scriptPath\n'
-        '# Stopping the service is what takes the rules out of the kernel. Deleting the files does\n'
-        '# not, because by then the kernel is holding them.\n'
-        'ExecStop=-/usr/sbin/nft destroy table inet ${WriteConnmarkNftTable.tableName}\n'
-        'ExecStop=-/usr/sbin/ip $rule\n'
-        '\n'
-        '[Install]\n'
-        'WantedBy=multi-user.target\n';
-  }
+  /// What goes in each slot of the service file.
+  ///
+  /// The table is named by [WriteConnmarkNftTable.tableName] and the rule by the same three numbers
+  /// [WritePublicSrcRoutingScript.ruleArguments] composes it from, so what the service takes out of
+  /// the kernel and what put it there are one description.
+  Map<String, String> get values => <String, String>{
+    'script-path': scriptPath,
+    'table-name': WriteConnmarkNftTable.tableName,
+    'mark': mark,
+    'table': '$table',
+    'priority': '$priority',
+  };
 }

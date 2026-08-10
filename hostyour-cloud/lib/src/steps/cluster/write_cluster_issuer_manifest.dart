@@ -1,4 +1,5 @@
 import 'package:ansiwise_api/ansiwise_api.dart';
+import '../template.dart';
 import 'configure_slave_apiserver_oidc_trust.dart';
 
 /// Renders the object every certificate on this cluster is issued by.
@@ -11,9 +12,10 @@ import 'configure_slave_apiserver_oidc_trust.dart';
 /// illustrations use, because the address stood in the program file and was somebody's example.
 /// It is answered now, so there is no example left to catch — and a rule that recognised an
 /// illustration would refuse the operator whose own mailbox happens to read like one.
-final class WriteClusterIssuerManifest extends ReversibleStep<String?> with FileStep {
+final class WriteClusterIssuerManifest extends ReversibleStep<String?> with FileStep, TemplateStep {
   /// Renders the issuer [name] into [stateDirectory], for the mailbox this run names.
   const WriteClusterIssuerManifest({
+    required this.templatePath,
     required this.name,
     required this.acmeServer,
     required this.ingressClass,
@@ -23,6 +25,7 @@ final class WriteClusterIssuerManifest extends ReversibleStep<String?> with File
   /// Builds the step from what the program gave it.
   factory WriteClusterIssuerManifest.fromArguments(Arguments arguments) =>
       WriteClusterIssuerManifest(
+        templatePath: arguments.text('template'),
         name: arguments.text('name'),
         acmeServer: arguments.text('acme_server'),
         ingressClass: arguments.text('ingress_class'),
@@ -31,6 +34,13 @@ final class WriteClusterIssuerManifest extends ReversibleStep<String?> with File
 
   /// What this step accepts.
   static const List<ArgumentSpec> arguments = <ArgumentSpec>[
+    ArgumentSpec(
+      name: 'template',
+      kind: ArgumentKind.text,
+      describes:
+          'the manifest as text, with a marked slot where each value this run holds belongs — '
+          '<name>, <acme-server>, <email> and <ingress-class>',
+    ),
     ArgumentSpec(
       name: 'name',
       kind: ArgumentKind.text,
@@ -70,6 +80,10 @@ final class WriteClusterIssuerManifest extends ReversibleStep<String?> with File
   /// The name the mailbox is answered under, which is what deploy-branch already calls it.
   static const String emailAnswer = 'letsencrypt_email';
 
+  /// The manifest as text, with a marked slot where each value belongs.
+  @override
+  final String templatePath;
+
   /// What the issuer is called.
   final String name;
 
@@ -96,7 +110,7 @@ final class WriteClusterIssuerManifest extends ReversibleStep<String?> with File
   /// to render.
   @override
   Future<FileContent> contentFor(StepContext context) async =>
-      FileContent.text(manifestFor(context));
+      FileContent.text(await manifestFor(context));
 
   @override
   Future<void> apply(StepContext context) async {
@@ -124,23 +138,14 @@ final class WriteClusterIssuerManifest extends ReversibleStep<String?> with File
     await context.files.write(path, captured, mode: mode);
   }
 
-  /// The manifest itself.
-  String manifestFor(StepContext context) =>
-      '# Every certificate on this cluster is issued by this. The account key lives in the secret\n'
-      '# named below, and it decides whether a rebuilt issuer registers again or carries on with\n'
-      '# the registration it already has.\n'
-      'apiVersion: cert-manager.io/v1\n'
-      'kind: ClusterIssuer\n'
-      'metadata:\n'
-      '  name: $name\n'
-      'spec:\n'
-      '  acme:\n'
-      '    server: $acmeServer\n'
-      '    email: ${context.answers.text(emailAnswer)}\n'
-      '    privateKeySecretRef:\n'
-      '      name: $name\n'
-      '    solvers:\n'
-      '      - http01:\n'
-      '          ingress:\n'
-      '            ingressClassName: $ingressClass\n';
+  /// The manifest itself, rendered from the template this run names.
+  ///
+  /// Public because what the cluster is asked to hold and what this writes have to be one text: the
+  /// steps that apply the issuer and that prove it settled compare against exactly this.
+  Future<String> manifestFor(StepContext context) => renderedWith(context, <String, String>{
+    'name': name,
+    'acme-server': acmeServer,
+    'email': context.answers.text(emailAnswer),
+    'ingress-class': ingressClass,
+  });
 }

@@ -263,7 +263,7 @@ void main() {
         expect(written, contains('${flag.key}=${flag.value}'));
       }
       expect(await apiserverOidc.check(context), isA<Satisfied>());
-      expect(machine.changing, contains('snap restart ${StampKubeProxyClusterCidr.kubelite}'));
+      expect(machine.changing, contains('snap restart $microk8sKubelite'));
     });
 
     test('a second run writes nothing and restarts nothing', () async {

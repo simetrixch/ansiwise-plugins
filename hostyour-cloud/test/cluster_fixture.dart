@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:ansiwise_api/ansiwise_api.dart';
 import 'package:hostyour_cloud/hostyour_cloud.dart';
@@ -9,7 +10,12 @@ final class ClusterMachine {
   ClusterMachine({FakeShell? shell, FakeFiles? files, FakeClock? clock})
     : shell = shell ?? FakeShell(),
       files = files ?? FakeFiles(),
-      clock = clock ?? FakeClock();
+      clock = clock ?? FakeClock() {
+    // The templates travel with the programs of an installation, so a machine one of these steps
+    // meets carries them the way it carries its programs. A machine that carries none is what the
+    // blocked check is for, and the test that wants that case takes one away.
+    this.files.contents.addAll(shippedClusterTemplates());
+  }
 
   final FakeShell shell;
   final FakeFiles files;
@@ -281,11 +287,44 @@ const ConfigureKubeApiserverOidc apiserverOidc = ConfigureKubeApiserverOidc(
 
 /// The certificate issuer as the program renders it.
 const WriteClusterIssuerManifest clusterIssuer = WriteClusterIssuerManifest(
+  templatePath: clusterIssuerTemplate,
   name: 'letsencrypt-prod',
   acmeServer: 'https://acme-v02.api.letsencrypt.org/directory',
   ingressClass: 'public',
   stateDirectory: ConfigureSlaveApiserverOidcTrust.defaultStateDirectory,
 );
+
+/// Where each template of the cluster area stands, as a program file names it.
+const String connmarkNftTableTemplate = 'templates/cluster/connmark-nft-table.tpl';
+
+/// See [connmarkNftTableTemplate].
+const String netplanPublicSrcRoutingTemplate = 'templates/cluster/netplan-public-src-routing.tpl';
+
+/// See [connmarkNftTableTemplate].
+const String publicSrcRoutingScriptTemplate = 'templates/cluster/public-src-routing-script.tpl';
+
+/// See [connmarkNftTableTemplate].
+const String publicSrcRoutingUnitTemplate = 'templates/cluster/public-src-routing-unit.tpl';
+
+/// See [connmarkNftTableTemplate].
+const String clusterIssuerTemplate = 'templates/cluster/cluster-issuer-manifest.tpl';
+
+/// Every template of the cluster area, keyed by the path a program file names it under.
+///
+/// READ OFF THE TREE, never pasted in. A test carrying its own copy of the text would measure that
+/// copy: the template could name a slot nothing fills, or lose one a step fills, and every
+/// assertion here would go on passing while the file that ships is broken. Reading the shipped file
+/// is also what makes a wrong path here fail immediately instead of quietly arranging nothing.
+Map<String, String> shippedClusterTemplates() => <String, String>{
+  for (final String path in <String>[
+    connmarkNftTableTemplate,
+    netplanPublicSrcRoutingTemplate,
+    publicSrcRoutingScriptTemplate,
+    publicSrcRoutingUnitTemplate,
+    clusterIssuerTemplate,
+  ])
+    path: File(path).readAsStringSync(),
+};
 
 /// A machine `deploy-cluster` has already brought all the way up.
 ///
@@ -311,7 +350,7 @@ const List<String> clusterToolsAssumed = <String>[
   'gpasswd',
 ];
 
-ClusterMachine convergedCluster() {
+Future<ClusterMachine> convergedCluster() async {
   final FakeShell shell = FakeShell();
   final FakeFiles files = FakeFiles();
 
@@ -435,13 +474,13 @@ ClusterMachine convergedCluster() {
   final StepContext context = machine.contextFor(const StepName('converged_fixture'));
 
   files.contents.addAll(<String, String>{
-    StampKubeProxyClusterCidr.defaultPath: kubeProxyArgs(),
+    microk8sKubeProxyArguments: kubeProxyArgs(),
     StampCalicoPoolCidrInCniManifest.defaultPath: cniManifest(),
     ConfigureKubeApiserverOidc.defaultPath: ConfigureKubeApiserverOidc.withFlags(
       '',
       apiserverOidc.flagsIn(context),
     ),
-    clusterIssuer.path: clusterIssuer.manifestFor(context),
+    clusterIssuer.path: await clusterIssuer.manifestFor(context),
     '$operatorHome/.bashrc': "alias kubectl='microk8s.kubectl'\nalias helm='microk8s.helm3'\n",
     '$operatorHome/.kube/config': 'apiVersion: v1\nkind: Config\nclusters: []\n',
   });

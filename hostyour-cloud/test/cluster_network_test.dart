@@ -7,7 +7,7 @@ import 'cluster_fixture.dart';
 /// The four mechanisms the cluster's own networking rests on, and the addon patch beside them.
 void main() {
   const StepName under = StepName('under_test');
-  const String argsPath = StampKubeProxyClusterCidr.defaultPath;
+  const String argsPath = microk8sKubeProxyArguments;
   const String liveCorefile =
       'microk8s kubectl -n kube-system get configmap coredns -o jsonpath={.data.Corefile}';
   const String entrypointArgument = '--entryPoints.postgres.address=:5432/tcp';
@@ -15,14 +15,20 @@ void main() {
       'microk8s kubectl get felixconfiguration/default -o jsonpath={.spec.iptablesBackend}';
 
   group('the service proxy on the modern packet-filtering backend', () {
+    // The row `deploy-cluster` writes: kube-proxy paints its rules where the network agent does.
+    // Set after an addon is up the old rules already exist, and nothing here removes them — this
+    // row prevents them rather than cleaning them up.
+    const SetProcessFlag proxyMode = SetProcessFlag(
+      argsPath: argsPath,
+      flag: '--proxy-mode',
+      value: 'nftables',
+    );
+
     test('the arguments carry the flag exactly once', () async {
       final ClusterMachine machine = ClusterMachine();
       machine.files.contents[argsPath] = '--proxy-mode=ipvs\n';
 
-      const ConfigureKubeProxyNftables step = ConfigureKubeProxyNftables(
-        proxyMode: 'nftables',
-        argsPath: argsPath,
-      );
+      const SetProcessFlag step = proxyMode;
       final StepContext context = machine.contextFor(under);
       await step.apply(context);
 
@@ -37,10 +43,7 @@ void main() {
       final ClusterMachine machine = ClusterMachine();
       machine.files.contents[argsPath] = '--proxy-mode=nftables\n';
 
-      const ConfigureKubeProxyNftables step = ConfigureKubeProxyNftables(
-        proxyMode: 'nftables',
-        argsPath: argsPath,
-      );
+      const SetProcessFlag step = proxyMode;
       final StepContext context = machine.contextFor(under);
 
       expect(await step.check(context), isA<Satisfied>());
@@ -49,12 +52,21 @@ void main() {
     });
 
     test('a machine with no such file is refused rather than given one', () async {
-      const ConfigureKubeProxyNftables step = ConfigureKubeProxyNftables(
-        proxyMode: 'nftables',
-        argsPath: argsPath,
-      );
-      final CheckResult answer = await step.check(ClusterMachine().contextFor(under));
+      final CheckResult answer = await proxyMode.check(ClusterMachine().contextFor(under));
       expect((answer as Blocked).reason, contains(argsPath));
+    });
+
+    test('the value as it stood is what an undo puts back, not the line taken out', () async {
+      // Several rows write this one file, so a row that removed its own line at undo time would
+      // leave the machine with no backend where it had one before the run.
+      final ClusterMachine machine = ClusterMachine();
+      machine.files.contents[argsPath] = '--proxy-mode=ipvs\n';
+      final StepContext context = machine.contextFor(under);
+
+      final String? captured = await proxyMode.capture(context);
+      await proxyMode.apply(context);
+      await proxyMode.undo(context, captured);
+      expect(machine.files.contents[argsPath], '--proxy-mode=ipvs\n');
     });
   });
 

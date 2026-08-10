@@ -2,7 +2,8 @@ import 'package:yaml/yaml.dart';
 
 import 'package:ansiwise_api/ansiwise_api.dart';
 import 'configure_kube_apiserver_oidc.dart';
-import 'stamp_kube_proxy_cluster_cidr.dart';
+import 'microk8s.dart';
+import 'set_process_flag.dart';
 
 /// Makes a cluster that has no identity provider of its own accept the one on the cluster that has.
 ///
@@ -189,9 +190,9 @@ final class ConfigureSlaveApiserverOidcTrust
     await context.files.write(
       argsPath,
       ConfigureKubeApiserverOidc.withFlags(current, _flags(issuer)),
-      mode: StampKubeProxyClusterCidr.mode,
+      mode: microk8sArgumentsFileMode,
     );
-    await StampKubeProxyClusterCidr.restartKubelite(context);
+    await SetProcessFlag.restartKubelite(context);
 
     await context.files.createDirectory(stateDirectory, mode: 0x1ed);
     await context.files.write(manifestPath, _binding, mode: manifestMode);
@@ -223,8 +224,8 @@ final class ConfigureSlaveApiserverOidcTrust
       );
     }
     if (captured.args case final String args) {
-      await context.files.write(argsPath, args, mode: StampKubeProxyClusterCidr.mode);
-      await StampKubeProxyClusterCidr.restartKubelite(context);
+      await context.files.write(argsPath, args, mode: microk8sArgumentsFileMode);
+      await SetProcessFlag.restartKubelite(context);
     }
   }
 

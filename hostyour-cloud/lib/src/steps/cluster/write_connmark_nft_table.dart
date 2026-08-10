@@ -1,4 +1,5 @@
 import 'package:ansiwise_api/ansiwise_api.dart';
+import '../template.dart';
 import 'detect_public_nic.dart';
 
 /// Writes the rules that mark a connection arriving on the public address, so its replies can be
@@ -17,16 +18,26 @@ import 'detect_public_nic.dart';
 ///
 /// **The file begins by removing the table it is about to define.** Loading it a second time then
 /// replaces what is there instead of adding to it, which is what makes reloading safe.
-final class WriteConnmarkNftTable extends ReversibleStep<String?> with FileStep {
+final class WriteConnmarkNftTable extends ReversibleStep<String?> with FileStep, TemplateStep {
   /// Writes the rules at [path], marking connections with [mark].
-  const WriteConnmarkNftTable({required this.path, required this.mark});
+  const WriteConnmarkNftTable({required this.templatePath, required this.path, required this.mark});
 
   /// Builds the step from what the program gave it.
-  factory WriteConnmarkNftTable.fromArguments(Arguments arguments) =>
-      WriteConnmarkNftTable(path: arguments.text('path'), mark: arguments.text('mark'));
+  factory WriteConnmarkNftTable.fromArguments(Arguments arguments) => WriteConnmarkNftTable(
+    templatePath: arguments.text('template'),
+    path: arguments.text('path'),
+    mark: arguments.text('mark'),
+  );
 
   /// What this step accepts.
   static const List<ArgumentSpec> arguments = <ArgumentSpec>[
+    ArgumentSpec(
+      name: 'template',
+      kind: ArgumentKind.text,
+      describes:
+          'the rule set as text, with a marked slot where each value this run holds belongs — '
+          '<device>, <address>, <table-name> and <mark>',
+    ),
     ArgumentSpec(
       name: 'path',
       kind: ArgumentKind.text,
@@ -55,6 +66,10 @@ final class WriteConnmarkNftTable extends ReversibleStep<String?> with FileStep 
   /// `0644` — a rule set that carries nothing secret and that the loader reads.
   static const int fileMode = 0x1a4;
 
+  /// The rule set as text, with a marked slot where each value belongs.
+  @override
+  final String templatePath;
+
   /// The rules' path.
   final String path;
 
@@ -79,7 +94,7 @@ final class WriteConnmarkNftTable extends ReversibleStep<String?> with FileStep 
         ? const FileContent.nothing(
             'nothing is steered on this machine, so no connection has to be marked',
           )
-        : FileContent.text(ruleset(nic, mark));
+        : FileContent.text(await renderedWith(context, valuesFor(nic)));
   }
 
   /// What the rules file held before, or null when it was not there.
@@ -99,27 +114,15 @@ final class WriteConnmarkNftTable extends ReversibleStep<String?> with FileStep 
     await context.files.write(path, captured, mode: mode);
   }
 
-  /// The rules for [nic], marking its connections with [mark].
-  static String ruleset(PublicNic nic, String mark) =>
-      '# Connections that arrived on ${nic.device} for ${nic.address} are marked, and the mark is put\n'
-      '# back onto the packets of the reply so the rule keyed on it can steer them out the public\n'
-      '# gateway. This covers the replies the source-address rules cannot: a reply handed back by a\n'
-      '# pod is sourced from the pod, not from ${nic.address}.\n'
-      '#\n'
-      '# The first line removes the table, so loading this again replaces it rather than adding to\n'
-      '# what is already there.\n'
-      'destroy table inet $tableName\n'
-      '\n'
-      'table inet $tableName {\n'
-      '  chain prerouting {\n'
-      '    type filter hook prerouting priority -150; policy accept;\n'
-      '    iifname "${nic.device}" ip daddr ${nic.address} ct state new ct mark set $mark\n'
-      '    ct mark $mark meta mark set ct mark\n'
-      '  }\n'
-      '\n'
-      '  chain output {\n'
-      '    type route hook output priority -150; policy accept;\n'
-      '    ct mark $mark meta mark set ct mark\n'
-      '  }\n'
-      '}\n';
+  /// What goes in each slot of the rule set, for the interface [nic] describes.
+  ///
+  /// [tableName] is filled in rather than written into the template, because [undo] takes the table
+  /// out of the kernel by that same name — one value, so the file and the undo cannot come to name
+  /// different tables.
+  Map<String, String> valuesFor(PublicNic nic) => <String, String>{
+    'device': nic.device,
+    'address': nic.address,
+    'table-name': tableName,
+    'mark': mark,
+  };
 }

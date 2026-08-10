@@ -3,7 +3,11 @@ import 'package:hostyour_cloud/hostyour_cloud.dart';
 import 'package:ansiwise_api/testing.dart';
 import 'package:test/test.dart';
 
-/// The two stamps that turn a copy of the product trunk into one installation.
+/// The two rows of one stamp that turn a copy of the product trunk into one installation.
+///
+/// One capability, two rows: the domain row replaces a placeholder wherever it stands, and the
+/// revision row replaces the trunk's own name where a named key carries it. Both are asserted here
+/// against the same class, which is what says the one class still does both jobs.
 ///
 /// Everything asserted here was found on a real tree. A stamp that rewrote a script turned that
 /// script's own guard into a refusal of the very domain it was installed for; a stamp that rewrote a
@@ -14,8 +18,23 @@ void main() {
   const String fqdn = 'm1.example.com';
   const String trunk = 'master';
 
-  const StampRevision retarget = StampRevision(repository: repository, trunk: trunk);
-  const StampFqdn stamp = StampFqdn(repository: repository, trunk: trunk);
+  /// The revision row of `deploy-branch`: the trunk's own name, under the generator tree, on a key.
+  const StampPlaceholderInTrackedFiles retarget = StampPlaceholderInTrackedFiles(
+    repository: repository,
+    trunk: trunk,
+    placeholder: trunk,
+    tree: RolePruning.generatorTree,
+    keys: <String>['revision', 'targetRevision'],
+  );
+
+  /// The domain row of `deploy-branch`: the placeholder, anywhere in the checkout, on no key.
+  const StampPlaceholderInTrackedFiles stamp = StampPlaceholderInTrackedFiles(
+    repository: repository,
+    trunk: trunk,
+    placeholder: FqdnSelection.placeholder,
+    tree: '',
+    keys: <String>[],
+  );
 
   /// The domain this installation answers on, which both stamps read out of the run by name.
   const Arguments answers = Arguments(<String, Object>{'fqdn': fqdn});
@@ -184,6 +203,22 @@ void main() {
       await retarget.apply(context);
       expect(files.written, isEmpty);
       expect(read(files, 'argocd/dev/apps/root-app.yaml'), once);
+    });
+
+    test('a chart template naming the trunk is product material and is left alone', () async {
+      // One file rule for every row of this stamp: what a chart keeps under its own templates/ is
+      // shipped to every installation and belongs to none, whatever literal it carries.
+      const String content = 'targetRevision: master\n';
+      final FakeFiles files = tree(<String, String>{
+        'argocd/dev/apps/templates/member.yaml': content,
+      });
+      final FakeShell shell = searching(
+        carrying: <String>['argocd/dev/apps/templates/member.yaml'],
+        literal: trunk,
+        within: 'argocd',
+      );
+
+      expect(await retarget.check(contextOn(shell: shell, files: files)), isA<Satisfied>());
     });
 
     test('the trunk is refused, whatever it carries', () async {
@@ -398,6 +433,21 @@ void main() {
       final FakeShell shell = searching(carrying: <String>['install.sh', 'docs/branching.md']);
 
       expect(await stamp.check(contextOn(shell: shell, files: files)), isA<Satisfied>());
+    });
+
+    test('a line carrying the keep marker keeps the placeholder too', () async {
+      // The marker says the line is product every installation shares. It is read by every row of
+      // this stamp, so a marked line is not one the domain row rewrites either.
+      const String content =
+          'domain: example.invalid\n'
+          'domain: example.invalid # set-domain:keep\n';
+      final FakeFiles files = tree(<String, String>{'platform/values-dev.yaml': content});
+      final FakeShell shell = searching(carrying: <String>['platform/values-dev.yaml']);
+
+      await stamp.apply(contextOn(shell: shell, files: files));
+      final List<String> lines = read(files, 'platform/values-dev.yaml').split('\n');
+      expect(lines[0], 'domain: $fqdn');
+      expect(lines[1], 'domain: example.invalid # set-domain:keep');
     });
 
     test('the trunk is refused, so no run can put a domain on it', () async {

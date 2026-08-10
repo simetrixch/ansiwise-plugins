@@ -92,7 +92,7 @@ void main() {
 
   group('the domain stamp, driven over planted paths', () {
     // Everything the stamped: and never-stamp: halves decide rests on this answering the way
-    // StampFqdn answers — and it answers by asking the very rule StampFqdn selects by. So what is
+    // the stamp answers — and it answers by asking the very rule the stamp selects by. So what is
     // proven here is not agreement between two copies, there being one; it is that the rule really
     // holds for the paths its exclusions exist for, which no real tree is obliged to carry.
 
@@ -229,7 +229,7 @@ void main() {
   });
 
   group('the revision stamp mirror', () {
-    // The `always` licence over the manifest tree rests on this. StampRevision's own apply touches
+    // The `always` licence over the manifest tree rests on this. The revision stamp's own apply touches
     // only the lines naming the trunk; what makes the whole directory derived is its undo, which
     // restores all of it, and StampRole taking the two foreign stage trees with it.
 
@@ -440,8 +440,9 @@ void main() {
         <String>[
           'stamp_app_toggles',
           'stamp_cluster_profile',
-          'stamp_fqdn',
-          'stamp_revision',
+          // One capability where stamp_fqdn and stamp_revision stood: both replaced a placeholder
+          // the trunk carries, and which placeholder is a program row now.
+          'stamp_placeholder_in_tracked_files',
           'stamp_role',
         ],
         reason:

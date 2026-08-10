@@ -1,6 +1,7 @@
 import 'package:ansiwise_api/ansiwise_api.dart';
 import 'delete_default_ipv4_ippool.dart';
-import 'stamp_kube_proxy_cluster_cidr.dart';
+import 'microk8s.dart';
+import 'set_process_flag.dart';
 
 /// Refuses to move the pod network of a cluster that is carrying workloads.
 ///
@@ -49,7 +50,7 @@ final class GuardPopulatedClusterPodCidrMigration extends ObservingStep {
       kind: ArgumentKind.text,
       describes: 'the file holding the arguments kube-proxy is started with',
       required: false,
-      defaultValue: StampKubeProxyClusterCidr.defaultPath,
+      defaultValue: microk8sKubeProxyArguments,
     ),
     ArgumentSpec(
       name: 'allow_populated_migration',
@@ -64,6 +65,13 @@ final class GuardPopulatedClusterPodCidrMigration extends ObservingStep {
 
   /// The namespace whose pods the conversion gives back by itself.
   static const String systemNamespace = 'kube-system';
+
+  /// The flag in kube-proxy's arguments that names the range the pods are on.
+  ///
+  /// A program row writes it into the file and this reads it back, so the two name the same flag.
+  /// kube-proxy decides what counts as leaving the pod network from this one line, and a cluster
+  /// whose file still carries the old range is a cluster the conversion has not finished on.
+  static const String clusterCidrFlag = '--cluster-cidr';
 
   /// The range every pod gets an address out of.
   final String podCidr;
@@ -126,7 +134,8 @@ final class GuardPopulatedClusterPodCidrMigration extends ObservingStep {
     if (!await context.files.exists(argsPath)) {
       return false;
     }
-    return StampKubeProxyClusterCidr.carries(await context.files.read(argsPath), podCidr);
+    final String args = await context.files.read(argsPath);
+    return SetProcessFlag.carries(args, '$clusterCidrFlag=$podCidr');
   }
 
   /// The pods outside [systemNamespace] that are on the pod network, or null when they cannot be read.

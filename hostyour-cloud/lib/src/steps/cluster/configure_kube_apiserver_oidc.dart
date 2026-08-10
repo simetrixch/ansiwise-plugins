@@ -1,6 +1,6 @@
 import 'package:ansiwise_api/ansiwise_api.dart';
 import 'microk8s.dart';
-import 'stamp_kube_proxy_cluster_cidr.dart';
+import 'set_process_flag.dart';
 
 /// Lets the API server accept the tokens the platform's identity provider issues.
 ///
@@ -199,9 +199,9 @@ final class ConfigureKubeApiserverOidc extends ReversibleStep<String?> {
     await context.files.write(
       argsPath,
       withFlags(current, flagsIn(context)),
-      mode: StampKubeProxyClusterCidr.mode,
+      mode: microk8sArgumentsFileMode,
     );
-    await StampKubeProxyClusterCidr.restartKubelite(context);
+    await SetProcessFlag.restartKubelite(context);
   }
 
   /// The API server's arguments as they were, or null when the file was not there.
@@ -220,8 +220,8 @@ final class ConfigureKubeApiserverOidc extends ReversibleStep<String?> {
       // the API server started with arguments nothing on the machine put there.
       return;
     }
-    await context.files.write(argsPath, captured, mode: StampKubeProxyClusterCidr.mode);
-    await StampKubeProxyClusterCidr.restartKubelite(context);
+    await context.files.write(argsPath, captured, mode: microk8sArgumentsFileMode);
+    await SetProcessFlag.restartKubelite(context);
   }
 
   /// [current] carrying every one of [flags]: each replaced where it is, each appended where it is
@@ -232,7 +232,7 @@ final class ConfigureKubeApiserverOidc extends ReversibleStep<String?> {
   static String withFlags(String current, Map<String, String> flags) {
     String written = current;
     for (final MapEntry<String, String> flag in flags.entries) {
-      written = StampKubeProxyClusterCidr.withFlag(written, '${flag.key}=${flag.value}');
+      written = SetProcessFlag.withFlag(written, '${flag.key}=${flag.value}');
     }
     return written;
   }

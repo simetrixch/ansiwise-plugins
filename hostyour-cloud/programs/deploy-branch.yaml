@@ -244,14 +244,22 @@ steps:
     trunk: master
     on_failure: exit
 
-  - step: stamp_revision
+  # The generators name the branch they read from, and on the trunk that name IS the trunk. Only the
+  # value of these two keys changes: the same word also stands in prose on those lines.
+  - step: stamp_placeholder_in_tracked_files
     repository: /srv/hostyour-cloud
     trunk: master
+    placeholder: master
+    tree: argocd
+    keys: [revision, targetRevision]
     on_failure: exit
 
-  - step: stamp_fqdn
+  # The domain the trunk carries in place of an installation's own, anywhere in the checkout. No key
+  # in front of it: the literal IS the value wherever it stands.
+  - step: stamp_placeholder_in_tracked_files
     repository: /srv/hostyour-cloud
     trunk: master
+    placeholder: example.invalid
     on_failure: exit
 
   - step: write_cluster_map

@@ -1,6 +1,5 @@
 import 'package:ansiwise_api/ansiwise_api.dart';
 import 'microk8s.dart';
-import 'stamp_kube_proxy_cluster_cidr.dart';
 
 /// Puts this cluster's pod range into the network manifest Calico creates its address pool from.
 ///
@@ -92,9 +91,9 @@ final class StampCalicoPoolCidrInCniManifest extends ReversibleStep<String?> {
       return;
     }
     final String backup = '$manifestPath.bak.${_stampOfNow(context)}';
-    await context.files.write(backup, current, mode: StampKubeProxyClusterCidr.mode);
+    await context.files.write(backup, current, mode: microk8sArgumentsFileMode);
     context.log.info('the manifest as it was is at $backup');
-    await context.files.write(manifestPath, stamped, mode: StampKubeProxyClusterCidr.mode);
+    await context.files.write(manifestPath, stamped, mode: microk8sArgumentsFileMode);
 
     // The write is reported the same way whether the rewrite matched anything or not, so what the
     // file holds now is read rather than assumed. This is the failure the same-line expression
@@ -124,7 +123,7 @@ final class StampCalicoPoolCidrInCniManifest extends ReversibleStep<String?> {
       // The snap writes this file when it installs. There was none, so there is nothing to put back.
       return;
     }
-    await context.files.write(manifestPath, captured, mode: StampKubeProxyClusterCidr.mode);
+    await context.files.write(manifestPath, captured, mode: microk8sArgumentsFileMode);
   }
 
   /// [manifest] with the value under [variable] replaced by [podCidr], or null when it declares none.

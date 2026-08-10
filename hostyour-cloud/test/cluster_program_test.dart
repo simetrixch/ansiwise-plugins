@@ -53,7 +53,7 @@ void main() {
     Mode mode, {
     ClusterMachine? machine,
   }) async {
-    final ClusterMachine it = machine ?? convergedCluster();
+    final ClusterMachine it = machine ?? await convergedCluster();
     final MemoryRecorder recorder = MemoryRecorder(it.clock);
     final RunRecord record =
         await Runner(
@@ -214,7 +214,7 @@ void main() {
     test('a pod network that overlaps the fixed service range is refused', () async {
       // Nothing is installed onto a machine whose pod range would make its pods unable to reach the
       // API server, and the refusal comes before the conversion touches anything.
-      final ClusterMachine machine = convergedCluster();
+      final ClusterMachine machine = await convergedCluster();
       final ResolvedProgram program = deployCluster();
       final ResolvedStep gate = program.steps.firstWhere(
         (ResolvedStep s) =>
@@ -244,11 +244,36 @@ void main() {
       );
     }
 
+    /// Where the row that sets [flag] in an argument file stands.
+    ///
+    /// Several rows of one step write these files, so a step name alone finds whichever comes
+    /// first. The flag each row owns is what tells them apart.
+    int atFlag(String flag) => deployCluster().steps.indexWhere(
+      (ResolvedStep step) =>
+          step.entry.step == const StepName('set_process_flag') &&
+          step.argumentsWithDefaults.text('flag') == flag,
+    );
+
     test('the packet-filtering backend is set before any addon is switched on', () {
-      before(
-        'configure_kube_proxy_nftables',
-        'enable_addons',
-        'set afterwards, rules already exist in the other backend and nothing here removes them',
+      final List<StepName> steps = order();
+      expect(atFlag('--proxy-mode'), isNot(-1));
+      expect(
+        atFlag('--proxy-mode'),
+        lessThan(steps.indexOf(const StepName('enable_addons'))),
+        reason:
+            'set afterwards, rules already exist in the other backend and nothing here removes them',
+      );
+    });
+
+    test('the range kube-proxy is told about is the flag the guard reads back', () {
+      // The row writes the flag into the file and the guard reads the same flag out of it to decide
+      // whether the conversion has happened. Two names for it would let a converted cluster read as
+      // unconverted, and the guard would refuse a swap that is already done.
+      final int row = atFlag(GuardPopulatedClusterPodCidrMigration.clusterCidrFlag);
+      expect(row, isNot(-1));
+      expect(
+        deployCluster().steps[row].argumentsWithDefaults.text('args_path'),
+        microk8sKubeProxyArguments,
       );
     });
 
@@ -270,9 +295,11 @@ void main() {
 
     test('the seven steps of the conversion are in the order they have to be in', () {
       final List<StepName> steps = order();
+      // The second of them is a row rather than a step of its own, so it is found by the flag it
+      // owns; the rest are found by name.
       final List<String> conversion = <String>[
         'stamp_calico_pool_cidr_in_cni_manifest',
-        'stamp_kube_proxy_cluster_cidr',
+        GuardPopulatedClusterPodCidrMigration.clusterCidrFlag,
         'delete_default_ipv4_ippool',
         'reapply_calico_manifest',
         'restart_microk8s_snap_for_pod_cidr',
@@ -280,7 +307,8 @@ void main() {
         'recycle_kube_system_pod_ips',
       ];
       final List<int> positions = <int>[
-        for (final String step in conversion) steps.indexOf(StepName(step)),
+        for (final String step in conversion)
+          step.startsWith('--') ? atFlag(step) : steps.indexOf(StepName(step)),
       ];
       expect(positions, everyElement(isNot(-1)));
       for (int i = 1; i < positions.length; i++) {

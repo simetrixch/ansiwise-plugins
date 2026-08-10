@@ -104,16 +104,19 @@ void main() {
       final ClusterMachine machine = singleNic();
       final List<Step> steps = <Step>[
         const WriteNetplanPublicSrcRouting(
+          templatePath: netplanPublicSrcRoutingTemplate,
           path: WriteNetplanPublicSrcRouting.defaultPath,
           table: WriteNetplanPublicSrcRouting.publicTable,
         ),
         const AssertNetplanMerged(),
         const ApplyNetplan(table: WriteNetplanPublicSrcRouting.publicTable),
         const WriteConnmarkNftTable(
+          templatePath: connmarkNftTableTemplate,
           path: WriteConnmarkNftTable.defaultPath,
           mark: WriteConnmarkNftTable.defaultMark,
         ),
         const WritePublicSrcRoutingScript(
+          templatePath: publicSrcRoutingScriptTemplate,
           path: WritePublicSrcRoutingScript.defaultPath,
           rulesPath: WriteConnmarkNftTable.defaultPath,
           mark: WriteConnmarkNftTable.defaultMark,
@@ -121,9 +124,9 @@ void main() {
           priority: WritePublicSrcRoutingScript.defaultPriority,
         ),
         const WritePublicSrcRoutingUnit(
+          templatePath: publicSrcRoutingUnitTemplate,
           path: WritePublicSrcRoutingUnit.defaultPath,
           scriptPath: WritePublicSrcRoutingScript.defaultPath,
-          rulesPath: WriteConnmarkNftTable.defaultPath,
           mark: WriteConnmarkNftTable.defaultMark,
           table: WriteNetplanPublicSrcRouting.publicTable,
           priority: WritePublicSrcRoutingScript.defaultPriority,
@@ -148,6 +151,7 @@ void main() {
 
   group('the drop-in', () {
     const WriteNetplanPublicSrcRouting step = WriteNetplanPublicSrcRouting(
+      templatePath: netplanPublicSrcRoutingTemplate,
       path: WriteNetplanPublicSrcRouting.defaultPath,
       table: WriteNetplanPublicSrcRouting.publicTable,
     );
@@ -168,26 +172,34 @@ void main() {
       expect(machine.files.modes[WriteNetplanPublicSrcRouting.defaultPath], 0x180);
     });
 
-    test('the four exceptions are numbered below the rule that catches everything else', () async {
+    test('the exceptions are numbered below the rule that catches everything else', () async {
+      // Read out of the drop-in that was written rather than off a constant. The ranges and their
+      // numbers are the template's own text now, so a constant here would say what this test wants
+      // to be true instead of what the file that ships says.
       final ClusterMachine machine = dualNic();
       await step.apply(machine.contextFor(under));
       final String written = machine.files.contents[WriteNetplanPublicSrcRouting.defaultPath]!;
 
-      for (final MapEntry<int, String> exception
-          in WriteNetplanPublicSrcRouting.exceptions.entries) {
+      final List<_Rule> rules = _rulesOf(written);
+      final List<_Rule> exceptions = rules.where((_Rule rule) => rule.to != null).toList();
+      final List<_Rule> catchAll = rules.where((_Rule rule) => rule.to == null).toList();
+
+      expect(catchAll, hasLength(1), reason: 'exactly one rule sends everything else out');
+      expect(exceptions, isNotEmpty, reason: 'without an exception nothing is kept on main');
+      for (final _Rule exception in exceptions) {
         expect(
-          exception.key,
-          lessThan(WriteNetplanPublicSrcRouting.catchAllPriority),
-          reason: 'a lower number wins in the kernel',
+          exception.priority,
+          lessThan(catchAll.single.priority),
+          reason: 'a lower number wins in the kernel, and ${exception.to} must stay on main',
         );
-        expect(written, contains('to: ${exception.value}'));
+        expect(exception.table, 254, reason: '${exception.to} stays on the kernel main table');
       }
       expect(
-        WriteNetplanPublicSrcRouting.exceptions.values,
+        exceptions.map((_Rule rule) => rule.to),
         contains('100.64.0.0/10'),
-        reason: "the certificate service checks its own answer over exactly that path",
+        reason: 'the certificate service checks its own answer over exactly that path',
       );
-      expect(written, contains('priority: ${WriteNetplanPublicSrcRouting.catchAllPriority}'));
+      expect(catchAll.single.table, WriteNetplanPublicSrcRouting.publicTable);
       expect(written, contains('via: $publicGateway'));
     });
 
@@ -274,6 +286,7 @@ void main() {
 
   group('the marking rules', () {
     const WriteConnmarkNftTable step = WriteConnmarkNftTable(
+      templatePath: connmarkNftTableTemplate,
       path: WriteConnmarkNftTable.defaultPath,
       mark: WriteConnmarkNftTable.defaultMark,
     );
@@ -324,6 +337,7 @@ void main() {
 
   group('the script and the service', () {
     const WritePublicSrcRoutingScript script = WritePublicSrcRoutingScript(
+      templatePath: publicSrcRoutingScriptTemplate,
       path: WritePublicSrcRoutingScript.defaultPath,
       rulesPath: WriteConnmarkNftTable.defaultPath,
       mark: WriteConnmarkNftTable.defaultMark,
@@ -366,11 +380,27 @@ void main() {
       expect(machine.files.modes[WritePublicSrcRoutingScript.defaultPath], 0x1ed);
     });
 
+    test('the script installs exactly the rule the undo removes', () async {
+      // The two used to be one expression: the script's add line was composed from ruleArguments,
+      // which is also what the undo runs. With the text in a template they are two statements, and
+      // two statements of one rule can disagree — a machine would then be left carrying a rule
+      // nothing on it knows how to take away.
+      final ClusterMachine machine = dualNic();
+      await script.apply(machine.contextFor(under));
+      final String written = machine.files.contents[WritePublicSrcRoutingScript.defaultPath]!;
+
+      expect(written, contains('ip ${script.ruleArguments('add').join(' ')}\n'));
+      expect(
+        script.ruleArguments('add').join(' ').replaceAll(' add ', ' del '),
+        script.ruleArguments('del').join(' '),
+      );
+    });
+
     test('the service waits for the network and says how to take the kernel state away', () async {
       const WritePublicSrcRoutingUnit unit = WritePublicSrcRoutingUnit(
+        templatePath: publicSrcRoutingUnitTemplate,
         path: WritePublicSrcRoutingUnit.defaultPath,
         scriptPath: WritePublicSrcRoutingScript.defaultPath,
-        rulesPath: WriteConnmarkNftTable.defaultPath,
         mark: WriteConnmarkNftTable.defaultMark,
         table: WriteNetplanPublicSrcRouting.publicTable,
         priority: WritePublicSrcRoutingScript.defaultPriority,
@@ -385,6 +415,114 @@ void main() {
       expect(written, contains('ExecStop=-/usr/sbin/nft destroy table inet hostyour-public-src'));
       expect(written, contains('fwmark 0x1000/0x1000'));
       expect(machine.changing, contains('systemctl daemon-reload'));
+    });
+
+    test('what the service stops is exactly what the script started', () async {
+      const WritePublicSrcRoutingUnit unit = WritePublicSrcRoutingUnit(
+        templatePath: publicSrcRoutingUnitTemplate,
+        path: WritePublicSrcRoutingUnit.defaultPath,
+        scriptPath: WritePublicSrcRoutingScript.defaultPath,
+        mark: WriteConnmarkNftTable.defaultMark,
+        table: WriteNetplanPublicSrcRouting.publicTable,
+        priority: WritePublicSrcRoutingScript.defaultPriority,
+      );
+      final ClusterMachine machine = dualNic();
+      await unit.apply(machine.contextFor(under));
+
+      expect(
+        machine.files.contents[WritePublicSrcRoutingUnit.defaultPath],
+        contains('ExecStop=-/usr/sbin/ip ${script.ruleArguments('del').join(' ')}\n'),
+      );
+    });
+  });
+
+  group('the template a file is written from', () {
+    const WriteConnmarkNftTable step = WriteConnmarkNftTable(
+      templatePath: connmarkNftTableTemplate,
+      path: WriteConnmarkNftTable.defaultPath,
+      mark: WriteConnmarkNftTable.defaultMark,
+    );
+
+    test('a machine that carries none is BLOCKED, never satisfied', () async {
+      // The two answers look alike from outside and are opposites. Satisfied says this machine has
+      // no business with the file; a machine whose template did not travel with its programs needs
+      // the file as much as any other, and reporting the first would leave it with no rule set and
+      // a run that said every step was fine.
+      final ClusterMachine machine = dualNic();
+      machine.files.contents.remove(connmarkNftTableTemplate);
+
+      final CheckResult answer = await step.check(machine.contextFor(under));
+      expect(answer, isA<Blocked>());
+      expect((answer as Blocked).reason, contains(connmarkNftTableTemplate));
+    });
+
+    test('and its plan says so rather than failing to be produced', () async {
+      final ClusterMachine machine = dualNic();
+      machine.files.contents.remove(connmarkNftTableTemplate);
+
+      final StepPlan plan = await step.plan(machine.contextFor(under));
+      expect(plan.summary, contains(connmarkNftTableTemplate));
+      expect(machine.files.written, isEmpty);
+    });
+
+    test('a machine that needs no such file says so, template or no template', () async {
+      // The order of the two questions. A machine that steers nothing has no business with the rule
+      // set at all, so whether its installation carries the template is not a question about it —
+      // and asking it first would kill the run on every single-interface machine of an installation
+      // whose templates did not travel, instead of on the machines that actually need them.
+      final ClusterMachine machine = singleNic();
+      machine.files.contents.remove(connmarkNftTableTemplate);
+
+      final CheckResult answer = await step.check(machine.contextFor(under));
+      expect(answer, isA<Satisfied>());
+      expect((answer as Satisfied).because, contains('nothing is steered'));
+    });
+
+    test('a dry run still shows the whole file, not a mention of a template', () async {
+      // The plan an operator reads must be the rendered rule set, byte for byte. A plan that had
+      // become "would render templates/..." would be a weaker plan than the eleven classes gave.
+      final ClusterMachine machine = dualNic();
+      final StepPlan plan = await step.plan(machine.contextFor(under));
+
+      expect(plan, isA<DiffPlan>());
+      final DiffPlan diff = plan as DiffPlan;
+      expect(diff.path, WriteConnmarkNftTable.defaultPath);
+      expect(diff.after, contains('iifname "$publicDevice" ip daddr $publicAddress'));
+      expect(diff.after, contains('ct mark ${WriteConnmarkNftTable.defaultMark}'));
+      expect(diff.after, isNot(contains('<')));
+      expect(machine.files.written, isEmpty);
+    });
+
+    test('a slot nothing fills is refused rather than written onto the machine', () async {
+      final ClusterMachine machine = dualNic();
+      machine.files.contents[connmarkNftTableTemplate] =
+          '${machine.files.contents[connmarkNftTableTemplate]}# <interface>\n';
+
+      await expectLater(
+        step.apply(machine.contextFor(under)),
+        throwsA(
+          isA<TemplateRefused>().having(
+            (TemplateRefused failure) => failure.message,
+            'message',
+            allOf(contains('<interface>'), contains(connmarkNftTableTemplate)),
+          ),
+        ),
+      );
+      expect(machine.files.written, isEmpty);
+    });
+
+    test('a value with no slot to go into is refused for the same reason', () {
+      const Template template = Template(path: 'somewhere.tpl', text: 'mark <mark>\n');
+      expect(
+        () => template.filledWith(<String, String>{'mark': '0x1000', 'device': 'eth0'}),
+        throwsA(
+          isA<TemplateRefused>().having(
+            (TemplateRefused failure) => failure.message,
+            'message',
+            contains('<device>'),
+          ),
+        ),
+      );
     });
   });
 
@@ -437,4 +575,47 @@ void main() {
       );
     });
   });
+}
+
+/// One routing-policy rule as the drop-in that was written states it.
+final class _Rule {
+  const _Rule({required this.priority, required this.table, this.to});
+
+  /// The number the kernel weighs it at.
+  final int priority;
+
+  /// The table it looks the reply up in.
+  final int table;
+
+  /// The range it is an exception for, or null where it catches everything else.
+  final String? to;
+}
+
+/// Every routing-policy rule of [dropIn], read back out of the text that was written.
+List<_Rule> _rulesOf(String dropIn) {
+  final List<_Rule> rules = <_Rule>[];
+  String? to;
+  int? table;
+  for (final String line in dropIn.split('\n')) {
+    final String said = line.trim();
+    if (said.startsWith('- from:')) {
+      to = null;
+      table = null;
+      continue;
+    }
+    if (said.startsWith('to:')) {
+      to = said.substring('to:'.length).trim();
+      continue;
+    }
+    if (said.startsWith('table:')) {
+      table = int.tryParse(said.substring('table:'.length).trim());
+      continue;
+    }
+    if (said.startsWith('priority:') && table != null) {
+      rules.add(
+        _Rule(priority: int.parse(said.substring('priority:'.length).trim()), table: table, to: to),
+      );
+    }
+  }
+  return rules;
 }

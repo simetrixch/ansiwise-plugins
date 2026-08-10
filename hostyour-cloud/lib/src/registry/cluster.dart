@@ -9,7 +9,6 @@ import '../steps/cluster/assert_cli_tool_versions.dart';
 import '../steps/cluster/assert_netplan_merged.dart';
 import '../steps/cluster/check_storage_mount.dart';
 import '../steps/cluster/configure_kube_apiserver_oidc.dart';
-import '../steps/cluster/configure_kube_proxy_nftables.dart';
 import '../steps/cluster/configure_slave_apiserver_oidc_trust.dart';
 import '../steps/cluster/create_storage_directory.dart';
 import '../steps/cluster/delete_default_ipv4_ippool.dart';
@@ -36,8 +35,8 @@ import '../steps/cluster/require_pod_cidr_free_of_reserved_ranges.dart';
 import '../steps/cluster/restart_cert_manager_and_reapply_cluster_issuer.dart';
 import '../steps/cluster/restart_microk8s_snap_for_pod_cidr.dart';
 import '../steps/cluster/set_default_storage_class.dart';
+import '../steps/cluster/set_process_flag.dart';
 import '../steps/cluster/stamp_calico_pool_cidr_in_cni_manifest.dart';
-import '../steps/cluster/stamp_kube_proxy_cluster_cidr.dart';
 import '../steps/cluster/verify_ippool_converged_with_self_heal.dart';
 import '../steps/cluster/wait_for_addons_enabled.dart';
 import '../steps/cluster/wait_for_answer.dart';
@@ -77,11 +76,11 @@ const Map<StepName, RegisteredStep> clusterSteps = <StepName, RegisteredStep>{
     create: WaitForAnswer.fromArguments,
     arguments: WaitForAnswer.arguments,
   ),
-  StepName('configure_kube_proxy_nftables'): RegisteredStep(
-    name: StepName('configure_kube_proxy_nftables'),
-    source: 'lib/src/steps/cluster/configure_kube_proxy_nftables.dart:15',
-    create: ConfigureKubeProxyNftables.fromArguments,
-    arguments: ConfigureKubeProxyNftables.arguments,
+  StepName('set_process_flag'): RegisteredStep(
+    name: StepName('set_process_flag'),
+    source: 'lib/src/steps/cluster/set_process_flag.dart:26',
+    create: SetProcessFlag.fromArguments,
+    arguments: SetProcessFlag.arguments,
   ),
   StepName('require_pod_cidr_free_of_reserved_ranges'): RegisteredStep(
     name: StepName('require_pod_cidr_free_of_reserved_ranges'),
@@ -92,21 +91,15 @@ const Map<StepName, RegisteredStep> clusterSteps = <StepName, RegisteredStep>{
   ),
   StepName('guard_populated_cluster_pod_cidr_migration'): RegisteredStep(
     name: StepName('guard_populated_cluster_pod_cidr_migration'),
-    source: 'lib/src/steps/cluster/guard_populated_cluster_pod_cidr_migration.dart:24',
+    source: 'lib/src/steps/cluster/guard_populated_cluster_pod_cidr_migration.dart:25',
     create: GuardPopulatedClusterPodCidrMigration.fromArguments,
     arguments: GuardPopulatedClusterPodCidrMigration.arguments,
   ),
   StepName('stamp_calico_pool_cidr_in_cni_manifest'): RegisteredStep(
     name: StepName('stamp_calico_pool_cidr_in_cni_manifest'),
-    source: 'lib/src/steps/cluster/stamp_calico_pool_cidr_in_cni_manifest.dart:20',
+    source: 'lib/src/steps/cluster/stamp_calico_pool_cidr_in_cni_manifest.dart:19',
     create: StampCalicoPoolCidrInCniManifest.fromArguments,
     arguments: StampCalicoPoolCidrInCniManifest.arguments,
-  ),
-  StepName('stamp_kube_proxy_cluster_cidr'): RegisteredStep(
-    name: StepName('stamp_kube_proxy_cluster_cidr'),
-    source: 'lib/src/steps/cluster/stamp_kube_proxy_cluster_cidr.dart:18',
-    create: StampKubeProxyClusterCidr.fromArguments,
-    arguments: StampKubeProxyClusterCidr.arguments,
   ),
   StepName('delete_default_ipv4_ippool'): RegisteredStep(
     name: StepName('delete_default_ipv4_ippool'),
@@ -216,7 +209,7 @@ const Map<StepName, RegisteredStep> clusterSteps = <StepName, RegisteredStep>{
   ),
   StepName('configure_slave_apiserver_oidc_trust'): RegisteredStep(
     name: StepName('configure_slave_apiserver_oidc_trust'),
-    source: 'lib/src/steps/cluster/configure_slave_apiserver_oidc_trust.dart:19',
+    source: 'lib/src/steps/cluster/configure_slave_apiserver_oidc_trust.dart:20',
     create: ConfigureSlaveApiserverOidcTrust.fromArguments,
     arguments: ConfigureSlaveApiserverOidcTrust.arguments,
     answers: ConfigureSlaveApiserverOidcTrust.answers,
@@ -229,7 +222,7 @@ const Map<StepName, RegisteredStep> clusterSteps = <StepName, RegisteredStep>{
   ),
   StepName('write_netplan_public_src_routing'): RegisteredStep(
     name: StepName('write_netplan_public_src_routing'),
-    source: 'lib/src/steps/cluster/write_netplan_public_src_routing.dart:22',
+    source: 'lib/src/steps/cluster/write_netplan_public_src_routing.dart:26',
     create: WriteNetplanPublicSrcRouting.fromArguments,
     arguments: WriteNetplanPublicSrcRouting.arguments,
   ),
@@ -247,19 +240,19 @@ const Map<StepName, RegisteredStep> clusterSteps = <StepName, RegisteredStep>{
   ),
   StepName('write_connmark_nft_table'): RegisteredStep(
     name: StepName('write_connmark_nft_table'),
-    source: 'lib/src/steps/cluster/write_connmark_nft_table.dart:20',
+    source: 'lib/src/steps/cluster/write_connmark_nft_table.dart:21',
     create: WriteConnmarkNftTable.fromArguments,
     arguments: WriteConnmarkNftTable.arguments,
   ),
   StepName('write_public_src_routing_script'): RegisteredStep(
     name: StepName('write_public_src_routing_script'),
-    source: 'lib/src/steps/cluster/write_public_src_routing_script.dart:17',
+    source: 'lib/src/steps/cluster/write_public_src_routing_script.dart:18',
     create: WritePublicSrcRoutingScript.fromArguments,
     arguments: WritePublicSrcRoutingScript.arguments,
   ),
   StepName('write_public_src_routing_unit'): RegisteredStep(
     name: StepName('write_public_src_routing_unit'),
-    source: 'lib/src/steps/cluster/write_public_src_routing_unit.dart:17',
+    source: 'lib/src/steps/cluster/write_public_src_routing_unit.dart:18',
     create: WritePublicSrcRoutingUnit.fromArguments,
     arguments: WritePublicSrcRoutingUnit.arguments,
   ),
@@ -304,7 +297,7 @@ const Map<StepName, RegisteredStep> clusterSteps = <StepName, RegisteredStep>{
   ),
   StepName('write_cluster_issuer_manifest'): RegisteredStep(
     name: StepName('write_cluster_issuer_manifest'),
-    source: 'lib/src/steps/cluster/write_cluster_issuer_manifest.dart:14',
+    source: 'lib/src/steps/cluster/write_cluster_issuer_manifest.dart:15',
     create: WriteClusterIssuerManifest.fromArguments,
     arguments: WriteClusterIssuerManifest.arguments,
     answers: WriteClusterIssuerManifest.answers,

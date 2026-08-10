@@ -287,7 +287,7 @@ void main() {
       // service is holding from before the cluster's own network was finished.
       final ClusterMachine machine = ClusterMachine();
       final StepContext context = withStorage(machine);
-      machine.files.contents[step.manifestPath] = clusterIssuer.manifestFor(context);
+      machine.files.contents[step.manifestPath] = await clusterIssuer.manifestFor(context);
       machine.shell
         ..answers(issuerReady, '')
         ..changes('microk8s kubectl apply -f ${step.manifestPath}', () {
@@ -310,7 +310,7 @@ void main() {
     test('the budget ends here, and what it means is reported', () async {
       final ClusterMachine machine = ClusterMachine();
       final StepContext context = withStorage(machine);
-      machine.files.contents[step.manifestPath] = clusterIssuer.manifestFor(context);
+      machine.files.contents[step.manifestPath] = await clusterIssuer.manifestFor(context);
       machine.shell.answers(issuerReady, '');
 
       await expectLater(

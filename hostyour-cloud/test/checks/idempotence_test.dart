@@ -252,7 +252,6 @@ const Set<String> notCoveredByAFakeMachine = <String>{
   'apply_netplan',
   'argocd_root_app',
   'configure_kube_apiserver_oidc',
-  'configure_kube_proxy_nftables',
   'configure_slave_apiserver_oidc_trust',
   'create_install_branch',
   'create_storage_directory',
@@ -288,11 +287,12 @@ const Set<String> notCoveredByAFakeMachine = <String>{
   'remove_snap',
   'restart_cert_manager_and_reapply_cluster_issuer',
   'restart_microk8s_snap_for_pod_cidr',
+  // Its apply restarts the service that reads the file, and a fake shell records a restart without
+  // carrying it out — the same reason the two steps it replaces were named here.
+  'set_process_flag',
   'set_default_storage_class',
   'stamp_calico_pool_cidr_in_cni_manifest',
-  'stamp_fqdn',
-  'stamp_kube_proxy_cluster_cidr',
-  'stamp_revision',
+  'stamp_placeholder_in_tracked_files',
   'stamp_role',
   'vault_auth_method',
   'vault_auth_role',

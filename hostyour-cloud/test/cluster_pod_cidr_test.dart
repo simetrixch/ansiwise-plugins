@@ -18,7 +18,7 @@ void main() {
   );
 
   const String manifestPath = StampCalicoPoolCidrInCniManifest.defaultPath;
-  const String argsPath = StampKubeProxyClusterCidr.defaultPath;
+  const String argsPath = microk8sKubeProxyArguments;
   const String livePool =
       'microk8s kubectl get ippool default-ipv4-ippool -o jsonpath={.spec.cidr}';
   const String podsEverywhere =
@@ -287,14 +287,20 @@ void main() {
   });
 
   group("the stamp into the service proxy's arguments", () {
+    // The row `deploy-cluster` writes. kube-proxy decides what counts as leaving the pod network
+    // from this one line: carrying the old range it translates the wrong traffic and leaves the
+    // right traffic untranslated, which shows up as pods that reach some addresses and not others.
+    const SetProcessFlag clusterCidr = SetProcessFlag(
+      argsPath: argsPath,
+      flag: GuardPopulatedClusterPodCidrMigration.clusterCidrFlag,
+      value: podCidr,
+    );
+
     test('an existing line is replaced in place rather than a second one appended', () async {
       final ClusterMachine machine = ClusterMachine();
       machine.files.contents[argsPath] = '--proxy-mode=nftables\n--cluster-cidr=10.1.0.0/16\n';
 
-      const StampKubeProxyClusterCidr step = StampKubeProxyClusterCidr(
-        podCidr: podCidr,
-        argsPath: argsPath,
-      );
+      const SetProcessFlag step = clusterCidr;
       final StepContext context = machine.contextFor(under);
       await step.apply(context);
 
@@ -308,10 +314,7 @@ void main() {
       final ClusterMachine machine = ClusterMachine();
       machine.files.contents[argsPath] = '--proxy-mode=nftables\n';
 
-      const StampKubeProxyClusterCidr step = StampKubeProxyClusterCidr(
-        podCidr: podCidr,
-        argsPath: argsPath,
-      );
+      const SetProcessFlag step = clusterCidr;
       await step.apply(machine.contextFor(under));
       expect(machine.files.contents[argsPath], '--proxy-mode=nftables\n--cluster-cidr=$podCidr\n');
     });
@@ -320,14 +323,11 @@ void main() {
       final ClusterMachine machine = ClusterMachine();
       machine.files.contents[argsPath] = '';
 
-      const StampKubeProxyClusterCidr step = StampKubeProxyClusterCidr(
-        podCidr: podCidr,
-        argsPath: argsPath,
-      );
+      const SetProcessFlag step = clusterCidr;
       await step.apply(machine.contextFor(under));
       expect(
         machine.changing,
-        contains('snap restart ${StampKubeProxyClusterCidr.kubelite}'),
+        contains('snap restart $microk8sKubelite'),
         reason: 'the service proxy is not a process of its own',
       );
     });

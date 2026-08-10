@@ -247,7 +247,23 @@ void main() {
     for (final ResolvedStep step in deployBranch().steps) {
       expect(
         step.entry.arguments.names,
-        everyElement(isIn(<String>['repository', 'trunk', 'stages', 'commands'])),
+        everyElement(
+          isIn(<String>[
+            // Where the checkout is and what the trunk is called: the same on every machine that
+            // runs this program.
+            'repository', 'trunk',
+            // The stages the PRODUCT carries, of which an installation is exactly one, and the
+            // commands the program assumes. Both are facts about the product.
+            'stages', 'commands',
+            // What the trunk writes where an installation writes its own: the trunk's own name, and
+            // the placeholder domain. Neither names an installation — they are what an installation
+            // REPLACES, which is why they can stand in a file that ships to all of them.
+            'placeholder',
+            // Which part of the tree a stamp is confined to, and the keys it rewrites there. Both
+            // are the shape of the product's own files.
+            'tree', 'keys',
+          ]),
+        ),
         reason:
             '${step.entry.step} is given something in the program file that names one '
             'installation, and a program file ships to every installation',
@@ -516,6 +532,16 @@ void main() {
 
     int at(String name) => order().indexOf(StepName(name));
 
+    /// Where the row of the stamp that replaces [placeholder] stands.
+    ///
+    /// One step, two rows, so a step name alone finds whichever comes first. What tells them apart
+    /// is the literal each replaces, which is also the only difference the order turns on.
+    int atStamp(String placeholder) => deployBranch().steps.indexWhere(
+      (ResolvedStep step) =>
+          step.entry.step == const StepName('stamp_placeholder_in_tracked_files') &&
+          step.argumentsWithDefaults.text('placeholder') == placeholder,
+    );
+
     test('nothing is asked of the remote before the cheap local questions', () async {
       expect(at('require_git_identity'), lessThan(at('require_pushable_origin')));
     });
@@ -533,17 +559,45 @@ void main() {
       );
     });
 
+    test('both rows of the stamp are there, and each replaces what its half needs', () {
+      // The domain row replaces what the trunk carries in place of a domain, and the rule the gate
+      // measures the tree by is where that literal is written down. The revision row replaces the
+      // trunk's own name under the generator tree, on the two keys that carry a branch.
+      expect(atStamp(FqdnSelection.placeholder), isNot(-1));
+      expect(atStamp(trunk), isNot(-1));
+
+      final ResolvedStep revision = deployBranch().steps[atStamp(trunk)];
+      expect(revision.argumentsWithDefaults.text('tree'), RolePruning.generatorTree);
+      expect(revision.argumentsWithDefaults.textList('keys'), <String>[
+        'revision',
+        'targetRevision',
+      ]);
+      expect(
+        revision.argumentsWithDefaults.text('trunk'),
+        trunk,
+        reason: 'the literal this row replaces IS the trunk, and the two have to be the same word',
+      );
+
+      final ResolvedStep domain = deployBranch().steps[atStamp(FqdnSelection.placeholder)];
+      expect(
+        domain.argumentsWithDefaults.text('tree'),
+        '',
+        reason: 'the placeholder stands anywhere in the checkout, not under one directory',
+      );
+      expect(domain.argumentsWithDefaults.textList('keys'), isEmpty);
+    });
+
     test('the branch exists before anything is stamped into it', () {
-      expect(at('create_install_branch'), lessThan(at('stamp_revision')));
-      expect(at('create_install_branch'), lessThan(at('stamp_fqdn')));
+      expect(at('create_install_branch'), lessThan(atStamp(trunk)));
+      expect(at('create_install_branch'), lessThan(atStamp(FqdnSelection.placeholder)));
       expect(at('create_install_branch'), lessThan(at('stamp_role')));
     });
 
     test('the map is written after the branch is stamped and before the role reads it', () {
       // Both stamps, not one: the map names the branch of every cluster of this installation, and a
       // map written between them would hold a tree that is half retargeted and half not.
-      expect(at('stamp_revision'), lessThan(at('write_cluster_map')));
-      expect(at('stamp_fqdn'), lessThan(at('write_cluster_map')));
+      expect(atStamp(trunk), lessThan(at('write_cluster_map')));
+      expect(atStamp(FqdnSelection.placeholder), lessThan(at('write_cluster_map')));
       expect(
         at('write_cluster_map'),
         lessThan(at('stamp_role')),

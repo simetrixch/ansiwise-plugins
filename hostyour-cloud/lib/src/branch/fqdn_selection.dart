@@ -5,7 +5,7 @@
 /// a fixture, an illustration or the documentation of the stamp itself.
 ///
 /// WHY THIS IS A CLASS OF ITS OWN AND NOT A METHOD OF THE STEP. Two callers need the same answer for
-/// different reasons. `StampFqdn` asks it about a file it read off a machine, in order to rewrite it.
+/// different reasons. The stamp asks it about a file it read off a machine, in order to rewrite it.
 /// The gate asks it about a tree it walked, in order to decide whether the declaration in
 /// `branch-classes.yaml` agrees with what would really happen. When the rule was written out twice —
 /// once inside the step, once as a mirror in the gate — the two could drift, and nothing compared
@@ -54,7 +54,16 @@ final class FqdnSelection {
   /// A [text] of null is a path with nothing readable at it — absent, or bytes rather than text —
   /// and nothing is rewritten there.
   bool selects(String path, String? text) =>
-      text != null && text.contains(placeholder) && !excludesByName(path) && !text.startsWith('#!');
+      text != null && text.contains(placeholder) && holdsInstallationState(path, text);
+
+  /// Whether [path], whose content is [text], holds installation state at all.
+  ///
+  /// [selects] is this question plus the placeholder being in the file, and asks it through here so
+  /// that the two cannot come apart. Every stamp into a checkout asks this one and only differs in
+  /// which literal it then replaces: a script, a document and a chart template hold product material
+  /// whatever the literal is, and rewriting one is the failure the exclusions were paid for.
+  bool holdsInstallationState(String path, String? text) =>
+      text != null && !excludesByName(path) && !text.startsWith('#!');
 
   /// Whether what [path] is called already says it holds no installation state.
   ///
