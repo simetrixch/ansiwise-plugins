@@ -1,8 +1,5 @@
 import 'package:test/test.dart';
-
-import 'finding.dart';
-import 'naming.dart';
-import 'source_tree.dart';
+import 'package:ansiwise_checks/ansiwise_checks.dart';
 
 void main() {
   final Naming check = Naming(SourceTree.on(repositoryRoot()));

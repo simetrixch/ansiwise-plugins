@@ -1,9 +1,7 @@
 import 'package:ansiwise_api/ansiwise_api.dart';
 import 'package:hostyour_cloud/hostyour_cloud.dart';
 import 'package:test/test.dart';
-
-import 'dry_safety.dart';
-import 'step_under_probe.dart';
+import 'package:ansiwise_checks/ansiwise_checks.dart';
 
 Future<void> main() async {
   final DrySafety check = DrySafety(

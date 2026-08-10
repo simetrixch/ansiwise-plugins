@@ -34,6 +34,15 @@ dependencies:
 dev_dependencies:
   test: ^1.31.2
   lints: ^6.1.0
+  # The audits that decide whether this plugin holds the framework's contract. They used to be
+  # copied into test/checks/ here; the copies drifted, and a repair made in one was absent from the
+  # other with nothing reporting it. What stays here is the wiring that points them at THIS
+  # registry and tree, the fixtures, and every counter-probe.
+  ansiwise_checks:
+    git:
+      url: https://github.com/simetrixch/ansiwise-api.git
+      ref: master
+      path: checks
   # The checks under test/checks/ walk this tree and resolve the paths its imports name. Nothing
   # under tool/ may reach it — the gate has to start before anything is resolved — and none of it is
   # shipped, so it is a development dependency.

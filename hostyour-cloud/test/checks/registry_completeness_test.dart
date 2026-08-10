@@ -1,11 +1,7 @@
 import 'package:ansiwise_api/ansiwise_api.dart';
 import 'package:hostyour_cloud/hostyour_cloud.dart';
 import 'package:test/test.dart';
-
-import 'finding.dart';
-import 'registry_completeness.dart';
-import 'registry_reading.dart';
-import 'source_tree.dart';
+import 'package:ansiwise_checks/ansiwise_checks.dart';
 
 void main() {
   final SourceTree tree = SourceTree.on(repositoryRoot());

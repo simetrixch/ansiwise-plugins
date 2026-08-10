@@ -1,8 +1,5 @@
 import 'package:test/test.dart';
-
-import 'exec_confinement.dart';
-import 'finding.dart';
-import 'source_tree.dart';
+import 'package:ansiwise_checks/ansiwise_checks.dart';
 
 void main() {
   final ExecConfinement check = ExecConfinement(SourceTree.on(repositoryRoot()));

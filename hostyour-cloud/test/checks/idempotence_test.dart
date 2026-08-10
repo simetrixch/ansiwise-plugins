@@ -2,10 +2,9 @@ import 'package:ansiwise_api/ansiwise_api.dart';
 import 'package:ansiwise_api/testing.dart';
 import 'package:hostyour_cloud/hostyour_cloud.dart';
 import 'package:test/test.dart';
+import 'package:ansiwise_checks/ansiwise_checks.dart';
 
-import 'idempotence.dart';
 import 'step_fixtures.dart';
-import 'step_under_probe.dart';
 
 Future<void> main() async {
   final Idempotence check = Idempotence(

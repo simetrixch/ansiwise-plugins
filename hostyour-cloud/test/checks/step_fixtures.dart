@@ -18,16 +18,16 @@
 library;
 
 import 'package:ansiwise_api/testing.dart';
+import 'package:ansiwise_checks/ansiwise_checks.dart';
 import 'package:hostyour_cloud/hostyour_cloud.dart';
-
-/// Arranges [FakeShell], [FakeFiles] and [FakeHttp] for one step.
-typedef Fixture = void Function(FakeShell shell, FakeFiles files, FakeHttp http);
 
 /// What the check passes for a text argument with no default.
 ///
 /// A fixture answers for the values the check actually hands the step, not for the values a program
-/// file would. Reading it from one place here is what stops the two drifting apart.
-const String _plausibleText = 'x';
+/// file would. It is read from the package that hands them over rather than restated here, because a
+/// fixture and the prober disagreeing about this one character is a fixture arranging the wrong file
+/// and a step coming back not covered for no visible reason.
+const String _plausibleText = plausibleText;
 
 /// The home directory the passwd entry in these fixtures reports.
 const String _home = '/home/$_plausibleText';
