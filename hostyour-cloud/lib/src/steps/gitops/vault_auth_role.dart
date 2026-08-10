@@ -29,6 +29,7 @@ final class VaultAuthRole extends ReversibleStep<Map<String, Object?>?> {
     required this.role,
     required this.body,
     this.preserveList,
+    this.layout = const VaultLayout(),
   });
 
   /// Builds the step from what the program gave it.
@@ -38,6 +39,7 @@ final class VaultAuthRole extends ReversibleStep<Map<String, Object?>?> {
     role: arguments.text('role'),
     body: arguments.text('body'),
     preserveList: arguments.optionalText('preserve_list'),
+    layout: VaultLayout.fromArguments(arguments),
   );
 
   /// What this step accepts.
@@ -78,6 +80,7 @@ final class VaultAuthRole extends ReversibleStep<Map<String, Object?>?> {
           'a list field whose members something else adds to, read back from the live role and '
           'unioned in so a re-run drops none of them',
     ),
+    ...VaultLayout.arguments,
   ];
 
   /// The answers this step reads, which is what its registry entry declares.
@@ -85,6 +88,9 @@ final class VaultAuthRole extends ReversibleStep<Map<String, Object?>?> {
 
   /// The checkout this installation runs from.
   final String repository;
+
+  /// Where the profile and the credential file stand under the checkout.
+  final VaultLayout layout;
 
   /// The auth mount.
   final String mount;
@@ -100,7 +106,7 @@ final class VaultAuthRole extends ReversibleStep<Map<String, Object?>?> {
 
   @override
   Future<CheckResult> check(StepContext context) async {
-    final ClusterProfile vault = await clusterProfileFrom(context, repository);
+    final ClusterProfile vault = await clusterProfileFrom(context, repository, layout: layout);
     if (vault.refusal case final String refusal) {
       return CheckResult.blocked(refusal);
     }
@@ -110,7 +116,10 @@ final class VaultAuthRole extends ReversibleStep<Map<String, Object?>?> {
     }
     final String url = vault.url ?? '';
 
-    final RootToken token = await rootTokenFrom(context, vaultCredentialsPath(context, repository));
+    final RootToken token = await rootTokenFrom(
+      context,
+      vaultCredentialsPath(context, repository, credentials: layout.credentials),
+    );
     if (token.refusal case final String refusal) {
       return CheckResult.blocked(refusal);
     }
@@ -143,7 +152,7 @@ final class VaultAuthRole extends ReversibleStep<Map<String, Object?>?> {
 
   @override
   Future<StepPlan> plan(StepContext context) async {
-    final ClusterProfile vault = await clusterProfileFrom(context, repository);
+    final ClusterProfile vault = await clusterProfileFrom(context, repository, layout: layout);
     if (vault.refusal case final String refusal) {
       return StepPlan.nothing(refusal);
     }
@@ -156,10 +165,13 @@ final class VaultAuthRole extends ReversibleStep<Map<String, Object?>?> {
 
   @override
   Future<void> apply(StepContext context) async {
-    final ClusterProfile vault = await clusterProfileFrom(context, repository);
+    final ClusterProfile vault = await clusterProfileFrom(context, repository, layout: layout);
     final _Role written = _writtenHere(context, vault);
     final String url = vault.url ?? '';
-    final RootToken token = await rootTokenFrom(context, vaultCredentialsPath(context, repository));
+    final RootToken token = await rootTokenFrom(
+      context,
+      vaultCredentialsPath(context, repository, credentials: layout.credentials),
+    );
     final String held = token.value ?? '';
     final Map<String, Object?> declared = decodedObject(written.body) ?? const <String, Object?>{};
     final Map<String, Object?> wanted = _merged(
@@ -191,12 +203,15 @@ final class VaultAuthRole extends ReversibleStep<Map<String, Object?>?> {
   /// policies — and no credential.
   @override
   Future<Map<String, Object?>?> capture(StepContext context) async {
-    final ClusterProfile vault = await clusterProfileFrom(context, repository);
+    final ClusterProfile vault = await clusterProfileFrom(context, repository, layout: layout);
     final _Role written = _writtenHere(context, vault);
     if (written.refusal != null) {
       return null;
     }
-    final RootToken token = await rootTokenFrom(context, vaultCredentialsPath(context, repository));
+    final RootToken token = await rootTokenFrom(
+      context,
+      vaultCredentialsPath(context, repository, credentials: layout.credentials),
+    );
     if (token.value case final String held) {
       return _current(context, vault.url ?? '', held, written.path);
     }
@@ -205,12 +220,15 @@ final class VaultAuthRole extends ReversibleStep<Map<String, Object?>?> {
 
   @override
   Future<void> undo(StepContext context, Map<String, Object?>? captured) async {
-    final ClusterProfile vault = await clusterProfileFrom(context, repository);
+    final ClusterProfile vault = await clusterProfileFrom(context, repository, layout: layout);
     final _Role written = _writtenHere(context, vault);
     if (written.refusal != null) {
       return;
     }
-    final RootToken token = await rootTokenFrom(context, vaultCredentialsPath(context, repository));
+    final RootToken token = await rootTokenFrom(
+      context,
+      vaultCredentialsPath(context, repository, credentials: layout.credentials),
+    );
     if (token.value case final String held) {
       final String url = vault.url ?? '';
       if (captured == null) {

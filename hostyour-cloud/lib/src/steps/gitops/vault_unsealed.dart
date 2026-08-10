@@ -18,11 +18,13 @@ import 'vault_api.dart';
 /// of a program that also runs on a cluster which has been up for months.
 final class VaultUnsealed extends ReversibleStep<bool?> {
   /// Unseals the Vault the profile in [repository] names, with the quorum of this stage.
-  const VaultUnsealed({required this.repository});
+  const VaultUnsealed({required this.repository, this.layout = const VaultLayout()});
 
   /// Builds the step from what the program gave it.
-  factory VaultUnsealed.fromArguments(Arguments arguments) =>
-      VaultUnsealed(repository: arguments.text('repository'));
+  factory VaultUnsealed.fromArguments(Arguments arguments) => VaultUnsealed(
+    repository: arguments.text('repository'),
+    layout: VaultLayout.fromArguments(arguments),
+  );
 
   /// What this step accepts.
   static const List<ArgumentSpec> arguments = <ArgumentSpec>[
@@ -33,6 +35,7 @@ final class VaultUnsealed extends ReversibleStep<bool?> {
           "the checkout this installation runs from, which carries the cluster's own profile "
           'and the credential file the quorum was written to',
     ),
+    ...VaultLayout.arguments,
   ];
 
   /// The answers this step reads, which is what its registry entry declares.
@@ -41,9 +44,12 @@ final class VaultUnsealed extends ReversibleStep<bool?> {
   /// The checkout this installation runs from.
   final String repository;
 
+  /// Where the profile and the credential file stand under the checkout.
+  final VaultLayout layout;
+
   @override
   Future<CheckResult> check(StepContext context) async {
-    final ClusterProfile vault = await clusterProfileFrom(context, repository);
+    final ClusterProfile vault = await clusterProfileFrom(context, repository, layout: layout);
     if (vault.refusal case final String refusal) {
       return CheckResult.blocked(refusal);
     }
@@ -66,7 +72,7 @@ final class VaultUnsealed extends ReversibleStep<bool?> {
 
   @override
   Future<StepPlan> plan(StepContext context) async {
-    final ClusterProfile vault = await clusterProfileFrom(context, repository);
+    final ClusterProfile vault = await clusterProfileFrom(context, repository, layout: layout);
     if (vault.refusal case final String refusal) {
       return StepPlan.nothing(refusal);
     }
@@ -74,16 +80,20 @@ final class VaultUnsealed extends ReversibleStep<bool?> {
       'POST',
       '${vault.url}/v1/sys/unseal',
       body:
-          'one key at a time out of ${vaultCredentialsPath(context, repository)}, until Vault '
+          'one key at a time out of ${vaultCredentialsPath(context, repository, credentials: layout.credentials)}, until Vault '
           'reports itself unsealed',
     );
   }
 
   @override
   Future<void> apply(StepContext context) async {
-    final ClusterProfile vault = await clusterProfileFrom(context, repository);
+    final ClusterProfile vault = await clusterProfileFrom(context, repository, layout: layout);
     final String url = vault.url ?? '';
-    final String credentialsPath = vaultCredentialsPath(context, repository);
+    final String credentialsPath = vaultCredentialsPath(
+      context,
+      repository,
+      credentials: layout.credentials,
+    );
     final List<String> keys = unsealKeysIn(await context.files.read(credentialsPath));
 
     for (int i = 0; i < keys.length; i++) {
@@ -130,7 +140,7 @@ final class VaultUnsealed extends ReversibleStep<bool?> {
   /// needed, and it is a credential — nothing carries it beyond the request that feeds it.
   @override
   Future<bool?> capture(StepContext context) async {
-    final ClusterProfile vault = await clusterProfileFrom(context, repository);
+    final ClusterProfile vault = await clusterProfileFrom(context, repository, layout: layout);
     if (vault.refusal != null) {
       return null;
     }
@@ -142,12 +152,14 @@ final class VaultUnsealed extends ReversibleStep<bool?> {
     if (captured != true) {
       return;
     }
-    final ClusterProfile vault = await clusterProfileFrom(context, repository);
+    final ClusterProfile vault = await clusterProfileFrom(context, repository, layout: layout);
     if (vault.refusal != null) {
       return;
     }
     final String? token = rootTokenIn(
-      await context.files.read(vaultCredentialsPath(context, repository)),
+      await context.files.read(
+        vaultCredentialsPath(context, repository, credentials: layout.credentials),
+      ),
     );
     if (token == null) {
       return;
@@ -159,7 +171,11 @@ final class VaultUnsealed extends ReversibleStep<bool?> {
 
   /// Why the quorum cannot be fed back, or null when it can.
   Future<String?> _quorumRefusal(StepContext context) async {
-    final String credentialsPath = vaultCredentialsPath(context, repository);
+    final String credentialsPath = vaultCredentialsPath(
+      context,
+      repository,
+      credentials: layout.credentials,
+    );
     if (!await context.files.exists(credentialsPath)) {
       return '$credentialsPath is not on this host, and it is the only place the unseal keys are — '
           'without it nothing on this machine can bring Vault back after a restart';

@@ -34,6 +34,8 @@ final class VaultKvEntry extends IrreversibleStep {
     required this.fields,
     required this.mint,
     required this.fieldsOwnedElsewhere,
+    this.layout = const VaultLayout(),
+    this.secrets = vaultSecretsDefault,
   });
 
   /// Builds the step from what the program gave it.
@@ -44,6 +46,8 @@ final class VaultKvEntry extends IrreversibleStep {
     fields: arguments.textList('fields'),
     mint: arguments.textList('mint'),
     fieldsOwnedElsewhere: arguments.textList('fields_owned_elsewhere'),
+    layout: VaultLayout.fromArguments(arguments),
+    secrets: arguments.text('secrets_path'),
   );
 
   /// What this step accepts.
@@ -93,6 +97,16 @@ final class VaultKvEntry extends IrreversibleStep {
           'the fields another writer owns, which are left out rather than refused when their '
           'variable is still unfilled',
     ),
+    ArgumentSpec(
+      name: 'secrets_path',
+      kind: ArgumentKind.text,
+      required: false,
+      defaultValue: vaultSecretsDefault,
+      describes:
+          'where the one hand-filled input of this installation stands, under the checkout at '
+          "repository — the stage answer fills the stage's place in it",
+    ),
+    ...VaultLayout.arguments,
   ];
 
   /// The answers this step reads, which is what its registry entry declares.
@@ -100,6 +114,12 @@ final class VaultKvEntry extends IrreversibleStep {
 
   /// The checkout this installation runs from.
   final String repository;
+
+  /// Where the profile and the credential file stand under the checkout.
+  final VaultLayout layout;
+
+  /// Where the hand-filled input stands under the checkout, with the stage's place marked.
+  final String secrets;
 
   /// The key-value mount.
   final String mount;
@@ -129,7 +149,7 @@ final class VaultKvEntry extends IrreversibleStep {
 
   @override
   Future<CheckResult> check(StepContext context) async {
-    final ClusterProfile vault = await clusterProfileFrom(context, repository);
+    final ClusterProfile vault = await clusterProfileFrom(context, repository, layout: layout);
     if (vault.refusal case final String refusal) {
       return CheckResult.blocked(refusal);
     }
@@ -140,7 +160,10 @@ final class VaultKvEntry extends IrreversibleStep {
     final String url = vault.url ?? '';
     final String dataPath = _dataPath(entry.value ?? '');
 
-    final RootToken token = await rootTokenFrom(context, vaultCredentialsPath(context, repository));
+    final RootToken token = await rootTokenFrom(
+      context,
+      vaultCredentialsPath(context, repository, credentials: layout.credentials),
+    );
     if (token.refusal case final String refusal) {
       return CheckResult.blocked(refusal);
     }
@@ -191,7 +214,7 @@ final class VaultKvEntry extends IrreversibleStep {
 
   @override
   Future<StepPlan> plan(StepContext context) async {
-    final ClusterProfile vault = await clusterProfileFrom(context, repository);
+    final ClusterProfile vault = await clusterProfileFrom(context, repository, layout: layout);
     if (vault.refusal case final String refusal) {
       return StepPlan.nothing(refusal);
     }
@@ -212,10 +235,13 @@ final class VaultKvEntry extends IrreversibleStep {
 
   @override
   Future<void> apply(StepContext context) async {
-    final ClusterProfile vault = await clusterProfileFrom(context, repository);
+    final ClusterProfile vault = await clusterProfileFrom(context, repository, layout: layout);
     final String url = vault.url ?? '';
     final String dataPath = _dataPath(vault.forThisInstallation(context, path).value ?? '');
-    final RootToken token = await rootTokenFrom(context, vaultCredentialsPath(context, repository));
+    final RootToken token = await rootTokenFrom(
+      context,
+      vaultCredentialsPath(context, repository, credentials: layout.credentials),
+    );
     final _Body wanted = await _wanted(context, dataPath);
     if (wanted.isEmpty) {
       return;
@@ -266,7 +292,7 @@ final class VaultKvEntry extends IrreversibleStep {
 
   /// What this entry would hold, or why it cannot be composed.
   Future<_Body> _wanted(StepContext context, String dataPath) async {
-    final String secretsPath = vaultSecretsPath(context, repository);
+    final String secretsPath = vaultSecretsPath(context, repository, secrets: secrets);
     if (!await context.files.exists(secretsPath)) {
       return _Body.unwritable(
         '$secretsPath is not on this host, and it is the one file an operator fills in — every '

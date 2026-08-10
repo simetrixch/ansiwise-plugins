@@ -48,10 +48,10 @@ final Map<String, Fixture> stepFixtures = <String, Fixture>{
   'kubernetes_object': (FakeShell shell, FakeFiles files, FakeHttp http) {
     const String file = '$_plausibleText/$_plausibleText';
     files.contents[file] = 'kind: Namespace\n';
-    shell.fails('kubectl diff --filename $file');
+    shell.fails('microk8s kubectl diff --filename $file');
     shell.changes(
-      'kubectl apply --filename $file',
-      () => shell.answers('kubectl diff --filename $file', ''),
+      'microk8s kubectl apply --filename $file',
+      () => shell.answers('microk8s kubectl diff --filename $file', ''),
     );
   },
 

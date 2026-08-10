@@ -509,8 +509,11 @@ void main() {
 /// A machine carrying the two tools deploy-gitops is made of.
 ///
 /// The head gate asks for them before anything is applied, so a fixture that did not answer would be
-/// a machine with no helm and no kubectl — every run against it stopping at the first step, which is
-/// what the gate is for and not what these fixtures are for.
+/// a machine with no helm and no cluster client — every run against it stopping at the first step,
+/// which is what the gate is for and not what these fixtures are for.
+///
+/// The client is `microk8s`, which is the command the steps start. A bare `kubectl` exists on such
+/// a machine too, as a shell alias the cluster program writes, but nothing here starts it.
 FakeShell gitopsToolsPresent() => FakeShell()
   ..answers('command -v helm', '/usr/local/bin/helm\n')
-  ..answers('command -v kubectl', '/usr/local/bin/kubectl\n');
+  ..answers('command -v microk8s', '/snap/bin/microk8s\n');

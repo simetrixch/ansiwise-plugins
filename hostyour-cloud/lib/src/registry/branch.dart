@@ -86,7 +86,7 @@ const Map<StepName, RegisteredStep> branchSteps = <StepName, RegisteredStep>{
   ),
   StepName('stamp_cluster_profile'): RegisteredStep(
     name: StepName('stamp_cluster_profile'),
-    source: 'lib/src/steps/branch/stamp_cluster_profile.dart:25',
+    source: 'lib/src/steps/branch/stamp_cluster_profile.dart:36',
     create: StampClusterProfile.fromArguments,
     arguments: StampClusterProfile.arguments,
     answers: StampClusterProfile.answers,

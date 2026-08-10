@@ -1,4 +1,5 @@
 import 'package:ansiwise_api/ansiwise_api.dart';
+import '../kubectl.dart';
 import 'guard_populated_cluster_pod_cidr_migration.dart';
 import 'require_pod_cidr_free_of_reserved_ranges.dart';
 
@@ -17,11 +18,13 @@ import 'require_pod_cidr_free_of_reserved_ranges.dart';
 /// the old one simply hands them addresses out of the old one again.
 final class RecycleKubeSystemPodIps extends IrreversibleStep {
   /// Recreates every pod of the system namespace whose address is outside [podCidr].
-  const RecycleKubeSystemPodIps({required this.podCidr});
+  const RecycleKubeSystemPodIps({required this.podCidr, this.kubectl = const Kubectl()});
 
   /// Builds the step from what the program gave it.
-  factory RecycleKubeSystemPodIps.fromArguments(Arguments arguments) =>
-      RecycleKubeSystemPodIps(podCidr: arguments.text('pod_cidr'));
+  factory RecycleKubeSystemPodIps.fromArguments(Arguments arguments) => RecycleKubeSystemPodIps(
+    podCidr: arguments.text('pod_cidr'),
+    kubectl: Kubectl.fromArguments(arguments),
+  );
 
   /// What this step accepts.
   static const List<ArgumentSpec> arguments = <ArgumentSpec>[
@@ -30,10 +33,14 @@ final class RecycleKubeSystemPodIps extends IrreversibleStep {
       kind: ArgumentKind.text,
       describes: 'the address range every pod on this cluster is given an address out of',
     ),
+    Kubectl.argument,
   ];
 
   /// The range every pod gets an address out of.
   final String podCidr;
+
+  /// How the cluster is reached.
+  final Kubectl kubectl;
 
   @override
   String get irreversibleReason =>
@@ -63,11 +70,9 @@ final class RecycleKubeSystemPodIps extends IrreversibleStep {
   @override
   Future<StepPlan> plan(StepContext context) async {
     final List<_Pod> stale = _stale(await _pods(context) ?? const <_Pod>[]);
-    return StepPlan.argv(<String>[
-      ..._delete,
-      for (final _Pod pod in stale) pod.name,
-      '--wait=false',
-    ]);
+    return StepPlan.argv(
+      kubectl.argv(<String>[..._delete, for (final _Pod pod in stale) pod.name, '--wait=false']),
+    );
   }
 
   @override
@@ -77,10 +82,10 @@ final class RecycleKubeSystemPodIps extends IrreversibleStep {
       context.log.debug(
         '${pod.name} holds ${pod.address}, which is outside $podCidr — recreating it',
       );
-      final List<String> argv = <String>[..._delete, pod.name, '--wait=false'];
-      final CommandResult deleted = await context.shell.run(Command(argv.first, argv.sublist(1)));
+      final Command delete = kubectl.command(<String>[..._delete, pod.name, '--wait=false']);
+      final CommandResult deleted = await context.shell.run(delete);
       if (!deleted.ok) {
-        throw CommandFailed(argv: argv, exitCode: deleted.exitCode, stderr: deleted.stderr);
+        throw CommandFailed(argv: delete.argv, exitCode: deleted.exitCode, stderr: deleted.stderr);
       }
     }
   }
@@ -99,8 +104,7 @@ final class RecycleKubeSystemPodIps extends IrreversibleStep {
 
   Future<List<_Pod>?> _pods(StepContext context) async {
     final CommandResult pods = await context.shell.run(
-      const Command.observing('microk8s', <String>[
-        'kubectl',
+      kubectl.observing(<String>[
         '-n',
         GuardPopulatedClusterPodCidrMigration.systemNamespace,
         'get',
@@ -120,8 +124,6 @@ final class RecycleKubeSystemPodIps extends IrreversibleStep {
   }
 
   static const List<String> _delete = <String>[
-    'microk8s',
-    'kubectl',
     '-n',
     GuardPopulatedClusterPodCidrMigration.systemNamespace,
     'delete',

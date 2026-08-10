@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:ansiwise_api/ansiwise_api.dart';
+import '../kubectl.dart';
 import 'detect_host_iptables_backend.dart';
 import 'reapply_calico_manifest.dart';
 
@@ -22,11 +23,13 @@ import 'reapply_calico_manifest.dart';
 /// every agent pod with it.
 final class AlignCalicoBackend extends ReversibleStep<String?> {
   /// Pins the agent to the machine's backend, giving the replacement [rolloutTimeoutSeconds].
-  const AlignCalicoBackend({required this.rolloutTimeoutSeconds});
+  const AlignCalicoBackend({required this.rolloutTimeoutSeconds, this.kubectl = const Kubectl()});
 
   /// Builds the step from what the program gave it.
-  factory AlignCalicoBackend.fromArguments(Arguments arguments) =>
-      AlignCalicoBackend(rolloutTimeoutSeconds: arguments.integer('rollout_timeout_seconds'));
+  factory AlignCalicoBackend.fromArguments(Arguments arguments) => AlignCalicoBackend(
+    rolloutTimeoutSeconds: arguments.integer('rollout_timeout_seconds'),
+    kubectl: Kubectl.fromArguments(arguments),
+  );
 
   /// What this step accepts.
   static const List<ArgumentSpec> arguments = <ArgumentSpec>[
@@ -37,6 +40,7 @@ final class AlignCalicoBackend extends ReversibleStep<String?> {
       required: false,
       defaultValue: 120,
     ),
+    Kubectl.argument,
   ];
 
   /// The object holding the agent's own settings.
@@ -47,6 +51,9 @@ final class AlignCalicoBackend extends ReversibleStep<String?> {
 
   /// How long the replacement is given.
   final int rolloutTimeoutSeconds;
+
+  /// How the cluster is reached.
+  final Kubectl kubectl;
 
   @override
   Future<CheckResult> check(StepContext context) async {
@@ -72,7 +79,7 @@ final class AlignCalicoBackend extends ReversibleStep<String?> {
   @override
   Future<StepPlan> plan(StepContext context) async {
     final String wanted = _wanted(await DetectHostIptablesBackend.detect(context));
-    return StepPlan.argv(_patch(wanted));
+    return StepPlan.argv(kubectl.argv(_patch(wanted)));
   }
 
   @override
@@ -104,15 +111,9 @@ final class AlignCalicoBackend extends ReversibleStep<String?> {
   }
 
   /// The agent's pinned backend, the empty string when it has none, or null when it cannot be read.
-  static Future<String?> _live(StepContext context) async {
+  Future<String?> _live(StepContext context) async {
     final CommandResult live = await context.shell.run(
-      const Command.observing('microk8s', <String>[
-        'kubectl',
-        'get',
-        configuration,
-        '-o',
-        'jsonpath={.spec.iptablesBackend}',
-      ]),
+      kubectl.observing(<String>['get', configuration, '-o', 'jsonpath={.spec.iptablesBackend}']),
     );
     return live.ok ? live.trimmed : null;
   }
@@ -121,9 +122,7 @@ final class AlignCalicoBackend extends ReversibleStep<String?> {
   static String _wanted(String backend) =>
       backend == DetectHostIptablesBackend.legacy ? 'Legacy' : 'NFT';
 
-  static List<String> _patch(String backend) => <String>[
-    'microk8s',
-    'kubectl',
+  List<String> _patch(String backend) => <String>[
     'patch',
     configuration,
     '--type',
@@ -136,8 +135,7 @@ final class AlignCalicoBackend extends ReversibleStep<String?> {
 
   Future<void> _rollAgent(StepContext context) async {
     await context.shell.run(
-      const Command('microk8s', <String>[
-        'kubectl',
+      kubectl.command(<String>[
         '-n',
         ReapplyCalicoManifest.namespace,
         'rollout',
@@ -146,8 +144,7 @@ final class AlignCalicoBackend extends ReversibleStep<String?> {
       ]),
     );
     await context.shell.run(
-      Command('microk8s', <String>[
-        'kubectl',
+      kubectl.command(<String>[
         '-n',
         ReapplyCalicoManifest.namespace,
         'rollout',
@@ -158,10 +155,11 @@ final class AlignCalicoBackend extends ReversibleStep<String?> {
     );
   }
 
-  Future<void> _mustRun(StepContext context, List<String> argv) async {
-    final CommandResult answer = await context.shell.run(Command(argv.first, argv.sublist(1)));
+  Future<void> _mustRun(StepContext context, List<String> arguments) async {
+    final Command command = kubectl.command(arguments);
+    final CommandResult answer = await context.shell.run(command);
     if (!answer.ok) {
-      throw CommandFailed(argv: argv, exitCode: answer.exitCode, stderr: answer.stderr);
+      throw CommandFailed(argv: command.argv, exitCode: answer.exitCode, stderr: answer.stderr);
     }
   }
 }

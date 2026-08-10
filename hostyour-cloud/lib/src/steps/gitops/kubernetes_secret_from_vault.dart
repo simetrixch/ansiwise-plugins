@@ -1,5 +1,6 @@
 import 'package:ansiwise_api/ansiwise_api.dart';
 
+import '../kubectl.dart';
 import 'argument_text.dart';
 import 'cluster_profile.dart';
 import 'vault_api.dart';
@@ -37,6 +38,8 @@ final class KubernetesSecretFromVault extends ReversibleStep<bool> {
     required this.namespace,
     required this.fields,
     required this.staging,
+    this.kubectl = const Kubectl(),
+    this.layout = const VaultLayout(),
   });
 
   /// Builds the step from what the program gave it.
@@ -48,6 +51,8 @@ final class KubernetesSecretFromVault extends ReversibleStep<bool> {
     namespace: arguments.text('namespace'),
     fields: arguments.textList('fields'),
     staging: arguments.text('staging'),
+    kubectl: Kubectl.fromArguments(arguments),
+    layout: VaultLayout.fromArguments(arguments),
   );
 
   /// What this step accepts.
@@ -91,6 +96,8 @@ final class KubernetesSecretFromVault extends ReversibleStep<bool> {
       kind: ArgumentKind.text,
       describes: 'the directory the manifest is written in and removed from again',
     ),
+    Kubectl.argument,
+    ...VaultLayout.arguments,
   ];
 
   /// The answers this step reads, which is what its registry entry declares.
@@ -117,6 +124,17 @@ final class KubernetesSecretFromVault extends ReversibleStep<bool> {
   /// Where the manifest is written and removed again.
   final String staging;
 
+  /// How the cluster is reached.
+  final Kubectl kubectl;
+
+  /// Where the secret store's own facts stand, and under which names.
+  ///
+  /// This step reads the same profile and the same credential file the vault family reads, so it
+  /// declares the same names. A step that took the layout from a row for eight of them and from a
+  /// literal for the ninth would open a path the operator never configured, and only for the
+  /// Secrets — the rest of the run would finish.
+  final VaultLayout layout;
+
   /// `0600` — the file holds every value of the Secret in the clear for as long as the apply takes.
   static const int mode = 0x180;
 
@@ -135,7 +153,7 @@ final class KubernetesSecretFromVault extends ReversibleStep<bool> {
 
   @override
   Future<StepPlan> plan(StepContext context) async =>
-      StepPlan.argv(<String>['kubectl', 'apply', '--filename', pathFor()]);
+      StepPlan.argv(kubectl.argv(<String>['apply', '--filename', pathFor()]));
 
   @override
   Future<void> apply(StepContext context) async {
@@ -146,10 +164,10 @@ final class KubernetesSecretFromVault extends ReversibleStep<bool> {
     final String file = pathFor();
     await context.files.write(file, manifestOf(entry.values), mode: mode);
     try {
-      final List<String> argv = <String>['kubectl', 'apply', '--filename', file];
-      final CommandResult applied = await context.shell.run(Command('kubectl', argv.sublist(1)));
+      final Command apply = kubectl.command(<String>['apply', '--filename', file]);
+      final CommandResult applied = await context.shell.run(apply);
       if (!applied.ok) {
-        throw CommandFailed(argv: argv, exitCode: applied.exitCode, stderr: applied.stderr);
+        throw CommandFailed(argv: apply.argv, exitCode: applied.exitCode, stderr: applied.stderr);
       }
     } finally {
       // In a finally: a failed apply would otherwise leave every value of the Secret standing in
@@ -176,7 +194,7 @@ final class KubernetesSecretFromVault extends ReversibleStep<bool> {
       return;
     }
     await context.shell.run(
-      Command('kubectl', <String>[
+      kubectl.command(<String>[
         'delete',
         'secret',
         name,
@@ -190,15 +208,7 @@ final class KubernetesSecretFromVault extends ReversibleStep<bool> {
   /// Whether the Secret this step writes stands in its namespace.
   Future<bool> _isThere(StepContext context) async {
     final CommandResult found = await context.shell.run(
-      Command.observing('kubectl', <String>[
-        'get',
-        'secret',
-        name,
-        '--namespace',
-        namespace,
-        '-o',
-        'name',
-      ]),
+      kubectl.observing(<String>['get', 'secret', name, '--namespace', namespace, '-o', 'name']),
     );
     return found.ok;
   }
@@ -224,7 +234,7 @@ final class KubernetesSecretFromVault extends ReversibleStep<bool> {
 
   /// The fields this Secret carries, read out of the store.
   Future<_Entry> _read(StepContext context) async {
-    final ClusterProfile store = await clusterProfileFrom(context, repository);
+    final ClusterProfile store = await clusterProfileFrom(context, repository, layout: layout);
     if (store.refusal case final String refusal) {
       return _Entry.unreadable(refusal);
     }
@@ -232,7 +242,10 @@ final class KubernetesSecretFromVault extends ReversibleStep<bool> {
     if (entry.refusal case final String refusal) {
       return _Entry.unreadable(refusal);
     }
-    final RootToken token = await rootTokenFrom(context, vaultCredentialsPath(context, repository));
+    final RootToken token = await rootTokenFrom(
+      context,
+      vaultCredentialsPath(context, repository, credentials: layout.credentials),
+    );
     if (token.refusal case final String refusal) {
       return _Entry.unreadable(refusal);
     }

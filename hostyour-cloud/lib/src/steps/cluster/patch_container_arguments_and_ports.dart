@@ -2,6 +2,8 @@ import 'dart:convert';
 
 import 'package:ansiwise_api/ansiwise_api.dart';
 
+import '../kubectl.dart';
+
 /// Makes one container of one workload carry the arguments and publish the ports a program names,
 /// and makes the pods that are already running carry them too.
 ///
@@ -51,6 +53,7 @@ final class PatchContainerArgumentsAndPorts extends ReversibleStep<ContainerAddi
     required this.containerArguments,
     required this.ports,
     required this.rolloutTimeoutSeconds,
+    this.kubectl = const Kubectl(),
   });
 
   /// Builds the step from what the program gave it.
@@ -63,6 +66,7 @@ final class PatchContainerArgumentsAndPorts extends ReversibleStep<ContainerAddi
         containerArguments: arguments.textList('arguments'),
         ports: arguments.textList('ports'),
         rolloutTimeoutSeconds: arguments.integer('rollout_timeout_seconds'),
+        kubectl: Kubectl.fromArguments(arguments),
       );
 
   /// What this step accepts.
@@ -106,6 +110,7 @@ final class PatchContainerArgumentsAndPorts extends ReversibleStep<ContainerAddi
       required: false,
       defaultValue: 90,
     ),
+    Kubectl.argument,
   ];
 
   /// The phase of a pod that is stuck waiting for something it cannot have.
@@ -134,6 +139,9 @@ final class PatchContainerArgumentsAndPorts extends ReversibleStep<ContainerAddi
 
   /// How long the replacements are given.
   final int rolloutTimeoutSeconds;
+
+  /// How the cluster is reached.
+  final Kubectl kubectl;
 
   /// The workload as the cluster client addresses it in a rollout.
   String get workload => '$kind/$name';
@@ -227,20 +235,21 @@ final class PatchContainerArgumentsAndPorts extends ReversibleStep<ContainerAddi
           ? StepPlan.nothing(
               'the declaration and every running pod of $name carry what this program asks for',
             )
-          : StepPlan.argv(_patchCommand(patch));
+          : StepPlan.argv(kubectl.argv(_patchCommand(patch)));
     }
     // A plan carries one command. Of the two the apply would run, the deletion is the one whose
     // consequence cannot be taken back, so the plan names it and the log beside it says the rest.
     if (patch != null) {
       context.log.info(
-        'before the deletion the declaration is patched: ${_patchCommand(patch).join(' ')}',
+        'before the deletion the declaration is patched: '
+        '${kubectl.argv(_patchCommand(patch)).join(' ')}',
       );
     }
     context.log.warn(
       'every pod this plan names is deleted, and nothing answers on the ports it holds until its '
       'replacement is up — the requests refused in between are not made again',
     );
-    return StepPlan.argv(<String>[..._delete, ...podsToDelete, '--grace-period=10']);
+    return StepPlan.argv(kubectl.argv(<String>[..._delete, ...podsToDelete, '--grace-period=10']));
   }
 
   @override
@@ -376,10 +385,8 @@ final class PatchContainerArgumentsAndPorts extends ReversibleStep<ContainerAddi
     return additions.isEmpty ? null : jsonEncode(additions);
   }
 
-  /// The command that applies [patch] to this workload.
+  /// What applies [patch] to this workload, after the words the client is invoked with.
   List<String> _patchCommand(String patch) => <String>[
-    'microk8s',
-    'kubectl',
     '-n',
     namespace,
     'patch',
@@ -421,8 +428,6 @@ final class PatchContainerArgumentsAndPorts extends ReversibleStep<ContainerAddi
       await _mustRun(context, <String>[..._delete, pod.name, '--grace-period=10']);
     }
     await _mustRun(context, <String>[
-      'microk8s',
-      'kubectl',
       '-n',
       namespace,
       'rollout',
@@ -435,16 +440,7 @@ final class PatchContainerArgumentsAndPorts extends ReversibleStep<ContainerAddi
   /// The workload as the cluster holds it, or null when it cannot be read.
   Future<_Workload?> _read(StepContext context) async {
     final CommandResult read = await context.shell.run(
-      Command.observing('microk8s', <String>[
-        'kubectl',
-        '-n',
-        namespace,
-        'get',
-        kind,
-        name,
-        '-o',
-        'json',
-      ]),
+      kubectl.observing(<String>['-n', namespace, 'get', kind, name, '-o', 'json']),
     );
     return read.ok ? _Workload.read(_decoded(read.stdout)) : null;
   }
@@ -457,17 +453,7 @@ final class PatchContainerArgumentsAndPorts extends ReversibleStep<ContainerAddi
   /// first time one of them was edited.
   Future<List<_Pod>?> _pods(StepContext context, String selector) async {
     final CommandResult read = await context.shell.run(
-      Command.observing('microk8s', <String>[
-        'kubectl',
-        '-n',
-        namespace,
-        'get',
-        'pods',
-        '-l',
-        selector,
-        '-o',
-        'json',
-      ]),
+      kubectl.observing(<String>['-n', namespace, 'get', 'pods', '-l', selector, '-o', 'json']),
     );
     if (!read.ok) {
       return null;
@@ -482,12 +468,13 @@ final class PatchContainerArgumentsAndPorts extends ReversibleStep<ContainerAddi
     ];
   }
 
-  List<String> get _delete => <String>['microk8s', 'kubectl', '-n', namespace, 'delete', 'pod'];
+  List<String> get _delete => <String>['-n', namespace, 'delete', 'pod'];
 
-  Future<void> _mustRun(StepContext context, List<String> argv) async {
-    final CommandResult answer = await context.shell.run(Command(argv.first, argv.sublist(1)));
+  Future<void> _mustRun(StepContext context, List<String> arguments) async {
+    final Command command = kubectl.command(arguments);
+    final CommandResult answer = await context.shell.run(command);
     if (!answer.ok) {
-      throw CommandFailed(argv: argv, exitCode: answer.exitCode, stderr: answer.stderr);
+      throw CommandFailed(argv: command.argv, exitCode: answer.exitCode, stderr: answer.stderr);
     }
   }
 

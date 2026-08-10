@@ -2,6 +2,8 @@ import 'dart:convert';
 
 import 'package:ansiwise_api/ansiwise_api.dart';
 
+import '../kubectl.dart';
+
 /// Gives the identity provider's administrator group its rights on this cluster.
 ///
 /// The other half of the API server wiring, and neither half works alone. The arguments make the
@@ -23,6 +25,7 @@ final class OidcAdminsBinding extends ReversibleStep<bool> {
     required this.group,
     required this.groupsPrefix,
     required this.clusterRole,
+    this.kubectl = const Kubectl(),
   });
 
   /// Builds the step from what the program gave it.
@@ -31,6 +34,7 @@ final class OidcAdminsBinding extends ReversibleStep<bool> {
     group: arguments.text('group'),
     groupsPrefix: arguments.text('groups_prefix'),
     clusterRole: arguments.text('cluster_role'),
+    kubectl: Kubectl.fromArguments(arguments),
   );
 
   /// What this step accepts.
@@ -58,6 +62,7 @@ final class OidcAdminsBinding extends ReversibleStep<bool> {
       kind: ArgumentKind.text,
       describes: 'the role that group is given',
     ),
+    Kubectl.argument,
   ];
 
   /// The binding's name.
@@ -72,13 +77,16 @@ final class OidcAdminsBinding extends ReversibleStep<bool> {
   /// The role the group is given.
   final String clusterRole;
 
+  /// How the cluster is reached.
+  final Kubectl kubectl;
+
   /// The group name as the cluster sees it.
   String get prefixedGroup => '$groupsPrefix$group';
 
   @override
   Future<CheckResult> check(StepContext context) async {
     final CommandResult read = await context.shell.run(
-      Command.observing('kubectl', <String>['get', 'clusterrolebinding', name, '-o', 'json']),
+      kubectl.observing(<String>['get', 'clusterrolebinding', name, '-o', 'json']),
     );
     if (!read.ok) {
       return const CheckResult.ready();
@@ -109,7 +117,7 @@ final class OidcAdminsBinding extends ReversibleStep<bool> {
   }
 
   @override
-  Future<StepPlan> plan(StepContext context) async => StepPlan.argv(_create);
+  Future<StepPlan> plan(StepContext context) async => StepPlan.argv(kubectl.argv(_create));
 
   @override
   Future<void> apply(StepContext context) async {
@@ -117,11 +125,15 @@ final class OidcAdminsBinding extends ReversibleStep<bool> {
     // right shape by a create, and the parts that drift are the parts that decide who holds
     // cluster-wide rights.
     await context.shell.run(
-      Command('kubectl', <String>['delete', 'clusterrolebinding', name, '--ignore-not-found']),
+      kubectl.command(<String>['delete', 'clusterrolebinding', name, '--ignore-not-found']),
     );
-    final CommandResult created = await context.shell.run(Command('kubectl', _create.sublist(1)));
+    final CommandResult created = await context.shell.run(kubectl.command(_create));
     if (!created.ok) {
-      throw CommandFailed(argv: _create, exitCode: created.exitCode, stderr: created.stderr);
+      throw CommandFailed(
+        argv: kubectl.argv(_create),
+        exitCode: created.exitCode,
+        stderr: created.stderr,
+      );
     }
   }
 
@@ -135,7 +147,7 @@ final class OidcAdminsBinding extends ReversibleStep<bool> {
   @override
   Future<bool> capture(StepContext context) async {
     final CommandResult read = await context.shell.run(
-      Command.observing('kubectl', <String>['get', 'clusterrolebinding', name, '-o', 'name']),
+      kubectl.observing(<String>['get', 'clusterrolebinding', name, '-o', 'name']),
     );
     return read.ok;
   }
@@ -146,12 +158,11 @@ final class OidcAdminsBinding extends ReversibleStep<bool> {
       return;
     }
     await context.shell.run(
-      Command('kubectl', <String>['delete', 'clusterrolebinding', name, '--ignore-not-found']),
+      kubectl.command(<String>['delete', 'clusterrolebinding', name, '--ignore-not-found']),
     );
   }
 
   List<String> get _create => <String>[
-    'kubectl',
     'create',
     'clusterrolebinding',
     name,

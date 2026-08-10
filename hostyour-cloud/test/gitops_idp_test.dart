@@ -59,7 +59,7 @@ void main() {
       // for a reason that has nothing to do with the identity provider.
       final FakeShell shell = FakeShell()
         ..answers('command -v helm', '/usr/local/bin/helm\n')
-        ..answers('command -v kubectl', '/usr/local/bin/kubectl\n');
+        ..answers('command -v microk8s', '/snap/bin/microk8s\n');
       final FakeFiles files = FakeFiles(<String, String>{
         '/srv/hostyour-cloud/configs/config.dev': 'ENABLE_IDP=false\n',
       });
@@ -99,7 +99,14 @@ void main() {
 
       // Skipped and not failed. A component nobody asked for is an answer about this installation,
       // and the run says which condition gave it.
-      expect(record.exitCode, 0);
+      expect(
+        record.exitCode,
+        0,
+        reason: record.steps
+            .where((StepRecord each) => each.verdict is Failed)
+            .map((StepRecord each) => '${each.step}: ${(each.verdict as Failed).reason}')
+            .join(' | '),
+      );
       expect(record.issues, isEmpty);
       final StepRecord flags = record.steps.firstWhere(
         (StepRecord step) => step.step == const StepName('configure_kube_apiserver_oidc'),
@@ -192,7 +199,7 @@ void main() {
 
     test('the binding carries the prefix the arguments add', () async {
       final FakeShell shell = FakeShell()
-        ..fails('kubectl get clusterrolebinding oidc-platform-admins -o json');
+        ..fails('microk8s kubectl get clusterrolebinding oidc-platform-admins -o json');
       final ({StepContext context, MemoryRecorder recorder}) it = contextOf(
         shell: shell,
         files: FakeFiles(),

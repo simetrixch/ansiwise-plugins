@@ -10,9 +10,11 @@ import 'vault_api.dart';
 /// reads is behind them.
 ///
 /// **The address comes from the profile and the credential file from the stage answer.** Neither is
-/// a step argument: the address is one installation's and is read out of `cluster/profile.yaml`
-/// where the branch stamp wrote it, and the file name carries the stage the operator answered. A
-/// program file that carried either would ship one installation's values to every installation.
+/// a step argument: the address is one installation's and is read out of the profile where the
+/// branch stamp wrote it, and the file name carries the stage the operator answered. A program file
+/// that carried either would ship one installation's values to every installation. What a row may
+/// say is only WHERE the profile and the file stand — the layout, whose defaults are this
+/// platform's own.
 ///
 /// **The credential file is never written over.** Three separate incidents in the shell this
 /// replaces were the same one: a placeholder written into an existing credential file, destroying
@@ -30,13 +32,19 @@ import 'vault_api.dart';
 /// would put it into the scrollback of every terminal and the record of every run.
 final class VaultInit extends IrreversibleStep {
   /// Initializes the Vault the profile in [repository] names.
-  const VaultInit({required this.repository, required this.keyShares, required this.keyThreshold});
+  const VaultInit({
+    required this.repository,
+    required this.keyShares,
+    required this.keyThreshold,
+    this.layout = const VaultLayout(),
+  });
 
   /// Builds the step from what the program gave it.
   factory VaultInit.fromArguments(Arguments arguments) => VaultInit(
     repository: arguments.text('repository'),
     keyShares: arguments.integer('key_shares'),
     keyThreshold: arguments.integer('key_threshold'),
+    layout: VaultLayout.fromArguments(arguments),
   );
 
   /// What this step accepts.
@@ -60,6 +68,7 @@ final class VaultInit extends IrreversibleStep {
       defaultValue: 3,
       describes: 'how many of those keys have to be fed back to unseal',
     ),
+    ...VaultLayout.arguments,
   ];
 
   /// The answers this step reads, which is what its registry entry declares.
@@ -70,6 +79,9 @@ final class VaultInit extends IrreversibleStep {
 
   /// The checkout this installation runs from.
   final String repository;
+
+  /// Where the profile and the credential file stand under the checkout.
+  final VaultLayout layout;
 
   /// How many shares the quorum is split into.
   final int keyShares;
@@ -85,12 +97,16 @@ final class VaultInit extends IrreversibleStep {
 
   @override
   Future<CheckResult> check(StepContext context) async {
-    final ClusterProfile vault = await clusterProfileFrom(context, repository);
+    final ClusterProfile vault = await clusterProfileFrom(context, repository, layout: layout);
     if (vault.refusal case final String refusal) {
       return CheckResult.blocked(refusal);
     }
     final String url = vault.url ?? '';
-    final String credentialsPath = vaultCredentialsPath(context, repository);
+    final String credentialsPath = vaultCredentialsPath(
+      context,
+      repository,
+      credentials: layout.credentials,
+    );
 
     final String? held = await _credentialsRefusal(context, credentialsPath);
     if (held != null) {
@@ -129,7 +145,7 @@ final class VaultInit extends IrreversibleStep {
 
   @override
   Future<StepPlan> plan(StepContext context) async {
-    final ClusterProfile vault = await clusterProfileFrom(context, repository);
+    final ClusterProfile vault = await clusterProfileFrom(context, repository, layout: layout);
     if (vault.refusal case final String refusal) {
       return StepPlan.nothing(refusal);
     }
@@ -138,15 +154,19 @@ final class VaultInit extends IrreversibleStep {
       '${vault.url}/v1/sys/init',
       body:
           'a quorum of $keyShares keys, $keyThreshold of which unseal, written to '
-          '${vaultCredentialsPath(context, repository)}',
+          '${vaultCredentialsPath(context, repository, credentials: layout.credentials)}',
     );
   }
 
   @override
   Future<void> apply(StepContext context) async {
-    final ClusterProfile vault = await clusterProfileFrom(context, repository);
+    final ClusterProfile vault = await clusterProfileFrom(context, repository, layout: layout);
     final String url = vault.url ?? '';
-    final String credentialsPath = vaultCredentialsPath(context, repository);
+    final String credentialsPath = vaultCredentialsPath(
+      context,
+      repository,
+      credentials: layout.credentials,
+    );
 
     final HttpAnswer answer = await context.http.send(
       vaultWrite(

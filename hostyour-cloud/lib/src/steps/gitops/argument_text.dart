@@ -99,7 +99,7 @@ extension ArgumentPlaceholders on ClusterProfile {
       if (clusterName case final String name) {
         written = written.replaceAll(clusterPlaceholder, name);
       } else {
-        return ArgumentText.unknown(_missing(path, clusterNameKey, clusterPlaceholder, text));
+        return ArgumentText.unknown(_missing(path, layout.nameKey, clusterPlaceholder, text));
       }
     }
     if (written.contains(kubernetesMountPlaceholder)) {
@@ -107,7 +107,7 @@ extension ArgumentPlaceholders on ClusterProfile {
         written = written.replaceAll(kubernetesMountPlaceholder, mount);
       } else {
         return ArgumentText.unknown(
-          _missing(path, kubernetesAuthPathKey, kubernetesMountPlaceholder, text),
+          _missing(path, layout.authPathKey, kubernetesMountPlaceholder, text),
         );
       }
     }

@@ -88,21 +88,43 @@ const List<String> vaultAnswers = <String>[vaultStageAnswer];
 /// The name the stage is answered under, which is what names the credential file.
 const String vaultStageAnswer = 'stage';
 
+/// The text a configured path carries where the stage belongs — the name of the stage answer in
+/// the angle brackets every marked slot of this family wears.
+const String _stageSlot = '<$vaultStageAnswer>';
+
+/// Where the quorum and the root token are under the checkout, when a program names nowhere else.
+///
+/// The marked stage keeps the file beside the other secrets of its stage. The phase that
+/// initializes Vault writes it here, and the host-side unsealer reads it from the same place.
+const String vaultCredentialsDefault = 'secrets/vault-$_stageSlot.txt';
+
+/// Where the one hand-filled input of this installation is under the checkout, when a program
+/// names nowhere else.
+///
+/// The same shape as the credential file: the file stands beside the other secrets of its stage,
+/// and the branch that generated this installation is what put it there.
+const String vaultSecretsDefault = 'secrets/secrets.$_stageSlot';
+
 /// Where the quorum and the root token are, under the checkout at [repository].
 ///
-/// Composed from the checkout and the stage answer, because the file is this installation's own and
-/// stands beside the other secrets of its stage. The phase that initializes Vault writes it here,
-/// and the host-side unsealer reads it from the same place.
-String vaultCredentialsPath(StepContext context, String repository) =>
-    '$repository/secrets/vault-${context.answers.text(vaultStageAnswer)}.txt';
+/// The step's row says where ([credentials]), and this run's stage answer fills the stage's place
+/// in it — the file is this installation's own, so no program file can write its name out whole.
+String vaultCredentialsPath(
+  StepContext context,
+  String repository, {
+  String credentials = vaultCredentialsDefault,
+}) => '$repository/${_stageFilled(context, credentials)}';
 
 /// Where the one hand-filled input of this installation is, under the checkout at [repository].
-///
-/// Composed from the checkout and the stage answer, the same shape as the credential file: the file
-/// stands beside the other secrets of its stage, and the branch that generated this installation is
-/// what put it there.
-String vaultSecretsPath(StepContext context, String repository) =>
-    '$repository/secrets/secrets.${context.answers.text(vaultStageAnswer)}';
+String vaultSecretsPath(
+  StepContext context,
+  String repository, {
+  String secrets = vaultSecretsDefault,
+}) => '$repository/${_stageFilled(context, secrets)}';
+
+/// [text] with this run's stage in the place the slot marks.
+String _stageFilled(StepContext context, String text) =>
+    text.replaceAll(_stageSlot, context.answers.text(vaultStageAnswer));
 
 /// Every unseal key the credential file carries, in the order the file writes them.
 ///

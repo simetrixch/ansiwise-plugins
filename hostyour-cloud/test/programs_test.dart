@@ -144,8 +144,10 @@ void main() {
         // used stops being demanded. A gate asking for a tool nothing needs refuses machines for
         // nothing, and it is the half of this that nobody would otherwise notice.
         final Set<String> started = <String>{
-          for (final ResolvedStep step in resolved.steps)
+          for (final ResolvedStep step in resolved.steps) ...<String>[
             ..._commandsStartedBy(step.registered.source),
+            ..._clientInvocationOf(step),
+          ],
         };
         expect(
           asked.difference(started),
@@ -175,6 +177,23 @@ Arguments _argumentsOf(ResolvedStep resolved) {
   return defaults.isEmpty
       ? resolved.entry.arguments
       : resolved.entry.arguments.withDefaults(defaults);
+}
+
+/// The word the cluster client is invoked with, for a step that composes its command line.
+///
+/// A step that reaches the cluster declares the `kubectl` argument and starts whatever its first
+/// word names, so no literal appears in its source for [_commandsStartedBy] to read. The resolved
+/// argument — the row's value, or the declared default — is what the run actually starts, and it
+/// is read here the same way the engine reads it.
+Set<String> _clientInvocationOf(ResolvedStep resolved) {
+  final bool composes = resolved.registered.arguments.any(
+    (ArgumentSpec spec) => spec.name == 'kubectl',
+  );
+  if (!composes) {
+    return const <String>{};
+  }
+  final List<String> invocation = _argumentsOf(resolved).textList('kubectl');
+  return invocation.isEmpty ? const <String>{} : <String>{invocation.first};
 }
 
 /// The commands the step declared at [source] starts, read from its own file.

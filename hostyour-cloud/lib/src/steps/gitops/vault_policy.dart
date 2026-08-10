@@ -37,6 +37,7 @@ final class VaultPolicy extends ReversibleStep<String?> {
     required this.name,
     required this.rules,
     this.authMount,
+    this.layout = const VaultLayout(),
   });
 
   /// Builds the step from what the program gave it.
@@ -45,6 +46,7 @@ final class VaultPolicy extends ReversibleStep<String?> {
     name: arguments.text('name'),
     rules: arguments.text('rules'),
     authMount: arguments.optionalText('auth_mount'),
+    layout: VaultLayout.fromArguments(arguments),
   );
 
   /// What this step accepts.
@@ -81,6 +83,7 @@ final class VaultPolicy extends ReversibleStep<String?> {
           '$accessorPlaceholder in its paths — "$kubernetesMountPlaceholder" for the mount this '
           "cluster's own workloads log in through",
     ),
+    ...VaultLayout.arguments,
   ];
 
   /// The answers this step reads, which is what its registry entry declares.
@@ -88,6 +91,9 @@ final class VaultPolicy extends ReversibleStep<String?> {
 
   /// The checkout this installation runs from.
   final String repository;
+
+  /// Where the profile and the credential file stand under the checkout.
+  final VaultLayout layout;
 
   /// The policy name.
   final String name;
@@ -100,7 +106,7 @@ final class VaultPolicy extends ReversibleStep<String?> {
 
   @override
   Future<CheckResult> check(StepContext context) async {
-    final ClusterProfile vault = await clusterProfileFrom(context, repository);
+    final ClusterProfile vault = await clusterProfileFrom(context, repository, layout: layout);
     if (vault.refusal case final String refusal) {
       return CheckResult.blocked(refusal);
     }
@@ -110,7 +116,10 @@ final class VaultPolicy extends ReversibleStep<String?> {
     }
     final String url = vault.url ?? '';
 
-    final RootToken token = await rootTokenFrom(context, vaultCredentialsPath(context, repository));
+    final RootToken token = await rootTokenFrom(
+      context,
+      vaultCredentialsPath(context, repository, credentials: layout.credentials),
+    );
     if (token.refusal case final String refusal) {
       return CheckResult.blocked(refusal);
     }
@@ -132,7 +141,7 @@ final class VaultPolicy extends ReversibleStep<String?> {
 
   @override
   Future<StepPlan> plan(StepContext context) async {
-    final ClusterProfile vault = await clusterProfileFrom(context, repository);
+    final ClusterProfile vault = await clusterProfileFrom(context, repository, layout: layout);
     if (vault.refusal case final String refusal) {
       return StepPlan.nothing(refusal);
     }
@@ -140,7 +149,10 @@ final class VaultPolicy extends ReversibleStep<String?> {
     if (named.refusal case final String refusal) {
       return StepPlan.nothing(refusal);
     }
-    final RootToken token = await rootTokenFrom(context, vaultCredentialsPath(context, repository));
+    final RootToken token = await rootTokenFrom(
+      context,
+      vaultCredentialsPath(context, repository, credentials: layout.credentials),
+    );
     if (token.refusal case final String refusal) {
       return StepPlan.nothing(refusal);
     }
@@ -163,10 +175,13 @@ final class VaultPolicy extends ReversibleStep<String?> {
 
   @override
   Future<void> apply(StepContext context) async {
-    final ClusterProfile vault = await clusterProfileFrom(context, repository);
+    final ClusterProfile vault = await clusterProfileFrom(context, repository, layout: layout);
     final _Names named = _namesIn(context, vault);
     final String url = vault.url ?? '';
-    final RootToken token = await rootTokenFrom(context, vaultCredentialsPath(context, repository));
+    final RootToken token = await rootTokenFrom(
+      context,
+      vaultCredentialsPath(context, repository, credentials: layout.credentials),
+    );
     final String held = token.value ?? '';
     final _Rules wanted = await _writtenRules(context, vault, named, url, held);
 
@@ -200,12 +215,15 @@ final class VaultPolicy extends ReversibleStep<String?> {
   /// the question and is not part of the answer.
   @override
   Future<String?> capture(StepContext context) async {
-    final ClusterProfile vault = await clusterProfileFrom(context, repository);
+    final ClusterProfile vault = await clusterProfileFrom(context, repository, layout: layout);
     final _Names named = _namesIn(context, vault);
     if (named.refusal != null) {
       return null;
     }
-    final RootToken token = await rootTokenFrom(context, vaultCredentialsPath(context, repository));
+    final RootToken token = await rootTokenFrom(
+      context,
+      vaultCredentialsPath(context, repository, credentials: layout.credentials),
+    );
     if (token.value case final String held) {
       return _heldPolicy(context, vault.url ?? '', held, named.name);
     }
@@ -214,12 +232,15 @@ final class VaultPolicy extends ReversibleStep<String?> {
 
   @override
   Future<void> undo(StepContext context, String? captured) async {
-    final ClusterProfile vault = await clusterProfileFrom(context, repository);
+    final ClusterProfile vault = await clusterProfileFrom(context, repository, layout: layout);
     final _Names named = _namesIn(context, vault);
     if (named.refusal != null) {
       return;
     }
-    final RootToken token = await rootTokenFrom(context, vaultCredentialsPath(context, repository));
+    final RootToken token = await rootTokenFrom(
+      context,
+      vaultCredentialsPath(context, repository, credentials: layout.credentials),
+    );
     if (token.value case final String held) {
       final String url = vault.url ?? '';
       if (captured == null) {

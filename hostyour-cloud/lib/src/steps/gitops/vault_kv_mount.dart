@@ -13,11 +13,18 @@ import 'vault_api.dart';
 /// transaction and nothing else undoes a value.
 final class VaultKvMount extends IrreversibleStep {
   /// Enables a versioned key-value mount at [path] in the Vault the profile in [repository] names.
-  const VaultKvMount({required this.repository, required this.path});
+  const VaultKvMount({
+    required this.repository,
+    required this.path,
+    this.layout = const VaultLayout(),
+  });
 
   /// Builds the step from what the program gave it.
-  factory VaultKvMount.fromArguments(Arguments arguments) =>
-      VaultKvMount(repository: arguments.text('repository'), path: arguments.text('path'));
+  factory VaultKvMount.fromArguments(Arguments arguments) => VaultKvMount(
+    repository: arguments.text('repository'),
+    path: arguments.text('path'),
+    layout: VaultLayout.fromArguments(arguments),
+  );
 
   /// What this step accepts.
   static const List<ArgumentSpec> arguments = <ArgumentSpec>[
@@ -33,6 +40,7 @@ final class VaultKvMount extends IrreversibleStep {
       kind: ArgumentKind.text,
       describes: 'the mount path every secret of this platform is written under',
     ),
+    ...VaultLayout.arguments,
   ];
 
   /// The answers this step reads, which is what its registry entry declares.
@@ -40,6 +48,9 @@ final class VaultKvMount extends IrreversibleStep {
 
   /// The checkout this installation runs from.
   final String repository;
+
+  /// Where the profile and the credential file stand under the checkout.
+  final VaultLayout layout;
 
   /// The mount path.
   final String path;
@@ -51,13 +62,16 @@ final class VaultKvMount extends IrreversibleStep {
 
   @override
   Future<CheckResult> check(StepContext context) async {
-    final ClusterProfile vault = await clusterProfileFrom(context, repository);
+    final ClusterProfile vault = await clusterProfileFrom(context, repository, layout: layout);
     if (vault.refusal case final String refusal) {
       return CheckResult.blocked(refusal);
     }
     final String url = vault.url ?? '';
 
-    final RootToken token = await rootTokenFrom(context, vaultCredentialsPath(context, repository));
+    final RootToken token = await rootTokenFrom(
+      context,
+      vaultCredentialsPath(context, repository, credentials: layout.credentials),
+    );
     if (token.refusal case final String refusal) {
       return CheckResult.blocked(refusal);
     }
@@ -89,7 +103,7 @@ final class VaultKvMount extends IrreversibleStep {
 
   @override
   Future<StepPlan> plan(StepContext context) async {
-    final ClusterProfile vault = await clusterProfileFrom(context, repository);
+    final ClusterProfile vault = await clusterProfileFrom(context, repository, layout: layout);
     if (vault.refusal case final String refusal) {
       return StepPlan.nothing(refusal);
     }
@@ -102,9 +116,12 @@ final class VaultKvMount extends IrreversibleStep {
 
   @override
   Future<void> apply(StepContext context) async {
-    final ClusterProfile vault = await clusterProfileFrom(context, repository);
+    final ClusterProfile vault = await clusterProfileFrom(context, repository, layout: layout);
     final String url = vault.url ?? '';
-    final RootToken token = await rootTokenFrom(context, vaultCredentialsPath(context, repository));
+    final RootToken token = await rootTokenFrom(
+      context,
+      vaultCredentialsPath(context, repository, credentials: layout.credentials),
+    );
     final HttpAnswer answer = await context.http.send(
       vaultWrite(
         url,

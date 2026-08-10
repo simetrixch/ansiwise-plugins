@@ -212,6 +212,7 @@ void main() {
       expect(
         await RestartCertManagerAndReapplyClusterIssuer.isReady(
           withStorage(machine),
+          const Kubectl(),
           'letsencrypt-prod',
         ),
         isFalse,

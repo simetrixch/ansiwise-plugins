@@ -1,5 +1,7 @@
 import 'package:ansiwise_api/ansiwise_api.dart';
 
+import '../kubectl.dart';
+
 /// Creates one namespace on the cluster, when it is not there.
 ///
 /// **Nothing is put into an existing namespace by this step and nothing is taken out of one.** The
@@ -14,11 +16,11 @@ import 'package:ansiwise_api/ansiwise_api.dart';
 /// before this step ran, and the undo removes only one that was not.
 final class KubernetesNamespace extends ReversibleStep<bool> {
   /// Creates the namespace called [namespace].
-  const KubernetesNamespace(this.namespace);
+  const KubernetesNamespace(this.namespace, {this.kubectl = const Kubectl()});
 
   /// Builds the step from what the program gave it.
   factory KubernetesNamespace.fromArguments(Arguments arguments) =>
-      KubernetesNamespace(arguments.text('namespace'));
+      KubernetesNamespace(arguments.text('namespace'), kubectl: Kubectl.fromArguments(arguments));
 
   /// What this step accepts.
   static const List<ArgumentSpec> arguments = <ArgumentSpec>[
@@ -27,10 +29,14 @@ final class KubernetesNamespace extends ReversibleStep<bool> {
       kind: ArgumentKind.text,
       describes: 'the namespace the release of this phase is installed into',
     ),
+    Kubectl.argument,
   ];
 
   /// The namespace.
   final String namespace;
+
+  /// How the cluster is reached.
+  final Kubectl kubectl;
 
   @override
   Future<CheckResult> check(StepContext context) async => await _isThere(context)
@@ -42,7 +48,9 @@ final class KubernetesNamespace extends ReversibleStep<bool> {
 
   @override
   Future<void> apply(StepContext context) async {
-    final CommandResult created = await context.shell.run(Command('kubectl', _create.sublist(1)));
+    final CommandResult created = await context.shell.run(
+      kubectl.command(<String>['create', 'namespace', namespace]),
+    );
     if (!created.ok) {
       throw CommandFailed(argv: _create, exitCode: created.exitCode, stderr: created.stderr);
     }
@@ -62,16 +70,16 @@ final class KubernetesNamespace extends ReversibleStep<bool> {
       return;
     }
     await context.shell.run(
-      Command('kubectl', <String>['delete', 'namespace', namespace, '--ignore-not-found']),
+      kubectl.command(<String>['delete', 'namespace', namespace, '--ignore-not-found']),
     );
   }
 
-  List<String> get _create => <String>['kubectl', 'create', 'namespace', namespace];
+  List<String> get _create => kubectl.argv(<String>['create', 'namespace', namespace]);
 
   /// Whether the cluster holds this namespace.
   Future<bool> _isThere(StepContext context) async {
     final CommandResult found = await context.shell.run(
-      Command.observing('kubectl', <String>['get', 'namespace', namespace, '-o', 'name']),
+      kubectl.observing(<String>['get', 'namespace', namespace, '-o', 'name']),
     );
     return found.ok;
   }

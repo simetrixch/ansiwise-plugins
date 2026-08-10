@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:ansiwise_api/ansiwise_api.dart';
+import '../kubectl.dart';
 import 'detect_host_upstream_resolvers.dart';
 
 /// Sets one key of one ConfigMap, and rolls the workload that reads it.
@@ -43,6 +44,7 @@ final class PatchConfigmapKey extends ReversibleStep<String?> {
     required this.rollout,
     required this.backupPath,
     required this.rolloutTimeoutSeconds,
+    this.kubectl = const Kubectl(),
   });
 
   /// Builds the step from what the program gave it.
@@ -54,6 +56,7 @@ final class PatchConfigmapKey extends ReversibleStep<String?> {
     rollout: arguments.text('rollout'),
     backupPath: arguments.text('backup_path'),
     rolloutTimeoutSeconds: arguments.integer('rollout_timeout_seconds'),
+    kubectl: Kubectl.fromArguments(arguments),
   );
 
   /// What this step accepts.
@@ -96,6 +99,7 @@ final class PatchConfigmapKey extends ReversibleStep<String?> {
       required: false,
       defaultValue: 60,
     ),
+    Kubectl.argument,
   ];
 
   /// Who may read the file the value as it was is written to.
@@ -124,6 +128,9 @@ final class PatchConfigmapKey extends ReversibleStep<String?> {
 
   /// How long the workload is given to come back.
   final int rolloutTimeoutSeconds;
+
+  /// How the cluster is reached.
+  final Kubectl kubectl;
 
   @override
   Future<CheckResult> check(StepContext context) async {
@@ -192,8 +199,7 @@ final class PatchConfigmapKey extends ReversibleStep<String?> {
   /// The value the key holds now, or null when it cannot be read.
   Future<String?> _live(StepContext context) async {
     final CommandResult live = await context.shell.run(
-      Command.observing('microk8s', <String>[
-        'kubectl',
+      kubectl.observing(<String>[
         '-n',
         namespace,
         'get',
@@ -216,8 +222,6 @@ final class PatchConfigmapKey extends ReversibleStep<String?> {
       'data': <String, String>{key: value},
     });
     await _mustRun(context, <String>[
-      'microk8s',
-      'kubectl',
       '-n',
       namespace,
       'patch',
@@ -228,18 +232,8 @@ final class PatchConfigmapKey extends ReversibleStep<String?> {
       '-p',
       patch,
     ]);
+    await _mustRun(context, <String>['-n', namespace, 'rollout', 'restart', rollout]);
     await _mustRun(context, <String>[
-      'microk8s',
-      'kubectl',
-      '-n',
-      namespace,
-      'rollout',
-      'restart',
-      rollout,
-    ]);
-    await _mustRun(context, <String>[
-      'microk8s',
-      'kubectl',
       '-n',
       namespace,
       'rollout',
@@ -249,10 +243,11 @@ final class PatchConfigmapKey extends ReversibleStep<String?> {
     ]);
   }
 
-  Future<void> _mustRun(StepContext context, List<String> argv) async {
-    final CommandResult answer = await context.shell.run(Command(argv.first, argv.sublist(1)));
+  Future<void> _mustRun(StepContext context, List<String> arguments) async {
+    final Command command = kubectl.command(arguments);
+    final CommandResult answer = await context.shell.run(command);
     if (!answer.ok) {
-      throw CommandFailed(argv: argv, exitCode: answer.exitCode, stderr: answer.stderr);
+      throw CommandFailed(argv: command.argv, exitCode: answer.exitCode, stderr: answer.stderr);
     }
   }
 }

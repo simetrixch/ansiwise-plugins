@@ -1,4 +1,5 @@
 import 'package:ansiwise_api/ansiwise_api.dart';
+import '../kubectl.dart';
 import 'stamp_calico_pool_cidr_in_cni_manifest.dart';
 
 /// Deletes the address pool the cluster is running on, so Calico builds it again on the new range.
@@ -15,12 +16,17 @@ import 'stamp_calico_pool_cidr_in_cni_manifest.dart';
 /// than a comment somewhere: this refuses to delete against an unstamped manifest.
 final class DeleteDefaultIpv4Ippool extends IrreversibleStep {
   /// Deletes the pool unless it already carries [podCidr], with [manifestPath] as the proof of order.
-  const DeleteDefaultIpv4Ippool({required this.podCidr, required this.manifestPath});
+  const DeleteDefaultIpv4Ippool({
+    required this.podCidr,
+    required this.manifestPath,
+    this.kubectl = const Kubectl(),
+  });
 
   /// Builds the step from what the program gave it.
   factory DeleteDefaultIpv4Ippool.fromArguments(Arguments arguments) => DeleteDefaultIpv4Ippool(
     podCidr: arguments.text('pod_cidr'),
     manifestPath: arguments.text('manifest_path'),
+    kubectl: Kubectl.fromArguments(arguments),
   );
 
   /// What this step accepts.
@@ -39,6 +45,7 @@ final class DeleteDefaultIpv4Ippool extends IrreversibleStep {
       required: false,
       defaultValue: StampCalicoPoolCidrInCniManifest.defaultPath,
     ),
+    Kubectl.argument,
   ];
 
   /// The pool MicroK8s ships, and the only one this program touches.
@@ -49,16 +56,9 @@ final class DeleteDefaultIpv4Ippool extends IrreversibleStep {
   /// **This is the live source of truth for the whole conversion, and the manifest is not.** The
   /// manifest's value is consumed once at creation, so a machine can carry a correctly stamped
   /// manifest and still run on the old pool. Every convergence question in this phase is asked here.
-  static Future<String?> liveCidr(StepContext context) async {
+  static Future<String?> liveCidr(StepContext context, Kubectl kubectl) async {
     final CommandResult pool = await context.shell.run(
-      const Command.observing('microk8s', <String>[
-        'kubectl',
-        'get',
-        'ippool',
-        poolName,
-        '-o',
-        'jsonpath={.spec.cidr}',
-      ]),
+      kubectl.observing(<String>['get', 'ippool', poolName, '-o', 'jsonpath={.spec.cidr}']),
     );
     if (!pool.ok || pool.trimmed.isEmpty) {
       return null;
@@ -72,6 +72,9 @@ final class DeleteDefaultIpv4Ippool extends IrreversibleStep {
   /// The manifest the pool is built again from.
   final String manifestPath;
 
+  /// How the cluster is reached.
+  final Kubectl kubectl;
+
   @override
   String get irreversibleReason =>
       'the address pool a running cluster is using is gone, and every pod holding an address out of '
@@ -80,7 +83,7 @@ final class DeleteDefaultIpv4Ippool extends IrreversibleStep {
 
   @override
   Future<CheckResult> check(StepContext context) async {
-    final String? live = await liveCidr(context);
+    final String? live = await liveCidr(context, kubectl);
     if (live == null) {
       return const CheckResult.satisfied('there is no $poolName, so there is none to delete');
     }
@@ -108,24 +111,25 @@ final class DeleteDefaultIpv4Ippool extends IrreversibleStep {
   }
 
   @override
-  Future<StepPlan> plan(StepContext context) async => const StepPlan.argv(argv);
+  Future<StepPlan> plan(StepContext context) async => StepPlan.argv(kubectl.argv(_delete));
 
   @override
   Future<void> apply(StepContext context) async {
-    await delete(context);
+    await delete(context, kubectl);
   }
 
   /// Deletes the pool, and fails when the command does.
   ///
   /// Shared with the verify step, whose self-heal is this same delete taken a second time when a
   /// startup race put the pool back on the old range.
-  static Future<void> delete(StepContext context) async {
-    final CommandResult deleted = await context.shell.run(Command(argv.first, argv.sublist(1)));
+  static Future<void> delete(StepContext context, Kubectl kubectl) async {
+    final Command command = kubectl.command(_delete);
+    final CommandResult deleted = await context.shell.run(command);
     if (!deleted.ok) {
-      throw CommandFailed(argv: argv, exitCode: deleted.exitCode, stderr: deleted.stderr);
+      throw CommandFailed(argv: command.argv, exitCode: deleted.exitCode, stderr: deleted.stderr);
     }
   }
 
-  /// The command that deletes the pool.
-  static const List<String> argv = <String>['microk8s', 'kubectl', 'delete', 'ippool', poolName];
+  /// What deletes the pool, after the words the client is invoked with.
+  static const List<String> _delete = <String>['delete', 'ippool', poolName];
 }

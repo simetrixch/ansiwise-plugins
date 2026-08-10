@@ -304,24 +304,31 @@ void main() {
       expect(machine.files.written, isEmpty);
     });
 
-    test('a branch the role stamp has not touched is left alone rather than guessed at', () async {
+    test('a profile carrying no address is refused, not passed over', () async {
+      // BLOCKED AND NOT SATISFIED. A profile with no address under the name this run was told to
+      // look under is a question nothing answered, not "the stamp has not run yet". Reported as
+      // satisfied, the run came back green with a slave whose API server accepts no token from the
+      // identity provider — and the message blamed a stamp that had already run.
       final ClusterMachine machine = ClusterMachine();
       machine.files.contents[profilePath] = 'global:\n  domain: example.invalid\n';
       final CheckResult answer = await trust.check(asRole(machine, 'slave'));
-      expect(answer, isA<Satisfied>());
-      expect((answer as Satisfied).because, contains('names no address'));
+      expect(answer, isA<Blocked>());
+      expect((answer as Blocked).reason, contains('vaultUrl'));
     });
 
     test('the address is derived from the one value the role stamp writes', () async {
-      final ClusterMachine machine = ClusterMachine();
-      machine.files.contents[profilePath] = 'global:\n  vaultUrl: https://vault.m1.example.com\n';
+      // Derived from where the secret store answers, and never read from a key of its own: the two
+      // follow the same installation, and a second key would be a second thing to keep in step.
+      // The profile is not parsed here — one reader does that for the whole family, so where the
+      // file stands and what its keys are called is a program row's to say in one place.
       expect(
-        await ConfigureSlaveApiserverOidcTrust.issuerFrom(
-          machine.contextFor(under),
-          profilePath,
-          'headlamp',
-        ),
+        ConfigureSlaveApiserverOidcTrust.issuerFor('https://vault.m1.example.com', 'headlamp'),
         'https://idp.m1.example.com/application/o/headlamp/',
+      );
+      expect(
+        ConfigureSlaveApiserverOidcTrust.issuerFor(null, 'headlamp'),
+        isNull,
+        reason: 'a profile that named no address derives nothing',
       );
     });
 

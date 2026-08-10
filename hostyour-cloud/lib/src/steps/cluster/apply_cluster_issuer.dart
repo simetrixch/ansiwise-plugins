@@ -1,4 +1,5 @@
 import 'package:ansiwise_api/ansiwise_api.dart';
+import '../kubectl.dart';
 import 'configure_slave_apiserver_oidc_trust.dart';
 import 'delete_existing_cluster_issuer.dart';
 
@@ -8,12 +9,17 @@ import 'delete_existing_cluster_issuer.dart';
 /// this: the object is accepted long before the account behind it is registered.
 final class ApplyClusterIssuer extends ReversibleStep<bool> {
   /// Applies the issuer [name] rendered into [stateDirectory].
-  const ApplyClusterIssuer({required this.name, required this.stateDirectory});
+  const ApplyClusterIssuer({
+    required this.name,
+    required this.stateDirectory,
+    this.kubectl = const Kubectl(),
+  });
 
   /// Builds the step from what the program gave it.
   factory ApplyClusterIssuer.fromArguments(Arguments arguments) => ApplyClusterIssuer(
     name: arguments.text('name'),
     stateDirectory: arguments.text('state_directory'),
+    kubectl: Kubectl.fromArguments(arguments),
   );
 
   /// What this step accepts.
@@ -32,6 +38,7 @@ final class ApplyClusterIssuer extends ReversibleStep<bool> {
       required: false,
       defaultValue: ConfigureSlaveApiserverOidcTrust.defaultStateDirectory,
     ),
+    Kubectl.argument,
   ];
 
   /// The issuer certificates are issued by.
@@ -39,6 +46,9 @@ final class ApplyClusterIssuer extends ReversibleStep<bool> {
 
   /// Where the rendered manifest is.
   final String stateDirectory;
+
+  /// How the cluster is reached.
+  final Kubectl kubectl;
 
   /// The manifest this step applies.
   String get manifestPath => '$stateDirectory/clusterissuer.yaml';
@@ -50,20 +60,21 @@ final class ApplyClusterIssuer extends ReversibleStep<bool> {
         '$manifestPath is not there, so the step that renders the issuer has not run',
       );
     }
-    if (await DeleteExistingClusterIssuer.exists(context, name)) {
+    if (await DeleteExistingClusterIssuer.exists(context, kubectl, name)) {
       return CheckResult.satisfied('$name is in the cluster');
     }
     return const CheckResult.ready();
   }
 
   @override
-  Future<StepPlan> plan(StepContext context) async => StepPlan.argv(_argv);
+  Future<StepPlan> plan(StepContext context) async => StepPlan.argv(kubectl.argv(_apply));
 
   @override
   Future<void> apply(StepContext context) async {
-    final CommandResult applied = await context.shell.run(Command(_argv.first, _argv.sublist(1)));
+    final Command apply = kubectl.command(_apply);
+    final CommandResult applied = await context.shell.run(apply);
     if (!applied.ok) {
-      throw CommandFailed(argv: _argv, exitCode: applied.exitCode, stderr: applied.stderr);
+      throw CommandFailed(argv: apply.argv, exitCode: applied.exitCode, stderr: applied.stderr);
     }
   }
 
@@ -73,17 +84,16 @@ final class ApplyClusterIssuer extends ReversibleStep<bool> {
   /// the cluster is issued by — deleting it would take the account key's registration out of use
   /// while cleaning up after something else.
   @override
-  Future<bool> capture(StepContext context) => DeleteExistingClusterIssuer.exists(context, name);
+  Future<bool> capture(StepContext context) =>
+      DeleteExistingClusterIssuer.exists(context, kubectl, name);
 
   @override
   Future<void> undo(StepContext context, bool captured) async {
     if (captured) {
       return;
     }
-    await context.shell.run(
-      Command('microk8s', <String>['kubectl', 'delete', 'clusterissuer', name]),
-    );
+    await context.shell.run(kubectl.command(<String>['delete', 'clusterissuer', name]));
   }
 
-  List<String> get _argv => <String>['microk8s', 'kubectl', 'apply', '-f', manifestPath];
+  List<String> get _apply => <String>['apply', '-f', manifestPath];
 }

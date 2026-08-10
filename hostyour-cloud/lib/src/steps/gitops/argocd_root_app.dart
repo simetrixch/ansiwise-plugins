@@ -1,5 +1,7 @@
 import 'package:ansiwise_api/ansiwise_api.dart';
 
+import '../kubectl.dart';
+
 /// Hands the cluster over, and stops.
 ///
 /// This is the last step of this program and the one act that makes the platform exist. Nothing in
@@ -20,11 +22,18 @@ import 'package:ansiwise_api/ansiwise_api.dart';
 /// message that a file is missing.
 final class ArgocdRootApp extends IrreversibleStep {
   /// Applies the root application of this run's stage out of the checkout at [repository].
-  const ArgocdRootApp({required this.repository, required this.trunk});
+  const ArgocdRootApp({
+    required this.repository,
+    required this.trunk,
+    this.kubectl = const Kubectl(),
+  });
 
   /// Builds the step from what the program gave it.
-  factory ArgocdRootApp.fromArguments(Arguments arguments) =>
-      ArgocdRootApp(repository: arguments.text('repository'), trunk: arguments.text('trunk'));
+  factory ArgocdRootApp.fromArguments(Arguments arguments) => ArgocdRootApp(
+    repository: arguments.text('repository'),
+    trunk: arguments.text('trunk'),
+    kubectl: Kubectl.fromArguments(arguments),
+  );
 
   /// What this step accepts.
   static const List<ArgumentSpec> arguments = <ArgumentSpec>[
@@ -38,6 +47,7 @@ final class ArgocdRootApp extends IrreversibleStep {
       kind: ArgumentKind.text,
       describes: 'the product branch, which is where a lost manifest is merged back from',
     ),
+    Kubectl.argument,
   ];
 
   /// The answers this step reads, which is what its registry entry declares.
@@ -54,6 +64,9 @@ final class ArgocdRootApp extends IrreversibleStep {
 
   /// The product branch.
   final String trunk;
+
+  /// How the cluster is reached.
+  final Kubectl kubectl;
 
   @override
   String get irreversibleReason =>
@@ -80,7 +93,7 @@ final class ArgocdRootApp extends IrreversibleStep {
     // also settles what nothing else can: whether the reconciler's own kinds are on this cluster
     // yet, because a manifest of a kind nobody registered cannot be compared at all.
     final CommandResult difference = await context.shell.run(
-      Command.observing('kubectl', <String>['diff', '-f', manifest]),
+      kubectl.observing(<String>['diff', '-f', manifest]),
     );
     switch (difference.exitCode) {
       case 0:
@@ -90,7 +103,7 @@ final class ArgocdRootApp extends IrreversibleStep {
       default:
         return CheckResult.blocked(
           'the cluster could not be asked what $manifest would change: '
-          '${difference.stderr.trim().isEmpty ? 'kubectl returned ${difference.exitCode}' : difference.stderr.trim()}',
+          '${difference.stderr.trim().isEmpty ? 'the client returned ${difference.exitCode}' : difference.stderr.trim()}',
         );
     }
   }
@@ -99,21 +112,18 @@ final class ArgocdRootApp extends IrreversibleStep {
   Future<StepPlan> plan(StepContext context) async =>
       // Verified rather than predicted: the check asked the cluster itself, so what this says would
       // change is what the cluster answered.
-      StepPlan.argv(_apply(context), serverVerified: true);
+      StepPlan.argv(kubectl.argv(_apply(context)), serverVerified: true);
 
   @override
   Future<void> apply(StepContext context) async {
-    final List<String> argv = _apply(context);
-    final CommandResult applied = await context.shell.run(
-      Command.detailed('kubectl', arguments: argv.sublist(1), timeout: const Duration(seconds: 60)),
-    );
+    final Command apply = kubectl.command(_apply(context), timeout: const Duration(seconds: 60));
+    final CommandResult applied = await context.shell.run(apply);
     if (!applied.ok) {
-      throw CommandFailed(argv: argv, exitCode: applied.exitCode, stderr: applied.stderr);
+      throw CommandFailed(argv: apply.argv, exitCode: applied.exitCode, stderr: applied.stderr);
     }
   }
 
   List<String> _apply(StepContext context) => <String>[
-    'kubectl',
     'apply',
     '-f',
     manifestIn(context),

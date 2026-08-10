@@ -1,4 +1,5 @@
 import 'package:ansiwise_api/ansiwise_api.dart';
+import '../kubectl.dart';
 import 'delete_default_ipv4_ippool.dart';
 import 'reapply_calico_manifest.dart';
 
@@ -23,6 +24,7 @@ final class VerifyIppoolConvergedWithSelfHeal extends IrreversibleStep {
     required this.timeoutSeconds,
     required this.intervalSeconds,
     required this.rolloutTimeoutSeconds,
+    this.kubectl = const Kubectl(),
   });
 
   /// Builds the step from what the program gave it.
@@ -32,6 +34,7 @@ final class VerifyIppoolConvergedWithSelfHeal extends IrreversibleStep {
         timeoutSeconds: arguments.integer('timeout_seconds'),
         intervalSeconds: arguments.integer('interval_seconds'),
         rolloutTimeoutSeconds: arguments.integer('rollout_timeout_seconds'),
+        kubectl: Kubectl.fromArguments(arguments),
       );
 
   /// What this step accepts.
@@ -62,6 +65,7 @@ final class VerifyIppoolConvergedWithSelfHeal extends IrreversibleStep {
       required: false,
       defaultValue: 120,
     ),
+    Kubectl.argument,
   ];
 
   /// The range every pod gets an address out of.
@@ -76,6 +80,9 @@ final class VerifyIppoolConvergedWithSelfHeal extends IrreversibleStep {
   /// How long a heal's rollout is given.
   final int rolloutTimeoutSeconds;
 
+  /// How the cluster is reached.
+  final Kubectl kubectl;
+
   @override
   String get irreversibleReason =>
       'putting the pool right means deleting it once more, and a pool a running cluster is using is '
@@ -84,7 +91,7 @@ final class VerifyIppoolConvergedWithSelfHeal extends IrreversibleStep {
 
   @override
   Future<CheckResult> check(StepContext context) async {
-    final String? live = await DeleteDefaultIpv4Ippool.liveCidr(context);
+    final String? live = await DeleteDefaultIpv4Ippool.liveCidr(context, kubectl);
     if (live == podCidr) {
       return CheckResult.satisfied('${DeleteDefaultIpv4Ippool.poolName} covers $podCidr');
     }
@@ -103,7 +110,7 @@ final class VerifyIppoolConvergedWithSelfHeal extends IrreversibleStep {
     bool healed = false;
 
     while (true) {
-      final String? live = await DeleteDefaultIpv4Ippool.liveCidr(context);
+      final String? live = await DeleteDefaultIpv4Ippool.liveCidr(context, kubectl);
       if (live == podCidr) {
         return;
       }
@@ -114,7 +121,7 @@ final class VerifyIppoolConvergedWithSelfHeal extends IrreversibleStep {
           'agent created it before the restart handed it the new range. Deleting it once more and '
           'replacing the agent, which now carries the stamped range.',
         );
-        await DeleteDefaultIpv4Ippool.delete(context);
+        await DeleteDefaultIpv4Ippool.delete(context, kubectl);
         await _rollNetworkAgent(context);
       }
       if (!context.clock.now().isBefore(giveUp)) {
@@ -131,8 +138,7 @@ final class VerifyIppoolConvergedWithSelfHeal extends IrreversibleStep {
 
   Future<void> _rollNetworkAgent(StepContext context) async {
     await context.shell.run(
-      const Command('microk8s', <String>[
-        'kubectl',
+      kubectl.command(<String>[
         '-n',
         ReapplyCalicoManifest.namespace,
         'rollout',
@@ -141,8 +147,7 @@ final class VerifyIppoolConvergedWithSelfHeal extends IrreversibleStep {
       ]),
     );
     await context.shell.run(
-      Command('microk8s', <String>[
-        'kubectl',
+      kubectl.command(<String>[
         '-n',
         ReapplyCalicoManifest.namespace,
         'rollout',

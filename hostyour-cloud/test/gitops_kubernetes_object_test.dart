@@ -31,7 +31,7 @@ void main() {
 
   /// A shell whose `kubectl diff` exits with [exitCode].
   FakeShell diffing(int exitCode) => FakeShell(<String, CommandResult>{
-    'kubectl diff --filename $path': CommandResult(
+    'microk8s kubectl diff --filename $path': CommandResult(
       exitCode: exitCode,
       stdout: '',
       stderr: exitCode > 1 ? 'the server could not be reached' : '',
@@ -75,12 +75,18 @@ void main() {
     // fail the second time on everything that already exists.
     final FakeShell shell = diffing(1);
     await step.apply(contextOn(shell));
-    expect(shell.commands.single.argv, <String>['kubectl', 'apply', '--filename', path]);
+    expect(shell.commands.single.argv, <String>[
+      'microk8s',
+      'kubectl',
+      'apply',
+      '--filename',
+      path,
+    ]);
   });
 
   test('a refused apply is a failure and not a shrug', () async {
     final FakeShell shell = FakeShell(<String, CommandResult>{
-      'kubectl apply --filename $path': const CommandResult(
+      'microk8s kubectl apply --filename $path': const CommandResult(
         exitCode: 1,
         stdout: '',
         stderr: 'no matches for kind "Certificate"',
@@ -100,6 +106,7 @@ void main() {
     final FakeShell shell = diffing(0);
     await step.undo(contextOn(shell), false);
     expect(shell.commands.single.argv, <String>[
+      'microk8s',
       'kubectl',
       'delete',
       '--filename',

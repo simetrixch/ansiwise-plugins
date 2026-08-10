@@ -1,4 +1,5 @@
 import 'package:ansiwise_api/ansiwise_api.dart';
+import '../kubectl.dart';
 import 'delete_default_ipv4_ippool.dart';
 import 'microk8s.dart';
 import 'set_process_flag.dart';
@@ -28,6 +29,7 @@ final class GuardPopulatedClusterPodCidrMigration extends ObservingStep {
     required this.podCidr,
     required this.argsPath,
     required this.allowPopulatedMigration,
+    this.kubectl = const Kubectl(),
   });
 
   /// Builds the step from what the program gave it.
@@ -36,6 +38,7 @@ final class GuardPopulatedClusterPodCidrMigration extends ObservingStep {
         podCidr: arguments.text('pod_cidr'),
         argsPath: arguments.text('args_path'),
         allowPopulatedMigration: arguments.flag('allow_populated_migration'),
+        kubectl: Kubectl.fromArguments(arguments),
       );
 
   /// What this step accepts.
@@ -61,6 +64,7 @@ final class GuardPopulatedClusterPodCidrMigration extends ObservingStep {
       required: false,
       defaultValue: false,
     ),
+    Kubectl.argument,
   ];
 
   /// The namespace whose pods the conversion gives back by itself.
@@ -81,6 +85,9 @@ final class GuardPopulatedClusterPodCidrMigration extends ObservingStep {
 
   /// Whether the operator asked for the swap on a populated cluster.
   final bool allowPopulatedMigration;
+
+  /// How the cluster is reached.
+  final Kubectl kubectl;
 
   @override
   bool get verifiesAnEarlierStep => true;
@@ -128,7 +135,7 @@ final class GuardPopulatedClusterPodCidrMigration extends ObservingStep {
 
   /// Whether both halves of the conversion are already done.
   Future<bool> _converged(StepContext context) async {
-    if (await DeleteDefaultIpv4Ippool.liveCidr(context) != podCidr) {
+    if (await DeleteDefaultIpv4Ippool.liveCidr(context, kubectl) != podCidr) {
       return false;
     }
     if (!await context.files.exists(argsPath)) {
@@ -145,8 +152,7 @@ final class GuardPopulatedClusterPodCidrMigration extends ObservingStep {
   /// answer is read as text and only the word `true` counts.
   Future<List<String>?> _podsOutsideSystem(StepContext context) async {
     final CommandResult pods = await context.shell.run(
-      const Command.observing('microk8s', <String>[
-        'kubectl',
+      kubectl.observing(<String>[
         'get',
         'pods',
         '--all-namespaces',

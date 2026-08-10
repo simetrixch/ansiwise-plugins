@@ -1,4 +1,5 @@
 import 'package:ansiwise_api/ansiwise_api.dart';
+import '../kubectl.dart';
 import 'microk8s.dart';
 import 'reapply_calico_manifest.dart';
 import 'stamp_calico_pool_cidr_in_cni_manifest.dart';
@@ -21,6 +22,7 @@ final class RestartMicrok8sSnapForPodCidr extends IrreversibleStep {
     required this.podCidr,
     required this.readyTimeoutSeconds,
     required this.rolloutTimeoutSeconds,
+    this.kubectl = const Kubectl(),
   });
 
   /// Builds the step from what the program gave it.
@@ -29,6 +31,7 @@ final class RestartMicrok8sSnapForPodCidr extends IrreversibleStep {
         podCidr: arguments.text('pod_cidr'),
         readyTimeoutSeconds: arguments.integer('ready_timeout_seconds'),
         rolloutTimeoutSeconds: arguments.integer('rollout_timeout_seconds'),
+        kubectl: Kubectl.fromArguments(arguments),
       );
 
   /// What this step accepts.
@@ -52,10 +55,14 @@ final class RestartMicrok8sSnapForPodCidr extends IrreversibleStep {
       required: false,
       defaultValue: 120,
     ),
+    Kubectl.argument,
   ];
 
   /// The range every pod gets an address out of.
   final String podCidr;
+
+  /// How the cluster is reached.
+  final Kubectl kubectl;
 
   /// How long the node is given to come back.
   final int readyTimeoutSeconds;
@@ -71,7 +78,7 @@ final class RestartMicrok8sSnapForPodCidr extends IrreversibleStep {
 
   @override
   Future<CheckResult> check(StepContext context) async {
-    final List<String>? running = await runningPoolCidrs(context);
+    final List<String>? running = await runningPoolCidrs(context, kubectl);
     if (running == null || running.isEmpty) {
       return const CheckResult.ready();
     }
@@ -89,7 +96,7 @@ final class RestartMicrok8sSnapForPodCidr extends IrreversibleStep {
 
   @override
   Future<void> apply(StepContext context) async {
-    await _mustRun(context, <String>['snap', 'restart', microk8sSnap]);
+    await _mustRun(context, const Command('snap', <String>['restart', microk8sSnap]));
 
     // TWO DEADLINES RACE HERE AND THE OUTER ONE HAS TO LOSE. The command is given the budget and
     // reports on its own when the node does not come back; the timeout beside it is only the
@@ -112,25 +119,27 @@ final class RestartMicrok8sSnapForPodCidr extends IrreversibleStep {
       );
     }
 
-    await _mustRun(context, <String>[
-      'microk8s',
-      'kubectl',
-      '-n',
-      ReapplyCalicoManifest.namespace,
-      'rollout',
-      'restart',
-      'daemonset/${ReapplyCalicoManifest.daemonSet}',
-    ]);
-    await _mustRun(context, <String>[
-      'microk8s',
-      'kubectl',
-      '-n',
-      ReapplyCalicoManifest.namespace,
-      'rollout',
-      'status',
-      'daemonset/${ReapplyCalicoManifest.daemonSet}',
-      '--timeout=${rolloutTimeoutSeconds}s',
-    ]);
+    await _mustRun(
+      context,
+      kubectl.command(<String>[
+        '-n',
+        ReapplyCalicoManifest.namespace,
+        'rollout',
+        'restart',
+        'daemonset/${ReapplyCalicoManifest.daemonSet}',
+      ]),
+    );
+    await _mustRun(
+      context,
+      kubectl.command(<String>[
+        '-n',
+        ReapplyCalicoManifest.namespace,
+        'rollout',
+        'status',
+        'daemonset/${ReapplyCalicoManifest.daemonSet}',
+        '--timeout=${rolloutTimeoutSeconds}s',
+      ]),
+    );
   }
 
   @override
@@ -139,10 +148,9 @@ final class RestartMicrok8sSnapForPodCidr extends IrreversibleStep {
       'second restart is another restart rather than the inverse of the first';
 
   /// The range each running network-agent pod carries, or null when the pods cannot be read.
-  static Future<List<String>?> runningPoolCidrs(StepContext context) async {
+  static Future<List<String>?> runningPoolCidrs(StepContext context, Kubectl kubectl) async {
     final CommandResult pods = await context.shell.run(
-      const Command.observing('microk8s', <String>[
-        'kubectl',
+      kubectl.observing(<String>[
         '-n',
         ReapplyCalicoManifest.namespace,
         'get',
@@ -164,10 +172,10 @@ final class RestartMicrok8sSnapForPodCidr extends IrreversibleStep {
     ];
   }
 
-  Future<void> _mustRun(StepContext context, List<String> argv) async {
-    final CommandResult answer = await context.shell.run(Command(argv.first, argv.sublist(1)));
+  Future<void> _mustRun(StepContext context, Command command) async {
+    final CommandResult answer = await context.shell.run(command);
     if (!answer.ok) {
-      throw CommandFailed(argv: argv, exitCode: answer.exitCode, stderr: answer.stderr);
+      throw CommandFailed(argv: command.argv, exitCode: answer.exitCode, stderr: answer.stderr);
     }
   }
 }

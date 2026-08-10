@@ -1,6 +1,6 @@
-import 'package:yaml/yaml.dart';
-
 import 'package:ansiwise_api/ansiwise_api.dart';
+import '../gitops/cluster_profile.dart';
+import '../kubectl.dart';
 import 'configure_kube_apiserver_oidc.dart';
 import 'microk8s.dart';
 import 'set_process_flag.dart';
@@ -27,6 +27,8 @@ final class ConfigureSlaveApiserverOidcTrust
     required this.bindingName,
     required this.stateDirectory,
     required this.argsPath,
+    this.kubectl = const Kubectl(),
+    this.layout = const VaultLayout(),
   });
 
   /// Builds the step from what the program gave it.
@@ -38,6 +40,8 @@ final class ConfigureSlaveApiserverOidcTrust
         bindingName: arguments.text('binding_name'),
         stateDirectory: arguments.text('state_directory'),
         argsPath: arguments.text('args_path'),
+        kubectl: Kubectl.fromArguments(arguments),
+        layout: VaultLayout.fromArguments(arguments),
       );
 
   /// What this step accepts.
@@ -84,6 +88,8 @@ final class ConfigureSlaveApiserverOidcTrust
       required: false,
       defaultValue: ConfigureKubeApiserverOidc.defaultPath,
     ),
+    Kubectl.argument,
+    ...VaultLayout.arguments,
   ];
 
   /// The answers this step reads, which is what its registry entry declares.
@@ -122,8 +128,19 @@ final class ConfigureSlaveApiserverOidcTrust
   /// The file holding the API server's arguments.
   final String argsPath;
 
+  /// How the cluster is reached.
+  final Kubectl kubectl;
+
+  /// Where the secret store's own facts stand, and under which names.
+  ///
+  /// The same layout the vault family declares, because this reads the same file for the same
+  /// value. A step that took it from a literal while the family took it from a row would open a
+  /// path the operator never configured — and this one answers SATISFIED when it finds nothing, so
+  /// the run would come back green with a slave that trusts no identity provider.
+  final VaultLayout layout;
+
   /// The profile the address is derived from.
-  String get profilePath => '$repository/cluster/profile.yaml';
+  String get profilePath => '$repository/${layout.profile}';
 
   /// The manifest this step renders.
   String get manifestPath => '$stateDirectory/$bindingName.yaml';
@@ -137,11 +154,20 @@ final class ConfigureSlaveApiserverOidcTrust
         'API server at it',
       );
     }
-    final String? issuer = await issuerFrom(context, profilePath, clientId);
+    final ClusterProfile store = await clusterProfileFrom(context, repository, layout: layout);
+    if (store.refusal case final String refusal) {
+      // BLOCKED AND NOT SATISFIED. A profile that cannot be read at all, or that carries no address
+      // under the name this run was told to look under, is not "the stamp has not run yet" — it is
+      // a question nothing answered. Reported as satisfied, the run comes back green with a slave
+      // whose API server accepts no token from the identity provider, and the message blames a
+      // stamp that already ran.
+      return CheckResult.blocked(refusal);
+    }
+    final String? issuer = issuerFor(store.url, clientId);
     if (issuer == null) {
-      return CheckResult.satisfied(
-        '$profilePath names no address to derive the identity provider from yet, so there is nothing '
-        'to trust — the role stamp writes it',
+      return CheckResult.blocked(
+        '$profilePath carries ${store.url} under ${layout.urlKey}, and no identity provider can be '
+        'derived from it — the address the secret store answers at is what gives the domain',
       );
     }
     if (!await context.files.exists(argsPath)) {
@@ -165,7 +191,10 @@ final class ConfigureSlaveApiserverOidcTrust
 
   @override
   Future<StepPlan> plan(StepContext context) async {
-    final String? issuer = await issuerFrom(context, profilePath, clientId);
+    final String? issuer = issuerFor(
+      (await clusterProfileFrom(context, repository, layout: layout)).url,
+      clientId,
+    );
     final String current = await context.files.exists(argsPath)
         ? await context.files.read(argsPath)
         : '';
@@ -180,7 +209,10 @@ final class ConfigureSlaveApiserverOidcTrust
 
   @override
   Future<void> apply(StepContext context) async {
-    final String? issuer = await issuerFrom(context, profilePath, clientId);
+    final String? issuer = issuerFor(
+      (await clusterProfileFrom(context, repository, layout: layout)).url,
+      clientId,
+    );
     if (issuer == null) {
       return;
     }
@@ -196,10 +228,10 @@ final class ConfigureSlaveApiserverOidcTrust
 
     await context.files.createDirectory(stateDirectory, mode: 0x1ed);
     await context.files.write(manifestPath, _binding, mode: manifestMode);
-    final List<String> argv = <String>['microk8s', 'kubectl', 'apply', '-f', manifestPath];
-    final CommandResult applied = await context.shell.run(Command(argv.first, argv.sublist(1)));
+    final Command apply = kubectl.command(<String>['apply', '-f', manifestPath]);
+    final CommandResult applied = await context.shell.run(apply);
     if (!applied.ok) {
-      throw CommandFailed(argv: argv, exitCode: applied.exitCode, stderr: applied.stderr);
+      throw CommandFailed(argv: apply.argv, exitCode: applied.exitCode, stderr: applied.stderr);
     }
   }
 
@@ -220,7 +252,7 @@ final class ConfigureSlaveApiserverOidcTrust
   Future<void> undo(StepContext context, ({String? args, bool binding}) captured) async {
     if (!captured.binding) {
       await context.shell.run(
-        Command('microk8s', <String>['kubectl', 'delete', 'clusterrolebinding', bindingName]),
+        kubectl.command(<String>['delete', 'clusterrolebinding', bindingName]),
       );
     }
     if (captured.args case final String args) {
@@ -229,43 +261,30 @@ final class ConfigureSlaveApiserverOidcTrust
     }
   }
 
-  /// The address tokens are issued at, derived from the profile at [profilePath].
   ///
   /// The profile names the cluster holding the platform's shared services by the address of one of
   /// them, and the identity provider sits beside it under the same domain. Reading it from there is
   /// what keeps a cluster from trusting an identity provider nothing else on it points at.
-  static Future<String?> issuerFrom(
-    StepContext context,
-    String profilePath,
-    String clientId,
-  ) async {
-    if (!await context.files.exists(profilePath)) {
+  /// The identity provider this cluster trusts, derived from where the secret store answers.
+  ///
+  /// The two follow the same installation: the store answers at `vault.<domain>` and the provider
+  /// at `idp.<domain>`, so the address of one gives the other. It is DERIVED and never read from a
+  /// key of its own — a second key would be a second thing to keep in step with the first.
+  ///
+  /// The profile is not parsed here. It is read once, by the reader the whole vault family uses, so
+  /// where it stands and what its keys are called is a program row's to say in one place rather than
+  /// in every step that happens to need a value out of it.
+  static String? issuerFor(String? vaultUrl, String clientId) {
+    if (vaultUrl == null) {
       return null;
     }
-    final YamlNode profile;
-    try {
-      profile = loadYamlNode(await context.files.read(profilePath));
-    } on YamlException {
+    final int dot = vaultUrl.indexOf('.');
+    final int scheme = vaultUrl.indexOf('://');
+    if (dot < 0 || scheme < 0 || dot < scheme) {
       return null;
     }
-    YamlNode? at = profile;
-    for (final String key in <String>['global', 'vaultUrl']) {
-      if (at case final YamlMap map) {
-        at = map.nodes[key];
-        continue;
-      }
-      return null;
-    }
-    if (at?.value case final String url) {
-      final int dot = url.indexOf('.');
-      final int scheme = url.indexOf('://');
-      if (dot < 0 || scheme < 0 || dot < scheme) {
-        return null;
-      }
-      final String domain = url.substring(dot + 1).split('/').first.trim();
-      return domain.isEmpty ? null : 'https://idp.$domain/application/o/$clientId/';
-    }
-    return null;
+    final String domain = vaultUrl.substring(dot + 1).split('/').first.trim();
+    return domain.isEmpty ? null : 'https://idp.$domain/application/o/$clientId/';
   }
 
   Map<String, String> _flags(String issuer) => ConfigureKubeApiserverOidc(
@@ -279,8 +298,7 @@ final class ConfigureSlaveApiserverOidcTrust
 
   Future<bool> _bindingExists(StepContext context) async {
     final CommandResult binding = await context.shell.run(
-      Command.observing('microk8s', <String>[
-        'kubectl',
+      kubectl.observing(<String>[
         'get',
         'clusterrolebinding',
         bindingName,

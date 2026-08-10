@@ -22,6 +22,17 @@ import 'package:ansiwise_api/ansiwise_api.dart';
 /// and the central observability stack run where the master role is; the registry runs on the build
 /// plane; and a cluster can be one, both or neither. Deriving one from the other is how a slave ends
 /// up pointed at its own empty Vault.
+/// **THE KEYS THIS WRITES ARE A CONTRACT WITH THE ROWS THAT READ THEM, and nothing checks it.** The
+/// steps that talk to the secret store take the profile's path and its key names from their own
+/// program rows, so that a product keeping the same facts elsewhere configures them instead of
+/// forking those steps. This step is the other side: it is THIS platform's, its keys are the ones
+/// its charts read, and it is not configurable for the same reason the chart values are not.
+///
+/// The two agree today because the rows default to what is written here. An operator who moves a
+/// key in a row and not here gets a run that reads nothing under the new name — and the vault steps
+/// refuse by name, which is what keeps that from being silent. The obligation ends when the vault
+/// steps become a package of their own: a generic one carries no default for this platform's key
+/// names, so both sides then stand in this installation's program files, once.
 final class StampClusterProfile extends ReversibleStep<String?> with FileStep {
   /// Writes the profile of the cluster this run was told about.
   const StampClusterProfile({required this.repository});

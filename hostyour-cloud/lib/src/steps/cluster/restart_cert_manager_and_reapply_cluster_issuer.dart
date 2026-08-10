@@ -1,4 +1,5 @@
 import 'package:ansiwise_api/ansiwise_api.dart';
+import '../kubectl.dart';
 import 'configure_slave_apiserver_oidc_trust.dart';
 
 /// The one recovery an issuer that did not register gets, and the end of the budget for it.
@@ -23,6 +24,7 @@ final class RestartCertManagerAndReapplyClusterIssuer extends IrreversibleStep {
     required this.settleSeconds,
     required this.waitSeconds,
     required this.intervalSeconds,
+    this.kubectl = const Kubectl(),
   });
 
   /// Builds the step from what the program gave it.
@@ -34,6 +36,7 @@ final class RestartCertManagerAndReapplyClusterIssuer extends IrreversibleStep {
         settleSeconds: arguments.integer('settle_seconds'),
         waitSeconds: arguments.integer('wait_seconds'),
         intervalSeconds: arguments.integer('interval_seconds'),
+        kubectl: Kubectl.fromArguments(arguments),
       );
 
   /// What this step accepts.
@@ -80,6 +83,7 @@ final class RestartCertManagerAndReapplyClusterIssuer extends IrreversibleStep {
       required: false,
       defaultValue: 10,
     ),
+    Kubectl.argument,
   ];
 
   /// Where the certificate service runs.
@@ -110,6 +114,9 @@ final class RestartCertManagerAndReapplyClusterIssuer extends IrreversibleStep {
   /// How long to leave between looks.
   final int intervalSeconds;
 
+  /// How the cluster is reached.
+  final Kubectl kubectl;
+
   /// The manifest this step applies again.
   String get manifestPath => '$stateDirectory/clusterissuer.yaml';
 
@@ -122,7 +129,7 @@ final class RestartCertManagerAndReapplyClusterIssuer extends IrreversibleStep {
 
   @override
   Future<CheckResult> check(StepContext context) async {
-    if (await isReady(context, name)) {
+    if (await isReady(context, kubectl, name)) {
       return CheckResult.satisfied('$name reports that its account is registered');
     }
     if (!await context.files.exists(manifestPath)) {
@@ -145,31 +152,22 @@ final class RestartCertManagerAndReapplyClusterIssuer extends IrreversibleStep {
     );
     for (final String deployment in deployments) {
       await context.shell.run(
-        Command('microk8s', <String>[
-          'kubectl',
-          '-n',
-          namespace,
-          'rollout',
-          'restart',
-          'deployment/$deployment',
-        ]),
+        kubectl.command(<String>['-n', namespace, 'rollout', 'restart', 'deployment/$deployment']),
       );
     }
     await context.clock.sleep(Duration(seconds: settleSeconds));
 
-    await context.shell.run(
-      Command('microk8s', <String>['kubectl', 'delete', 'clusterissuer', name]),
-    );
+    await context.shell.run(kubectl.command(<String>['delete', 'clusterissuer', name]));
     await context.clock.sleep(const Duration(seconds: 5));
 
-    final List<String> argv = <String>['microk8s', 'kubectl', 'apply', '-f', manifestPath];
-    final CommandResult applied = await context.shell.run(Command(argv.first, argv.sublist(1)));
+    final Command apply = kubectl.command(<String>['apply', '-f', manifestPath]);
+    final CommandResult applied = await context.shell.run(apply);
     if (!applied.ok) {
-      throw CommandFailed(argv: argv, exitCode: applied.exitCode, stderr: applied.stderr);
+      throw CommandFailed(argv: apply.argv, exitCode: applied.exitCode, stderr: applied.stderr);
     }
 
     final DateTime giveUp = context.clock.now().add(Duration(seconds: waitSeconds));
-    while (!await isReady(context, name)) {
+    while (!await isReady(context, kubectl, name)) {
       if (!context.clock.now().isBefore(giveUp)) {
         throw WaitedTooLong(
           waitingFor:
@@ -188,10 +186,9 @@ final class RestartCertManagerAndReapplyClusterIssuer extends IrreversibleStep {
   /// An issuer that has just been applied carries no conditions at all, and reading them then gives
   /// nothing rather than an answer — which is not ready, and is not an error either. A reader that
   /// expected the conditions to be there would fail on the very state it is meant to report.
-  static Future<bool> isReady(StepContext context, String name) async {
+  static Future<bool> isReady(StepContext context, Kubectl kubectl, String name) async {
     final CommandResult condition = await context.shell.run(
-      Command.observing('microk8s', <String>[
-        'kubectl',
+      kubectl.observing(<String>[
         'get',
         'clusterissuer',
         name,

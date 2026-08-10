@@ -46,16 +46,21 @@ roles: [master]
 steps:
   # --- the two tools this program is made of ----------------------------------------------------
   #
-  # Every step below is one of them. helm installs the releases; kubectl applies the objects and
-  # waits on them. Neither is installed here — the cluster program is what puts them on the machine,
-  # and that this program usually runs after that one is a fact of the usual ORDER rather than of
-  # this program. Pointed at a cluster somebody else built, it would otherwise fail at the first
-  # release with a message about a chart repository where the truth is a missing command.
+  # Every step below is one of them. helm installs the releases; the cluster client applies the
+  # objects and waits on them. Neither is installed here — the cluster program is what puts them on
+  # the machine, and that this program usually runs after that one is a fact of the usual ORDER
+  # rather than of this program. Pointed at a cluster somebody else built, it would otherwise fail at
+  # the first release with a message about a chart repository where the truth is a missing command.
+  #
+  # WHAT IS DEMANDED IS WHAT IS STARTED. The steps start `microk8s kubectl`, which is one command —
+  # `microk8s` — and not two. A bare `kubectl` exists on a machine the cluster program finished, as
+  # a shell alias it writes, but demanding it here refuses a machine over a tool nothing uses while
+  # letting one through that carries no cluster client at all.
   #
   # It MEASURES and installs nothing. A program that quietly installed something would be a program
   # whose dry run lied, having shown a plan without the installation it was about to perform.
   - step: require_commands
-    commands: [helm, kubectl]
+    commands: [helm, microk8s]
     on_failure: exit
 
   # --- the secret store -----------------------------------------------------------------------

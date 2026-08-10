@@ -164,6 +164,63 @@ void main() {
       expect(wrongStage, isA<Blocked>());
       expect((wrongStage as Blocked).reason, contains('vault-dev.txt'));
     });
+
+    test('where the profile and the credential file stand is the row\'s to say', () async {
+      // Another product keeps the same facts elsewhere: the profile under another name, the
+      // address under other keys, the credential file in another directory. The layout arguments
+      // carry all of it, and the stage answer still fills the marked stage in the moved path.
+      const VaultLayout moved = VaultLayout(
+        profile: 'platform/profile.yaml',
+        urlKey: 'platform.vaultUrl',
+        nameKey: 'platform.clusterName',
+        authPathKey: 'platform.vaultKubernetesAuthPath',
+        credentials: 'platform/vault-<stage>.txt',
+      );
+      final ScriptedHttp http = ScriptedHttp(
+        (HttpRequest request, int nth) => answer('{"sealed": false}'),
+      );
+      final ({StepContext context, MemoryRecorder recorder}) it = contextOf(
+        shell: FakeShell(),
+        files: FakeFiles(<String, String>{
+          '$repository/platform/profile.yaml': 'platform:\n  vaultUrl: $url\n',
+          '$repository/platform/vault-dev.txt': credentialFileHolding(<String>['k1']),
+        }),
+        http: http,
+        step: 'vault_unsealed',
+      );
+
+      expect(
+        await const VaultUnsealed(repository: repository, layout: moved).check(it.context),
+        isA<Satisfied>(),
+      );
+      expect(http.sent.single.url, '$url/v1/sys/seal-status');
+    });
+
+    test(
+      'a moved profile that lacks the address names the configured key, not the default',
+      () async {
+        const VaultLayout moved = VaultLayout(
+          profile: 'platform/profile.yaml',
+          urlKey: 'platform.vaultUrl',
+        );
+        final ScriptedHttp http = ScriptedHttp((HttpRequest request, int nth) => answer('{}'));
+        final ({StepContext context, MemoryRecorder recorder}) it = contextOf(
+          shell: FakeShell(),
+          files: FakeFiles(<String, String>{'$repository/platform/profile.yaml': 'platform: {}\n'}),
+          http: http,
+          step: 'vault_unsealed',
+        );
+
+        final CheckResult result = await const VaultUnsealed(
+          repository: repository,
+          layout: moved,
+        ).check(it.context);
+        expect(result, isA<Blocked>());
+        expect((result as Blocked).reason, contains('$repository/platform/profile.yaml'));
+        expect(result.reason, contains('platform.vaultUrl'));
+        expect(http.sent, isEmpty);
+      },
+    );
   });
 
   group('minting the quorum', () {

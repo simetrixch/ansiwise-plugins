@@ -22,13 +22,19 @@ import 'vault_api.dart';
 /// resort it is and why nothing re-enables a mount by turning it off first.
 final class VaultAuthMethod extends ReversibleStep<bool> {
   /// Enables an auth method of [type] at [path] in the Vault the profile in [repository] names.
-  const VaultAuthMethod({required this.repository, required this.type, required this.path});
+  const VaultAuthMethod({
+    required this.repository,
+    required this.type,
+    required this.path,
+    this.layout = const VaultLayout(),
+  });
 
   /// Builds the step from what the program gave it.
   factory VaultAuthMethod.fromArguments(Arguments arguments) => VaultAuthMethod(
     repository: arguments.text('repository'),
     type: arguments.text('type'),
     path: arguments.text('path'),
+    layout: VaultLayout.fromArguments(arguments),
   );
 
   /// What this step accepts.
@@ -53,6 +59,7 @@ final class VaultAuthMethod extends ReversibleStep<bool> {
           'against — "$kubernetesMountPlaceholder" for the mount this cluster\'s own workloads log '
           'in through, which the profile names',
     ),
+    ...VaultLayout.arguments,
   ];
 
   /// The answers this step reads, which is what its registry entry declares.
@@ -60,6 +67,9 @@ final class VaultAuthMethod extends ReversibleStep<bool> {
 
   /// The checkout this installation runs from.
   final String repository;
+
+  /// Where the profile and the credential file stand under the checkout.
+  final VaultLayout layout;
 
   /// The kind of method.
   final String type;
@@ -69,7 +79,7 @@ final class VaultAuthMethod extends ReversibleStep<bool> {
 
   @override
   Future<CheckResult> check(StepContext context) async {
-    final ClusterProfile vault = await clusterProfileFrom(context, repository);
+    final ClusterProfile vault = await clusterProfileFrom(context, repository, layout: layout);
     final ArgumentText mount = vault.forThisInstallation(context, path);
     if (mount.refusal case final String refusal) {
       return CheckResult.blocked(refusal);
@@ -77,7 +87,10 @@ final class VaultAuthMethod extends ReversibleStep<bool> {
     final String url = vault.url ?? '';
     final String at = mount.value ?? '';
 
-    final RootToken token = await rootTokenFrom(context, vaultCredentialsPath(context, repository));
+    final RootToken token = await rootTokenFrom(
+      context,
+      vaultCredentialsPath(context, repository, credentials: layout.credentials),
+    );
     if (token.refusal case final String refusal) {
       return CheckResult.blocked(refusal);
     }
@@ -99,7 +112,7 @@ final class VaultAuthMethod extends ReversibleStep<bool> {
 
   @override
   Future<StepPlan> plan(StepContext context) async {
-    final ClusterProfile vault = await clusterProfileFrom(context, repository);
+    final ClusterProfile vault = await clusterProfileFrom(context, repository, layout: layout);
     final ArgumentText mount = vault.forThisInstallation(context, path);
     if (mount.refusal case final String refusal) {
       return StepPlan.nothing(refusal);
@@ -113,10 +126,13 @@ final class VaultAuthMethod extends ReversibleStep<bool> {
 
   @override
   Future<void> apply(StepContext context) async {
-    final ClusterProfile vault = await clusterProfileFrom(context, repository);
+    final ClusterProfile vault = await clusterProfileFrom(context, repository, layout: layout);
     final String url = vault.url ?? '';
     final String at = vault.forThisInstallation(context, path).value ?? '';
-    final RootToken token = await rootTokenFrom(context, vaultCredentialsPath(context, repository));
+    final RootToken token = await rootTokenFrom(
+      context,
+      vaultCredentialsPath(context, repository, credentials: layout.credentials),
+    );
     final String held = token.value ?? '';
     final HttpAnswer answer = await context.http.send(
       vaultWrite(url, 'sys/auth/$at', token: held, body: <String, Object?>{'type': type}),
@@ -142,12 +158,12 @@ final class VaultAuthMethod extends ReversibleStep<bool> {
   /// as already there: neither is a mount it may disable.
   @override
   Future<bool> capture(StepContext context) async {
-    final ClusterProfile vault = await clusterProfileFrom(context, repository);
+    final ClusterProfile vault = await clusterProfileFrom(context, repository, layout: layout);
     final ArgumentText mount = vault.forThisInstallation(context, path);
     if (mount.refusal == null) {
       final RootToken token = await rootTokenFrom(
         context,
-        vaultCredentialsPath(context, repository),
+        vaultCredentialsPath(context, repository, credentials: layout.credentials),
       );
       if (token.value case final String held) {
         return await _mountedType(context, vault.url ?? '', held, mount.value ?? '') != null;
@@ -161,12 +177,15 @@ final class VaultAuthMethod extends ReversibleStep<bool> {
     if (captured) {
       return;
     }
-    final ClusterProfile vault = await clusterProfileFrom(context, repository);
+    final ClusterProfile vault = await clusterProfileFrom(context, repository, layout: layout);
     final ArgumentText mount = vault.forThisInstallation(context, path);
     if (mount.refusal != null) {
       return;
     }
-    final RootToken token = await rootTokenFrom(context, vaultCredentialsPath(context, repository));
+    final RootToken token = await rootTokenFrom(
+      context,
+      vaultCredentialsPath(context, repository, credentials: layout.credentials),
+    );
     if (token.value case final String held) {
       await context.http.send(vaultDelete(vault.url ?? '', 'sys/auth/${mount.value}', token: held));
     }

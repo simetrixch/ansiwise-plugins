@@ -42,13 +42,13 @@ void main() {
   }
 
   FakeShell diffing(int exitCode) => FakeShell(<String, CommandResult>{
-    'kubectl diff --filename $composed': CommandResult(
+    'microk8s kubectl diff --filename $composed': CommandResult(
       exitCode: exitCode,
       stdout: '',
       stderr: exitCode > 1 ? 'the server could not be reached' : '',
       elapsed: Duration.zero,
     ),
-    'kubectl create configmap idp-blueprints --namespace idp --from-file $blueprints '
+    'microk8s kubectl create configmap idp-blueprints --namespace idp --from-file $blueprints '
         '--dry-run=client -o yaml': const CommandResult(
       exitCode: 0,
       stdout: 'apiVersion: v1\nkind: ConfigMap\n',
@@ -111,7 +111,13 @@ void main() {
 
         expect(shell.commands.first.argv, contains('--dry-run=client'));
         expect(shell.commands.first.argv, contains(blueprints));
-        expect(shell.commands.last.argv, <String>['kubectl', 'apply', '--filename', composed]);
+        expect(shell.commands.last.argv, <String>[
+          'microk8s',
+          'kubectl',
+          'apply',
+          '--filename',
+          composed,
+        ]);
       },
     );
 
@@ -126,7 +132,7 @@ void main() {
 
     test('a create that fails is a failure, and nothing is applied after it', () async {
       final FakeShell shell = FakeShell(<String, CommandResult>{
-        'kubectl create configmap idp-blueprints --namespace idp --from-file $blueprints '
+        'microk8s kubectl create configmap idp-blueprints --namespace idp --from-file $blueprints '
             '--dry-run=client -o yaml': const CommandResult(
           exitCode: 1,
           stdout: '',
@@ -152,6 +158,7 @@ void main() {
     final FakeShell shell = diffing(0);
     await step.undo(contextOn(shell).context, false);
     expect(shell.commands.single.argv, <String>[
+      'microk8s',
       'kubectl',
       'delete',
       'configmap',

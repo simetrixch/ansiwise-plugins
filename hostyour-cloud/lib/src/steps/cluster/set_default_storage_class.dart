@@ -2,6 +2,8 @@ import 'dart:convert';
 
 import 'package:ansiwise_api/ansiwise_api.dart';
 
+import '../kubectl.dart';
+
 /// Marks one of the cluster's storage classes as the one a claim gets when it names none.
 ///
 /// Almost every claim this platform makes names no class, so without a default they are all accepted
@@ -17,12 +19,17 @@ import 'package:ansiwise_api/ansiwise_api.dart';
 /// second time, which nothing arranges. Waiting is the deliberate departure from what this replaces.
 final class SetDefaultStorageClass extends ReversibleStep<String?> {
   /// Waits up to [timeoutSeconds] for a class and marks the first one as the default.
-  const SetDefaultStorageClass({required this.timeoutSeconds, required this.intervalSeconds});
+  const SetDefaultStorageClass({
+    required this.timeoutSeconds,
+    required this.intervalSeconds,
+    this.kubectl = const Kubectl(),
+  });
 
   /// Builds the step from what the program gave it.
   factory SetDefaultStorageClass.fromArguments(Arguments arguments) => SetDefaultStorageClass(
     timeoutSeconds: arguments.integer('timeout_seconds'),
     intervalSeconds: arguments.integer('interval_seconds'),
+    kubectl: Kubectl.fromArguments(arguments),
   );
 
   /// What this step accepts.
@@ -41,6 +48,7 @@ final class SetDefaultStorageClass extends ReversibleStep<String?> {
       required: false,
       defaultValue: 5,
     ),
+    Kubectl.argument,
   ];
 
   /// The mark that says a class is the default.
@@ -51,6 +59,9 @@ final class SetDefaultStorageClass extends ReversibleStep<String?> {
 
   /// How long to leave between looks.
   final int intervalSeconds;
+
+  /// How the cluster is reached.
+  final Kubectl kubectl;
 
   @override
   Future<CheckResult> check(StepContext context) async {
@@ -119,8 +130,7 @@ final class SetDefaultStorageClass extends ReversibleStep<String?> {
   /// Every storage class and whether it carries the mark, or null when they cannot be read.
   Future<Map<String, bool>?> _classes(StepContext context) async {
     final CommandResult classes = await context.shell.run(
-      Command.observing('microk8s', <String>[
-        'kubectl',
+      kubectl.observing(<String>[
         'get',
         'storageclass',
         '-o',
@@ -153,9 +163,7 @@ final class SetDefaultStorageClass extends ReversibleStep<String?> {
   }
 
   Future<void> _mark(StepContext context, String storageClass, bool isDefault) async {
-    final List<String> argv = <String>[
-      'microk8s',
-      'kubectl',
+    final Command mark = kubectl.command(<String>[
       'patch',
       'storageclass',
       storageClass,
@@ -167,10 +175,10 @@ final class SetDefaultStorageClass extends ReversibleStep<String?> {
           'annotations': <String, String>{annotation: '$isDefault'},
         },
       }),
-    ];
-    final CommandResult marked = await context.shell.run(Command(argv.first, argv.sublist(1)));
+    ]);
+    final CommandResult marked = await context.shell.run(mark);
     if (!marked.ok) {
-      throw CommandFailed(argv: argv, exitCode: marked.exitCode, stderr: marked.stderr);
+      throw CommandFailed(argv: mark.argv, exitCode: marked.exitCode, stderr: marked.stderr);
     }
   }
 

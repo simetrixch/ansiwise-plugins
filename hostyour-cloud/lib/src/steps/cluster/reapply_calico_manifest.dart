@@ -1,4 +1,5 @@
 import 'package:ansiwise_api/ansiwise_api.dart';
+import '../kubectl.dart';
 import 'stamp_calico_pool_cidr_in_cni_manifest.dart';
 
 /// Puts the stamped network manifest into the cluster, so Calico carries the new range.
@@ -13,12 +14,17 @@ import 'stamp_calico_pool_cidr_in_cni_manifest.dart';
 /// after this one, and whether it converged is the step after that.
 final class ReapplyCalicoManifest extends ReversibleStep<String?> {
   /// Applies the manifest at [manifestPath], which must already carry [podCidr].
-  const ReapplyCalicoManifest({required this.podCidr, required this.manifestPath});
+  const ReapplyCalicoManifest({
+    required this.podCidr,
+    required this.manifestPath,
+    this.kubectl = const Kubectl(),
+  });
 
   /// Builds the step from what the program gave it.
   factory ReapplyCalicoManifest.fromArguments(Arguments arguments) => ReapplyCalicoManifest(
     podCidr: arguments.text('pod_cidr'),
     manifestPath: arguments.text('manifest_path'),
+    kubectl: Kubectl.fromArguments(arguments),
   );
 
   /// What this step accepts.
@@ -35,6 +41,7 @@ final class ReapplyCalicoManifest extends ReversibleStep<String?> {
       required: false,
       defaultValue: StampCalicoPoolCidrInCniManifest.defaultPath,
     ),
+    Kubectl.argument,
   ];
 
   /// The namespace the network agent runs in.
@@ -49,6 +56,9 @@ final class ReapplyCalicoManifest extends ReversibleStep<String?> {
   /// The manifest that is applied.
   final String manifestPath;
 
+  /// How the cluster is reached.
+  final Kubectl kubectl;
+
   @override
   Future<CheckResult> check(StepContext context) async {
     if (!await context.files.exists(manifestPath)) {
@@ -61,14 +71,15 @@ final class ReapplyCalicoManifest extends ReversibleStep<String?> {
         'cluster',
       );
     }
-    if (await declaredPoolCidr(context) == podCidr) {
+    if (await declaredPoolCidr(context, kubectl) == podCidr) {
       return CheckResult.satisfied('$daemonSet in the cluster is declared with $podCidr');
     }
     return const CheckResult.ready();
   }
 
   @override
-  Future<StepPlan> plan(StepContext context) async => StepPlan.argv(_argv(manifestPath));
+  Future<StepPlan> plan(StepContext context) async =>
+      StepPlan.argv(kubectl.argv(<String>['apply', '-f', manifestPath]));
 
   @override
   Future<void> apply(StepContext context) async {
@@ -93,10 +104,9 @@ final class ReapplyCalicoManifest extends ReversibleStep<String?> {
   }
 
   /// The range the network agent is declared with in the cluster, or null when it cannot be read.
-  static Future<String?> declaredPoolCidr(StepContext context) async {
+  static Future<String?> declaredPoolCidr(StepContext context, Kubectl kubectl) async {
     final CommandResult declared = await context.shell.run(
-      const Command.observing('microk8s', <String>[
-        'kubectl',
+      kubectl.observing(<String>[
         '-n',
         namespace,
         'get',
@@ -110,13 +120,11 @@ final class ReapplyCalicoManifest extends ReversibleStep<String?> {
     return declared.ok && declared.trimmed.isNotEmpty ? declared.trimmed : null;
   }
 
-  static Future<void> _apply(StepContext context, String path) async {
-    final List<String> argv = _argv(path);
-    final CommandResult applied = await context.shell.run(Command(argv.first, argv.sublist(1)));
+  Future<void> _apply(StepContext context, String path) async {
+    final Command apply = kubectl.command(<String>['apply', '-f', path]);
+    final CommandResult applied = await context.shell.run(apply);
     if (!applied.ok) {
-      throw CommandFailed(argv: argv, exitCode: applied.exitCode, stderr: applied.stderr);
+      throw CommandFailed(argv: apply.argv, exitCode: applied.exitCode, stderr: applied.stderr);
     }
   }
-
-  static List<String> _argv(String path) => <String>['microk8s', 'kubectl', 'apply', '-f', path];
 }

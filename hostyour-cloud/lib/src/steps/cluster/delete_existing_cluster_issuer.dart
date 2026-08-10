@@ -1,5 +1,7 @@
 import 'package:ansiwise_api/ansiwise_api.dart';
 
+import '../kubectl.dart';
+
 /// Takes the certificate issuer away so the next steps build it again from what this run renders.
 ///
 /// Only when the operator asks for it. An issuer that is there and working is what every certificate
@@ -7,11 +9,19 @@ import 'package:ansiwise_api/ansiwise_api.dart';
 /// gain.
 final class DeleteExistingClusterIssuer extends IrreversibleStep {
   /// Deletes the issuer [name] when [force] is set.
-  const DeleteExistingClusterIssuer({required this.name, required this.force});
+  const DeleteExistingClusterIssuer({
+    required this.name,
+    required this.force,
+    this.kubectl = const Kubectl(),
+  });
 
   /// Builds the step from what the program gave it.
   factory DeleteExistingClusterIssuer.fromArguments(Arguments arguments) =>
-      DeleteExistingClusterIssuer(name: arguments.text('name'), force: arguments.flag('force'));
+      DeleteExistingClusterIssuer(
+        name: arguments.text('name'),
+        force: arguments.flag('force'),
+        kubectl: Kubectl.fromArguments(arguments),
+      );
 
   /// What this step accepts.
   static const List<ArgumentSpec> arguments = <ArgumentSpec>[
@@ -29,6 +39,7 @@ final class DeleteExistingClusterIssuer extends IrreversibleStep {
       required: false,
       defaultValue: false,
     ),
+    Kubectl.argument,
   ];
 
   /// The issuer certificates are issued by.
@@ -36,6 +47,9 @@ final class DeleteExistingClusterIssuer extends IrreversibleStep {
 
   /// Whether the operator asked for it to be rebuilt.
   final bool force;
+
+  /// How the cluster is reached.
+  final Kubectl kubectl;
 
   @override
   String get irreversibleReason =>
@@ -51,46 +65,33 @@ final class DeleteExistingClusterIssuer extends IrreversibleStep {
         'a rebuild was not asked for, so an issuer that is already there is left alone',
       );
     }
-    if (!await exists(context, name)) {
+    if (!await exists(context, kubectl, name)) {
       return CheckResult.satisfied('there is no $name to take away');
     }
     return const CheckResult.ready();
   }
 
   @override
-  Future<StepPlan> plan(StepContext context) async => StepPlan.argv(_argv(name));
+  Future<StepPlan> plan(StepContext context) async => StepPlan.argv(kubectl.argv(_delete));
 
   @override
   Future<void> apply(StepContext context) async {
-    final List<String> argv = _argv(name);
-    final CommandResult deleted = await context.shell.run(Command(argv.first, argv.sublist(1)));
+    final Command delete = kubectl.command(_delete);
+    final CommandResult deleted = await context.shell.run(delete);
     if (!deleted.ok) {
-      throw CommandFailed(argv: argv, exitCode: deleted.exitCode, stderr: deleted.stderr);
+      throw CommandFailed(argv: delete.argv, exitCode: deleted.exitCode, stderr: deleted.stderr);
     }
   }
 
-  /// Whether the issuer [name] is in the cluster.
+  /// Whether the issuer [name] is in the cluster, asked through [kubectl].
   ///
   /// Shared with the step that applies it, so both ask the same question of the cluster.
-  static Future<bool> exists(StepContext context, String name) async {
+  static Future<bool> exists(StepContext context, Kubectl kubectl, String name) async {
     final CommandResult issuer = await context.shell.run(
-      Command.observing('microk8s', <String>[
-        'kubectl',
-        'get',
-        'clusterissuer',
-        name,
-        '-o',
-        'jsonpath={.metadata.name}',
-      ]),
+      kubectl.observing(<String>['get', 'clusterissuer', name, '-o', 'jsonpath={.metadata.name}']),
     );
     return issuer.ok && issuer.trimmed == name;
   }
 
-  static List<String> _argv(String name) => <String>[
-    'microk8s',
-    'kubectl',
-    'delete',
-    'clusterissuer',
-    name,
-  ];
+  List<String> get _delete => <String>['delete', 'clusterissuer', name];
 }

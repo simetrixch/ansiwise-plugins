@@ -1,5 +1,7 @@
 import 'package:ansiwise_api/ansiwise_api.dart';
 
+import '../kubectl.dart';
+
 /// Puts the objects of one manifest of the checkout on the cluster, and takes exactly those away.
 ///
 /// **What this replaces is eight step classes.** The certificates and routes that give the identity
@@ -25,12 +27,17 @@ import 'package:ansiwise_api/ansiwise_api.dart';
 /// [capture] found the cluster holding none of them.
 final class KubernetesObject extends ReversibleStep<bool> {
   /// Applies the manifest at [manifest], under [repository].
-  const KubernetesObject({required this.repository, required this.manifest});
+  const KubernetesObject({
+    required this.repository,
+    required this.manifest,
+    this.kubectl = const Kubectl(),
+  });
 
   /// Builds the step from what the program gave it.
   factory KubernetesObject.fromArguments(Arguments arguments) => KubernetesObject(
     repository: arguments.text('repository'),
     manifest: arguments.text('manifest'),
+    kubectl: Kubectl.fromArguments(arguments),
   );
 
   /// What this step accepts.
@@ -45,6 +52,7 @@ final class KubernetesObject extends ReversibleStep<bool> {
       kind: ArgumentKind.text,
       describes: 'the manifest, as a path under that checkout',
     ),
+    Kubectl.argument,
   ];
 
   /// The checkout.
@@ -52,6 +60,9 @@ final class KubernetesObject extends ReversibleStep<bool> {
 
   /// The manifest, relative to it.
   final String manifest;
+
+  /// How the cluster is reached.
+  final Kubectl kubectl;
 
   /// The manifest as the machine holds it.
   String get path => '$repository/$manifest';
@@ -64,7 +75,7 @@ final class KubernetesObject extends ReversibleStep<bool> {
       return CheckResult.blocked('$manifest is not in this checkout, so there is nothing to apply');
     }
     final CommandResult found = await context.shell.run(
-      Command.observing('kubectl', <String>['diff', '--filename', path]),
+      kubectl.observing(<String>['diff', '--filename', path]),
     );
     // `kubectl diff` exits zero when the cluster already holds what the file says and one when it
     // does not — which is the question this step's check asks, answered by the server rather than by
@@ -84,7 +95,9 @@ final class KubernetesObject extends ReversibleStep<bool> {
 
   @override
   Future<void> apply(StepContext context) async {
-    final CommandResult applied = await context.shell.run(Command('kubectl', _apply.sublist(1)));
+    final CommandResult applied = await context.shell.run(
+      kubectl.command(<String>['apply', '--filename', path]),
+    );
     if (!applied.ok) {
       throw CommandFailed(argv: _apply, exitCode: applied.exitCode, stderr: applied.stderr);
     }
@@ -103,7 +116,7 @@ final class KubernetesObject extends ReversibleStep<bool> {
   @override
   Future<bool> capture(StepContext context) async {
     final CommandResult found = await context.shell.run(
-      Command.observing('kubectl', <String>['get', '--filename', path, '-o', 'name']),
+      kubectl.observing(<String>['get', '--filename', path, '-o', 'name']),
     );
     return found.ok;
   }
@@ -114,9 +127,9 @@ final class KubernetesObject extends ReversibleStep<bool> {
       return;
     }
     await context.shell.run(
-      Command('kubectl', <String>['delete', '--filename', path, '--ignore-not-found']),
+      kubectl.command(<String>['delete', '--filename', path, '--ignore-not-found']),
     );
   }
 
-  List<String> get _apply => <String>['kubectl', 'apply', '--filename', path];
+  List<String> get _apply => kubectl.argv(<String>['apply', '--filename', path]);
 }

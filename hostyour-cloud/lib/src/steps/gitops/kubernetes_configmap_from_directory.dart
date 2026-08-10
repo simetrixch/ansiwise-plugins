@@ -1,5 +1,7 @@
 import 'package:ansiwise_api/ansiwise_api.dart';
 
+import '../kubectl.dart';
+
 /// Makes a ConfigMap out of a directory of the checkout, one key per file.
 ///
 /// **What it is for.** The identity provider's blueprints declare the OIDC client of everything an
@@ -28,6 +30,7 @@ final class KubernetesConfigmapFromDirectory extends ReversibleStep<bool> {
     required this.name,
     required this.namespace,
     required this.staging,
+    this.kubectl = const Kubectl(),
   });
 
   /// Builds the step from what the program gave it.
@@ -38,6 +41,7 @@ final class KubernetesConfigmapFromDirectory extends ReversibleStep<bool> {
         name: arguments.text('name'),
         namespace: arguments.text('namespace'),
         staging: arguments.text('staging'),
+        kubectl: Kubectl.fromArguments(arguments),
       );
 
   /// What this step accepts.
@@ -63,6 +67,7 @@ final class KubernetesConfigmapFromDirectory extends ReversibleStep<bool> {
       kind: ArgumentKind.text,
       describes: 'the directory the composed object is written in and removed from again',
     ),
+    Kubectl.argument,
   ];
 
   /// The checkout.
@@ -79,6 +84,9 @@ final class KubernetesConfigmapFromDirectory extends ReversibleStep<bool> {
 
   /// Where the composed object stands while `kubectl` reads it.
   final String staging;
+
+  /// How the cluster is reached.
+  final Kubectl kubectl;
 
   /// `0644` — what this carries is declarations and no credential, so it is readable like the files
   /// it was composed from.
@@ -101,7 +109,7 @@ final class KubernetesConfigmapFromDirectory extends ReversibleStep<bool> {
       return CheckResult.blocked('$directory holds no file, so the ConfigMap would carry no key');
     }
     final CommandResult found = await context.shell.run(
-      Command.observing('kubectl', <String>['diff', '--filename', pathFor()]),
+      kubectl.observing(<String>['diff', '--filename', pathFor()]),
     );
     // Asked of the file this step composes, so the answer covers the keys as well as the object:
     // a file deleted from the directory is a key the cluster still has and the composed object no
@@ -115,21 +123,22 @@ final class KubernetesConfigmapFromDirectory extends ReversibleStep<bool> {
 
   @override
   Future<StepPlan> plan(StepContext context) async =>
-      StepPlan.argv(<String>['kubectl', 'apply', '--filename', pathFor()]);
+      StepPlan.argv(kubectl.argv(<String>['apply', '--filename', pathFor()]));
 
   @override
   Future<void> apply(StepContext context) async {
-    final CommandResult composed = await context.shell.run(Command('kubectl', _compose.sublist(1)));
+    final Command compose = kubectl.command(_compose);
+    final CommandResult composed = await context.shell.run(compose);
     if (!composed.ok) {
-      throw CommandFailed(argv: _compose, exitCode: composed.exitCode, stderr: composed.stderr);
+      throw CommandFailed(argv: compose.argv, exitCode: composed.exitCode, stderr: composed.stderr);
     }
     final String file = pathFor();
     await context.files.write(file, composed.stdout, mode: mode);
     try {
-      final List<String> argv = <String>['kubectl', 'apply', '--filename', file];
-      final CommandResult applied = await context.shell.run(Command('kubectl', argv.sublist(1)));
+      final Command apply = kubectl.command(<String>['apply', '--filename', file]);
+      final CommandResult applied = await context.shell.run(apply);
       if (!applied.ok) {
-        throw CommandFailed(argv: argv, exitCode: applied.exitCode, stderr: applied.stderr);
+        throw CommandFailed(argv: apply.argv, exitCode: applied.exitCode, stderr: applied.stderr);
       }
     } finally {
       await context.files.delete(file);
@@ -149,15 +158,7 @@ final class KubernetesConfigmapFromDirectory extends ReversibleStep<bool> {
   @override
   Future<bool> capture(StepContext context) async {
     final CommandResult found = await context.shell.run(
-      Command.observing('kubectl', <String>[
-        'get',
-        'configmap',
-        name,
-        '--namespace',
-        namespace,
-        '-o',
-        'name',
-      ]),
+      kubectl.observing(<String>['get', 'configmap', name, '--namespace', namespace, '-o', 'name']),
     );
     return found.ok;
   }
@@ -168,7 +169,7 @@ final class KubernetesConfigmapFromDirectory extends ReversibleStep<bool> {
       return;
     }
     await context.shell.run(
-      Command('kubectl', <String>[
+      kubectl.command(<String>[
         'delete',
         'configmap',
         name,
@@ -185,7 +186,6 @@ final class KubernetesConfigmapFromDirectory extends ReversibleStep<bool> {
   /// its own refuses a ConfigMap that already exists, so a second run would fail on the very thing
   /// a second run is supposed to find already done.
   List<String> get _compose => <String>[
-    'kubectl',
     'create',
     'configmap',
     name,
