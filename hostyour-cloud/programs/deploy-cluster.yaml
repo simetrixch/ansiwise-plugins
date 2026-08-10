@@ -349,6 +349,12 @@ steps:
   # The last part of the certificate service to come up is the one that admits certificate objects,
   # so it is what readiness is decided on: while it is not running, applying an issuer is refused by
   # the API server with a message about a webhook rather than about certificates.
+  #
+  # WHY THIS DEADLINE CAN BE REACHED ON A HEALTHY CLUSTER, and why that is correct: some versions of
+  # the certificate service do not label their admission part `app=webhook`, so this row finds
+  # nothing and waits out its budget. The run is meant to continue — the failure is recorded and
+  # `on_failure: continue` carries it. The plausible wrong repair is to loosen the row until it
+  # passes, and that would make "ready" mean less on the version this platform actually pins.
   - step: wait_for_answer
     waiting_for: the part of the certificate service that admits certificate objects to be running
     command: microk8s

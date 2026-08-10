@@ -63,6 +63,12 @@ final class RestartMicrok8sSnapForPodCidr extends IrreversibleStep {
   /// How long the rollout is given.
   final int rolloutTimeoutSeconds;
 
+  /// The room the readiness command has beyond the budget it was given.
+  ///
+  /// Named rather than written into the call, because the number is not arbitrary and the obvious
+  /// tidy-up is to remove it: it is what makes the outer kill lose the race.
+  static const Duration _outerGrace = Duration(seconds: 30);
+
   @override
   Future<CheckResult> check(StepContext context) async {
     final List<String>? running = await runningPoolCidrs(context);
@@ -85,12 +91,17 @@ final class RestartMicrok8sSnapForPodCidr extends IrreversibleStep {
   Future<void> apply(StepContext context) async {
     await _mustRun(context, <String>['snap', 'restart', microk8sSnap]);
 
+    // TWO DEADLINES RACE HERE AND THE OUTER ONE HAS TO LOSE. The command is given the budget and
+    // reports on its own when the node does not come back; the timeout beside it is only the
+    // backstop for a command that never returns at all. The grace is what makes the command's own
+    // answer arrive first — without it both expire together and what the operator reads is a bare
+    // kill instead of the status line saying which part is not up.
     final CommandResult ready = await context.shell.run(
       Command.detailed(
         'microk8s',
         arguments: <String>['status', '--wait-ready', '--timeout', '$readyTimeoutSeconds'],
         observes: true,
-        timeout: Duration(seconds: readyTimeoutSeconds + 30),
+        timeout: Duration(seconds: readyTimeoutSeconds) + _outerGrace,
       ),
     );
     if (!ready.ok || !ready.stdout.contains(microk8sRunningLine)) {
