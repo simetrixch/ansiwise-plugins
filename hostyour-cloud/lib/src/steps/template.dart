@@ -1,14 +1,16 @@
 import 'package:ansiwise_api/ansiwise_api.dart';
 
+import 'slots.dart';
+
 /// The text of a file this plugin writes, kept beside the plugin instead of composed in Dart.
 ///
 /// **A template is the file itself with each per-installation value taken out and a marked slot left
-/// where it stood.** A slot is written `<name>`, which is the notation this plugin already uses
-/// everywhere a value cannot be written down in advance: a program file writes `<cluster>` and
-/// `<stage>` where the run's own names belong, and a release url writes `<version>` where the pin
-/// belongs. A slot is a NAME and nothing else — no expression, no condition, no loop — so what a
-/// reader has in front of them is the file that will land on the machine rather than a language for
-/// producing files.
+/// where it stood.** A slot is written `<name>` — the one notation this plugin uses everywhere a
+/// value cannot be written down in advance, defined in one place for every filling: a program file
+/// writes `<cluster>` and `<stage>` where the run's own names belong, and a release url writes
+/// `<version>` where the pin belongs. A slot is a NAME and nothing else — no expression, no
+/// condition, no loop — so what a reader has in front of them is the file that will land on the
+/// machine rather than a language for producing files.
 ///
 /// **What that rules out is deliberate.** A file whose line is present on one machine and absent on
 /// another cannot be written this way: leaving a slot empty writes the key with no value, and a key
@@ -31,22 +33,15 @@ final class Template {
   final String text;
 
   /// The slot names it carries, each named once, in the order they first appear.
-  List<String> get slots {
-    final List<String> found = <String>[];
-    for (final RegExpMatch match in _slot.allMatches(text)) {
-      if (match.group(1) case final String name) {
-        if (!found.contains(name)) {
-          found.add(name);
-        }
-      }
-    }
-    return found;
-  }
+  List<String> get slots => slotsIn(text);
 
   /// [text] with the slot named by each entry of [values] holding that entry's value.
   ///
   /// Throws [TemplateRefused] naming everything the two disagree about, all of it at once — a
-  /// caller correcting one name per run is a caller running it five times.
+  /// caller correcting one name per run is a caller running it five times. Both directions are
+  /// refused, and that is stricter than filling an argument on purpose: a template is a whole file
+  /// with a declared value set, so a value with no slot is a value that silently never reaches the
+  /// file, while an argument is free to use any part of what a run holds.
   String filledWith(Map<String, String> values) {
     final List<String> named = slots;
     final List<String> unfilled = <String>[
@@ -70,11 +65,7 @@ final class Template {
       );
     }
 
-    String written = text;
-    for (final MapEntry<String, String> value in values.entries) {
-      written = written.replaceAll('<${value.key}>', value.value);
-    }
-    return written;
+    return filledSlots(text, values);
   }
 
   static String _asSlots(List<String> names) => names.map((String name) => '<$name>').join(', ');
@@ -165,6 +156,3 @@ base mixin TemplateStep on FileStep {
     }
   }
 }
-
-/// A marked slot: a name in angle brackets, and nothing that could be an expression.
-final RegExp _slot = RegExp('<([a-z][a-z0-9-]*)>');

@@ -9,10 +9,10 @@ import '../cluster/configure_kube_apiserver_oidc.dart';
 /// configuration rather than about the address. So the address is measured once, here, and named as
 /// what it is.
 ///
-/// **The address is composed by the step that configures the API server, and not by this one.** The
-/// two are the same address by construction — [ConfigureKubeApiserverOidc.issuerUrlFor] is called
-/// here — because a gate given its own address checks one issuer while the cluster is pointed at
-/// another, and the run is green either way.
+/// **The address is filled by the same code that fills it for the API server, never composed
+/// here.** [ConfigureKubeApiserverOidc.issuerUrlFor] is called with this row's issuer and client,
+/// which therefore must be the words the configuring row writes — a gate measuring one issuer
+/// while the cluster is pointed at another is green either way.
 ///
 /// **This is a gate that verifies an earlier step, and it says so.** The document does not exist
 /// until the identity provider is deployed, so in the two modes that change nothing it reports what
@@ -23,11 +23,16 @@ import '../cluster/configure_kube_apiserver_oidc.dart';
 /// fetches before it ever sees a login form.
 final class IdpDiscoveryReachable extends ObservingStep {
   /// Refuses a run whose identity provider does not answer for the client [clientId].
-  const IdpDiscoveryReachable({required this.clientId});
+  const IdpDiscoveryReachable({
+    required this.clientId,
+    this.issuer = ConfigureKubeApiserverOidc.defaultIssuer,
+  });
 
   /// Builds the step from what the program gave it.
-  factory IdpDiscoveryReachable.fromArguments(Arguments arguments) =>
-      IdpDiscoveryReachable(clientId: arguments.text('client_id'));
+  factory IdpDiscoveryReachable.fromArguments(Arguments arguments) => IdpDiscoveryReachable(
+    clientId: arguments.text('client_id'),
+    issuer: arguments.text('issuer'),
+  );
 
   /// What this step accepts.
   static const List<ArgumentSpec> arguments = <ArgumentSpec>[
@@ -39,6 +44,16 @@ final class IdpDiscoveryReachable extends ObservingStep {
       describes:
           'the client whose issuer is measured, which has to be the one the API server is '
           'configured with — the issuer address carries it',
+    ),
+    ArgumentSpec(
+      name: 'issuer',
+      kind: ArgumentKind.text,
+      required: false,
+      defaultValue: ConfigureKubeApiserverOidc.defaultIssuer,
+      describes:
+          'the issuer this gate measures, with its slots still in it — it has to be the text the '
+          'row configuring the API server writes, or this measures an address the cluster is not '
+          'pointed at',
     ),
   ];
 
@@ -59,9 +74,12 @@ final class IdpDiscoveryReachable extends ObservingStep {
   /// The client the tokens are issued for.
   final String clientId;
 
+  /// Where the tokens are issued, with the domain and the client still in their marked slots.
+  final String issuer;
+
   /// The issuer this run measures.
   String issuerUrlIn(StepContext context) =>
-      ConfigureKubeApiserverOidc.issuerUrlFor(context, clientId);
+      ConfigureKubeApiserverOidc.issuerUrlFor(context, issuer: issuer, clientId: clientId);
 
   /// Where the discovery document stands.
   String discoveryUrlIn(StepContext context) =>
@@ -72,6 +90,10 @@ final class IdpDiscoveryReachable extends ObservingStep {
 
   @override
   Future<CheckResult> check(StepContext context) async {
+    if (ConfigureKubeApiserverOidc.issuerRefusal(row: issuer, written: issuerUrlIn(context))
+        case final String why) {
+      return CheckResult.blocked(why);
+    }
     final String discoveryUrl = discoveryUrlIn(context);
 
     // A `GET`, so the framework derives on its own that this changes nothing — which is what lets a

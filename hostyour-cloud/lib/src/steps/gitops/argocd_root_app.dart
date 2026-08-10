@@ -1,6 +1,7 @@
 import 'package:ansiwise_api/ansiwise_api.dart';
 
 import '../kubectl.dart';
+import '../slots.dart';
 
 /// Hands the cluster over, and stops.
 ///
@@ -12,19 +13,19 @@ import '../kubectl.dart';
 ///
 /// **After this, the question "which file put this object on the cluster" is answered by the
 /// reconciler and not by any record here.** Every application it creates names its own path, and
-/// from that moment the attribution is its. That boundary is what makes this a recorded step with a
-/// verdict of its own rather than a line at the end of a run: it is the last thing a bring-up does
-/// and the first thing an operator asks about afterwards.
+/// from that moment the attribution is its. That boundary keeps this an IRREVERSIBLE step rather
+/// than a `kubernetes_object` row: that row's undo deletes what its manifest names, and deleting
+/// the root application takes all of them with it — the point of no return is announced instead.
 ///
-/// **A branch that has lost the manifest is refused with the repair.** The trunk carries one for
-/// every stage and the reduction to one stage keeps the one it prunes to, so a branch without it is
-/// a branch something removed — and the operator needs the two commands that put it back, not a
-/// message that a file is missing.
+/// **Which manifest is applied is the row's to say, with the stage in a marked slot.** A branch
+/// that has lost it is refused with the repair — the two commands that put it back — because the
+/// trunk carries one per stage and the reduction to one stage keeps the one it prunes to.
 final class ArgocdRootApp extends IrreversibleStep {
   /// Applies the root application of this run's stage out of the checkout at [repository].
   const ArgocdRootApp({
     required this.repository,
     required this.trunk,
+    this.manifest = defaultManifest,
     this.kubectl = const Kubectl(),
   });
 
@@ -32,6 +33,7 @@ final class ArgocdRootApp extends IrreversibleStep {
   factory ArgocdRootApp.fromArguments(Arguments arguments) => ArgocdRootApp(
     repository: arguments.text('repository'),
     trunk: arguments.text('trunk'),
+    manifest: arguments.text('manifest'),
     kubectl: Kubectl.fromArguments(arguments),
   );
 
@@ -47,23 +49,45 @@ final class ArgocdRootApp extends IrreversibleStep {
       kind: ArgumentKind.text,
       describes: 'the product branch, which is where a lost manifest is merged back from',
     ),
+    ArgumentSpec(
+      name: 'manifest',
+      kind: ArgumentKind.text,
+      required: false,
+      defaultValue: defaultManifest,
+      describes:
+          'the manifest of the root application, as a path under the checkout, written with '
+          '$stageSlot where the stage of this installation belongs',
+    ),
     Kubectl.argument,
   ];
 
   /// The answers this step reads, which is what its registry entry declares.
   ///
-  /// The stage names the manifest, and it is the operator's own answer rather than an argument: the
-  /// trunk carries one manifest per stage and the branch keeps the one it was reduced to.
+  /// The stage fills the manifest's slot, and it is the operator's own answer rather than an
+  /// argument: the trunk carries one manifest per stage and the branch keeps the one it was
+  /// reduced to.
   static const List<String> answers = <String>[stageAnswer];
 
   /// The name the one stage this installation runs is answered under.
   static const String stageAnswer = 'stage';
+
+  /// The text a manifest row writes where the stage of this installation belongs.
+  ///
+  /// Derived from the name the stage is answered under, so the slot and the answer cannot come
+  /// apart.
+  static const String stageSlot = '<$stageAnswer>';
+
+  /// The manifest this platform's own trunk carries, when a program names no other.
+  static const String defaultManifest = 'argocd/$stageSlot/root-app.yaml';
 
   /// The checkout.
   final String repository;
 
   /// The product branch.
   final String trunk;
+
+  /// The manifest, relative to the checkout, with the stage still in its slot.
+  final String manifest;
 
   /// How the cluster is reached.
   final Kubectl kubectl;
@@ -76,14 +100,21 @@ final class ArgocdRootApp extends IrreversibleStep {
 
   /// The manifest this applies, for the stage this run was told about.
   String manifestIn(StepContext context) =>
-      '$repository/argocd/${context.answers.text(stageAnswer)}/root-app.yaml';
+      '$repository/${filledSlots(manifest, <String, String>{stageAnswer: context.answers.text(stageAnswer)})}';
 
   @override
   Future<CheckResult> check(StepContext context) async {
-    final String manifest = manifestIn(context);
-    if (!await context.files.exists(manifest)) {
+    final String path = manifestIn(context);
+    if (leftoverSlotIn(path) case final String left) {
       return CheckResult.blocked(
-        'the handoff is impossible: $manifest is not on this branch. The trunk carries one for '
+        'the manifest "$manifest" carries $left, and the one slot such a row may write is '
+        '$stageSlot, which this run fills from its stage answer — the file would be looked for '
+        'under the name as it stands',
+      );
+    }
+    if (!await context.files.exists(path)) {
+      return CheckResult.blocked(
+        'the handoff is impossible: $path is not on this branch. The trunk carries one for '
         'every stage and the reduction to one stage keeps the one it prunes to, so this branch has '
         'lost it — restore it with "git -C $repository merge $trunk" and re-run',
       );
@@ -93,16 +124,16 @@ final class ArgocdRootApp extends IrreversibleStep {
     // also settles what nothing else can: whether the reconciler's own kinds are on this cluster
     // yet, because a manifest of a kind nobody registered cannot be compared at all.
     final CommandResult difference = await context.shell.run(
-      kubectl.observing(<String>['diff', '-f', manifest]),
+      kubectl.observing(<String>['diff', '-f', path]),
     );
     switch (difference.exitCode) {
       case 0:
-        return CheckResult.satisfied('the cluster already holds what $manifest declares');
+        return CheckResult.satisfied('the cluster already holds what $path declares');
       case 1:
         return const CheckResult.ready();
       default:
         return CheckResult.blocked(
-          'the cluster could not be asked what $manifest would change: '
+          'the cluster could not be asked what $path would change: '
           '${difference.stderr.trim().isEmpty ? 'the client returned ${difference.exitCode}' : difference.stderr.trim()}',
         );
     }

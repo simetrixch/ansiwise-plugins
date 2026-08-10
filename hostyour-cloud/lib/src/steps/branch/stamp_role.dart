@@ -28,13 +28,25 @@ import '../../branch/role_pruning.dart';
 /// nothing is removed at all.
 final class StampRole extends ReversibleStep<List<String>> {
   /// Reduces the checkout at [repository] to the one stage and role this run was told about.
-  const StampRole({required this.repository, required this.stages, required this.trunk});
+  const StampRole({
+    required this.repository,
+    required this.stages,
+    required this.trunk,
+    this.stageFiles = RolePruning.defaultStageFiles,
+    this.stageTrees = RolePruning.defaultStageTrees,
+    this.booksTree = RolePruning.defaultBooksTree,
+    this.mapsTree = RolePruning.defaultMapsTree,
+  });
 
   /// Builds the step from what the program gave it.
   factory StampRole.fromArguments(Arguments arguments) => StampRole(
     repository: arguments.text('repository'),
     stages: arguments.textList('stages'),
     trunk: arguments.text('trunk'),
+    stageFiles: arguments.textList('stage_files'),
+    stageTrees: arguments.textList('stage_trees'),
+    booksTree: arguments.text('books_tree'),
+    mapsTree: arguments.text('maps_tree'),
   );
 
   /// What this step accepts.
@@ -53,6 +65,41 @@ final class StampRole extends ReversibleStep<List<String>> {
       name: 'trunk',
       kind: ArgumentKind.text,
       describes: 'the product branch, which this refuses to reduce',
+    ),
+    ArgumentSpec(
+      name: 'stage_files',
+      kind: ArgumentKind.textList,
+      describes:
+          'the files a stage owns, as regular expressions anchored at the top of the checkout and '
+          'carrying the <stage> slot',
+      required: false,
+      defaultValue: RolePruning.defaultStageFiles,
+    ),
+    ArgumentSpec(
+      name: 'stage_trees',
+      kind: ArgumentKind.textList,
+      describes:
+          'the directories a stage owns, as plain paths carrying the <stage> slot — removed file '
+          'by file, and then the emptied directory itself',
+      required: false,
+      defaultValue: RolePruning.defaultStageTrees,
+    ),
+    ArgumentSpec(
+      name: 'books_tree',
+      kind: ArgumentKind.text,
+      describes:
+          'the directory the books of onboarded units stand in, which only a master\'s branch '
+          'keeps',
+      required: false,
+      defaultValue: RolePruning.defaultBooksTree,
+    ),
+    ArgumentSpec(
+      name: 'maps_tree',
+      kind: ArgumentKind.text,
+      describes:
+          'the directory the cluster maps stand in, of which a slave\'s branch keeps only its own',
+      required: false,
+      defaultValue: RolePruning.defaultMapsTree,
     ),
   ];
 
@@ -74,8 +121,20 @@ final class StampRole extends ReversibleStep<List<String>> {
   /// The product branch, which this step refuses to reduce.
   final String trunk;
 
+  /// The files a stage owns, as regular expressions carrying the `<stage>` slot.
+  final List<String> stageFiles;
+
+  /// The directories a stage owns, as plain paths carrying the `<stage>` slot.
+  final List<String> stageTrees;
+
+  /// The directory the books stand in, which only a master's branch keeps.
+  final String booksTree;
+
+  /// The directory the cluster maps stand in.
+  final String mapsTree;
+
   /// Where the map of this cluster stands, relative to the top of the checkout.
-  String mapPathFor(StepContext context) => 'clusters/active/${context.answers.text('fqdn')}.yaml';
+  String mapPathFor(StepContext context) => '$mapsTree/${context.answers.text('fqdn')}.yaml';
 
   @override
   Future<CheckResult> check(StepContext context) async {
@@ -123,10 +182,12 @@ final class StampRole extends ReversibleStep<List<String>> {
 
     final String kept = context.answers.text('stage');
     for (final String other in stages.where((String each) => each != kept)) {
-      await _removeEmptied(context, 'argocd/$other');
+      for (final String tree in stageTrees) {
+        await _removeEmptied(context, RolePruning.filled(tree, other));
+      }
     }
     if (context.answers.text('role') == slave) {
-      await _removeEmptied(context, 'registrations');
+      await _removeEmptied(context, booksTree);
     }
   }
 
@@ -219,6 +280,10 @@ final class StampRole extends ReversibleStep<List<String>> {
     stages: stages,
     isSlave: context.answers.text('role') == slave,
     ownMap: _relativeToRepository(mapPathFor(context)),
+    stageFiles: stageFiles,
+    stageTrees: stageTrees,
+    booksTree: booksTree,
+    mapsTree: mapsTree,
   );
 
   /// [full] as the checkout names it, because the pruning rule speaks in tracked paths.

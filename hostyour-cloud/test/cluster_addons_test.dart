@@ -322,14 +322,34 @@ void main() {
       // The profile is not parsed here — one reader does that for the whole family, so where the
       // file stands and what its keys are called is a program row's to say in one place.
       expect(
-        ConfigureSlaveApiserverOidcTrust.issuerFor('https://vault.m1.example.com', 'headlamp'),
+        trust.issuerUrlFrom('https://vault.m1.example.com'),
         'https://idp.m1.example.com/application/o/headlamp/',
       );
       expect(
-        ConfigureSlaveApiserverOidcTrust.issuerFor(null, 'headlamp'),
+        trust.issuerUrlFrom(null),
         isNull,
         reason: 'a profile that named no address derives nothing',
       );
+    });
+
+    test('an issuer row carrying a slot nothing fills is refused, not sent', () async {
+      // The issuer's shape is the row's to say, and its two slots are the only names the run
+      // fills. A misspelled one would otherwise stand in the API server's own arguments, and every
+      // login would be refused with a message about the token.
+      const ConfigureSlaveApiserverOidcTrust misspelled = ConfigureSlaveApiserverOidcTrust(
+        repository: repository,
+        clientId: 'headlamp',
+        adminGroup: 'authentik Admins',
+        bindingName: 'authentik-admins-cluster-admin',
+        stateDirectory: ConfigureSlaveApiserverOidcTrust.defaultStateDirectory,
+        argsPath: argsPath,
+        issuer: 'https://idp.<master-domian>/application/o/<client>/',
+      );
+      final ClusterMachine machine = ClusterMachine();
+      machine.files.contents[profilePath] = 'global:\n  vaultUrl: https://vault.m1.example.com\n';
+      final CheckResult answer = await misspelled.check(asRole(machine, 'slave'));
+      expect(answer, isA<Blocked>());
+      expect((answer as Blocked).reason, contains('<master-domian>'));
     });
 
     test('the flags and the rule granting the administrators go on together', () async {

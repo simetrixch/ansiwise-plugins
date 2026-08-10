@@ -337,5 +337,42 @@ void main() {
 
       expect(clientOf('idp_discovery_reachable'), clientOf('configure_kube_apiserver_oidc'));
     });
+
+    test('the issuer both entries write is the same text', () {
+      // The shape of the address became a row's to say, so the same must-agree rule that holds for
+      // the client holds for it: a gate measuring one issuer while the cluster is configured with
+      // another is green either way.
+      final Program program = loadProgram(
+        File('programs/deploy-gitops.yaml').readAsStringSync(),
+        where: 'deploy-gitops.yaml',
+      );
+      String issuerOf(String step) {
+        final ProgramStep entry = program.steps.firstWhere(
+          (ProgramStep each) => each.step == StepName(step),
+        );
+        return entry.arguments.optionalText('issuer') ?? ConfigureKubeApiserverOidc.defaultIssuer;
+      }
+
+      expect(issuerOf('idp_discovery_reachable'), issuerOf('configure_kube_apiserver_oidc'));
+    });
+
+    test('an issuer row carrying a slot nothing fills is refused, not measured', () async {
+      // A misspelled slot would otherwise stand inside the address this gate fetches, the request
+      // would fail, and the message would blame the identity provider for an address nobody wrote.
+      final ({StepContext context, MemoryRecorder recorder}) it = contextOf(
+        shell: FakeShell(),
+        files: FakeFiles(),
+        http: FakeHttp(),
+        step: 'idp_discovery_reachable',
+        answers: onTheMaster,
+      );
+
+      final CheckResult result = await const IdpDiscoveryReachable(
+        clientId: 'headlamp',
+        issuer: 'https://idp.<master-domian>/application/o/<client>/',
+      ).check(it.context);
+      expect(result, isA<Blocked>());
+      expect((result as Blocked).reason, contains('<master-domian>'));
+    });
   });
 }

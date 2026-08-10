@@ -16,6 +16,12 @@
 /// already does not read the file again, and a test can drive it over paths no real tree carries —
 /// which is the only way the exclusions can be proven to hold.
 ///
+/// THE EXCLUSION LISTS ARE CONFIGURATION, stated once as the defaults below. The stamp step takes
+/// them from its program row, defaulting to these; the gate reads the default rule. The two agree
+/// exactly as long as no program row overrides a default — a row that does is a row the gate's
+/// stamp checks no longer describe, and dissolving the gate is what removes that edge, not a second
+/// statement here.
+///
 /// TWO OF THE EXCLUSIONS WERE PAID FOR. Scripts are excluded as a class, because the placeholder
 /// inside one is never installation state: before the exclusion existed, a script whose own guard
 /// compared against the placeholder came out refusing the very domain it was being installed for,
@@ -26,28 +32,42 @@ library;
 
 /// The rule that decides what the domain stamp rewrites.
 final class FqdnSelection {
-  /// The rule. It has no state; the constructor exists so callers can name it.
-  const FqdnSelection();
+  /// The rule, over the exclusion lists given — or over the defaults, which are what the gate reads
+  /// and what a program row that says nothing gets.
+  const FqdnSelection({
+    this.excludedSegments = defaultExcludedSegments,
+    this.excludedNames = defaultExcludedNames,
+    this.scriptSuffixes = defaultScriptSuffixes,
+  });
 
   /// What the trunk carries in place of a domain.
   static const String placeholder = 'example.invalid';
+
+  /// Path segments whose contents are product material, unless a program row says otherwise.
+  static const List<String> defaultExcludedSegments = <String>['docs', 'templates'];
+
+  /// Files excluded by name, unless a program row says otherwise.
+  static const List<String> defaultExcludedNames = <String>['branch-classes.yaml'];
+
+  /// The script suffixes, unless a program row says otherwise.
+  static const List<String> defaultScriptSuffixes = <String>['.sh', '.ps1'];
 
   /// Path segments whose contents are product material rather than installation state.
   ///
   /// A segment and not a prefix: a chart's `templates/` sits several levels down and is the same
   /// kind of thing as one at the top of the tree.
-  static const List<String> excludedSegments = <String>['docs', 'templates'];
+  final List<String> excludedSegments;
 
-  /// The file excluded by its name, because it is the declaration of this stamp.
+  /// Files excluded by their name, because each is a declaration about this stamp.
   ///
-  /// It states which paths hold installation state, so it quotes the placeholder in order to explain
-  /// what is done to it. Rewritten, the one file an operator opens to learn which paths must never be
-  /// stamped would itself name a real domain, and the section listing what is never stamped would
-  /// read as its own opposite.
-  static const String excludedName = 'branch-classes.yaml';
+  /// The default names the file that states which paths hold installation state: it quotes the
+  /// placeholder in order to explain what is done to it. Rewritten, the one file an operator opens
+  /// to learn which paths must never be stamped would itself name a real domain, and the section
+  /// listing what is never stamped would read as its own opposite.
+  final List<String> excludedNames;
 
   /// The suffixes of the scripts that carry no first line to recognise them by.
-  static const List<String> scriptSuffixes = <String>['.sh', '.ps1'];
+  final List<String> scriptSuffixes;
 
   /// Whether the domain stamp rewrites [path], whose content is [text].
   ///
@@ -73,7 +93,7 @@ final class FqdnSelection {
   bool excludesByName(String path) {
     final List<String> segments = path.split('/');
     return segments.any(excludedSegments.contains) ||
-        segments.last == excludedName ||
+        excludedNames.contains(segments.last) ||
         scriptSuffixes.any(path.endsWith);
   }
 }

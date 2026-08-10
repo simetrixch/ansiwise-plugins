@@ -1,4 +1,5 @@
 import 'package:ansiwise_api/ansiwise_api.dart';
+import '../slots.dart';
 import 'microk8s.dart';
 import 'set_process_flag.dart';
 
@@ -12,8 +13,7 @@ import 'set_process_flag.dart';
 /// exactly those people out, with a refusal that mentions nothing about verification.
 ///
 /// **These may be written before the identity provider exists.** The API server does not fail to
-/// start on an issuer it cannot reach; it simply refuses tokens until the address answers. So
-/// nothing has to be ordered around the identity provider's own deployment.
+/// start on an unreachable issuer; it refuses tokens until the address answers.
 final class ConfigureKubeApiserverOidc extends ReversibleStep<String?> {
   /// Points the API server at this installation's identity provider, for the client [clientId].
   const ConfigureKubeApiserverOidc({
@@ -23,6 +23,7 @@ final class ConfigureKubeApiserverOidc extends ReversibleStep<String?> {
     required this.groupsClaim,
     required this.groupsPrefix,
     required this.argsPath,
+    this.issuer = defaultIssuer,
   });
 
   /// Builds the step from what the program gave it.
@@ -34,6 +35,7 @@ final class ConfigureKubeApiserverOidc extends ReversibleStep<String?> {
         groupsClaim: arguments.text('groups_claim'),
         groupsPrefix: arguments.text('groups_prefix'),
         argsPath: arguments.text('args_path'),
+        issuer: arguments.text('issuer'),
       );
 
   /// What this step accepts.
@@ -82,6 +84,16 @@ final class ConfigureKubeApiserverOidc extends ReversibleStep<String?> {
       required: false,
       defaultValue: defaultPath,
     ),
+    ArgumentSpec(
+      name: 'issuer',
+      kind: ArgumentKind.text,
+      describes:
+          'where the tokens are issued, written with $masterDomainSlot where the domain of the '
+          'cluster holding the master part belongs and $clientSlot where the client belongs — '
+          'both are filled by the run and never typed',
+      required: false,
+      defaultValue: defaultIssuer,
+    ),
   ];
 
   /// The answers this step reads, which is what its registry entry declares.
@@ -124,25 +136,67 @@ final class ConfigureKubeApiserverOidc extends ReversibleStep<String?> {
   /// The file holding the API server's arguments.
   final String argsPath;
 
-  /// Where the tokens this cluster accepts are issued.
+  /// Where the tokens are issued, with the domain and the client still in their marked slots.
   ///
-  /// Composed rather than answered, the way the profile stamp composes the address of Vault: an
-  /// installation has ONE identity provider, it stands on the cluster holding the master part, and
-  /// the path is the identity provider's own — a second answer for it would only agree with the
-  /// first by accident. On a cluster that holds the master part, that cluster is the master.
-  String issuerUrlIn(StepContext context) => issuerUrlFor(context, clientId);
+  /// The SHAPE is the row's to say; the domain is not. The run fills [masterDomainSlot] from its
+  /// own answers, because an installation has ONE identity provider, it stands on the cluster
+  /// holding the master part, and a second answer for its address would only agree with the first
+  /// by accident.
+  final String issuer;
 
-  /// The same address for a caller that holds no instance of this step.
+  /// The text an issuer row writes where the domain of the cluster holding the master part belongs.
+  static const String masterDomainSlot = '<master-domain>';
+
+  /// The text an issuer row writes where the client the tokens are issued for belongs.
   ///
-  /// The gate that refuses a run while the identity provider cannot be read composes the address
-  /// here rather than being given one: two compositions would let the program check one address and
-  /// configure another, and a cluster whose API server points at an issuer nobody measured refuses
-  /// every login with a message about the token.
-  static String issuerUrlFor(StepContext context, String clientId) {
+  /// A slot rather than a second spelling of the client's name, so the issuer and the client
+  /// argument cannot disagree — the address carries the client, and a mismatch between the two
+  /// refuses every login with a message about the token.
+  static const String clientSlot = '<client>';
+
+  /// The issuer as this platform deploys it, when a program names no other: the identity provider
+  /// answers under `idp.` beside the other services of the master's domain, and the path below it
+  /// is the provider's own URL shape for one client.
+  static const String defaultIssuer = 'https://idp.$masterDomainSlot/application/o/$clientSlot/';
+
+  /// Where the tokens this cluster accepts are issued.
+  String issuerUrlIn(StepContext context) =>
+      issuerUrlFor(context, issuer: issuer, clientId: clientId);
+
+  /// The same filling for a caller that holds no instance of this step.
+  ///
+  /// The gate that refuses a run while the identity provider cannot be read fills the address here
+  /// rather than composing one of its own: two compositions would let the program check one address
+  /// and configure another, and a cluster whose API server points at an issuer nobody measured
+  /// refuses every login with a message about the token. On a cluster that holds the master part,
+  /// that cluster is the master.
+  static String issuerUrlFor(
+    StepContext context, {
+    required String issuer,
+    required String clientId,
+  }) {
     final String master = context.answers.text(roleAnswer) == masterRole
         ? context.answers.text(fqdnAnswer)
         : context.answers.text(masterAnswer);
-    return 'https://idp.$master/application/o/$clientId/';
+    return issuerWith(issuer, domain: master, clientId: clientId);
+  }
+
+  /// [issuer] with [domain] and [clientId] in its slots.
+  ///
+  /// Shared with the step that points a cluster at another cluster's identity provider: the domain
+  /// SOURCES differ — the master's own answers there, the profile here — but the shape they fill
+  /// is one, so the two cannot write different addresses from the same facts.
+  static String issuerWith(String issuer, {required String domain, required String clientId}) =>
+      filledSlots(issuer, <String, String>{'master-domain': domain, 'client': clientId});
+
+  /// Why [written] cannot be used as an issuer, or null when every slot of [row] was filled.
+  static String? issuerRefusal({required String row, required String written}) {
+    if (leftoverSlotIn(written) case final String left) {
+      return 'the issuer "$row" carries $left, and nothing in this run holds that name — an '
+          'issuer row may write $masterDomainSlot and $clientSlot, and anything else would reach '
+          'the API server as it stands';
+    }
+    return null;
   }
 
   /// What a cluster holding the master part answers as its role.
@@ -175,6 +229,9 @@ final class ConfigureKubeApiserverOidc extends ReversibleStep<String?> {
         'account made in the interface. Use "preferred_username".',
       );
     }
+    if (issuerRefusal(row: issuer, written: issuerUrlIn(context)) case final String why) {
+      return CheckResult.blocked(why);
+    }
     if (!await context.files.exists(argsPath)) {
       return CheckResult.blocked(
         '$argsPath is not there — the snap writes it when it installs, so this ran before the '
@@ -190,11 +247,21 @@ final class ConfigureKubeApiserverOidc extends ReversibleStep<String?> {
   @override
   Future<StepPlan> plan(StepContext context) async {
     final String current = await _current(context);
-    return StepPlan.diff(argsPath, before: current, after: withFlags(current, flagsIn(context)));
+    // An issuer whose slots could not all be filled writes nothing: the check is what refuses it,
+    // and a plan claiming the flags would be written with a slot still in them would be a lie.
+    final bool refused = issuerRefusal(row: issuer, written: issuerUrlIn(context)) != null;
+    return StepPlan.diff(
+      argsPath,
+      before: current,
+      after: refused ? current : withFlags(current, flagsIn(context)),
+    );
   }
 
   @override
   Future<void> apply(StepContext context) async {
+    if (issuerRefusal(row: issuer, written: issuerUrlIn(context)) != null) {
+      return;
+    }
     final String current = await _current(context);
     await context.files.write(
       argsPath,

@@ -23,6 +23,7 @@ library;
 
 import 'package:ansiwise_api/ansiwise_api.dart';
 
+import '../slots.dart';
 import 'cluster_profile.dart';
 import 'vault_api.dart';
 
@@ -55,7 +56,9 @@ const String clusterPlaceholder = '<cluster>';
 const String kubernetesMountPlaceholder = '<kubernetes-mount>';
 
 /// The text a program file writes where the stage of this installation belongs.
-const String stagePlaceholder = '<stage>';
+///
+/// Derived from the name the stage is answered under, so the slot and the answer cannot come apart.
+const String stagePlaceholder = '<$vaultStageAnswer>';
 
 /// The text a program file writes where the address of this installation's Vault belongs.
 const String vaultUrlPlaceholder = '<vault-url>';
@@ -115,7 +118,7 @@ extension ArgumentPlaceholders on ClusterProfile {
       written = written.replaceAll(accessorPlaceholder, minted);
     }
 
-    if (_anyPlaceholder.firstMatch(written)?.group(0) case final String left) {
+    if (leftoverSlotIn(written) case final String left) {
       return ArgumentText.unknown(
         '"$text" carries $left, and nothing in this run holds that name — a program file may write '
         '$stagePlaceholder, $vaultUrlPlaceholder, $clusterPlaceholder and '
@@ -132,6 +135,3 @@ String _missing(String path, String key, String placeholder, String text) =>
     '$path does not carry $key, and $placeholder in "$text" stands for it — the step that stamps '
     'the cluster profile writes that key when the install branch is generated, and nothing here '
     'composes the name in its place';
-
-/// Any `<...>` name, for the refusal that catches one nothing here can fill.
-final RegExp _anyPlaceholder = RegExp('<[^<>]*>');

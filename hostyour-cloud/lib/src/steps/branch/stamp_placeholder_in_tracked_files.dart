@@ -65,6 +65,7 @@ final class StampPlaceholderInTrackedFiles extends ReversibleStep<List<String>> 
     required this.placeholder,
     required this.tree,
     required this.keys,
+    this.rule = selection,
   });
 
   /// Builds the step from what the program gave it.
@@ -75,6 +76,11 @@ final class StampPlaceholderInTrackedFiles extends ReversibleStep<List<String>> 
         placeholder: arguments.text('placeholder'),
         tree: arguments.text('tree'),
         keys: arguments.textList('keys'),
+        rule: FqdnSelection(
+          excludedSegments: arguments.textList('excluded_segments'),
+          excludedNames: arguments.textList('excluded_names'),
+          scriptSuffixes: arguments.textList('script_suffixes'),
+        ),
       );
 
   /// What this step accepts.
@@ -114,18 +120,49 @@ final class StampPlaceholderInTrackedFiles extends ReversibleStep<List<String>> 
       required: false,
       defaultValue: <String>[],
     ),
+    ArgumentSpec(
+      name: 'excluded_segments',
+      kind: ArgumentKind.textList,
+      describes:
+          'path segments whose contents are product material rather than installation state — a '
+          'segment and not a prefix, so a directory of that name is excluded at any depth',
+      required: false,
+      defaultValue: FqdnSelection.defaultExcludedSegments,
+    ),
+    ArgumentSpec(
+      name: 'excluded_names',
+      kind: ArgumentKind.textList,
+      describes:
+          'files excluded by their name, because each declares something about the stamp and '
+          'would read as its own opposite once stamped',
+      required: false,
+      defaultValue: FqdnSelection.defaultExcludedNames,
+    ),
+    ArgumentSpec(
+      name: 'script_suffixes',
+      kind: ArgumentKind.textList,
+      describes:
+          'the suffixes of the scripts that carry no first line to recognise them by — a script '
+          'is never stamped, whatever it is called',
+      required: false,
+      defaultValue: FqdnSelection.defaultScriptSuffixes,
+    ),
   ];
 
   /// The answers this step reads, which is what its registry entry declares.
   static const List<String> answers = <String>['fqdn'];
 
-  /// Which files this stamp rewrites, as a rule with no ports and no context.
+  /// The default rule, which is what the gate applies to the tree it walks.
   ///
-  /// The gate applies the SAME object to the tree it walks, in order to decide whether
-  /// branch-classes.yaml agrees with what would really happen here. It used to restate the rule
-  /// instead, and a changed exclusion left every probe over there green while it certified a stamp
-  /// it was no longer describing.
+  /// The gate applies the SAME rule class in order to decide whether branch-classes.yaml agrees
+  /// with what would really happen here. It used to restate the rule instead, and a changed
+  /// exclusion left every probe over there green while it certified a stamp it was no longer
+  /// describing. The run itself stamps by [rule], built from the row — the two agree exactly as
+  /// long as the row keeps the default exclusion lists.
   static const FqdnSelection selection = FqdnSelection();
+
+  /// The rule this run selects files by, built from the row's exclusion lists.
+  final FqdnSelection rule;
 
   /// The trailing comment that exempts a line from every stamp.
   static const String keepMarker = 'set-domain:keep';
@@ -234,7 +271,7 @@ final class StampPlaceholderInTrackedFiles extends ReversibleStep<List<String>> 
     final String branch = CreateInstallBranch.branchIn(context);
     final Map<String, String> stampable = <String, String>{};
     for (final String path in await _search(context)) {
-      if (selection.excludesByName(path)) {
+      if (rule.excludesByName(path)) {
         continue;
       }
       // A tracked path the search names is not necessarily a file that is there: reducing the branch
@@ -247,7 +284,7 @@ final class StampPlaceholderInTrackedFiles extends ReversibleStep<List<String>> 
       // What the name test above already settled is settled again here and costs nothing; what it
       // could not settle — a first line that makes this a script whatever it is called — is settled
       // by the same object the gate asks, so the two cannot answer differently.
-      if (!selection.holdsInstallationState(path, content)) {
+      if (!rule.holdsInstallationState(path, content)) {
         continue;
       }
       if (_changing(content, branch).isEmpty) {

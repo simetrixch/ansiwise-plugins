@@ -367,6 +367,66 @@ void main() {
     );
   });
 
+  group('the manifest the handoff applies', () {
+    StepContext handoffContext(FakeFiles files) {
+      final FakeClock clock = FakeClock();
+      const StepName name = StepName('argocd_root_app');
+      return StepContext(
+        shell: FakeShell(),
+        files: files,
+        http: FakeHttp(),
+        clock: clock,
+        entropy: FakeEntropy(),
+        log: RecordingLogger(recorder: MemoryRecorder(clock), redactor: Redactor.none, step: name),
+        step: name,
+        arguments: Arguments.none,
+        answers: const Arguments(<String, Object>{'stage': 'dev'}),
+        facts: Facts.none,
+      );
+    }
+
+    test('is a row value with the stage in a marked slot, filled from the answers', () {
+      // The path is the row's to say; what the row cannot say is which stage this installation
+      // runs, so that one value stands as a slot and the run fills it.
+      const ArgocdRootApp handoff = ArgocdRootApp(
+        repository: '/srv/hostyour-cloud',
+        trunk: 'master',
+      );
+      expect(handoff.manifest, ArgocdRootApp.defaultManifest);
+      expect(
+        handoff.manifestIn(handoffContext(FakeFiles())),
+        '/srv/hostyour-cloud/argocd/dev/root-app.yaml',
+      );
+    });
+
+    test('a manifest row carrying a slot nothing fills is refused, not looked for', () async {
+      // A misspelled slot would otherwise be looked for on disk in angle brackets, and the refusal
+      // would say the branch lost a manifest nobody ever named.
+      const ArgocdRootApp misspelled = ArgocdRootApp(
+        repository: '/srv/hostyour-cloud',
+        trunk: 'master',
+        manifest: 'argocd/<stag>/root-app.yaml',
+      );
+      final CheckResult answer = await misspelled.check(handoffContext(FakeFiles()));
+      expect(answer, isA<Blocked>());
+      expect((answer as Blocked).reason, contains('<stag>'));
+    });
+
+    test('a branch that lost the manifest is refused with the repair', () async {
+      const ArgocdRootApp handoff = ArgocdRootApp(
+        repository: '/srv/hostyour-cloud',
+        trunk: 'master',
+      );
+      final CheckResult answer = await handoff.check(handoffContext(FakeFiles()));
+      expect(answer, isA<Blocked>());
+      expect(
+        (answer as Blocked).reason,
+        contains('git -C /srv/hostyour-cloud merge master'),
+        reason: 'the operator needs the command that puts it back, not a missing-file message',
+      );
+    });
+  });
+
   group('an enabled gate that is off', () {
     test('leaves nothing at all behind', () async {
       final ({RunRecord record, FakeShell shell, FakeFiles files, MemoryRecorder recorder}) it =

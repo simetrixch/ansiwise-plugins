@@ -105,4 +105,5 @@ export 'src/steps/host/require_key_login_possible.dart';
 export 'src/steps/host/require_machine_size.dart';
 export 'src/steps/host/require_pinned_ubuntu.dart';
 export 'src/steps/kubectl.dart';
+export 'src/steps/slots.dart';
 export 'src/steps/template.dart';

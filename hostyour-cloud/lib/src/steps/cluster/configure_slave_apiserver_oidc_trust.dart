@@ -27,6 +27,7 @@ final class ConfigureSlaveApiserverOidcTrust
     required this.bindingName,
     required this.stateDirectory,
     required this.argsPath,
+    this.issuer = ConfigureKubeApiserverOidc.defaultIssuer,
     this.kubectl = const Kubectl(),
     this.layout = const VaultLayout(),
   });
@@ -40,6 +41,7 @@ final class ConfigureSlaveApiserverOidcTrust
         bindingName: arguments.text('binding_name'),
         stateDirectory: arguments.text('state_directory'),
         argsPath: arguments.text('args_path'),
+        issuer: arguments.text('issuer'),
         kubectl: Kubectl.fromArguments(arguments),
         layout: VaultLayout.fromArguments(arguments),
       );
@@ -88,6 +90,18 @@ final class ConfigureSlaveApiserverOidcTrust
       required: false,
       defaultValue: ConfigureKubeApiserverOidc.defaultPath,
     ),
+    ArgumentSpec(
+      name: 'issuer',
+      kind: ArgumentKind.text,
+      describes:
+          'where the tokens are issued, written with '
+          '${ConfigureKubeApiserverOidc.masterDomainSlot} where the domain of the cluster holding '
+          'the master part belongs and ${ConfigureKubeApiserverOidc.clientSlot} where the client '
+          'belongs — on this step the domain is derived from where the secret store answers, '
+          'never typed',
+      required: false,
+      defaultValue: ConfigureKubeApiserverOidc.defaultIssuer,
+    ),
     Kubectl.argument,
     ...VaultLayout.arguments,
   ];
@@ -128,6 +142,9 @@ final class ConfigureSlaveApiserverOidcTrust
   /// The file holding the API server's arguments.
   final String argsPath;
 
+  /// Where the tokens are issued, with the domain and the client still in their marked slots.
+  final String issuer;
+
   /// How the cluster is reached.
   final Kubectl kubectl;
 
@@ -163,12 +180,16 @@ final class ConfigureSlaveApiserverOidcTrust
       // stamp that already ran.
       return CheckResult.blocked(refusal);
     }
-    final String? issuer = issuerFor(store.url, clientId);
-    if (issuer == null) {
+    final String? issuerUrl = issuerUrlFrom(store.url);
+    if (issuerUrl == null) {
       return CheckResult.blocked(
         '$profilePath carries ${store.url} under ${layout.urlKey}, and no identity provider can be '
         'derived from it — the address the secret store answers at is what gives the domain',
       );
+    }
+    if (ConfigureKubeApiserverOidc.issuerRefusal(row: issuer, written: issuerUrl)
+        case final String why) {
+      return CheckResult.blocked(why);
     }
     if (!await context.files.exists(argsPath)) {
       return CheckResult.blocked(
@@ -179,41 +200,43 @@ final class ConfigureSlaveApiserverOidcTrust
 
     final String current = await context.files.read(argsPath);
     final List<String> missing = <String>[
-      if (current != ConfigureKubeApiserverOidc.withFlags(current, _flags(issuer)))
-        'the API server does not accept tokens issued at $issuer',
+      if (current != ConfigureKubeApiserverOidc.withFlags(current, _flags(issuerUrl)))
+        'the API server does not accept tokens issued at $issuerUrl',
       if (!await _bindingExists(context)) '$adminGroup is not an administrator of this cluster',
     ];
     if (missing.isEmpty) {
-      return CheckResult.satisfied('this cluster trusts the identity provider at $issuer');
+      return CheckResult.satisfied('this cluster trusts the identity provider at $issuerUrl');
     }
     return const CheckResult.ready();
   }
 
   @override
   Future<StepPlan> plan(StepContext context) async {
-    final String? issuer = issuerFor(
+    final String? issuerUrl = issuerUrlFrom(
       (await clusterProfileFrom(context, repository, layout: layout)).url,
-      clientId,
     );
     final String current = await context.files.exists(argsPath)
         ? await context.files.read(argsPath)
         : '';
+    // An issuer that cannot be derived, or whose slots could not all be filled, writes nothing:
+    // the check is what refuses it, and a plan claiming otherwise would be a lie.
+    final bool unusable =
+        issuerUrl == null ||
+        ConfigureKubeApiserverOidc.issuerRefusal(row: issuer, written: issuerUrl) != null;
     return StepPlan.diff(
       argsPath,
       before: current,
-      after: issuer == null
-          ? current
-          : ConfigureKubeApiserverOidc.withFlags(current, _flags(issuer)),
+      after: unusable ? current : ConfigureKubeApiserverOidc.withFlags(current, _flags(issuerUrl)),
     );
   }
 
   @override
   Future<void> apply(StepContext context) async {
-    final String? issuer = issuerFor(
+    final String? issuerUrl = issuerUrlFrom(
       (await clusterProfileFrom(context, repository, layout: layout)).url,
-      clientId,
     );
-    if (issuer == null) {
+    if (issuerUrl == null ||
+        ConfigureKubeApiserverOidc.issuerRefusal(row: issuer, written: issuerUrl) != null) {
       return;
     }
     final String current = await context.files.exists(argsPath)
@@ -221,7 +244,7 @@ final class ConfigureSlaveApiserverOidcTrust
         : '';
     await context.files.write(
       argsPath,
-      ConfigureKubeApiserverOidc.withFlags(current, _flags(issuer)),
+      ConfigureKubeApiserverOidc.withFlags(current, _flags(issuerUrl)),
       mode: microk8sArgumentsFileMode,
     );
     await SetProcessFlag.restartKubelite(context);
@@ -261,20 +284,19 @@ final class ConfigureSlaveApiserverOidcTrust
     }
   }
 
+  /// The domain of the cluster holding the master part, derived from where the secret store
+  /// answers, or null where [vaultUrl] gives none.
   ///
-  /// The profile names the cluster holding the platform's shared services by the address of one of
-  /// them, and the identity provider sits beside it under the same domain. Reading it from there is
-  /// what keeps a cluster from trusting an identity provider nothing else on it points at.
-  /// The identity provider this cluster trusts, derived from where the secret store answers.
-  ///
-  /// The two follow the same installation: the store answers at `vault.<domain>` and the provider
-  /// at `idp.<domain>`, so the address of one gives the other. It is DERIVED and never read from a
-  /// key of its own — a second key would be a second thing to keep in step with the first.
+  /// The profile names that cluster by the address of one of its shared services, and the identity
+  /// provider sits beside it under the same domain — the store answers at `vault.<domain>`, so the
+  /// address of one gives the other. It is DERIVED and never read from a key of its own: a second
+  /// key would be a second thing to keep in step with the first. Reading it from there is what
+  /// keeps a cluster from trusting an identity provider nothing else on it points at.
   ///
   /// The profile is not parsed here. It is read once, by the reader the whole vault family uses, so
   /// where it stands and what its keys are called is a program row's to say in one place rather than
   /// in every step that happens to need a value out of it.
-  static String? issuerFor(String? vaultUrl, String clientId) {
+  static String? masterDomainFrom(String? vaultUrl) {
     if (vaultUrl == null) {
       return null;
     }
@@ -284,7 +306,20 @@ final class ConfigureSlaveApiserverOidcTrust
       return null;
     }
     final String domain = vaultUrl.substring(dot + 1).split('/').first.trim();
-    return domain.isEmpty ? null : 'https://idp.$domain/application/o/$clientId/';
+    return domain.isEmpty ? null : domain;
+  }
+
+  /// The identity provider this cluster trusts: [issuer] with the derived domain and the client in
+  /// its slots, or null where no domain can be derived.
+  ///
+  /// The filling is the one the master's own step uses, so the two cannot write different
+  /// addresses from the same shape — only the SOURCE of the domain differs, and that difference is
+  /// the whole of this step.
+  String? issuerUrlFrom(String? vaultUrl) {
+    final String? domain = masterDomainFrom(vaultUrl);
+    return domain == null
+        ? null
+        : ConfigureKubeApiserverOidc.issuerWith(issuer, domain: domain, clientId: clientId);
   }
 
   Map<String, String> _flags(String issuer) => ConfigureKubeApiserverOidc(

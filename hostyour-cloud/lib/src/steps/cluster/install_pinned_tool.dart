@@ -1,4 +1,5 @@
 import 'package:ansiwise_api/ansiwise_api.dart';
+import '../slots.dart';
 import 'assert_cli_tool_versions.dart';
 
 /// Fetches one tool's released binary at exactly the version this platform pins, and puts it where
@@ -15,10 +16,9 @@ import 'assert_cli_tool_versions.dart';
 /// could be built again.
 ///
 /// **A release that arrives packed is unpacked into place; one that IS the binary is fetched
-/// straight to where it goes.** [archive] is what says which of the two this is, and it is also
-/// where the packed copy is put while it is being unpacked. That copy is removed afterwards whether
-/// the unpacking worked or not, because a half-finished download left in the temporary directory is
-/// what the next run would find and unpack.
+/// straight to where it goes.** [archive] says which of the two this is, and it is also where the
+/// packed copy is put while it is being unpacked. That copy is removed afterwards whether the
+/// unpacking worked or not — a half-finished download left there is what the next run would unpack.
 ///
 /// **A packed release has to hold exactly one file, named for the tool.** The unpacking writes
 /// everything the archive holds into [directory]; this step never reads what came out of it and
@@ -31,12 +31,12 @@ import 'assert_cli_tool_versions.dart';
 /// writes over whatever [path] held, and keeping the replaced binary would mean copying it aside
 /// before the apply — a change to the machine made by the capture, which is the one part of a
 /// reversible step required to change nothing, and a copy nothing would ever clear away again,
-/// because a step is told to undo and is never told the run succeeded. Which of the two machines a
-/// run meets is decided by the machine and not by the program, and this step exists for the one
-/// carrying another version. A step declares one kind for every machine, so it declares the kind
-/// that holds for the worse of them. The cost is that a run which only created a file is announced
-/// as a point of no return it was not; the other way round would be a step promising to put back a
-/// binary it never kept, which is the failure that matters.
+/// because a step is told to undo and is never told the run succeeded. Which machine a run meets is
+/// decided by the machine and not the program, and this step exists for the one carrying another
+/// version. A step declares one kind for every machine, so it declares the kind that holds for the
+/// worse of them. The cost: a run that only created a file is announced as a point of no return it
+/// was not; the other way round would be a step promising to put back a binary it never kept, which
+/// is the failure that matters.
 final class InstallPinnedTool extends IrreversibleStep {
   /// Fetches [tool] at [version] from [url] into [directory], out of [archive] where there is one.
   const InstallPinnedTool({
@@ -135,9 +135,10 @@ final class InstallPinnedTool extends IrreversibleStep {
   String get path => '$directory/$tool';
 
   /// Where it is fetched from, with the pin in it.
-  String get fetchedFrom => url
-      .replaceAll(versionPlaceholder, version)
-      .replaceAll(bareVersionPlaceholder, AssertCliToolVersions.bare(version));
+  String get fetchedFrom => filledSlots(url, <String, String>{
+    'version': version,
+    'bare-version': AssertCliToolVersions.bare(version),
+  });
 
   /// Why this cannot be taken back, written for the machine where it costs something.
   ///
@@ -165,6 +166,13 @@ final class InstallPinnedTool extends IrreversibleStep {
         'the url for $tool names neither $versionPlaceholder nor $bareVersionPlaceholder, so what '
         'is fetched and what the pin says are two values that can drift apart with nothing saying '
         'so',
+      );
+    }
+    if (leftoverSlotIn(fetchedFrom) case final String left) {
+      return CheckResult.blocked(
+        'the url for $tool still carries $left once the pin filled $versionPlaceholder and '
+        '$bareVersionPlaceholder — nothing else fills a slot here, and the fetch would send the '
+        'text as it stands',
       );
     }
     if (AssertCliToolVersions.readers[tool] == null) {

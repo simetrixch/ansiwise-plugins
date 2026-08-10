@@ -153,6 +153,24 @@ void main() {
       expect((answer as Blocked).reason, contains(InstallPinnedTool.versionPlaceholder));
     });
 
+    test(
+      'a url carrying a slot nothing fills is refused rather than fetched as it stands',
+      () async {
+        // The pin fills exactly two slots. A misspelled one passes the slot-for-the-pin gate as long
+        // as a correct one is also there, and would otherwise reach curl inside the address.
+        final CheckResult answer = await const InstallPinnedTool(
+          tool: 'yq',
+          version: 'v4.53.3',
+          url:
+              'https://github.com/mikefarah/yq/releases/download/'
+              '${InstallPinnedTool.versionPlaceholder}/yq_<architekture>',
+          directory: InstallPinnedTool.defaultDirectory,
+          archive: null,
+        ).check(ClusterMachine().contextFor(under));
+        expect((answer as Blocked).reason, contains('<architekture>'));
+      },
+    );
+
     test('a tool nothing can ask its version is refused rather than fetched every run', () async {
       // The skip is decided on the version, so a tool the readers do not know would be fetched
       // again on every run and nothing would notice.
