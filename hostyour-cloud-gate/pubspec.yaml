@@ -43,4 +43,12 @@ dev_dependencies:
     git:
       url: https://github.com/simetrixch/ansiwise-api.git
       ref: master
+  # The reader that holds checks.yaml against the suite on disk. It used to be a private copy under
+  # tool/ here; every other package of this tree needs the same reading, and a copy per package is
+  # how one of them gains a repair the others never get.
+  ansiwise_checks:
+    git:
+      url: https://github.com/simetrixch/ansiwise-api.git
+      ref: master
+      path: checks
   lints: ^6.1.0

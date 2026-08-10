@@ -3,12 +3,10 @@ import 'package:ansiwise_checks/ansiwise_checks.dart';
 import 'package:ansiwise_host/ansiwise_host.dart';
 import 'package:test/test.dart';
 
-import 'declared_answers.dart';
-
 Future<void> main() async {
   final DrySafety check = DrySafety(
     registry: hostRegistry,
-    answers: answersDeclaredBy(hostRegistry),
+    answers: (await answersDeclaredBy(hostRegistry)).values,
   );
   final DryRunReading reading = await check.askEveryStep();
 

@@ -1,7 +1,5 @@
 import 'package:ansiwise_api/ansiwise_api.dart';
 import 'detect_public_nic.dart';
-import 'write_connmark_nft_table.dart';
-import 'write_netplan_public_src_routing.dart';
 
 /// Switches the steering service on, and puts the kernel state back whenever it is not there.
 ///
@@ -22,8 +20,9 @@ final class ActivatePublicSrcRouting extends ReversibleStep<bool> {
 
   /// What this step accepts.
   static const List<ArgumentSpec> arguments = <ArgumentSpec>[
-    // No default: the service's name is the product's, so the program row states it — as the base
-    // name of the service file the unit writer's row names.
+    // No defaults at all. The service's name is the installation's, and the mark and the table are
+    // what the steps that wrote them chose against THIS machine — a default here would let this
+    // step go on looking for a rule the machine never carried and report the steering as installed.
     ArgumentSpec(
       name: 'unit_name',
       kind: ArgumentKind.text,
@@ -32,16 +31,15 @@ final class ActivatePublicSrcRouting extends ReversibleStep<bool> {
     ArgumentSpec(
       name: 'mark',
       kind: ArgumentKind.text,
-      describes: 'the mark the installed rule is keyed on',
-      required: false,
-      defaultValue: WriteConnmarkNftTable.defaultMark,
+      describes:
+          'the mark the installed rule is keyed on, as the rules the service loads put it on',
     ),
     ArgumentSpec(
       name: 'table',
       kind: ArgumentKind.integer,
-      describes: 'the routing table the marked replies are steered into',
-      required: false,
-      defaultValue: WriteNetplanPublicSrcRouting.publicTable,
+      describes:
+          'the routing table the marked replies are steered into, as the drop-in that holds the '
+          'public gateway numbers it',
     ),
   ];
 

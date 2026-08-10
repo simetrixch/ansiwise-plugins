@@ -43,7 +43,7 @@ const Map<StepName, RegisteredStep> vaultSteps = <StepName, RegisteredStep>{
   ),
   StepName('vault_policy'): RegisteredStep(
     name: StepName('vault_policy'),
-    source: 'lib/src/steps/vault_policy.dart:32',
+    source: 'lib/src/steps/vault_policy.dart:33',
     create: VaultPolicy.fromArguments,
     arguments: VaultPolicy.arguments,
     answers: VaultPolicy.answers,

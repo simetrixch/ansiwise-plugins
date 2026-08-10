@@ -99,7 +99,15 @@ final class KubernetesSecretFromVault extends ReversibleStep<bool> {
   ];
 
   /// The answers this step reads, which is what its registry entry declares.
-  static const List<String> answers = <String>[vaultStageAnswer];
+  ///
+  /// The stage, and it is THIS product's word rather than the vault family's: those steps take the
+  /// name of the answer as an argument and know none themselves. Named here because this step is a
+  /// step of one product, and the registry entry is what holds a program of it to declaring the
+  /// question its operator is asked.
+  static const List<String> answers = <String>[stageAnswer];
+
+  /// The name this product answers its stage under, which the row also names under `run_answer`.
+  static const String stageAnswer = 'stage';
 
   /// The checkout.
   final String repository;
@@ -242,7 +250,7 @@ final class KubernetesSecretFromVault extends ReversibleStep<bool> {
     }
     final RootToken token = await rootTokenFrom(
       context,
-      vaultCredentialsPath(context, repository, credentials: layout.credentials),
+      vaultCredentialsPath(context, repository, layout: layout),
     );
     if (token.refusal case final String refusal) {
       return _Entry.unreadable(refusal);

@@ -4,6 +4,10 @@ import 'package:test/test.dart';
 
 import 'host_fixture.dart';
 
+/// The tag shapes a program row states for the tools below: one project writes its tag with a
+/// leading letter, another writes its own name in front of the number.
+const List<String> pinPrefixes = <String>['v', 'jq-'];
+
 /// The two shapes a pinned release arrives in, each written the way a program row writes it.
 ///
 /// One step covers both, so what separates them is only their arguments — which is the claim these
@@ -19,6 +23,7 @@ const InstallPinnedTool vaultCli = InstallPinnedTool(
   directory: InstallPinnedTool.defaultDirectory,
   archive: '/tmp/vault.zip',
   versionCommand: <String>['version'],
+  pinPrefixes: pinPrefixes,
 );
 
 const InstallPinnedTool yqCli = InstallPinnedTool(
@@ -30,6 +35,7 @@ const InstallPinnedTool yqCli = InstallPinnedTool(
   directory: InstallPinnedTool.defaultDirectory,
   archive: null,
   versionCommand: <String>['--version'],
+  pinPrefixes: pinPrefixes,
 );
 
 /// The tools an operator uses on the machine, and the pins that make two machines the same.
@@ -129,6 +135,7 @@ void main() {
         directory: yqCli.directory,
         archive: null,
         versionCommand: yqCli.versionCommand,
+        pinPrefixes: pinPrefixes,
       ).check(HostMachine().contextFor(under));
       expect((answer as Blocked).reason, contains('pinned release'));
     });
@@ -144,6 +151,7 @@ void main() {
         directory: InstallPinnedTool.defaultDirectory,
         archive: null,
         versionCommand: <String>['--version'],
+        pinPrefixes: pinPrefixes,
       ).check(HostMachine().contextFor(under));
       expect((answer as Blocked).reason, contains(InstallPinnedTool.versionPlaceholder));
     });
@@ -162,6 +170,7 @@ void main() {
           directory: InstallPinnedTool.defaultDirectory,
           archive: null,
           versionCommand: <String>['--version'],
+          pinPrefixes: pinPrefixes,
         ).check(HostMachine().contextFor(under));
         expect((answer as Blocked).reason, contains('<architekture>'));
       },
@@ -179,6 +188,7 @@ void main() {
           directory: InstallPinnedTool.defaultDirectory,
           archive: null,
           versionCommand: <String>[],
+          pinPrefixes: pinPrefixes,
         ).check(HostMachine().contextFor(under));
         expect((answer as Blocked).reason, contains('what version it is'));
       },
@@ -254,6 +264,7 @@ void main() {
         'jq=--version',
         'tailscale=version',
       ],
+      pinPrefixes: pinPrefixes,
     );
 
     HostMachine withTools({Map<String, String> answers = const <String, String>{}}) {
@@ -270,10 +281,24 @@ void main() {
       return machine;
     }
 
-    test('the tag shapes come off before the comparison', () {
-      expect(AssertCliToolVersions.bare('v4.53.3'), '4.53.3');
-      expect(AssertCliToolVersions.bare('jq-1.8.2'), '1.8.2');
-      expect(AssertCliToolVersions.bare('2.0.3'), '2.0.3');
+    test('the tag shape comes off before the comparison', () {
+      expect(AssertCliToolVersions.bare('v4.53.3', pinPrefixes), '4.53.3');
+      expect(AssertCliToolVersions.bare('jq-1.8.2', pinPrefixes), '1.8.2');
+      expect(AssertCliToolVersions.bare('2.0.3', pinPrefixes), '2.0.3');
+    });
+
+    test('at most ONE shape comes off, so two of them cannot eat into the version', () {
+      // The defect this replaced: every shape was stripped in turn, so a tag beginning with one of
+      // them and holding another lost both and was compared as a number no tool answers with.
+      expect(AssertCliToolVersions.bare('vjq-1.7', pinPrefixes), 'jq-1.7');
+    });
+
+    test('the longest shape wins, so one that begins with another is not cut short', () {
+      expect(AssertCliToolVersions.bare('jq-1.8.2', <String>['j', 'jq-']), '1.8.2');
+    });
+
+    test('a row that names no shape leaves every pin as it stands', () {
+      expect(AssertCliToolVersions.bare('v4.53.3', <String>[]), 'v4.53.3');
     });
 
     test('a version reader answers with the bare version and nothing else', () async {
@@ -342,6 +367,7 @@ void main() {
         tools: <String>['helm=v4.2.3'],
         unpinnable: <String>[],
         versionCommands: <String>[],
+        pinPrefixes: pinPrefixes,
       );
       final CheckResult answer = await unknown.check(withTools().contextFor(under));
       expect((answer as Blocked).reason, contains('helm'));
@@ -354,6 +380,7 @@ void main() {
         tools: <String>['yq=v4.53.3'],
         unpinnable: <String>[],
         versionCommands: <String>['yq=', '=--version', 'yq'],
+        pinPrefixes: pinPrefixes,
       );
       final CheckResult answer = await malformed.check(withTools().contextFor(under));
       expect((answer as Blocked).reason, contains('nothing was given to ask yq'));
@@ -433,7 +460,8 @@ void main() {
   });
 
   group('the credentials for this cluster', () {
-    const ExportKubeconfig step = ExportKubeconfig();
+    const List<String> credentialsCommand = <String>['microk8s', 'config'];
+    const ExportKubeconfig step = ExportKubeconfig(credentialsCommand: credentialsCommand);
     const String credentials = 'apiVersion: v1\nkind: Config\nclusters: []\n';
 
     test('the file is readable by its owner alone, and so is the directory', () async {

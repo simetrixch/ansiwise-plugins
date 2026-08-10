@@ -61,8 +61,8 @@ final class VaultAuthRole extends ReversibleStep<Map<String, Object?>?> {
       name: 'role',
       kind: ArgumentKind.text,
       describes:
-          'the role name, which the caller names when it logs in, and which may carry '
-          '"$stagePlaceholder" where the callers expect the stage in it',
+          'the role name, which the caller names when it logs in, and which may carry the slot '
+          'this row names under run_answer where the callers expect that value in it',
     ),
     ArgumentSpec(
       name: 'body',
@@ -83,7 +83,12 @@ final class VaultAuthRole extends ReversibleStep<Map<String, Object?>?> {
   ];
 
   /// The answers this step reads, which is what its registry entry declares.
-  static const List<String> answers = vaultAnswers;
+  ///
+  /// None by name. What this step reads out of the run is whichever answer the row's `run_answer`
+  /// names, and that is a value of a program rather than of this package — so there is no name here
+  /// that a resolver could hold a program to, and an answer the run does not carry leaves the slot
+  /// standing and is refused by name where the text is used.
+  static const List<String> answers = <String>[];
 
   /// The checkout this installation runs from.
   final String repository;
@@ -117,7 +122,7 @@ final class VaultAuthRole extends ReversibleStep<Map<String, Object?>?> {
 
     final RootToken token = await rootTokenFrom(
       context,
-      vaultCredentialsPath(context, repository, credentials: layout.credentials),
+      vaultCredentialsPath(context, repository, layout: layout),
     );
     if (token.refusal case final String refusal) {
       return CheckResult.blocked(refusal);
@@ -169,7 +174,7 @@ final class VaultAuthRole extends ReversibleStep<Map<String, Object?>?> {
     final String url = vault.url ?? '';
     final RootToken token = await rootTokenFrom(
       context,
-      vaultCredentialsPath(context, repository, credentials: layout.credentials),
+      vaultCredentialsPath(context, repository, layout: layout),
     );
     final String held = token.value ?? '';
     final Map<String, Object?> declared = decodedObject(written.body) ?? const <String, Object?>{};
@@ -209,7 +214,7 @@ final class VaultAuthRole extends ReversibleStep<Map<String, Object?>?> {
     }
     final RootToken token = await rootTokenFrom(
       context,
-      vaultCredentialsPath(context, repository, credentials: layout.credentials),
+      vaultCredentialsPath(context, repository, layout: layout),
     );
     if (token.value case final String held) {
       return _current(context, vault.url ?? '', held, written.path);
@@ -226,7 +231,7 @@ final class VaultAuthRole extends ReversibleStep<Map<String, Object?>?> {
     }
     final RootToken token = await rootTokenFrom(
       context,
-      vaultCredentialsPath(context, repository, credentials: layout.credentials),
+      vaultCredentialsPath(context, repository, layout: layout),
     );
     if (token.value case final String held) {
       final String url = vault.url ?? '';

@@ -12,13 +12,13 @@ import 'configure_slave_apiserver_oidc_trust.dart';
 /// It is answered now, so there is no example left to catch — and a rule that recognised an
 /// illustration would refuse the operator whose own mailbox happens to read like one.
 final class WriteClusterIssuerManifest extends ReversibleStep<String?> with FileStep, TemplateStep {
-  /// Renders the issuer [name] into [stateDirectory], for the mailbox this run names.
+  /// Renders the issuer [name] into the file at [path], for the mailbox this run names.
   const WriteClusterIssuerManifest({
     required this.templatePath,
     required this.name,
     required this.acmeServer,
     required this.ingressClass,
-    required this.stateDirectory,
+    required this.path,
   });
 
   /// Builds the step from what the program gave it.
@@ -28,7 +28,7 @@ final class WriteClusterIssuerManifest extends ReversibleStep<String?> with File
         name: arguments.text('name'),
         acmeServer: arguments.text('acme_server'),
         ingressClass: arguments.text('ingress_class'),
-        stateDirectory: arguments.text('state_directory'),
+        path: arguments.text('issuer_manifest_path'),
       );
 
   /// What this step accepts.
@@ -61,14 +61,27 @@ final class WriteClusterIssuerManifest extends ReversibleStep<String?> with File
       required: false,
       defaultValue: 'public',
     ),
+    // The whole path and not a directory with a base name added here. This step and the two that
+    // apply the file are given one value under one name, so the name of the file is written once
+    // in the program and the three cannot come to mean three different files. The directory it
+    // stands in is created from the same value, so there is no second answer about where it goes.
     ArgumentSpec(
-      name: 'state_directory',
+      name: 'issuer_manifest_path',
       kind: ArgumentKind.text,
-      describes: 'where this program keeps the manifests it renders',
+      describes:
+          'the file this renders the issuer into, which the steps that apply it are given too',
       required: false,
-      defaultValue: ConfigureSlaveApiserverOidcTrust.defaultStateDirectory,
+      defaultValue: defaultManifestPath,
     ),
   ];
+
+  /// Where this product renders the issuer, and the ONE place its file name is written.
+  ///
+  /// The tool package that applies the file carries no name for it — cert-manager mandates none, so
+  /// a base name there would agree with this one only by accident. Here it is a fact of this
+  /// product, beside the directory this product keeps everything it renders in.
+  static const String defaultManifestPath =
+      '${ConfigureSlaveApiserverOidcTrust.defaultStateDirectory}/clusterissuer.yaml';
 
   /// The answers this step reads, which is what its registry entry declares.
   ///
@@ -92,11 +105,17 @@ final class WriteClusterIssuerManifest extends ReversibleStep<String?> with File
   /// The ingress a request is answered over.
   final String ingressClass;
 
-  /// Where the rendered manifest goes.
-  final String stateDirectory;
-
   /// Where the rendered manifest is written.
-  String get path => '$stateDirectory/clusterissuer.yaml';
+  final String path;
+
+  /// The directory the manifest stands in, taken off the path rather than answered a second time.
+  ///
+  /// Null where the path names no directory at all — a bare file name is written where the run
+  /// stands, and there is nothing to create for it.
+  String? get directory {
+    final int lastSeparator = path.lastIndexOf('/');
+    return lastSeparator <= 0 ? null : path.substring(0, lastSeparator);
+  }
 
   @override
   String pathFor(StepContext context) => path;
@@ -116,7 +135,9 @@ final class WriteClusterIssuerManifest extends ReversibleStep<String?> with File
     // The directory first. It is the state directory of this installation, and a run that reached
     // here on a machine that has never had one would otherwise fail on the write rather than on
     // anything that says what is missing.
-    await context.files.createDirectory(stateDirectory, mode: 0x1ed);
+    if (directory case final String under) {
+      await context.files.createDirectory(under, mode: 0x1ed);
+    }
     await super.apply(context);
   }
 

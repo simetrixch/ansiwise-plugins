@@ -90,7 +90,7 @@ const Map<StepName, RegisteredStep> kubernetesSteps = <StepName, RegisteredStep>
   ),
   StepName('set_default_storage_class'): RegisteredStep(
     name: StepName('set_default_storage_class'),
-    source: 'lib/src/steps/set_default_storage_class.dart:20',
+    source: 'lib/src/steps/set_default_storage_class.dart:24',
     create: SetDefaultStorageClass.fromArguments,
     arguments: SetDefaultStorageClass.arguments,
   ),

@@ -18,7 +18,8 @@ final class RestartCertManagerAndReapplyClusterIssuer extends IrreversibleStep {
   const RestartCertManagerAndReapplyClusterIssuer({
     required this.name,
     required this.namespace,
-    required this.stateDirectory,
+    required this.deployments,
+    required this.manifestPath,
     required this.settleSeconds,
     required this.waitSeconds,
     required this.intervalSeconds,
@@ -30,7 +31,8 @@ final class RestartCertManagerAndReapplyClusterIssuer extends IrreversibleStep {
       RestartCertManagerAndReapplyClusterIssuer(
         name: arguments.text('name'),
         namespace: arguments.text('namespace'),
-        stateDirectory: arguments.text('state_directory'),
+        deployments: arguments.textList('deployments'),
+        manifestPath: arguments.text('issuer_manifest_path'),
         settleSeconds: arguments.integer('settle_seconds'),
         waitSeconds: arguments.integer('wait_seconds'),
         intervalSeconds: arguments.integer('interval_seconds'),
@@ -46,19 +48,29 @@ final class RestartCertManagerAndReapplyClusterIssuer extends IrreversibleStep {
           'the issuer every certificate on this cluster is issued by — what it is called is a '
           'fact about the installation',
     ),
+    // Neither the namespace nor the names of the parts has a default. Both are decided by how the
+    // certificate service was INSTALLED — a release under another name gives its deployments that
+    // name and can be put in any namespace — and this package did not install it. A default would
+    // roll nothing on such a cluster while every command still returned zero, and the issuer would
+    // be applied again to the same stuck service.
     ArgumentSpec(
       name: 'namespace',
       kind: ArgumentKind.text,
       describes: 'the namespace the certificate service runs in',
-      required: false,
-      defaultValue: defaultNamespace,
     ),
     ArgumentSpec(
-      name: 'state_directory',
+      name: 'deployments',
+      kind: ArgumentKind.textList,
+      describes:
+          'the deployments of the certificate service that are restarted, under the names the '
+          'release that installed it gave them',
+    ),
+    ArgumentSpec(
+      name: 'issuer_manifest_path',
       kind: ArgumentKind.text,
       describes:
-          'where this program keeps the manifests it renders — where that directory sits is a '
-          'fact about the installation',
+          'the file the rendered issuer stands in, as the step that renders it writes it — one '
+          'value, so the writer and this cannot come to name different files',
     ),
     ArgumentSpec(
       name: 'settle_seconds',
@@ -84,24 +96,17 @@ final class RestartCertManagerAndReapplyClusterIssuer extends IrreversibleStep {
     Kubectl.argument,
   ];
 
-  /// Where the certificate service runs, under the name it gives itself.
-  static const String defaultNamespace = 'cert-manager';
-
-  /// The parts of the certificate service that are restarted, under the names it gives them.
-  static const List<String> deployments = <String>[
-    'cert-manager',
-    'cert-manager-webhook',
-    'cert-manager-cainjector',
-  ];
-
   /// The issuer certificates are issued by.
   final String name;
 
   /// The namespace the certificate service runs in.
   final String namespace;
 
-  /// Where the rendered manifest is.
-  final String stateDirectory;
+  /// The deployments of the certificate service that are restarted.
+  final List<String> deployments;
+
+  /// The manifest this step applies again.
+  final String manifestPath;
 
   /// How long the restarted service is left.
   final int settleSeconds;
@@ -114,9 +119,6 @@ final class RestartCertManagerAndReapplyClusterIssuer extends IrreversibleStep {
 
   /// How the cluster is reached.
   final Kubectl kubectl;
-
-  /// The manifest this step applies again.
-  String get manifestPath => '$stateDirectory/clusterissuer.yaml';
 
   @override
   String get irreversibleReason =>

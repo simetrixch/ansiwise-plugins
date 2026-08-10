@@ -4,13 +4,12 @@ import 'package:ansiwise_checks/ansiwise_checks.dart';
 import 'package:ansiwise_kubernetes/ansiwise_kubernetes.dart';
 import 'package:test/test.dart';
 
-import 'declared_answers.dart';
 import 'step_fixtures.dart';
 
 Future<void> main() async {
   final Idempotence check = Idempotence(
     registry: kubernetesRegistry,
-    answers: answersDeclaredBy(kubernetesRegistry),
+    answers: (await answersDeclaredBy(kubernetesRegistry)).values,
     fixtures: stepFixtures,
   );
   final IdempotenceReading reading = await check.runEveryStep();

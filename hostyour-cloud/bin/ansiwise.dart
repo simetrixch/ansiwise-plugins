@@ -86,6 +86,10 @@ Future<void> main(List<String> argv) async {
   // precedence: the file is what this installation always wants, the flag is what this one run
   // wants. Declared here so a refusal below cannot leave it unset.
   LogLevel logLevel = LogLevel.info;
+  // Whether a real run still needs a clean dry run behind it. An installation may waive it, and
+  // the waiver is read here rather than assumed, so the gate a run meets is the one this
+  // installation configured rather than the one the code happens to default to.
+  bool requireDryRun = true;
   try {
     if (!await machine.files.exists(configuration)) {
       throw PluginRejected(
@@ -99,6 +103,7 @@ Future<void> main(List<String> argv) async {
     );
     registry = plugins.activate(active.plugins);
     logLevel = active.logLevel;
+    requireDryRun = active.requireDryRun;
   } on PluginRejected catch (refused) {
     stderr.writeln(refused.message);
     exit(78);
@@ -142,6 +147,7 @@ Future<void> main(List<String> argv) async {
       store: store,
       directory: directory,
       options: options,
+      requireDryRun: requireDryRun,
     );
     return;
   }
@@ -156,11 +162,13 @@ Future<void> main(List<String> argv) async {
       argv: argv,
       program: ProgramName(rest.first),
       logLevel: logLevel,
+      requireDryRun: requireDryRun,
     ),
   );
 }
 
 Future<void> _serve({
+  required bool requireDryRun,
   required Machine machine,
   required Catalogue catalogue,
   required FileRunStore store,
@@ -177,9 +185,9 @@ Future<void> _serve({
         newRunId: () => _newRunId(machine.clock),
       ),
       catalogue: catalogue,
-      gate: Gate(store),
+      gate: Gate(store, requireDryRun: requireDryRun),
       json: const RecordCodec(),
-      commit: await _commit(machine),
+      commit: () => _commit(machine),
     ),
     events: EventsEndpoint(store: store, json: const RecordCodec()),
   );
@@ -189,6 +197,7 @@ Future<void> _serve({
 }
 
 Future<int> _runProgram({
+  required bool requireDryRun,
   required Machine machine,
   required Catalogue catalogue,
   required FileRunStore store,
@@ -227,10 +236,22 @@ Future<int> _runProgram({
   }
 
   final String commit = await _commit(machine);
-  final String fingerprint = fingerprintOf(program: resolved, commit: commit);
+  final String fingerprint = fingerprintOf(program: resolved, commit: commit, answers: answers);
+
+  // Said BEFORE the run, and by the one implementation. Every step declares whether it can be taken
+  // back, so where a run stops being reversible is a fact this program can state rather than a
+  // surprise the operator meets at the failure. Printed for a dry run as much as for a real one:
+  // the dry run is where somebody decides, and a boundary they read afterwards is a boundary they
+  // could not act on.
+  if (pointOfNoReturnSaid(resolved) case final String boundary) {
+    stdout.writeln(boundary);
+  }
 
   try {
-    await Gate(store).admit(mode: mode, program: program, fingerprint: fingerprint);
+    await Gate(
+      store,
+      requireDryRun: requireDryRun,
+    ).admit(mode: mode, program: program, fingerprint: fingerprint);
   } on GateNotMet catch (refusal) {
     stderr.writeln(refusal.message);
     return 69;
@@ -273,12 +294,22 @@ Future<int> _runProgram({
     resumes: resumes,
   );
 
-  // Built from the VALUES of the answers the program declared secret. Everything on its way into
-  // the record passes through here, which is what makes a record safe to read and to paste into a
-  // message when something has gone wrong.
+  // Built from the VALUES of everything declared secret, on BOTH surfaces a value arrives by.
+  // Everything on its way into the record passes through here, which is what makes a record safe to
+  // read and to paste into a message when something has gone wrong.
+  //
+  // An ANSWER is the surface an operator fills in. An ARGUMENT is the surface a program row writes,
+  // and a step may declare one secret too - a token a row carries, a key a plugin needs. Built from
+  // the answers alone, a secret argument's value would reach a world-readable record through the
+  // command line a step composes and through the plan it prints, while ArgumentSpec.secret says the
+  // value is never sent back out.
   final Redactor redactor = Redactor(<String>[
     for (final String name in resolved.declared.answers.secretNames)
       if (answers.optionalText(name) case final String value) value,
+    for (final ResolvedStep step in resolved.steps)
+      for (final ArgumentSpec spec in step.registered.arguments)
+        if (spec.secret)
+          if (step.entry.arguments.optionalText(spec.name) case final String value) value,
   ]);
 
   final FileRecorder recorder = await FileRecorder.open(

@@ -141,6 +141,10 @@ void main() {
             'gigabytes',
             'packages',
             'commands',
+            // Which package carries a command whose name is not the package's name. One
+            // distribution's fact rather than one machine's, so it belongs to the product and not
+            // to whoever is installing it.
+            'provided_by',
           ]),
         ),
         reason:

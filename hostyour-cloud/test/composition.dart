@@ -1,6 +1,3 @@
-// A test may read the real files; the rule that confines `dart:io` is about the shipped library.
-import 'dart:io' show Directory, Platform;
-
 import 'package:ansiwise_api/ansiwise_api.dart';
 import 'package:hostyour_cloud/hostyour_cloud.dart';
 
@@ -14,30 +11,14 @@ import 'package:hostyour_cloud/hostyour_cloud.dart';
 /// **The tests still prove the programs, because a program that does not resolve is caught here or
 /// on a machine.** So they read the tree next to this checkout, and the environment may point them
 /// somewhere else.
-String get installationTree =>
-    Platform.environment['ANSIWISE_INSTALLATION'] ?? '../../../digitaplatform/digita-cloud';
-
-/// [installationTree], proven to be there.
 ///
-/// **Absent FAILS, and says what it looked for.** A test suite that quietly skipped the programs
-/// would report green over the one thing it is here to measure — and the shape of that failure is a
-/// program with a misspelled step name reaching a machine.
-String get installationRoot {
-  if (!Directory('$installationTree/$installationPrograms').existsSync()) {
-    throw StateError(
-      'no programs at $installationTree/$installationPrograms — the programs of an installation '
-      'live in its own repository, and these tests read that tree. Clone it beside this one, or '
-      'set ANSIWISE_INSTALLATION to where it is.',
-    );
-  }
-  return installationTree;
-}
-
-/// Where the programs stand inside an installation tree.
-const String installationPrograms = 'ansiwise/programs';
-
-/// The program file named [name], as a path a test can open.
-String programAt(String name) => '$installationRoot/$installationPrograms/$name';
+/// **Where that tree is, is decided ONCE and not here.** The four tool packages this plugin stands
+/// on read the same declarations for the same reason — their probes plant the kinds and defaults the
+/// programs declare — and a second answer to "where is the installation" is a second answer that can
+/// disagree with the first. So the resolution and its refusal come out of the checks package, and
+/// are carried on through here for everything that already reads them.
+export 'package:ansiwise_checks/ansiwise_checks.dart'
+    show installationPrograms, installationProgramsRoot, installationRoot, programAt;
 
 /// The registry a program of this product is actually resolved against.
 ///

@@ -1,26 +1,28 @@
 import 'dart:io';
 
+import 'package:ansiwise_checks/ansiwise_checks.dart';
 import 'package:test/test.dart';
 
-import '../tool/declared_checks.dart';
-
-/// The gate is told what it checks, and holds the disk against it.
+/// declared-checks — this package is told what it checks, and holds the disk against it.
 ///
 /// `dart test` discovers whatever is on disk and reports whether any of it failed. Delete a test
 /// file and NOTHING fails — the check is not there to fail — and the run goes on to say that every
 /// check is green. It is worse than a missing test: a check and its counter-probe live in the same
 /// file, so the thing that would have noticed goes with the thing it was watching.
 ///
-/// `tool/ci.dart` therefore reads `checks.yaml` before anything runs and stops when the two
-/// disagree. This file drives the same reading over declarations written for the purpose, so the
-/// refusal is proven to happen rather than assumed — which is the whole point of the mechanism and
-/// would be the first thing to go quiet if it were only asserted in prose.
+/// The reading is [parseChecks] and [disagreements], shared with every other package of this tree
+/// through package:ansiwise_checks. What is here is this package's own declaration, the counter-probe
+/// that proves the refusal really happens, and where its checks live — all of them directly under
+/// `test/`, because this package is nothing but checks.
+///
+/// `tool/ci.dart` asks one thing this file cannot: whether this file is there at all. It imports no
+/// package, so it does not read the declaration; it refuses to start when either half is missing.
 void main() {
-  group('the declaration this repository really carries', () {
+  group('the declaration this package really carries', () {
     late List<DeclaredCheck> declared;
 
     setUpAll(() {
-      final File file = File('${Directory.current.path}/checks.yaml');
+      final File file = File('${Directory.current.path}/$checksFileName');
       expect(
         file.existsSync(),
         isTrue,
@@ -40,7 +42,10 @@ void main() {
 
     test('agrees with the files on disk, in both directions', () {
       expect(
-        disagreements(declared: declared, testFilesOnDisk: testFilesUnder(Directory.current)),
+        disagreements(
+          declared: declared,
+          checkFilesOnDisk: checkFilesUnder(Directory.current, checksDirectory),
+        ),
         isEmpty,
       );
     });
@@ -48,7 +53,11 @@ void main() {
     test('gives every check a name and a file', () {
       for (final DeclaredCheck check in declared) {
         expect(check.name, isNotEmpty, reason: 'a refusal has to be able to name what vanished');
-        expect(check.file, startsWith('test/'), reason: '$check does not name a file of the suite');
+        expect(
+          check.file,
+          startsWith('$checksDirectory/'),
+          reason: '$check does not name a file of the suite',
+        );
       }
     });
   });
@@ -60,36 +69,36 @@ void main() {
     );
 
     test('a declared check whose file is gone is reported, by name', () {
-      final List<String> found = disagreements(
+      final List<Finding> found = disagreements(
         declared: <DeclaredCheck>[lineEndings],
-        testFilesOnDisk: const <String>[],
+        checkFilesOnDisk: const <String>[],
       );
       expect(found, hasLength(1));
+      expect(found.single.subject, 'test/line_endings_test.dart');
       expect(
-        found.single,
-        allOf(contains('line-endings'), contains('test/line_endings_test.dart')),
+        found.single.what,
+        contains('line-endings'),
         reason:
             'the name is what a person looks for; a count of missing files says something is wrong '
             'and not what',
       );
     });
 
-    test('a test file nothing declares is reported too', () {
-      final List<String> found = disagreements(
+    test('a check file nothing declares is reported too', () {
+      final List<Finding> found = disagreements(
         declared: const <DeclaredCheck>[],
-        testFilesOnDisk: <String>['test/unagreed_test.dart'],
+        checkFilesOnDisk: <String>['test/unagreed_test.dart'],
       );
       expect(found, hasLength(1));
-      expect(found.single, contains('test/unagreed_test.dart'));
+      expect(found.single.subject, 'test/unagreed_test.dart');
     });
 
     test('a rename is reported from both sides rather than as one silent swap', () {
-      final List<String> found = disagreements(
-        declared: <DeclaredCheck>[lineEndings],
-        testFilesOnDisk: <String>['test/line_ending_test.dart'],
-      );
       expect(
-        found,
+        disagreements(
+          declared: <DeclaredCheck>[lineEndings],
+          checkFilesOnDisk: <String>['test/line_ending_test.dart'],
+        ),
         hasLength(2),
         reason:
             'one half missing and the other unaccounted for; a single finding would let the reader '
@@ -101,7 +110,7 @@ void main() {
       expect(
         disagreements(
           declared: <DeclaredCheck>[lineEndings],
-          testFilesOnDisk: <String>['test/line_endings_test.dart'],
+          checkFilesOnDisk: <String>['test/line_endings_test.dart'],
         ),
         isEmpty,
       );
@@ -130,4 +139,34 @@ void main() {
       );
     });
   });
+
+  group('listing what is on disk', () {
+    test('a file that is not a test is not a check of this package', () {
+      final Directory scratch = _scratch();
+      Directory('${scratch.path}/test').createSync(recursive: true);
+      File('${scratch.path}/test/naming_test.dart').writeAsStringSync('void main() {}\n');
+      File('${scratch.path}/test/support.dart').writeAsStringSync('void help() {}\n');
+      expect(checkFilesUnder(scratch, 'test'), <String>['test/naming_test.dart']);
+    });
+
+    test('a directory of helpers holds no check', () {
+      final Directory scratch = _scratch();
+      Directory('${scratch.path}/test/support').createSync(recursive: true);
+      File('${scratch.path}/test/support/helper_test.dart').writeAsStringSync('void main() {}\n');
+      expect(
+        checkFilesUnder(scratch, 'test'),
+        isEmpty,
+        reason: 'the declaration names the files dart test discovers as checks, not every file',
+      );
+    });
+  });
+}
+
+/// Where this package keeps the files that judge it.
+const String checksDirectory = 'test';
+
+Directory _scratch() {
+  final Directory directory = Directory.systemTemp.createTempSync('hostyour-cloud-gate-declared-');
+  addTearDown(() => directory.deleteSync(recursive: true));
+  return directory;
 }

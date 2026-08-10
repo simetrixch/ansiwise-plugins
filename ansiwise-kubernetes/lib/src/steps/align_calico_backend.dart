@@ -130,6 +130,13 @@ final class AlignCalicoBackend extends ReversibleStep<String?> {
   /// cannot read is reported as being on the modern backend, the default of every recent release
   /// and the safer of the two to be wrong about — pinning the agent to the older one on a machine
   /// that is really on the modern one is the split this measurement exists to prevent.
+  ///
+  /// **This is a SECOND reading of the same link, and the package that owns the machine's own
+  /// tooling carries the first.** That is stated rather than hidden, because the two can come to
+  /// disagree and nothing would report it: the tool packages do not depend on one another, and the
+  /// framework carries no channel by which a step that MEASURED something hands the value to a
+  /// later step — a predicate answers yes or no, and an answer comes from the operator. Until there
+  /// is such a channel there are two readings, and this is where that costs somebody something.
   static Future<String> _machineBackend(StepContext context) async {
     for (final List<String> argv in <List<String>>[
       <String>['readlink', '-f', '/etc/alternatives/iptables'],

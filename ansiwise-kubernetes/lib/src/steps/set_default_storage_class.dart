@@ -9,9 +9,13 @@ import 'kubectl.dart';
 /// Almost every claim this platform makes names no class, so without a default they are all accepted
 /// and none of them is ever satisfied — a workload that waits for ever with nothing saying why.
 ///
-/// **The class is found and never configured.** Which one the volume addon produced is the addon's
-/// business; naming it in a program file would be a second answer that only agrees with the first by
-/// accident.
+/// **The class is found and never configured, and finding it means finding exactly ONE.** Which
+/// class the volume addon produced is the addon's business; naming it in a program file would be a
+/// second answer that only agrees with the first by accident. Where the cluster carries SEVERAL and
+/// none of them is the default, this refuses and names them: which of several should catch every
+/// claim that names none is a decision, and taking whichever the cluster listed first would make it
+/// silently — the order is the API server's and can differ between two readings of the same cluster,
+/// so the same program would produce different clusters and nothing would say why.
 ///
 /// **This waits for the class rather than reporting that there was none.** The addon produces it
 /// shortly after it is switched on, so a step that looked once and moved on would leave a first
@@ -75,12 +79,16 @@ final class SetDefaultStorageClass extends ReversibleStep<String?> {
     if (already != null) {
       return CheckResult.satisfied('$already is the default storage class');
     }
+    if (classes.length > 1) {
+      return CheckResult.blocked(_undecided(classes));
+    }
     return const CheckResult.ready();
   }
 
   @override
   Future<StepPlan> plan(StepContext context) async => StepPlan.nothing(
-    'would wait up to ${timeoutSeconds}s for a storage class and mark the first one as the default',
+    'would wait up to ${timeoutSeconds}s for a storage class and mark it as the default — and '
+    'refuse a cluster that carries several with no default among them',
   );
 
   @override
@@ -91,8 +99,11 @@ final class SetDefaultStorageClass extends ReversibleStep<String?> {
       if (_default(classes) != null) {
         return;
       }
+      if (classes.length > 1) {
+        throw StateError(_undecided(classes));
+      }
       if (classes.isNotEmpty) {
-        await _mark(context, classes.keys.first, true);
+        await _mark(context, classes.keys.single, true);
         return;
       }
       if (!context.clock.now().isBefore(giveUp)) {
@@ -152,6 +163,16 @@ final class SetDefaultStorageClass extends ReversibleStep<String?> {
     }
     return found;
   }
+
+  /// Why this cluster's classes leave nothing to mark, for the check and for the apply alike.
+  ///
+  /// One sentence in both places rather than two that could come to say different things about the
+  /// same cluster: the check is what a dry run prints, and the apply is what a real run stops on
+  /// when a class appeared between the two.
+  static String _undecided(Map<String, bool> classes) =>
+      'this cluster carries ${classes.length} storage classes and none of them is the default: '
+      '${classes.keys.join(', ')}. Which of them catches every claim that names none is a decision, '
+      'and nothing here makes it — mark one on the cluster, or leave the cluster with one class';
 
   String? _default(Map<String, bool> classes) {
     for (final MapEntry<String, bool> storageClass in classes.entries) {

@@ -3,12 +3,10 @@ import 'package:ansiwise_checks/ansiwise_checks.dart';
 import 'package:ansiwise_kubernetes/ansiwise_kubernetes.dart';
 import 'package:test/test.dart';
 
-import 'declared_answers.dart';
-
 Future<void> main() async {
   final DrySafety check = DrySafety(
     registry: kubernetesRegistry,
-    answers: answersDeclaredBy(kubernetesRegistry),
+    answers: (await answersDeclaredBy(kubernetesRegistry)).values,
   );
   final DryRunReading reading = await check.askEveryStep();
 

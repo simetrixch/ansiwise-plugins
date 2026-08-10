@@ -3,10 +3,11 @@
 /// Nothing here starts a tool itself: it is handed a toolchain and a list of packages, which is what
 /// lets a test drive the whole sequence and read the verdict without `dart` being involved.
 ///
-/// Each package is resolved, then the analyzer and the formatter are asked about the whole tree at
-/// once, then each suite runs. A package whose resolution failed is not analysed and not tested —
-/// there is nothing true to say about it until its dependencies are there, and the analyzer would
-/// answer with one error per import.
+/// Each package is resolved, then what each of them resolved a package of this repository TO is
+/// read and refused where it is not this repository's own checkout, then the analyzer and the
+/// formatter are asked about the whole tree at once, then each suite runs. A package whose
+/// resolution failed is not analysed and not tested — there is nothing true to say about it until
+/// its dependencies are there, and the analyzer would answer with one error per import.
 ///
 /// EVERY PACKAGE AND EVERY STEP RUNS EVEN AFTER AN EARLIER ONE WENT RED. One failure hiding the rest
 /// is how the next run finds a second problem that was there all along.
@@ -17,6 +18,7 @@ import 'dart:io';
 import 'dart_packages.dart';
 import 'dart_toolchain.dart';
 import 'gate_log.dart';
+import 'resolved_packages.dart';
 
 /// What a gate run decided.
 final class GateVerdict {
@@ -95,6 +97,30 @@ final class PackageGate {
       } else {
         failures.add('${package.name}/pub-get');
       }
+    }
+
+    // WHICH COPY OF EACH PACKAGE WAS COMPOSED, before anything is judged. A package of this
+    // repository that a sibling resolved from a commit or a cache is a second copy of code this
+    // gate is also walking on disk, and the two halves of the run would then be green about
+    // different bytes. Read after every resolution, because that is when the package config says
+    // what really answered.
+    log.heading('resolved packages');
+    for (final DartPackage package in resolved) {
+      for (final ResolvedDependency dependency in inRepositoryResolutionOf(package, packages)) {
+        log.note('  $dependency');
+      }
+    }
+    final List<String> split = splitResolutions(
+      resolutions: <ResolvedDependency>[
+        for (final DartPackage package in resolved) ...inRepositoryResolutionOf(package, packages),
+      ],
+      repositoryPackages: packages,
+    );
+    if (split.isNotEmpty) {
+      for (final String refusal in split) {
+        log.note('  $refusal');
+      }
+      failures.add('resolution');
     }
 
     log.heading('dart run $analysisScript');

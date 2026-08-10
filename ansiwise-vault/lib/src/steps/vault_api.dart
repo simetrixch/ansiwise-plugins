@@ -19,6 +19,8 @@ import 'dart:convert';
 
 import 'package:ansiwise_api/ansiwise_api.dart';
 
+import 'vault_profile.dart';
+
 /// How long any one call to Vault may take before the run gives up on it.
 ///
 /// Explicit because the default is to wait forever, and a Vault that accepts the connection and then
@@ -62,6 +64,10 @@ final class RootToken {
 
 /// Reads Vault's root token out of the credential file at [path].
 Future<RootToken> rootTokenFrom(StepContext context, String path) async {
+  final String? unfilled = unfilledSlotRefusal(path);
+  if (unfilled != null) {
+    return RootToken.unreadable(unfilled);
+  }
   if (!await context.files.exists(path)) {
     return RootToken.unreadable(
       '$path is not on this host, and it is where Vault\'s root token is — the step that '
@@ -79,37 +85,43 @@ Future<RootToken> rootTokenFrom(StepContext context, String path) async {
       : RootToken.read(token);
 }
 
-/// The answers every step that talks to Vault reads, which is what their registry entries declare.
+/// Why [path] cannot be used as it stands, or null when it can.
 ///
-/// One name: the stage. It names the credential file and the hand-filled input, it is what the
-/// `<stage>` slot stands for, and it is the only part of the connection an operator states — the
-/// address itself is read out of the profile, never answered and never composed.
-const List<String> vaultAnswers = <String>[vaultStageAnswer];
+/// A path still carrying angle brackets is a path whose slot nothing filled — the program named an
+/// answer this run does not hold, or none at all while writing a slot anyway. Refused with the slot
+/// still in it rather than sent to the file system: a file called `vault-<stage>.txt` does not
+/// exist either way, and the refusal that says only "not on this host" would send an operator
+/// looking for a file nobody ever meant to write.
+String? unfilledSlotRefusal(String path) {
+  final String? slot = _leftoverSlot.firstMatch(path)?.group(0);
+  return slot == null
+      ? null
+      : '$path still carries $slot, and nothing in this run holds that name — the row that names '
+            'the answer filling it is where that is decided, and the program has to declare an '
+            'answer of that name for the operator to be asked for one';
+}
 
-/// The name the stage is answered under, which is what names the credential file.
-const String vaultStageAnswer = 'stage';
-
-/// The text a configured path carries where the stage belongs — the name of the stage answer in
-/// the angle brackets every marked slot of this family wears.
-const String _stageSlot = '<$vaultStageAnswer>';
+/// Anything at all between angle brackets, which is what an unfilled slot looks like.
+final RegExp _leftoverSlot = RegExp('<[^<>]*>');
 
 /// Where the quorum and the root token are, under the checkout at [repository].
 ///
-/// The step's row says where ([credentials]), and this run's stage answer fills the stage's place
-/// in it — the file is this installation's own, so no program file can write its name out whole.
+/// The step's row says where ([VaultLayout.credentials]), and this run's own value for the answer
+/// the layout names fills the slot in it — the file is this installation's own, so no program file
+/// can write its name out whole.
 String vaultCredentialsPath(
   StepContext context,
   String repository, {
-  required String credentials,
-}) => '$repository/${_stageFilled(context, credentials)}';
+  required VaultLayout layout,
+}) => '$repository/${layout.runAnswerFilled(context, layout.credentials)}';
 
 /// Where the one hand-filled input of this installation is, under the checkout at [repository].
-String vaultSecretsPath(StepContext context, String repository, {required String secrets}) =>
-    '$repository/${_stageFilled(context, secrets)}';
-
-/// [text] with this run's stage in the place the slot marks.
-String _stageFilled(StepContext context, String text) =>
-    text.replaceAll(_stageSlot, context.answers.text(vaultStageAnswer));
+String vaultSecretsPath(
+  StepContext context,
+  String repository, {
+  required String secrets,
+  required VaultLayout layout,
+}) => '$repository/${layout.runAnswerFilled(context, secrets)}';
 
 /// Every unseal key the credential file carries, in the order the file writes them.
 ///

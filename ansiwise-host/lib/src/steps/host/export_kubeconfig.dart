@@ -12,15 +12,43 @@ import 'install_authorized_key.dart';
 ///
 /// The file carries credentials that reach the whole cluster, so it is readable by its owner alone
 /// and the directory it sits in is theirs.
+///
+/// **Which command hands the credentials over is an argument, and there is no default for it.** This
+/// package drives a machine and owns no cluster client, so it has no invocation of its own to fall
+/// back on: a distribution that ships the client inside a snap, one that expects a plain client on
+/// the path, and one that reads a file put there by something else are three different command
+/// lines, and only the program that installed the cluster knows which of them this machine has.
 final class ExportKubeconfig extends IrreversibleStep {
-  /// Writes the credentials into the operator's home.
-  const ExportKubeconfig();
+  /// Writes the credentials [credentialsCommand] prints into the operator's home.
+  const ExportKubeconfig({required this.credentialsCommand});
 
   /// Builds the step from what the program gave it.
-  factory ExportKubeconfig.fromArguments(Arguments arguments) => const ExportKubeconfig();
+  ///
+  /// An empty list is refused here, before anything runs: it would name no word to start at all,
+  /// and every step is constructed before the first one runs, so the refusal reaches the operator
+  /// as a broken program rather than as a step failing halfway through an installation.
+  factory ExportKubeconfig.fromArguments(Arguments arguments) {
+    final List<String> command = arguments.textList('credentials_command');
+    if (command.isEmpty) {
+      throw ArgumentError.value(
+        command,
+        'credentials_command',
+        'names no word at all, so there is nothing to ask the cluster for its credentials with',
+      );
+    }
+    return ExportKubeconfig(credentialsCommand: command);
+  }
 
   /// What this step accepts.
-  static const List<ArgumentSpec> arguments = <ArgumentSpec>[];
+  static const List<ArgumentSpec> arguments = <ArgumentSpec>[
+    ArgumentSpec(
+      name: 'credentials_command',
+      kind: ArgumentKind.textList,
+      describes:
+          'the command that prints this cluster\'s credentials, word by word — it is run and its '
+          'whole output is what the file holds, so it must print the credentials and nothing else',
+    ),
+  ];
 
   /// The answers this step reads, which is what its registry entry declares.
   ///
@@ -29,6 +57,10 @@ final class ExportKubeconfig extends IrreversibleStep {
   static const List<String> answers = <String>[InstallAuthorizedKey.userAnswer];
 
   /// The directory under the account's home that holds the credentials.
+  ///
+  /// Not an argument: this is the place the client reads when nothing points it elsewhere, the same
+  /// on every machine and for every product, so a run that wrote anywhere else would leave the
+  /// operator's tools finding nothing.
   static const String directoryName = '.kube';
 
   /// `0700` — a directory holding credentials to the whole cluster.
@@ -36,6 +68,9 @@ final class ExportKubeconfig extends IrreversibleStep {
 
   /// `0600` — the credentials themselves.
   static const int fileMode = 0x180;
+
+  /// The command that prints this cluster's credentials, word by word.
+  final List<String> credentialsCommand;
 
   @override
   String get irreversibleReason =>
@@ -88,7 +123,7 @@ final class ExportKubeconfig extends IrreversibleStep {
     final String? credentials = await _credentials(context);
     if (credentials == null) {
       throw CommandFailed(
-        argv: <String>['microk8s', 'config'],
+        argv: credentialsCommand,
         exitCode: 1,
         stderr: 'the cluster would not hand out its credentials',
       );
@@ -111,7 +146,7 @@ final class ExportKubeconfig extends IrreversibleStep {
   /// The credentials the cluster hands out, or null when it will not.
   Future<String?> _credentials(StepContext context) async {
     final CommandResult config = await context.shell.run(
-      const Command.observing('microk8s', <String>['config']),
+      Command.observing(credentialsCommand.first, credentialsCommand.sublist(1)),
     );
     return config.ok && config.stdout.trim().isNotEmpty ? config.stdout : null;
   }

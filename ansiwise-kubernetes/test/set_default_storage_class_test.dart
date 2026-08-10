@@ -17,7 +17,7 @@ void main() {
   );
 
   test(
-    'the first class the provisioner produced is marked, and its name is never configured',
+    'the one class the provisioner produced is marked, and its name is never configured',
     () async {
       final ClusterMachine machine = ClusterMachine();
       machine.shell
@@ -64,5 +64,38 @@ void main() {
   test('a cluster that never produces one ends in a reported failure', () async {
     final ClusterMachine machine = ClusterMachine()..shell.answers(storageClasses, '');
     await expectLater(step.apply(machine.contextFor(under)), throwsA(isA<WaitedTooLong>()));
+  });
+
+  group('a cluster carrying several classes and no default', () {
+    // Which of several catches every claim that names none is a decision. Taking whichever the API
+    // server listed first would make it silently, and the order is the API server's — so two
+    // readings of the same cluster can produce two different clusters with nothing saying why.
+    ClusterMachine withTwoClasses() =>
+        ClusterMachine()..shell.answers(storageClasses, 'local-hostpath \nnetwork-block \n');
+
+    test('is refused by the check, with both of them named', () async {
+      final CheckResult answer = await step.check(withTwoClasses().contextFor(under));
+      expect((answer as Blocked).reason, contains('local-hostpath'));
+      expect(answer.reason, contains('network-block'));
+    });
+
+    test('is refused by the apply rather than marked at random', () async {
+      final ClusterMachine machine = withTwoClasses();
+      await expectLater(step.apply(machine.contextFor(under)), throwsA(isA<StateError>()));
+      expect(
+        machine.changing,
+        isEmpty,
+        reason: 'a refusal that had already patched one of them is not a refusal',
+      );
+    });
+
+    test('one of them already marked is left exactly as it is', () async {
+      // The other side of the refusal: several classes are not a problem in themselves, and a
+      // cluster where somebody already decided is satisfied rather than refused.
+      final ClusterMachine machine = ClusterMachine()
+        ..shell.answers(storageClasses, 'local-hostpath \nnetwork-block true\n');
+      expect(await step.check(machine.contextFor(under)), isA<Satisfied>());
+      expect(machine.changing, isEmpty);
+    });
   });
 }

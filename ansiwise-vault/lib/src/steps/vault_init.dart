@@ -72,7 +72,12 @@ final class VaultInit extends IrreversibleStep {
   ];
 
   /// The answers this step reads, which is what its registry entry declares.
-  static const List<String> answers = vaultAnswers;
+  ///
+  /// None by name. What this step reads out of the run is whichever answer the row's `run_answer`
+  /// names, and that is a value of a program rather than of this package — so there is no name here
+  /// that a resolver could hold a program to, and an answer the run does not carry leaves the slot
+  /// standing and is refused by name where the text is used.
+  static const List<String> answers = <String>[];
 
   /// `0600` — the file holds the keys to everything, and whatever unseals on this host reads it as
   /// root.
@@ -103,11 +108,7 @@ final class VaultInit extends IrreversibleStep {
       return CheckResult.blocked(refusal);
     }
     final String url = vault.url ?? '';
-    final String credentialsPath = vaultCredentialsPath(
-      context,
-      repository,
-      credentials: layout.credentials,
-    );
+    final String credentialsPath = vaultCredentialsPath(context, repository, layout: layout);
 
     final String? held = await _credentialsRefusal(context, credentialsPath);
     if (held != null) {
@@ -155,7 +156,7 @@ final class VaultInit extends IrreversibleStep {
       '${vault.url}/v1/sys/init',
       body:
           'a quorum of $keyShares keys, $keyThreshold of which unseal, written to '
-          '${vaultCredentialsPath(context, repository, credentials: layout.credentials)}',
+          '${vaultCredentialsPath(context, repository, layout: layout)}',
     );
   }
 
@@ -163,11 +164,7 @@ final class VaultInit extends IrreversibleStep {
   Future<void> apply(StepContext context) async {
     final VaultProfile vault = await vaultProfileFrom(context, repository, layout: layout);
     final String url = vault.url ?? '';
-    final String credentialsPath = vaultCredentialsPath(
-      context,
-      repository,
-      credentials: layout.credentials,
-    );
+    final String credentialsPath = vaultCredentialsPath(context, repository, layout: layout);
 
     final HttpAnswer answer = await context.http.send(
       vaultWrite(

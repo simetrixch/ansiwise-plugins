@@ -3,8 +3,8 @@
 /// A program file ships inside the binary to every installation and nothing rewrites it, so no value
 /// that belongs to ONE installation can stand in it. What stands there instead is a marked slot, and
 /// the step fills it from the run: [clusterPlaceholder], [kubernetesMountPlaceholder] and
-/// [vaultUrlPlaceholder] out of the profile the layout names, [stagePlaceholder] out of the answers,
-/// and [accessorPlaceholder] out of Vault itself.
+/// [vaultUrlPlaceholder] out of the profile the layout names, the layout's own `run_answer` slot out
+/// of the answers, and [accessorPlaceholder] out of Vault itself.
 ///
 /// **A slot is not a template, and this is the one marked-slot notation, not a second one.** A slot
 /// is a lower-case name in angle brackets standing for exactly one value this run holds — no
@@ -12,7 +12,7 @@
 /// program rather than the configuration language, and it is the same shape [accessorPlaceholder]
 /// has had since the first templated policy.
 ///
-/// **Four of the five are known before the first request and the fifth is not.** The accessor is
+/// **All but one are known before the first request, and that one is not.** The accessor is
 /// minted when an auth mount is enabled, so only the step that knows which mount an argument belongs
 /// to can read it — that step reads it and hands it in here, rather than a second filling growing
 /// beside this one.
@@ -26,7 +26,6 @@ library;
 
 import 'package:ansiwise_api/ansiwise_api.dart';
 
-import 'vault_api.dart';
 import 'vault_profile.dart';
 
 /// The text a rules argument writes where the auth mount's accessor belongs.
@@ -37,6 +36,13 @@ import 'vault_profile.dart';
 const String accessorPlaceholder = '<accessor>';
 
 /// The text a program file writes where this cluster's own short name belongs.
+///
+/// **The three slots filled out of the profile keep their spelling here, and that is a decision.**
+/// What a vendor renames is the KEY the value is read from, and every one of those is a declared
+/// argument with no default; the slot is only the notation this package offers for saying "the
+/// value under that key goes here", the same for everybody who uses the package, like the accessor
+/// slot above. What was per-product was the one slot standing for an answer of the RUN — a stage, a
+/// region, whatever the product runs one tree per — and that name is the row's, not this file's.
 ///
 /// **A policy name follows the profile's name key and never its auth-path key.** A deployment can
 /// write the short name as a value of its own and the mount path as a composition over that same
@@ -56,11 +62,6 @@ const String clusterPlaceholder = '<cluster>';
 /// here would agree with what is deployed only by accident, and the disagreement shows up as a
 /// login refused on a mount nobody wrote.
 const String kubernetesMountPlaceholder = '<kubernetes-mount>';
-
-/// The text a program file writes where the stage of this installation belongs.
-///
-/// Derived from the name the stage is answered under, so the slot and the answer cannot come apart.
-const String stagePlaceholder = '<$vaultStageAnswer>';
 
 /// The text a program file writes where the address of this installation's Vault belongs.
 const String vaultUrlPlaceholder = '<vault-url>';
@@ -93,10 +94,7 @@ extension ArgumentPlaceholders on VaultProfile {
       return ArgumentText.unknown(why);
     }
 
-    String written = text;
-    if (written.contains(stagePlaceholder)) {
-      written = written.replaceAll(stagePlaceholder, context.answers.text(vaultStageAnswer));
-    }
+    String written = layout.runAnswerFilled(context, text);
     if (written.contains(vaultUrlPlaceholder)) {
       written = written.replaceAll(vaultUrlPlaceholder, url ?? '');
     }
@@ -121,11 +119,13 @@ extension ArgumentPlaceholders on VaultProfile {
     }
 
     if (_leftoverSlot.firstMatch(written)?.group(0) case final String left) {
+      final String runSlot =
+          layout.runSlot ?? 'no slot at all, because the row names no run_answer';
       return ArgumentText.unknown(
         '"$text" carries $left, and nothing in this run holds that name — a program file may write '
-        '$stagePlaceholder, $vaultUrlPlaceholder, $clusterPlaceholder and '
-        '$kubernetesMountPlaceholder, and $accessorPlaceholder where the step reads an auth mount '
-        'to fill it from; anything else would reach Vault as it stands',
+        '$vaultUrlPlaceholder, $clusterPlaceholder and $kubernetesMountPlaceholder, '
+        '$accessorPlaceholder where the step reads an auth mount to fill it from, and for the '
+        'answer this row names $runSlot; anything else would reach Vault as it stands',
       );
     }
     return ArgumentText.of(written);

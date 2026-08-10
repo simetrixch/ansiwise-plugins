@@ -16,6 +16,13 @@ import 'composition.dart';
 /// eye: that the counts of policies and roles are exactly what the platform is specified to have,
 /// and that a phase switched off leaves nothing at all behind.
 void main() {
+  /// The slot this product's rows write where its stage belongs.
+  ///
+  /// The product's own text, and no longer the vault package's: those steps take the NAME of the
+  /// answer as an argument and hold no word of their own. The program is where the two meet, and
+  /// the test below reads its `run_answer` back to prove that this is the same word.
+  const String stagePlaceholder = '<stage>';
+
   // The five plugins the shipped configuration turns on, composed the way the binary composes
   // them. Resolved once, because reading a file per test says nothing more than reading it once.
   late final Registry shipped;

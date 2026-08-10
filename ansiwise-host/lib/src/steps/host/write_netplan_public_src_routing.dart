@@ -48,27 +48,25 @@ final class WriteNetplanPublicSrcRouting extends ReversibleStep<String?>
           'the drop-in as text, with a marked slot where each value this run holds belongs — '
           '<device>, <address>, <mac>, <gateway> and <table>',
     ),
+    // No defaults for the drop-in's name or the table number. The file name decides the ORDER the
+    // network tool merges the directory in, and the table number has to be free of whatever else
+    // the machine already routes with — both are the installation's to pick, so the program row
+    // states them.
     ArgumentSpec(
       name: 'path',
       kind: ArgumentKind.text,
-      describes: 'the drop-in that steers replies from the public address',
-      required: false,
-      defaultValue: defaultPath,
+      describes:
+          'the drop-in that steers replies from the public address — its name decides where it '
+          'falls in the merge order of the directory it goes in',
     ),
     ArgumentSpec(
       name: 'table',
       kind: ArgumentKind.integer,
-      describes: 'the routing table whose only route is the public gateway',
-      required: false,
-      defaultValue: publicTable,
+      describes:
+          'the routing table whose only route is the public gateway, free of every table this '
+          'machine already routes with',
     ),
   ];
-
-  /// Where the drop-in goes.
-  static const String defaultPath = '/etc/netplan/60-public-src-routing.yaml';
-
-  /// The table holding the public gateway, and nothing else.
-  static const int publicTable = 100;
 
   /// `0600` — the network tool refuses to read a file anyone can read.
   static const int fileMode = 0x180;

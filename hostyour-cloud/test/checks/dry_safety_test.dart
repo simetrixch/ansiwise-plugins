@@ -13,7 +13,7 @@ Future<void> main() async {
   final Registry shipped = await shippedRegistry();
   final DrySafety check = DrySafety(
     registry: shipped,
-    answers: await plausibleAnswers(const RealFiles(), '$installationRoot/$installationPrograms'),
+    answers: await plausibleAnswers(const RealFiles(), installationProgramsRoot),
   );
   final DryRunReading reading = await check.askEveryStep();
 

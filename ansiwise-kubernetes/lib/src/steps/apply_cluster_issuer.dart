@@ -7,17 +7,17 @@ import 'kubectl.dart';
 /// Whether it can then actually issue anything is a different question, asked by the step after
 /// this: the object is accepted long before the account behind it is registered.
 final class ApplyClusterIssuer extends ReversibleStep<bool> {
-  /// Applies the issuer [name] rendered into [stateDirectory].
+  /// Applies the issuer [name] out of the file at [manifestPath].
   const ApplyClusterIssuer({
     required this.name,
-    required this.stateDirectory,
+    required this.manifestPath,
     this.kubectl = const Kubectl(),
   });
 
   /// Builds the step from what the program gave it.
   factory ApplyClusterIssuer.fromArguments(Arguments arguments) => ApplyClusterIssuer(
     name: arguments.text('name'),
-    stateDirectory: arguments.text('state_directory'),
+    manifestPath: arguments.text('issuer_manifest_path'),
     kubectl: Kubectl.fromArguments(arguments),
   );
 
@@ -30,12 +30,16 @@ final class ApplyClusterIssuer extends ReversibleStep<bool> {
           'the issuer every certificate on this cluster is issued by — what it is called is a '
           'fact about the installation',
     ),
+    // The WHOLE path, and no base name composed here. cert-manager mandates none, so a base name
+    // in this package would agree with whatever renders the file only by accident: rename it on
+    // the rendering side and this step goes on looking for the old one, finds nothing, and reports
+    // that the renderer has not run.
     ArgumentSpec(
-      name: 'state_directory',
+      name: 'issuer_manifest_path',
       kind: ArgumentKind.text,
       describes:
-          'where this program keeps the manifests it renders — where that directory sits is a '
-          'fact about the installation',
+          'the file the rendered issuer stands in, as the step that renders it writes it — one '
+          'value, so the writer and this cannot come to name different files',
     ),
     Kubectl.argument,
   ];
@@ -43,14 +47,11 @@ final class ApplyClusterIssuer extends ReversibleStep<bool> {
   /// The issuer certificates are issued by.
   final String name;
 
-  /// Where the rendered manifest is.
-  final String stateDirectory;
+  /// The manifest this step applies.
+  final String manifestPath;
 
   /// How the cluster is reached.
   final Kubectl kubectl;
-
-  /// The manifest this step applies.
-  String get manifestPath => '$stateDirectory/clusterissuer.yaml';
 
   @override
   Future<CheckResult> check(StepContext context) async {

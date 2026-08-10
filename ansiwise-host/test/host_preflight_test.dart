@@ -150,14 +150,36 @@ void main() {
     });
 
     test('a command whose package has another name says which package', () async {
-      final CheckResult answer = await const RequireCommands(<String>[
-        'htpasswd',
-      ]).check(contextOn(shell: withCommands(const <String>{})));
+      // The pairing comes from the program row, because which package carries a command is a fact
+      // of one distribution's archive rather than of the machine this step measures.
+      final CheckResult answer = await const RequireCommands(
+        <String>['htpasswd'],
+        providedBy: <String>['htpasswd=apache2-utils'],
+      ).check(contextOn(shell: withCommands(const <String>{})));
       expect(
         (answer as Blocked).reason,
         contains('apache2-utils'),
         reason: 'an operator told to install htpasswd looks for a package that does not exist',
       );
+    });
+
+    test('a row that pairs nothing reports every missing command under its own name', () async {
+      // The neutral case, and what the declaration falls back to: nothing is invented for a command
+      // the row said nothing about, so no operator is sent to a package this step guessed at.
+      final CheckResult answer = await const RequireCommands(<String>[
+        'htpasswd',
+      ]).check(contextOn(shell: withCommands(const <String>{})));
+      expect((answer as Blocked).reason, 'not on the path: htpasswd');
+    });
+
+    test('half a pairing is no pairing, so the command keeps its own name', () async {
+      // An entry with no package behind it would otherwise be kept and reported as "(from )",
+      // which sends an operator looking for a package with no name.
+      final CheckResult answer = await const RequireCommands(
+        <String>['htpasswd'],
+        providedBy: <String>['htpasswd=', '=apache2-utils', 'htpasswd'],
+      ).check(contextOn(shell: withCommands(const <String>{})));
+      expect((answer as Blocked).reason, 'not on the path: htpasswd');
     });
   });
 

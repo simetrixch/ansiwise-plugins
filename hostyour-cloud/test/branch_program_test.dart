@@ -555,8 +555,11 @@ void main() {
 
     test('push ability is proven before anything changes', () {
       final ResolvedProgram program = deployBranch();
+      // Built with the defaults the step declares, exactly as the engine builds it: a step relying
+      // on one is refused outright by a reader that skips them, and the failure looks like a broken
+      // program rather than like a test that read the row too narrowly.
       final int firstChange = program.steps.indexWhere(
-        (ResolvedStep s) => s.registered.create(s.entry.arguments) is! ObservingStep,
+        (ResolvedStep s) => s.registered.create(_withDefaults(s)) is! ObservingStep,
       );
       expect(firstChange, isNot(-1));
       expect(
@@ -612,4 +615,16 @@ void main() {
       );
     });
   });
+}
+
+/// The arguments [resolved] runs with: what the program wrote, plus what the step declares by
+/// default.
+Arguments _withDefaults(ResolvedStep resolved) {
+  final Map<String, Object> defaults = <String, Object>{
+    for (final ArgumentSpec spec in resolved.registered.arguments)
+      if (spec.defaultValue case final Object value) spec.name: value,
+  };
+  return defaults.isEmpty
+      ? resolved.entry.arguments
+      : resolved.entry.arguments.withDefaults(defaults);
 }

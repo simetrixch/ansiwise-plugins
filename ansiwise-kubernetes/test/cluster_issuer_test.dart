@@ -7,8 +7,15 @@ import 'support/machine.dart';
 /// The issuer every certificate on the cluster comes from: take away, apply, and the one recovery.
 void main() {
   const StepName under = StepName('cluster_issuer');
-  const String stateDirectory = '/var/lib/deploy/state';
-  const String manifestPath = '$stateDirectory/clusterissuer.yaml';
+  // The whole path, the way a program row states it: this package composes no base name of its
+  // own, so the file the renderer writes and the file these steps apply are one value.
+  const String manifestPath = '/var/lib/deploy/state/clusterissuer.yaml';
+  // The names the release that installed the certificate service gave its deployments.
+  const List<String> certManagerDeployments = <String>[
+    'cert-manager',
+    'cert-manager-webhook',
+    'cert-manager-cainjector',
+  ];
   const String manifest = 'kind: ClusterIssuer\nmetadata:\n  name: my-issuer\n';
   const String issuerReady =
       'kubectl get clusterissuer my-issuer -o '
@@ -38,7 +45,7 @@ void main() {
   group('applying the rendered issuer', () {
     const ApplyClusterIssuer step = ApplyClusterIssuer(
       name: 'my-issuer',
-      stateDirectory: stateDirectory,
+      manifestPath: manifestPath,
     );
 
     test('a manifest nothing rendered is refused rather than applied', () async {
@@ -77,7 +84,8 @@ void main() {
         RestartCertManagerAndReapplyClusterIssuer(
           name: 'my-issuer',
           namespace: 'cert-manager',
-          stateDirectory: stateDirectory,
+          deployments: certManagerDeployments,
+          manifestPath: manifestPath,
           settleSeconds: 15,
           waitSeconds: 60,
           intervalSeconds: 10,

@@ -4,13 +4,12 @@ import 'package:ansiwise_checks/ansiwise_checks.dart';
 import 'package:ansiwise_helm/ansiwise_helm.dart';
 import 'package:test/test.dart';
 
-import 'declared_answers.dart';
 import 'step_fixtures.dart';
 
 Future<void> main() async {
   final Idempotence check = Idempotence(
     registry: helmRegistry,
-    answers: answersDeclaredBy(helmRegistry),
+    answers: (await answersDeclaredBy(helmRegistry)).values,
     fixtures: stepFixtures,
   );
   final IdempotenceReading reading = await check.runEveryStep();

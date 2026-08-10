@@ -32,6 +32,7 @@ final class AssertCliToolVersions extends ObservingStep {
     required this.tools,
     required this.unpinnable,
     required this.versionCommands,
+    required this.pinPrefixes,
   });
 
   /// Builds the step from what the program gave it.
@@ -39,6 +40,7 @@ final class AssertCliToolVersions extends ObservingStep {
     tools: arguments.textList('tools'),
     unpinnable: arguments.textList('unpinnable'),
     versionCommands: arguments.textList('version_commands'),
+    pinPrefixes: arguments.textList('pin_prefixes'),
   );
 
   /// What this step accepts.
@@ -70,6 +72,18 @@ final class AssertCliToolVersions extends ObservingStep {
           'and the arguments it is run with, such as yq=--version — a tool named in tools with '
           'nothing here is refused, because its version could not be read',
     ),
+    // No default here either, and for the same reason as the table above: a release tag is written
+    // the way its own project writes it, so which shapes a run has to take off is decided by which
+    // tools the program pins. A list written here would be the tag shapes of whichever product was
+    // in front of the author.
+    ArgumentSpec(
+      name: 'pin_prefixes',
+      kind: ArgumentKind.textList,
+      describes:
+          'the shapes a release tag is written with, taken off a pin before it is held against what '
+          'a tool answers — such as v for v4.53.3. At most one comes off any pin, so a tag that '
+          'begins with one of these and holds another is left as it stands',
+    ),
   ];
 
   /// Every tool and its pin.
@@ -81,6 +95,9 @@ final class AssertCliToolVersions extends ObservingStep {
   /// How each tool is asked what version it is, each written as its name, an equals sign and the
   /// arguments it is run with.
   final List<String> versionCommands;
+
+  /// The shapes a release tag is written with, taken off a pin before it is compared.
+  final List<String> pinPrefixes;
 
   /// [versionCommands] read as the arguments each tool is asked its version with, keyed by tool.
   ///
@@ -106,18 +123,25 @@ final class AssertCliToolVersions extends ObservingStep {
     return byTool;
   }
 
-  /// [pin] without the shapes the release tags carry, so it can be held against what a tool answers.
+  /// [pin] without the shape its release tag carries, so it can be held against what a tool answers.
   ///
   /// The tags are written the way each project writes them and the readers all answer with the bare
-  /// number, so the shapes come off here rather than in every place that holds a pin against one.
-  static String bare(String pin) {
-    String value = pin.trim();
-    for (final String prefix in <String>['v', 'jq-']) {
-      if (value.startsWith(prefix)) {
-        value = value.substring(prefix.length);
+  /// number, so the shape comes off here rather than in every place that holds a pin against one.
+  ///
+  /// **At most ONE shape comes off, and that is the whole of the rule.** A tag carries one shape,
+  /// so stripping every match in turn eats into the version itself the moment two of the given
+  /// shapes overlap: with `v` and `jq-` both given, `vjq-1.7` loses both and is compared as `1.7`
+  /// against a tool that answers something else entirely — a pin silently held against the wrong
+  /// number. The longest match wins, so a shape that begins with another one is not cut short.
+  static String bare(String pin, List<String> prefixes) {
+    final String value = pin.trim();
+    String longest = '';
+    for (final String prefix in prefixes) {
+      if (prefix.isNotEmpty && value.startsWith(prefix) && prefix.length > longest.length) {
+        longest = prefix;
       }
     }
-    return value;
+    return value.substring(longest.length);
   }
 
   /// The version [tool] answers with when it is run with [versionCommand], or null when it is not
@@ -181,7 +205,7 @@ final class AssertCliToolVersions extends ObservingStep {
         problems.add('$tool is not on this machine');
         continue;
       }
-      if (installed == bare(pin)) {
+      if (installed == bare(pin, pinPrefixes)) {
         right.add('$tool $installed');
         continue;
       }

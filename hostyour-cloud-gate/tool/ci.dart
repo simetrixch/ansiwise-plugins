@@ -36,7 +36,6 @@ library;
 
 import 'dart:io';
 
-import 'declared_checks.dart';
 import 'toolchain_guard.dart';
 
 /// THE PINS. Each was read from the source named beside it, on the date given. A version recalled
@@ -73,27 +72,31 @@ Future<void> main(List<String> arguments) async {
 
   // BEFORE ANYTHING RUNS, because a suite cannot report a check that is not in it. `dart test`
   // discovers what is on disk: delete a file and nothing fails, since the check is not there to
-  // fail, and a check takes its own counter-probe with it. So the declaration is read first and the
-  // disk is held against it, and the run stops naming what vanished.
+  // fail, and a check takes its own counter-probe with it.
+  //
+  // WHAT IS ASKED HERE IS ONLY WHETHER THE TWO FILES ARE THERE. Reading the declaration and holding
+  // every name in it against the disk is the suite's job, and it is done by the file named below —
+  // once, in one implementation, shared with every other package through package:ansiwise_checks.
+  // This program may import no package at all, because `dart pub get` further down is its own first
+  // step, so a second reader written here would be a second answer that can disagree with the one
+  // that decides. What the suite cannot do is notice that the file holding it is gone, which is
+  // exactly what these two lines are for.
   stdout.writeln('\n########## declared checks ##########');
-  final File declaration = File('$package/$checksFile');
-  if (!declaration.existsSync()) {
-    stderr.writeln('ci: FAIL — $checksFile is not there, so this gate cannot say what it checks');
+  final List<String> missing = <String>[
+    for (final String path in <String>[checksFile, declaredChecksGuard])
+      if (!File('$package/$path').existsSync()) path,
+  ];
+  if (missing.isNotEmpty) {
+    stderr.writeln(
+      'ci: FAIL — ${missing.join(' and ')} is not there, so nothing holds this gate to what it '
+      'says it checks',
+    );
     exit(1);
   }
-  final List<DeclaredCheck> declared = parseChecks(declaration.readAsStringSync());
-  final List<String> mismatches = disagreements(
-    declared: declared,
-    testFilesOnDisk: testFilesUnder(_package),
+  stdout.writeln(
+    '$checksFile and $declaredChecksGuard are there; the suite holds one against the '
+    'other',
   );
-  if (mismatches.isNotEmpty) {
-    for (final String mismatch in mismatches) {
-      stderr.writeln('  $mismatch');
-    }
-    stderr.writeln('ci: FAIL — declared checks');
-    exit(1);
-  }
-  stdout.writeln('declared checks: ${declared.length}, all present');
 
   // `pub get` next and on its own: nothing below can say anything true without a resolved package
   // config — the analyzer reports every import as unresolved and the failure reads as a package
@@ -121,11 +124,14 @@ Future<void> main(List<String> arguments) async {
     stderr.writeln('ci: FAIL — ${failed.join(' ')}');
     exit(1);
   }
-  stdout.writeln('ci: OK — all ${declared.length} declared checks green for hostyour_cloud_gate');
+  stdout.writeln('ci: OK — every declared check green for hostyour_cloud_gate');
 }
 
 /// Where this gate declares what it checks, relative to the package root.
 const String checksFile = 'checks.yaml';
+
+/// The check that reads [checksFile] and holds every name in it against the disk.
+const String declaredChecksGuard = 'test/declared_checks_test.dart';
 
 /// Runs `dart [argv]` in [workingDirectory], showing its output as it happens.
 ///

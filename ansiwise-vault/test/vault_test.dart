@@ -28,6 +28,7 @@ void main() {
     nameKey: 'global.clusterName',
     authPathKey: 'global.vaultKubernetesAuthPath',
     credentials: 'secrets/vault-<stage>.txt',
+    runAnswer: 'stage',
   );
 
   /// The profile as the deployment writes it, naming [vaultUrl] as this installation's Vault.
@@ -191,6 +192,7 @@ void main() {
         nameKey: 'platform.clusterName',
         authPathKey: 'platform.vaultKubernetesAuthPath',
         credentials: 'platform/vault-<stage>.txt',
+        runAnswer: 'stage',
       );
       final ScriptedHttp http = ScriptedHttp(
         (HttpRequest request, int nth) => answer('{"sealed": false}'),
@@ -219,6 +221,7 @@ void main() {
         nameKey: 'platform.clusterName',
         authPathKey: 'platform.vaultKubernetesAuthPath',
         credentials: 'platform/vault-<stage>.txt',
+        runAnswer: 'stage',
       );
       final ScriptedHttp http = ScriptedHttp((HttpRequest request, int nth) => answer('{}'));
       final ({StepContext context, MemoryRecorder recorder}) it = contextOf(

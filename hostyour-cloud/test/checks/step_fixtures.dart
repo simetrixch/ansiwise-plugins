@@ -23,8 +23,6 @@ import 'package:ansiwise_api/testing.dart';
 import 'package:ansiwise_checks/ansiwise_checks.dart';
 import 'package:hostyour_cloud/hostyour_cloud.dart';
 
-import '../composition.dart';
-
 /// What the check passes for a text argument with no default.
 ///
 /// A fixture answers for the values the check actually hands the step, not for the values a program

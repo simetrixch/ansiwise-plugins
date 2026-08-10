@@ -1,6 +1,5 @@
 import 'package:ansiwise_api/ansiwise_api.dart';
 import 'detect_public_nic.dart';
-import 'write_netplan_public_src_routing.dart';
 
 /// Puts the written network configuration into the running kernel.
 ///
@@ -20,12 +19,14 @@ final class ApplyNetplan extends IrreversibleStep {
 
   /// What this step accepts.
   static const List<ArgumentSpec> arguments = <ArgumentSpec>[
+    // No default: this is what the drop-in the program wrote numbered the table, and a default here
+    // would have this step read a table nothing fills and report the configuration as applied.
     ArgumentSpec(
       name: 'table',
       kind: ArgumentKind.integer,
-      describes: 'the routing table whose only route is the public gateway',
-      required: false,
-      defaultValue: WriteNetplanPublicSrcRouting.publicTable,
+      describes:
+          'the routing table whose only route is the public gateway, as the drop-in that holds it '
+          'numbers it',
     ),
   ];
 

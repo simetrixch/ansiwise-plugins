@@ -144,7 +144,7 @@ const Map<StepName, RegisteredStep> hostSteps = <StepName, RegisteredStep>{
   ),
   StepName('export_kubeconfig'): RegisteredStep(
     name: StepName('export_kubeconfig'),
-    source: 'lib/src/steps/host/export_kubeconfig.dart:15',
+    source: 'lib/src/steps/host/export_kubeconfig.dart:21',
     create: ExportKubeconfig.fromArguments,
     arguments: ExportKubeconfig.arguments,
     answers: ExportKubeconfig.answers,
@@ -218,7 +218,7 @@ const Map<StepName, RegisteredStep> hostSteps = <StepName, RegisteredStep>{
   ),
   StepName('apply_netplan'): RegisteredStep(
     name: StepName('apply_netplan'),
-    source: 'lib/src/steps/host/apply_netplan.dart:13',
+    source: 'lib/src/steps/host/apply_netplan.dart:12',
     create: ApplyNetplan.fromArguments,
     arguments: ApplyNetplan.arguments,
   ),
@@ -230,19 +230,19 @@ const Map<StepName, RegisteredStep> hostSteps = <StepName, RegisteredStep>{
   ),
   StepName('write_public_src_routing_script'): RegisteredStep(
     name: StepName('write_public_src_routing_script'),
-    source: 'lib/src/steps/host/write_public_src_routing_script.dart:17',
+    source: 'lib/src/steps/host/write_public_src_routing_script.dart:15',
     create: WritePublicSrcRoutingScript.fromArguments,
     arguments: WritePublicSrcRoutingScript.arguments,
   ),
   StepName('write_public_src_routing_unit'): RegisteredStep(
     name: StepName('write_public_src_routing_unit'),
-    source: 'lib/src/steps/host/write_public_src_routing_unit.dart:17',
+    source: 'lib/src/steps/host/write_public_src_routing_unit.dart:14',
     create: WritePublicSrcRoutingUnit.fromArguments,
     arguments: WritePublicSrcRoutingUnit.arguments,
   ),
   StepName('activate_public_src_routing'): RegisteredStep(
     name: StepName('activate_public_src_routing'),
-    source: 'lib/src/steps/host/activate_public_src_routing.dart:12',
+    source: 'lib/src/steps/host/activate_public_src_routing.dart:10',
     create: ActivatePublicSrcRouting.fromArguments,
     arguments: ActivatePublicSrcRouting.arguments,
   ),

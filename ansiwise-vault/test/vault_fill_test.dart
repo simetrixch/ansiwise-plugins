@@ -33,7 +33,12 @@ void main() {
     nameKey: 'global.clusterName',
     authPathKey: 'global.vaultKubernetesAuthPath',
     credentials: 'secrets/vault-<stage>.txt',
+    runAnswer: 'stage',
   );
+
+  /// The slot this deployment's rows write. It is the deployment's own text and not the package's:
+  /// nothing in the vault package knows the word, and the test below is what holds the two together.
+  const String stagePlaceholder = '<stage>';
   const String secretsPath = 'secrets/secrets.<stage>';
 
   /// The profile as the deployment writes it, which is where every step reads these three.

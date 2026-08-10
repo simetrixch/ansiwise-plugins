@@ -293,8 +293,12 @@ const WriteClusterIssuerManifest clusterIssuer = WriteClusterIssuerManifest(
   name: 'letsencrypt-prod',
   acmeServer: 'https://acme-v02.api.letsencrypt.org/directory',
   ingressClass: 'public',
-  stateDirectory: ConfigureSlaveApiserverOidcTrust.defaultStateDirectory,
+  path: clusterIssuerManifest,
 );
+
+/// The file the issuer is rendered into: one value, given to the step that writes it and to the two
+/// that apply it. Read off the step that owns the name rather than written again here.
+const String clusterIssuerManifest = WriteClusterIssuerManifest.defaultManifestPath;
 
 /// Where each template of the cluster area stands, as a program file names it.
 const String connmarkNftTableTemplate = 'ansiwise/templates/connmark-nft-table.tpl';

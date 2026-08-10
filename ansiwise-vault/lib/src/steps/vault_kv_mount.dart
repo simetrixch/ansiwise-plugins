@@ -40,7 +40,12 @@ final class VaultKvMount extends IrreversibleStep {
   ];
 
   /// The answers this step reads, which is what its registry entry declares.
-  static const List<String> answers = vaultAnswers;
+  ///
+  /// None by name. What this step reads out of the run is whichever answer the row's `run_answer`
+  /// names, and that is a value of a program rather than of this package — so there is no name here
+  /// that a resolver could hold a program to, and an answer the run does not carry leaves the slot
+  /// standing and is refused by name where the text is used.
+  static const List<String> answers = <String>[];
 
   /// The checkout this installation runs from.
   final String repository;
@@ -66,7 +71,7 @@ final class VaultKvMount extends IrreversibleStep {
 
     final RootToken token = await rootTokenFrom(
       context,
-      vaultCredentialsPath(context, repository, credentials: layout.credentials),
+      vaultCredentialsPath(context, repository, layout: layout),
     );
     if (token.refusal case final String refusal) {
       return CheckResult.blocked(refusal);
@@ -116,7 +121,7 @@ final class VaultKvMount extends IrreversibleStep {
     final String url = vault.url ?? '';
     final RootToken token = await rootTokenFrom(
       context,
-      vaultCredentialsPath(context, repository, credentials: layout.credentials),
+      vaultCredentialsPath(context, repository, layout: layout),
     );
     final HttpAnswer answer = await context.http.send(
       vaultWrite(

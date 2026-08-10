@@ -1,8 +1,5 @@
 import 'package:ansiwise_api/ansiwise_api.dart';
 import 'detect_public_nic.dart';
-import 'write_connmark_nft_table.dart';
-import 'write_netplan_public_src_routing.dart';
-import 'write_public_src_routing_script.dart';
 
 /// Writes the service that runs the steering script, and takes it away again when it is stopped.
 ///
@@ -46,8 +43,10 @@ final class WritePublicSrcRoutingUnit extends ReversibleStep<String?> with FileS
           'the service file as text, with a marked slot where each value this run holds belongs — '
           '<script-path>, <table-name>, <mark>, <table> and <priority>',
     ),
-    // No defaults for the paths and the table name: they are the product's own names, so the
-    // program rows state them — each as the same value the row that writes that file names.
+    // No defaults at all. The paths and the table name are the installation's own, and the mark,
+    // the table and the number are what the steps that installed them chose against THIS machine —
+    // the stopping commands in this file take exactly those out of the kernel, so a default here
+    // would write a service that removes a rule nobody installed and leaves the real one behind.
     ArgumentSpec(
       name: 'path',
       kind: ArgumentKind.text,
@@ -66,23 +65,19 @@ final class WritePublicSrcRoutingUnit extends ReversibleStep<String?> with FileS
     ArgumentSpec(
       name: 'mark',
       kind: ArgumentKind.text,
-      describes: 'the mark the rule is keyed on',
-      required: false,
-      defaultValue: WriteConnmarkNftTable.defaultMark,
+      describes: 'the mark the rule is keyed on, as the rules the script loads put it on',
     ),
     ArgumentSpec(
       name: 'table',
       kind: ArgumentKind.integer,
-      describes: 'the routing table the marked replies are steered into',
-      required: false,
-      defaultValue: WriteNetplanPublicSrcRouting.publicTable,
+      describes:
+          'the routing table the marked replies are steered into, as the drop-in that holds the '
+          'public gateway numbers it',
     ),
     ArgumentSpec(
       name: 'priority',
       kind: ArgumentKind.integer,
-      describes: 'the number the rule keyed on the mark is installed at',
-      required: false,
-      defaultValue: WritePublicSrcRoutingScript.defaultPriority,
+      describes: 'the number the rule keyed on the mark is installed at, as the script installs it',
     ),
   ];
 
@@ -164,9 +159,9 @@ final class WritePublicSrcRoutingUnit extends ReversibleStep<String?> with FileS
 
   /// What goes in each slot of the service file.
   ///
-  /// The rule is described by the same three numbers [WritePublicSrcRoutingScript.ruleArguments]
-  /// composes it from, so what the service takes out of the kernel and what put it there are one
-  /// description.
+  /// The rule is described by the same three numbers the step that writes the script composes it
+  /// from — the mark, the table and the number — so what the service takes out of the kernel and
+  /// what put it there are one description. The program row is where the two are seen to agree.
   Map<String, String> get values => <String, String>{
     'script-path': scriptPath,
     'table-name': tableName,

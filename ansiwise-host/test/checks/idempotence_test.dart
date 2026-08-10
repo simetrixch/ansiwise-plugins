@@ -4,13 +4,12 @@ import 'package:ansiwise_checks/ansiwise_checks.dart';
 import 'package:ansiwise_host/ansiwise_host.dart';
 import 'package:test/test.dart';
 
-import 'declared_answers.dart';
 import 'step_fixtures.dart';
 
 Future<void> main() async {
   final Idempotence check = Idempotence(
     registry: hostRegistry,
-    answers: answersDeclaredBy(hostRegistry),
+    answers: (await answersDeclaredBy(hostRegistry)).values,
     fixtures: stepFixtures,
   );
   final IdempotenceReading reading = await check.runEveryStep();
@@ -249,6 +248,13 @@ const Set<String> notCoveredByAFakeMachine = <String>{
   'add_shell_alias',
   'add_user_to_group',
   'apply_netplan',
+  // Nothing about the fake machine keeps it from being exercised: the answer does. Every program
+  // that runs it declares `storage_directory` with an empty default, so a run that says nothing
+  // about it takes the early return — the machine has no separate data filesystem and there is no
+  // directory to make — and the step is satisfied before it ever has work. It was reported as
+  // exercised while the probe handed it a placeholder path no installation gives, which measured a
+  // branch the product does not take. Closing it needs a program that answers a path, not a fixture.
+  'create_storage_directory',
   'ensure_tool_prerequisites',
   'export_kubeconfig',
   // It has a fixture, and it is still not covered: its apply ends in a `chown` of the key file and

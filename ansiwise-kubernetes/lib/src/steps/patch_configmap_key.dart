@@ -268,6 +268,13 @@ final class PatchConfigmapKey extends ReversibleStep<String?> {
   // because a pod's own loopback is not the machine's. So the resolver is asked first for the
   // servers it actually forwards to, and the file is only read when that yields nothing. Loopback
   // goes from BOTH sources, a zone id after `%` is cut, and repeats are dropped.
+  //
+  // THIS IS A SECOND READING OF THE SAME MACHINE, and the package that owns those two sources
+  // carries the first. That is stated rather than hidden, because the two can come to disagree and
+  // nothing would report it: the tool packages do not depend on one another, and the framework
+  // carries no channel by which a step that MEASURED something hands the value to a later step — a
+  // predicate answers yes or no, and an answer comes from the operator. Until there is such a
+  // channel there are two readings, and this comment is where that costs somebody something.
   // ---------------------------------------------------------------------------------------------
 
   /// [text] with [placeholder] replaced by this machine's name servers, or null when it names none.

@@ -21,6 +21,12 @@ void main() {
   const String scriptPath = '/usr/local/sbin/public-src-routing.sh';
   const String unitPath = '/etc/systemd/system/public-src-routing.service';
   const String unitName = 'public-src-routing.service';
+  const String dropInPath = '/etc/netplan/60-public-src-routing.yaml';
+  const int publicTable = 100;
+  const String connmarkMark = '0x1000';
+  const int rulePriority = 10100;
+  const String installerKey = 'dhcp4';
+  const String dropInKey = 'routing-policy';
 
   /// A machine with two interfaces: the public address on one, the winning default route on another.
   HostMachine dualNic() {
@@ -114,39 +120,35 @@ void main() {
       final List<Step> steps = <Step>[
         const WriteNetplanPublicSrcRouting(
           templatePath: netplanPublicSrcRoutingTemplate,
-          path: WriteNetplanPublicSrcRouting.defaultPath,
-          table: WriteNetplanPublicSrcRouting.publicTable,
+          path: dropInPath,
+          table: publicTable,
         ),
-        const AssertNetplanMerged(),
-        const ApplyNetplan(table: WriteNetplanPublicSrcRouting.publicTable),
+        const AssertNetplanMerged(installerKey: installerKey, dropInKey: dropInKey),
+        const ApplyNetplan(table: publicTable),
         const WriteConnmarkNftTable(
           templatePath: connmarkNftTableTemplate,
           path: rulesPath,
           tableName: tableName,
-          mark: WriteConnmarkNftTable.defaultMark,
+          mark: connmarkMark,
         ),
         const WritePublicSrcRoutingScript(
           templatePath: publicSrcRoutingScriptTemplate,
           path: scriptPath,
           rulesPath: rulesPath,
-          mark: WriteConnmarkNftTable.defaultMark,
-          table: WriteNetplanPublicSrcRouting.publicTable,
-          priority: WritePublicSrcRoutingScript.defaultPriority,
+          mark: connmarkMark,
+          table: publicTable,
+          priority: rulePriority,
         ),
         const WritePublicSrcRoutingUnit(
           templatePath: publicSrcRoutingUnitTemplate,
           path: unitPath,
           scriptPath: scriptPath,
           tableName: tableName,
-          mark: WriteConnmarkNftTable.defaultMark,
-          table: WriteNetplanPublicSrcRouting.publicTable,
-          priority: WritePublicSrcRoutingScript.defaultPriority,
+          mark: connmarkMark,
+          table: publicTable,
+          priority: rulePriority,
         ),
-        const ActivatePublicSrcRouting(
-          unitName: unitName,
-          mark: WriteConnmarkNftTable.defaultMark,
-          table: WriteNetplanPublicSrcRouting.publicTable,
-        ),
+        const ActivatePublicSrcRouting(unitName: unitName, mark: connmarkMark, table: publicTable),
       ];
       for (final Step step in steps) {
         expect(
@@ -163,14 +165,14 @@ void main() {
   group('the drop-in', () {
     const WriteNetplanPublicSrcRouting step = WriteNetplanPublicSrcRouting(
       templatePath: netplanPublicSrcRoutingTemplate,
-      path: WriteNetplanPublicSrcRouting.defaultPath,
-      table: WriteNetplanPublicSrcRouting.publicTable,
+      path: dropInPath,
+      table: publicTable,
     );
 
     test('is keyed on the hardware address and the name, so it folds in', () async {
       final HostMachine machine = dualNic();
       await step.apply(machine.contextFor(under));
-      final String written = machine.files.contents[WriteNetplanPublicSrcRouting.defaultPath]!;
+      final String written = machine.files.contents[dropInPath]!;
       expect(written, contains('macaddress: "$publicMac"'));
       expect(written, contains('set-name: $publicDevice'));
     });
@@ -180,7 +182,7 @@ void main() {
       // quietly ignoring it.
       final HostMachine machine = dualNic();
       await step.apply(machine.contextFor(under));
-      expect(machine.files.modes[WriteNetplanPublicSrcRouting.defaultPath], 0x180);
+      expect(machine.files.modes[dropInPath], 0x180);
     });
 
     test('the exceptions are numbered below the rule that catches everything else', () async {
@@ -189,7 +191,7 @@ void main() {
       // to be true instead of what the file that ships says.
       final HostMachine machine = dualNic();
       await step.apply(machine.contextFor(under));
-      final String written = machine.files.contents[WriteNetplanPublicSrcRouting.defaultPath]!;
+      final String written = machine.files.contents[dropInPath]!;
 
       final List<_Rule> rules = _rulesOf(written);
       final List<_Rule> exceptions = rules.where((_Rule rule) => rule.to != null).toList();
@@ -210,7 +212,7 @@ void main() {
         contains('100.64.0.0/10'),
         reason: 'a certificate service checks its own answer over exactly that path',
       );
-      expect(catchAll.single.table, WriteNetplanPublicSrcRouting.publicTable);
+      expect(catchAll.single.table, publicTable);
       expect(written, contains('via: $publicGateway'));
     });
 
@@ -220,7 +222,7 @@ void main() {
 
       expect(await step.check(context), isA<Ready>());
       await step.apply(context);
-      final String once = machine.files.contents[WriteNetplanPublicSrcRouting.defaultPath]!;
+      final String once = machine.files.contents[dropInPath]!;
 
       expect(
         await step.check(context),
@@ -228,12 +230,15 @@ void main() {
         reason: 'a check that is satisfied is never followed by an apply',
       );
       expect(machine.files.written, hasLength(1));
-      expect(machine.files.contents[WriteNetplanPublicSrcRouting.defaultPath], once);
+      expect(machine.files.contents[dropInPath], once);
     });
   });
 
   group('the proof that the drop-in folded in', () {
-    const AssertNetplanMerged step = AssertNetplanMerged();
+    const AssertNetplanMerged step = AssertNetplanMerged(
+      installerKey: installerKey,
+      dropInKey: dropInKey,
+    );
 
     test('one declaration carrying both halves is the proof', () async {
       final HostMachine machine = dualNic();
@@ -261,7 +266,7 @@ void main() {
   });
 
   group('applying the configuration', () {
-    const ApplyNetplan step = ApplyNetplan(table: WriteNetplanPublicSrcRouting.publicTable);
+    const ApplyNetplan step = ApplyNetplan(table: publicTable);
 
     test('runs when the kernel is not carrying the rule and the route', () async {
       final HostMachine machine = dualNic();
@@ -300,7 +305,7 @@ void main() {
       templatePath: connmarkNftTableTemplate,
       path: rulesPath,
       tableName: tableName,
-      mark: WriteConnmarkNftTable.defaultMark,
+      mark: connmarkMark,
     );
 
     test('the file begins by removing the table it defines, so a reload replaces it', () async {
@@ -316,7 +321,7 @@ void main() {
     test('the mark is clear of every other mark on the machine', () {
       // The network agent owns 0x10000-0x80000, the service proxy 0x4000 and the port publisher
       // 0x2000. Any of those would be reconciled or misread.
-      final int mark = int.parse(WriteConnmarkNftTable.defaultMark.substring(2), radix: 16);
+      final int mark = int.parse(connmarkMark.substring(2), radix: 16);
       for (final int taken in <int>[0x10000, 0x20000, 0x40000, 0x80000, 0x4000, 0x2000]) {
         expect(mark & taken, 0, reason: 'the mark shares a bit with 0x${taken.toRadixString(16)}');
       }
@@ -327,10 +332,7 @@ void main() {
       await step.apply(machine.contextFor(under));
       final String written = machine.files.contents[rulesPath]!;
       expect(written, contains('iifname "$publicDevice" ip daddr $publicAddress ct state new'));
-      expect(
-        written,
-        contains('ct mark ${WriteConnmarkNftTable.defaultMark} meta mark set ct mark'),
-      );
+      expect(written, contains('ct mark $connmarkMark meta mark set ct mark'));
     });
 
     test('an undo takes the table out of the kernel as well as off the disk', () async {
@@ -349,9 +351,9 @@ void main() {
       templatePath: publicSrcRoutingScriptTemplate,
       path: scriptPath,
       rulesPath: rulesPath,
-      mark: WriteConnmarkNftTable.defaultMark,
-      table: WriteNetplanPublicSrcRouting.publicTable,
-      priority: WritePublicSrcRoutingScript.defaultPriority,
+      mark: connmarkMark,
+      table: publicTable,
+      priority: rulePriority,
     );
 
     const WritePublicSrcRoutingUnit unit = WritePublicSrcRoutingUnit(
@@ -359,9 +361,9 @@ void main() {
       path: unitPath,
       scriptPath: scriptPath,
       tableName: tableName,
-      mark: WriteConnmarkNftTable.defaultMark,
-      table: WriteNetplanPublicSrcRouting.publicTable,
-      priority: WritePublicSrcRoutingScript.defaultPriority,
+      mark: connmarkMark,
+      table: publicTable,
+      priority: rulePriority,
     );
 
     test('the rule is MASKED, which is what makes it match at all', () async {
@@ -369,22 +371,14 @@ void main() {
       // read correctly and steer nothing.
       final HostMachine machine = dualNic();
       await script.apply(machine.contextFor(under));
-      expect(
-        machine.files.contents[scriptPath],
-        contains(
-          'fwmark ${WriteConnmarkNftTable.defaultMark}/${WriteConnmarkNftTable.defaultMark}',
-        ),
-      );
+      expect(machine.files.contents[scriptPath], contains('fwmark $connmarkMark/$connmarkMark'));
     });
 
     test('the script removes every rule at its own number before adding one', () async {
       final HostMachine machine = dualNic();
       await script.apply(machine.contextFor(under));
       final String written = machine.files.contents[scriptPath]!;
-      expect(
-        written,
-        contains('while ip -4 rule del priority ${WritePublicSrcRoutingScript.defaultPriority}'),
-      );
+      expect(written, contains('while ip -4 rule del priority $rulePriority'));
       expect(written, contains('nft -f $rulesPath'));
       expect(
         written.indexOf('nft -f'),
@@ -447,7 +441,7 @@ void main() {
       templatePath: connmarkNftTableTemplate,
       path: rulesPath,
       tableName: tableName,
-      mark: WriteConnmarkNftTable.defaultMark,
+      mark: connmarkMark,
     );
 
     test('a machine that carries none is BLOCKED, never satisfied', () async {
@@ -495,7 +489,7 @@ void main() {
       final DiffPlan diff = plan as DiffPlan;
       expect(diff.path, rulesPath);
       expect(diff.after, contains('iifname "$publicDevice" ip daddr $publicAddress'));
-      expect(diff.after, contains('ct mark ${WriteConnmarkNftTable.defaultMark}'));
+      expect(diff.after, contains('ct mark $connmarkMark'));
       expect(diff.after, isNot(contains('<')));
       expect(machine.files.written, isEmpty);
     });
@@ -536,8 +530,8 @@ void main() {
   group('switching the steering on', () {
     const ActivatePublicSrcRouting step = ActivatePublicSrcRouting(
       unitName: unitName,
-      mark: WriteConnmarkNftTable.defaultMark,
-      table: WriteNetplanPublicSrcRouting.publicTable,
+      mark: connmarkMark,
+      table: publicTable,
     );
 
     test('a service that is on with the rule in the kernel is left alone', () async {

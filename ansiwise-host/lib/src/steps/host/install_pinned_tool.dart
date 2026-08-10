@@ -46,6 +46,7 @@ final class InstallPinnedTool extends IrreversibleStep {
     required this.directory,
     required this.archive,
     required this.versionCommand,
+    required this.pinPrefixes,
   });
 
   /// Builds the step from what the program gave it.
@@ -56,6 +57,7 @@ final class InstallPinnedTool extends IrreversibleStep {
     directory: arguments.text('directory'),
     archive: arguments.optionalText('archive'),
     versionCommand: arguments.textList('version_command'),
+    pinPrefixes: arguments.textList('pin_prefixes'),
   );
 
   /// What this step accepts.
@@ -106,6 +108,16 @@ final class InstallPinnedTool extends IrreversibleStep {
           'the skip is decided on the version, so a tool nothing can ask is refused rather than '
           'fetched again on every run',
     ),
+    // No default: which tag shapes are in play is decided by which tools the program pins, and the
+    // same list has to reach the step that holds every tool against its pin — so it stands once in
+    // the program rather than twice in this package.
+    ArgumentSpec(
+      name: 'pin_prefixes',
+      kind: ArgumentKind.textList,
+      describes:
+          'the shapes a release tag is written with, taken off the pin where the url asks for it '
+          "without one and before the tool's own answer is compared — such as v for v4.53.3",
+    ),
   ];
 
   /// Where the tool goes.
@@ -142,6 +154,9 @@ final class InstallPinnedTool extends IrreversibleStep {
   /// What the tool is run with to ask it what version it is.
   final List<String> versionCommand;
 
+  /// The shapes a release tag is written with, taken off the pin.
+  final List<String> pinPrefixes;
+
   /// Where the tool ends up.
   ///
   /// The name a command is started as and the name of the file it is started from are the same
@@ -152,7 +167,7 @@ final class InstallPinnedTool extends IrreversibleStep {
   /// Where it is fetched from, with the pin in it.
   String get fetchedFrom => filledSlots(url, <String, String>{
     'version': version,
-    'bare-version': AssertCliToolVersions.bare(version),
+    'bare-version': AssertCliToolVersions.bare(version, pinPrefixes),
   });
 
   /// Why this cannot be taken back, written for the machine where it costs something.
@@ -201,7 +216,7 @@ final class InstallPinnedTool extends IrreversibleStep {
       tool,
       versionCommand,
     );
-    if (installed == AssertCliToolVersions.bare(version)) {
+    if (installed == AssertCliToolVersions.bare(version, pinPrefixes)) {
       return CheckResult.satisfied('$tool is at $installed');
     }
     return const CheckResult.ready();

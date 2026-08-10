@@ -1,7 +1,5 @@
 import 'package:ansiwise_api/ansiwise_api.dart';
 import 'detect_public_nic.dart';
-import 'write_connmark_nft_table.dart';
-import 'write_netplan_public_src_routing.dart';
 
 /// Writes the script that loads the marking rules and installs the rule keyed on the mark.
 ///
@@ -46,8 +44,12 @@ final class WritePublicSrcRoutingScript extends ReversibleStep<String?>
           'the script as text, with a marked slot where each value this run holds belongs — '
           '<rules-path>, <mark>, <table> and <priority>',
     ),
-    // No defaults for the two paths: both are the product's own names, so the program row
-    // states them — the rules path as the same value the row of the rules writer names.
+    // Nothing here has a default. Every one of the five is a value the installation picked and
+    // three of them are picked TWICE — the mark and the table by the two steps that write them,
+    // the rules path by the step that writes that file — so a default here would let one row keep
+    // a value while another row moved, and the script would then load a file nobody writes or
+    // steer into a table nobody fills. The program row states all five, which is the only place
+    // the pairs can be seen to agree.
     ArgumentSpec(name: 'path', kind: ArgumentKind.text, describes: 'the script the unit runs'),
     ArgumentSpec(
       name: 'rules_path',
@@ -57,28 +59,21 @@ final class WritePublicSrcRoutingScript extends ReversibleStep<String?>
     ArgumentSpec(
       name: 'mark',
       kind: ArgumentKind.text,
-      describes: 'the mark the rule is keyed on',
-      required: false,
-      defaultValue: WriteConnmarkNftTable.defaultMark,
+      describes: 'the mark the rule is keyed on, as the step that writes the rules puts it on',
     ),
     ArgumentSpec(
       name: 'table',
       kind: ArgumentKind.integer,
-      describes: 'the routing table the marked replies are steered into',
-      required: false,
-      defaultValue: WriteNetplanPublicSrcRouting.publicTable,
+      describes:
+          'the routing table the marked replies are steered into, as the drop-in that holds the '
+          'public gateway numbers it',
     ),
     ArgumentSpec(
       name: 'priority',
       kind: ArgumentKind.integer,
       describes: 'the number the rule keyed on the mark is installed at',
-      required: false,
-      defaultValue: defaultPriority,
     ),
   ];
-
-  /// The number the rule is installed at.
-  static const int defaultPriority = 10100;
 
   /// `0755` — a script the unit runs.
   static const int fileMode = 0x1ed;

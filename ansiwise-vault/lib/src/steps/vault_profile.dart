@@ -26,8 +26,8 @@ import 'package:ansiwise_api/ansiwise_api.dart';
 /// Where one installation's profile and credential file stand, and under which keys the profile
 /// carries its three values.
 ///
-/// The five names are declared ONCE, in [arguments], and every step of the vault family spreads
-/// that list into its own — so the family cannot disagree about a name. What stands UNDER the
+/// The names are declared ONCE, in [arguments], and every step of the vault family spreads that
+/// list into its own — so the family cannot disagree about a name. What stands UNDER the
 /// names is never an argument: the address is one installation's own, and the credential file's
 /// content is minted, not configured.
 final class VaultLayout {
@@ -38,6 +38,7 @@ final class VaultLayout {
     required this.nameKey,
     required this.authPathKey,
     required this.credentials,
+    this.runAnswer,
   });
 
   /// Builds the layout from what the program gave the step carrying it.
@@ -47,6 +48,7 @@ final class VaultLayout {
     nameKey: arguments.text('cluster_name_key'),
     authPathKey: arguments.text('kubernetes_auth_path_key'),
     credentials: arguments.text('credentials_path'),
+    runAnswer: arguments.optionalText('run_answer'),
   );
 
   /// The arguments every step of the vault family declares.
@@ -85,8 +87,25 @@ final class VaultLayout {
       name: 'credentials_path',
       kind: ArgumentKind.text,
       describes:
-          "where the quorum and Vault's root token are, under the checkout at repository — the "
-          "stage answer fills the stage's place in it, so one file stands per stage",
+          "where the quorum and Vault's root token are, under the checkout at repository — it may "
+          'carry the run_answer slot, and this run\'s value for it fills that place',
+    ),
+    // The ONE axis a product may run the same Vault layout along more than once, and the reason it
+    // is named rather than known: Vault has no such axis. A product with three environments wants
+    // one credential file and one tree of paths per environment, one with three regions wants the
+    // same per region, and a product with neither wants none at all — so what the axis is CALLED is
+    // the product's, and a name written into this package would make every vendor carry that one.
+    //
+    // Absent is a first-class case and not a mistake: with nothing here, no path and no rule is
+    // filled from an answer, and a text still carrying angle brackets is refused rather than sent.
+    ArgumentSpec(
+      name: 'run_answer',
+      kind: ArgumentKind.text,
+      describes:
+          'the name of the answer whose value fills the slot spelled with that same name — write '
+          '"stage" here and every "<stage>" in a path, a role or a policy rule of this family is '
+          "filled with this run's stage. Leave it off where the product has no such axis",
+      required: false,
     ),
   ];
 
@@ -102,8 +121,33 @@ final class VaultLayout {
   /// The key of the profile the cluster's own auth mount is written under.
   final String authPathKey;
 
-  /// Where the credential file stands, under the checkout, with the stage's place marked.
+  /// Where the credential file stands, under the checkout, with the run answer's place marked.
   final String credentials;
+
+  /// The name of the answer whose value fills the slot spelled with that same name, or null where
+  /// the product running these steps has no such axis.
+  final String? runAnswer;
+
+  /// The text that stands where this run's own value for [runAnswer] belongs, or null where there
+  /// is no such answer.
+  ///
+  /// Derived from the name rather than declared beside it, so the slot and the answer cannot come
+  /// apart: a program that renames the answer renames the slot in the same act.
+  String? get runSlot => runAnswer == null ? null : '<$runAnswer>';
+
+  /// [text] with this run's own value for [runAnswer] where the slot marks it.
+  ///
+  /// Text carrying no slot, a layout naming no answer, and a run that does not hold the answer all
+  /// come back unchanged — the last of them so the slot is still visible in whatever refusal
+  /// reports the text, rather than being replaced by an empty string nobody could see.
+  String runAnswerFilled(StepContext context, String text) {
+    final String? slot = runSlot;
+    final String? answer = runAnswer;
+    if (slot == null || answer == null || !text.contains(slot) || !context.answers.has(answer)) {
+      return text;
+    }
+    return text.replaceAll(slot, context.answers.text(answer));
+  }
 }
 
 /// What the profile says about this installation, for the steps that talk to Vault.

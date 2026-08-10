@@ -3,7 +3,6 @@ import 'package:ansiwise_api/testing.dart';
 import 'package:hostyour_cloud/hostyour_cloud.dart';
 import 'package:test/test.dart';
 
-import '../composition.dart';
 import 'package:ansiwise_checks/ansiwise_checks.dart';
 
 import 'step_fixtures.dart';
@@ -11,7 +10,7 @@ import 'step_fixtures.dart';
 Future<void> main() async {
   final Idempotence check = Idempotence(
     registry: executionRegistry,
-    answers: await plausibleAnswers(const RealFiles(), '$installationRoot/$installationPrograms'),
+    answers: await plausibleAnswers(const RealFiles(), installationProgramsRoot),
     fixtures: stepFixtures,
   );
   final IdempotenceReading reading = await check.runEveryStep();

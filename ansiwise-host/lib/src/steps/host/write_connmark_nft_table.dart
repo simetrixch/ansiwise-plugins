@@ -43,8 +43,9 @@ final class WriteConnmarkNftTable extends ReversibleStep<String?> with FileStep,
           'the rule set as text, with a marked slot where each value this run holds belongs — '
           '<device>, <address>, <table-name> and <mark>',
     ),
-    // No defaults for the path and the table name: both are the product's own names, so the
-    // program row states them.
+    // No defaults for the path, the table name or the mark. Which bit is free depends on what else
+    // runs on the machine — the network agent, the service proxy and the port publisher each own
+    // their own — so the value has to be picked against THAT machine and stands in the program row.
     ArgumentSpec(
       name: 'path',
       kind: ArgumentKind.text,
@@ -59,13 +60,8 @@ final class WriteConnmarkNftTable extends ReversibleStep<String?> with FileStep,
       name: 'mark',
       kind: ArgumentKind.text,
       describes: 'the mark put on those connections, which nothing else on the machine uses',
-      required: false,
-      defaultValue: defaultMark,
     ),
   ];
-
-  /// The mark, chosen clear of everything else on the machine.
-  static const String defaultMark = '0x1000';
 
   /// `0644` — a rule set that carries nothing secret and that the loader reads.
   static const int fileMode = 0x1a4;

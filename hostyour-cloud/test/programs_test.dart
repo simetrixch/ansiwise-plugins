@@ -78,7 +78,7 @@ void main() {
     ];
 
     final int firstChange = resolved.steps.indexWhere(
-      (ResolvedStep s) => s.registered.create(s.entry.arguments) is! ObservingStep,
+      (ResolvedStep s) => _built(s) is! ObservingStep,
     );
     expect(firstChange, isNot(-1), reason: 'this program changes nothing at all');
 

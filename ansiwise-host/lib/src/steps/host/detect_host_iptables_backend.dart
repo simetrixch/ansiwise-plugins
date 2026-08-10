@@ -40,7 +40,12 @@ final class DetectHostIptablesBackend extends ObservingStep {
 
   /// Which backend this machine is set to.
   ///
-  /// Shared with the step that pins the network agent, so the machine is measured in one place.
+  /// **This measurement is not shared with the step that pins the network agent, and cannot be.**
+  /// That step lives in the package that owns the cluster client; that package and this one do not
+  /// depend on each other, and the framework carries no channel by which one step hands a VALUE to
+  /// a later one — a predicate answers yes or no, and an answer comes from the operator. So the
+  /// link is read twice, once on each side of that line, and what stands here is that fact rather
+  /// than a claim of one implementation.
   static Future<String> detect(StepContext context, {String link = defaultLink}) async {
     for (final List<String> argv in <List<String>>[
       <String>['readlink', '-f', link],

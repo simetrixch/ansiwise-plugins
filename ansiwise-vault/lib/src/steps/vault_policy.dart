@@ -11,14 +11,15 @@ import 'vault_profile.dart';
 ///
 /// **Every grant carries the whole path it applies to.** A reader of the program file sees
 /// the full path a rule reaches and knows what that rule grants; nothing is put in front of
-/// it here. The stage is the marked slot [stagePlaceholder] and this run's own stage fills it, the
-/// way every other name one installation owns is filled.
+/// it here. Where a product runs one tree per environment, per region or per anything else, the
+/// row names that answer under `run_answer` and writes its slot in the path — this run's own value
+/// fills it, the way every other name one installation owns is filled.
 ///
-/// **A stage written out in full is refused rather than written.** The policy would be accepted by
-/// Vault and would grant on a tree that is not this installation's, and the first sign of it is a
-/// caller refused with a message about its own token. Only THIS run's stage can be recognised — the
-/// step knows no other — and that is the half that is reachable by copying a rule out of a working
-/// installation.
+/// **That value written out in full is refused rather than written.** The policy would be accepted
+/// by Vault and would grant on a tree that is not this installation's, and the first sign of it is
+/// a caller refused with a message about its own token. Only THIS run's value can be recognised —
+/// the step knows no other — and that is the half that is reachable by copying a rule out of a
+/// working installation.
 ///
 /// **A templated policy needs the mount's accessor, and the accessor cannot be written down.** It is
 /// minted when the mount is enabled, so a policy that interpolates a caller's own login metadata
@@ -70,8 +71,8 @@ final class VaultPolicy extends ReversibleStep<String?> {
       kind: ArgumentKind.text,
       describes:
           "the grants, in Vault's own language, each written on the whole path it applies to — "
-          '"$stagePlaceholder" where that path belongs to one stage\'s tree, and '
-          '"$accessorPlaceholder" where it templates on the calling account\'s own login',
+          'the slot this row names under run_answer where that path belongs to one value of that '
+          'axis, and "$accessorPlaceholder" where it templates on the calling account\'s own login',
     ),
     ArgumentSpec(
       name: 'auth_mount',
@@ -86,7 +87,12 @@ final class VaultPolicy extends ReversibleStep<String?> {
   ];
 
   /// The answers this step reads, which is what its registry entry declares.
-  static const List<String> answers = vaultAnswers;
+  ///
+  /// None by name. What this step reads out of the run is whichever answer the row's `run_answer`
+  /// names, and that is a value of a program rather than of this package — so there is no name here
+  /// that a resolver could hold a program to, and an answer the run does not carry leaves the slot
+  /// standing and is refused by name where the text is used.
+  static const List<String> answers = <String>[];
 
   /// The checkout this installation runs from.
   final String repository;
@@ -117,7 +123,7 @@ final class VaultPolicy extends ReversibleStep<String?> {
 
     final RootToken token = await rootTokenFrom(
       context,
-      vaultCredentialsPath(context, repository, credentials: layout.credentials),
+      vaultCredentialsPath(context, repository, layout: layout),
     );
     if (token.refusal case final String refusal) {
       return CheckResult.blocked(refusal);
@@ -150,7 +156,7 @@ final class VaultPolicy extends ReversibleStep<String?> {
     }
     final RootToken token = await rootTokenFrom(
       context,
-      vaultCredentialsPath(context, repository, credentials: layout.credentials),
+      vaultCredentialsPath(context, repository, layout: layout),
     );
     if (token.refusal case final String refusal) {
       return StepPlan.nothing(refusal);
@@ -179,7 +185,7 @@ final class VaultPolicy extends ReversibleStep<String?> {
     final String url = vault.url ?? '';
     final RootToken token = await rootTokenFrom(
       context,
-      vaultCredentialsPath(context, repository, credentials: layout.credentials),
+      vaultCredentialsPath(context, repository, layout: layout),
     );
     final String held = token.value ?? '';
     final _Rules wanted = await _writtenRules(context, vault, named, url, held);
@@ -221,7 +227,7 @@ final class VaultPolicy extends ReversibleStep<String?> {
     }
     final RootToken token = await rootTokenFrom(
       context,
-      vaultCredentialsPath(context, repository, credentials: layout.credentials),
+      vaultCredentialsPath(context, repository, layout: layout),
     );
     if (token.value case final String held) {
       return _heldPolicy(context, vault.url ?? '', held, named.name);
@@ -238,7 +244,7 @@ final class VaultPolicy extends ReversibleStep<String?> {
     }
     final RootToken token = await rootTokenFrom(
       context,
-      vaultCredentialsPath(context, repository, credentials: layout.credentials),
+      vaultCredentialsPath(context, repository, layout: layout),
     );
     if (token.value case final String held) {
       final String url = vault.url ?? '';
@@ -305,7 +311,7 @@ final class VaultPolicy extends ReversibleStep<String?> {
         'refuses every caller bound to it, with a message about their own token',
       );
     }
-    if (_stageWrittenOut(context) case final String refusal) {
+    if (_runValueWrittenOut(context) case final String refusal) {
       return _Rules.unwritable(refusal);
     }
 
@@ -338,21 +344,31 @@ final class VaultPolicy extends ReversibleStep<String?> {
     return _Rules.text(written.value ?? '');
   }
 
-  /// Why a rule names this run's stage where the slot belongs, or null when none does.
+  /// Why a rule writes this run's own value out where the slot belongs, or null when none does.
   ///
-  /// The path is quoted back with the slot in the stage's place, so the fix is on the screen rather
+  /// The path is quoted back with the slot in that value's place, so the fix is on the screen rather
   /// than a second run away.
-  String? _stageWrittenOut(StepContext context) {
-    final String stage = context.answers.text(vaultStageAnswer);
+  ///
+  /// A row that names no `run_answer` has nothing to recognise: there is no axis, so a segment that
+  /// happens to read like one is just a path. That is the correct answer and not a gap — the check
+  /// exists to catch a rule copied out of ONE installation, and where there is no such value there
+  /// is no such rule.
+  String? _runValueWrittenOut(StepContext context) {
+    final String? answer = layout.runAnswer;
+    final String? slot = layout.runSlot;
+    if (answer == null || slot == null || !context.answers.has(answer)) {
+      return null;
+    }
+    final String value = context.answers.text(answer);
     for (final String path in _pathsIn(rules)) {
       final List<String> segments = path.split('/');
-      final int at = segments.indexOf(stage);
+      final int at = segments.indexOf(value);
       if (at < 0) {
         continue;
       }
-      segments[at] = stagePlaceholder;
-      return 'the policy "$name" names the stage "$stage" in "$path", and a program file ships to '
-          'every installation — write it as "${segments.join('/')}" and this run\'s own stage goes '
+      segments[at] = slot;
+      return 'the policy "$name" names the $answer "$value" in "$path", and a program file ships to '
+          'every installation — write it as "${segments.join('/')}" and this run\'s own $answer goes '
           'there';
     }
     return null;
