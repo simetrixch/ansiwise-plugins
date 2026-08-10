@@ -1,7 +1,5 @@
 import 'package:ansiwise_api/ansiwise_api.dart';
-import '../steps/branch/create_install_branch.dart';
-import '../steps/branch/require_git_identity.dart';
-import '../steps/branch/require_pushable_origin.dart';
+import '../steps/branch/require_installation_domain.dart';
 import '../steps/branch/stamp_app_toggles.dart';
 import '../steps/branch/stamp_cluster_profile.dart';
 import '../steps/branch/stamp_placeholder_in_tracked_files.dart';
@@ -17,30 +15,22 @@ import '../steps/branch/write_stage_secrets.dart';
 /// without meeting in the same place. The composer in the parent directory is the only thing that
 /// knows about all of them.
 ///
+/// **The git of this program is not here.** Measuring a committer identity, offering a push that
+/// changes nothing and cutting a branch are things git does for anybody, so they are registered by
+/// `ansiwise-git` and named by the same program file. What is left here is what only this product
+/// can answer: whether the domain it was given is one.
+///
 /// **`answers:` is what a step reads out of the run rather than out of the program file**, and it is
 /// declared here for the same reason `arguments:` is: a step reaching for an answer the program
 /// never declared would fail in the middle of an installation, and the resolver refuses that
 /// combination before anything is looked at. The list is taken from the step's own `answers`
 /// constant, so the entry and the class cannot come to disagree about it.
 const Map<StepName, RegisteredStep> branchSteps = <StepName, RegisteredStep>{
-  StepName('require_git_identity'): RegisteredStep(
-    name: StepName('require_git_identity'),
-    source: 'lib/src/steps/branch/require_git_identity.dart:12',
-    create: RequireGitIdentity.fromArguments,
-    arguments: RequireGitIdentity.arguments,
-  ),
-  StepName('require_pushable_origin'): RegisteredStep(
-    name: StepName('require_pushable_origin'),
-    source: 'lib/src/steps/branch/require_pushable_origin.dart:18',
-    create: RequirePushableOrigin.fromArguments,
-    arguments: RequirePushableOrigin.arguments,
-  ),
-  StepName('create_install_branch'): RegisteredStep(
-    name: StepName('create_install_branch'),
-    source: 'lib/src/steps/branch/create_install_branch.dart:17',
-    create: CreateInstallBranch.fromArguments,
-    arguments: CreateInstallBranch.arguments,
-    answers: CreateInstallBranch.answers,
+  StepName('require_installation_domain'): RegisteredStep(
+    name: StepName('require_installation_domain'),
+    source: 'lib/src/steps/branch/require_installation_domain.dart:22',
+    create: RequireInstallationDomain.fromArguments,
+    answers: RequireInstallationDomain.answers,
   ),
   StepName('stamp_placeholder_in_tracked_files'): RegisteredStep(
     name: StepName('stamp_placeholder_in_tracked_files'),

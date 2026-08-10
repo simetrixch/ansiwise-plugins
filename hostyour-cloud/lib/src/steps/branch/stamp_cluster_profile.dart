@@ -7,10 +7,10 @@ import 'package:ansiwise_api/ansiwise_api.dart';
 /// stands here wins over everything the product declares. That is what makes one tree serve two
 /// companies.
 ///
-/// **Two steps read it and, until this existed, nothing wrote it.** `preflight_docker_mirror_
-/// credential` reads `global.endpoints.registry.host` and `configure_slave_apiserver_oidc_trust`
-/// reads `global.vaultUrl`, both during `deploy-cluster`. An install branch cut without this file
-/// rendered carries the trunk's empty map, and those two steps then read a profile nobody wrote.
+/// **Steps read it and, until this existed, nothing wrote it.** The image-mirror gate reads
+/// `global.endpoints.registry.host` during `deploy-cluster`, and the secret store's family reads
+/// `global.vaultUrl` during `deploy-gitops`. An install branch cut without this file rendered
+/// carries the trunk's empty map, and those steps then read a profile nobody wrote.
 ///
 /// **Rendered from the answers, not parsed back out of the cluster map.** The map and this file are
 /// two renderings of one set of facts, and the run holds those facts already — checked once, where

@@ -7,6 +7,7 @@ import 'steps/guard_populated_cluster_pod_cidr_migration.dart';
 import 'steps/kubernetes_configmap_from_directory.dart';
 import 'steps/kubernetes_namespace.dart';
 import 'steps/kubernetes_object.dart';
+import 'steps/kubernetes_object_irreversible.dart';
 import 'steps/oidc_admins_binding.dart';
 import 'steps/patch_configmap_key.dart';
 import 'steps/patch_container_arguments_and_ports.dart';
@@ -17,6 +18,7 @@ import 'steps/restart_cert_manager_and_reapply_cluster_issuer.dart';
 import 'steps/set_default_storage_class.dart';
 import 'steps/verify_ippool_converged_with_self_heal.dart';
 import 'steps/wait_for_answer.dart';
+import 'steps/write_cluster_issuer_manifest.dart';
 
 /// The map from the names a program file writes to the classes that implement them.
 ///
@@ -100,6 +102,14 @@ const Map<StepName, RegisteredStep> kubernetesSteps = <StepName, RegisteredStep>
     create: DeleteExistingClusterIssuer.fromArguments,
     arguments: DeleteExistingClusterIssuer.arguments,
   ),
+  // Rendered before it is applied, and both are given the same file under the same name.
+  StepName('write_cluster_issuer_manifest'): RegisteredStep(
+    name: StepName('write_cluster_issuer_manifest'),
+    source: 'lib/src/steps/write_cluster_issuer_manifest.dart:21',
+    create: WriteClusterIssuerManifest.fromArguments,
+    arguments: WriteClusterIssuerManifest.arguments,
+    answers: WriteClusterIssuerManifest.answers,
+  ),
   StepName('apply_cluster_issuer'): RegisteredStep(
     name: StepName('apply_cluster_issuer'),
     source: 'lib/src/steps/apply_cluster_issuer.dart:9',
@@ -129,6 +139,12 @@ const Map<StepName, RegisteredStep> kubernetesSteps = <StepName, RegisteredStep>
     source: 'lib/src/steps/kubernetes_object.dart:27',
     create: KubernetesObject.fromArguments,
     arguments: KubernetesObject.arguments,
+  ),
+  StepName('kubernetes_object_irreversible'): RegisteredStep(
+    name: StepName('kubernetes_object_irreversible'),
+    source: 'lib/src/steps/kubernetes_object_irreversible.dart:30',
+    create: KubernetesObjectIrreversible.fromArguments,
+    arguments: KubernetesObjectIrreversible.arguments,
   ),
   StepName('oidc_admins_binding'): RegisteredStep(
     name: StepName('oidc_admins_binding'),

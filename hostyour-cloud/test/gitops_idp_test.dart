@@ -17,12 +17,22 @@ import 'composition.dart';
 /// run red; and the cluster's own trust in the one it has is six arguments in a file, one of which
 /// reads correct and locks every operator out.
 void main() {
-  // The five plugins the shipped configuration turns on, composed the way the binary composes
+  // The six plugins the shipped configuration turns on, composed the way the binary composes
   // them. Resolved once, because reading a file per test says nothing more than reading it once.
   late final Registry shipped;
   setUpAll(() async => shipped = await shippedRegistry());
 
   const String issuer = 'https://idp.m1.example.com/application/o/headlamp/';
+
+  /// The issuer as the PROGRAM writes it, with both its slots still in place, and the client it
+  /// names.
+  ///
+  /// Written out here rather than read off a step, because the gate carries no default for either
+  /// any more: which client this platform issues tokens for, and what shape the address has, are
+  /// this deployment's decisions. They stand once in the program's defaults block and reach both
+  /// rows from there, which is what the two agreement tests below now read.
+  const String issuerRow = 'https://idp.<master-domain>/application/o/<client>/';
+  const String client = 'headlamp';
 
   /// What a cluster holding the master part answers, which is what the issuer is composed from.
   const Arguments onTheMaster = Arguments(<String, Object>{
@@ -218,13 +228,32 @@ void main() {
   });
 
   group('the discovery document', () {
+    /// The gate as the program builds it.
+    const IdpDiscoveryReachable gate = IdpDiscoveryReachable(clientId: client, issuer: issuerRow);
+
     test('is a gate that verifies an earlier step', () {
-      const IdpDiscoveryReachable step = IdpDiscoveryReachable(clientId: 'headlamp');
       expect(
-        step.verifiesAnEarlierStep,
+        gate.verifiesAnEarlierStep,
         isTrue,
         reason: 'the document does not exist until the identity provider is deployed',
       );
+    });
+
+    test('neither of its two values has a default, so the program has to state both', () {
+      // The demotion this step exists on the product side for. A default here is the half of the
+      // pair that stops being read the day the other row changes: the gate then measures an address
+      // the cluster is not pointed at, and the run comes back green either way.
+      for (final String name in <String>['client_id', 'issuer']) {
+        final ArgumentSpec spec = IdpDiscoveryReachable.arguments.firstWhere(
+          (ArgumentSpec each) => each.name == name,
+        );
+        expect(
+          spec.defaultValue,
+          isNull,
+          reason: '$name is this deployment\'s choice, not a gate\'s',
+        );
+        expect(spec.required, isTrue, reason: 'a value nobody states is a value nobody chose');
+      }
     });
 
     test('is read with a request that only reads', () async {
@@ -237,13 +266,10 @@ void main() {
         answers: onTheMaster,
       );
 
-      expect(
-        await const IdpDiscoveryReachable(clientId: 'headlamp').check(it.context),
-        isA<Satisfied>(),
-      );
+      expect(await gate.check(it.context), isA<Satisfied>());
       expect(http.sent.single.method, 'GET');
       expect(http.sent.single.observes, isTrue);
-      expect(http.sent.single.url, endsWith('/.well-known/openid-configuration'));
+      expect(http.sent.single.url, endsWith('/${IdpDiscoveryReachable.discoveryPath}'));
     });
 
     test('names the address when something else is answering there', () async {
@@ -255,9 +281,7 @@ void main() {
         answers: onTheMaster,
       );
 
-      final CheckResult result = await const IdpDiscoveryReachable(
-        clientId: 'headlamp',
-      ).check(it.context);
+      final CheckResult result = await gate.check(it.context);
       expect(result, isA<Blocked>());
       expect((result as Blocked).reason, contains('openid-configuration'));
     });
@@ -275,16 +299,17 @@ void main() {
         answers: onTheMaster,
       );
 
-      expect(const IdpDiscoveryReachable(clientId: 'headlamp').issuerUrlIn(it.context), issuer);
+      expect(gate.issuerUrlIn(it.context), issuer);
       expect(
-        const IdpDiscoveryReachable(clientId: 'headlamp').issuerUrlIn(it.context),
+        gate.issuerUrlIn(it.context),
         const ConfigureKubeApiserverOidc(
-          clientId: 'headlamp',
+          clientId: client,
           usernameClaim: 'preferred_username',
           usernamePrefix: 'oidc:',
           groupsClaim: 'groups',
           groupsPrefix: '',
           argsPath: ConfigureKubeApiserverOidc.defaultPath,
+          issuer: issuerRow,
         ).issuerUrlIn(it.context),
       );
     });
@@ -305,43 +330,36 @@ void main() {
         }),
       );
 
-      expect(const IdpDiscoveryReachable(clientId: 'headlamp').issuerUrlIn(it.context), issuer);
+      expect(gate.issuerUrlIn(it.context), issuer);
     });
 
-    test('the client both entries name is the same word', () {
-      final Program program = loadProgram(
-        File(programAt('deploy-gitops.yaml')).readAsStringSync(),
-        where: 'deploy-gitops.yaml',
+    test('the client and the issuer both entries are given are the same words', () async {
+      // Asked of the RESOLVED rows, so this holds however the program says it: written once as a
+      // program-wide default, or written out on both rows. Written DIFFERENTLY on the two rows it
+      // fails, which is the only thing that has to be true. A gate given its own address checks one
+      // issuer while the cluster is pointed at another, and the run is green either way.
+      final ResolvedProgram program = ProgramResolver(shipped).resolve(
+        loadProgram(
+          File(programAt('deploy-gitops.yaml')).readAsStringSync(),
+          where: 'deploy-gitops.yaml',
+        ),
       );
-      final Object? fallback = IdpDiscoveryReachable.arguments
-          .firstWhere((ArgumentSpec spec) => spec.name == 'client_id')
-          .defaultValue;
-      String clientOf(String step) {
-        final ProgramStep entry = program.steps.firstWhere(
-          (ProgramStep each) => each.step == StepName(step),
-        );
-        return entry.arguments.optionalText('client_id') ?? '$fallback';
-      }
+      Arguments given(String step) => program.steps
+          .firstWhere((ResolvedStep each) => each.entry.step == StepName(step))
+          .entry
+          .arguments;
 
-      expect(clientOf('idp_discovery_reachable'), clientOf('configure_kube_apiserver_oidc'));
-    });
-
-    test('the issuer both entries write is the same text', () {
-      // The shape of the address became a row's to say, so the same must-agree rule that holds for
-      // the client holds for it: a gate measuring one issuer while the cluster is configured with
-      // another is green either way.
-      final Program program = loadProgram(
-        File(programAt('deploy-gitops.yaml')).readAsStringSync(),
-        where: 'deploy-gitops.yaml',
+      expect(
+        given('idp_discovery_reachable').text('client_id'),
+        given('configure_kube_apiserver_oidc').text('client_id'),
       );
-      String issuerOf(String step) {
-        final ProgramStep entry = program.steps.firstWhere(
-          (ProgramStep each) => each.step == StepName(step),
-        );
-        return entry.arguments.optionalText('issuer') ?? ConfigureKubeApiserverOidc.defaultIssuer;
-      }
-
-      expect(issuerOf('idp_discovery_reachable'), issuerOf('configure_kube_apiserver_oidc'));
+      expect(
+        given('idp_discovery_reachable').text('issuer'),
+        given('configure_kube_apiserver_oidc').text('issuer'),
+      );
+      // And they are the address with its slots still in it, not one installation's own: a program
+      // file ships inside the binary to every installation and nothing rewrites it.
+      expect(given('idp_discovery_reachable').text('issuer'), issuerRow);
     });
 
     test('an issuer row carrying a slot nothing fills is refused, not measured', () async {
@@ -356,7 +374,7 @@ void main() {
       );
 
       final CheckResult result = await const IdpDiscoveryReachable(
-        clientId: 'headlamp',
+        clientId: client,
         issuer: 'https://idp.<master-domian>/application/o/<client>/',
       ).check(it.context);
       expect(result, isA<Blocked>());

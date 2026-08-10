@@ -8,7 +8,7 @@ import '../../tool/gate/resolved_packages.dart';
 
 /// resolved-packages — the checks and the code they judge are one copy, not two.
 ///
-/// This plugin names the four tool packages by a git ref, and both the override file and the lock
+/// This plugin names the five tool packages by a git ref, and both the override file and the lock
 /// file are gitignored. Without the untracked override the composition is resolved out of a COMMIT
 /// while each tool package's own checks walk the working tree beside it — so one half of the gate
 /// judges the bytes on disk and the other half judges bytes from somewhere else, and the verdict is

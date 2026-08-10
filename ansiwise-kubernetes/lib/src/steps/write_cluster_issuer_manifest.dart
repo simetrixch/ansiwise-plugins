@@ -1,16 +1,23 @@
 import 'package:ansiwise_api/ansiwise_api.dart';
-import 'configure_slave_apiserver_oidc_trust.dart';
 
-/// Renders the object every certificate on this cluster is issued by.
+/// Renders the cert-manager object every certificate on this cluster is issued by.
 ///
 /// It names the certificate authority, the address that receives the notices before a certificate
-/// expires, the secret the account's own key lives in, and how a request is answered — over the
-/// ingress this cluster already serves, which is why nothing else has to be arranged for it.
+/// expires, the secret the account's own key lives in, and how a request is answered — over an
+/// ingress the cluster already serves, which is why nothing else has to be arranged for it.
 ///
-/// **Nothing here judges the address.** It used to warn when the mailbox ended in the domain the
-/// illustrations use, because the address stood in the program file and was somebody's example.
-/// It is answered now, so there is no example left to catch — and a rule that recognised an
-/// illustration would refuse the operator whose own mailbox happens to read like one.
+/// **The manifest is a TEMPLATE beside the programs, not text composed here.** Every value one
+/// installation decides stands in a marked slot: `<name>`, `<acme-server>`, `<email>` and
+/// `<ingress-class>`. A slot nothing fills and a value with no slot are both refused, so the file
+/// that lands on the machine and the values this run holds cannot silently disagree.
+///
+/// **Nothing here judges the address.** It is the mailbox of whoever operates the installation, and
+/// a rule that recognised an illustration would refuse the operator whose own mailbox reads like
+/// one.
+///
+/// **Where it is written is a row's to say, and cert-manager mandates no name for it.** A base name
+/// in this package would agree with the file the steps that APPLY the issuer are given only by
+/// accident, which is why one value is handed to all three under one name.
 final class WriteClusterIssuerManifest extends ReversibleStep<String?> with FileStep, TemplateStep {
   /// Renders the issuer [name] into the file at [path], for the mailbox this run names.
   const WriteClusterIssuerManifest({
@@ -44,53 +51,44 @@ final class WriteClusterIssuerManifest extends ReversibleStep<String?> with File
       name: 'name',
       kind: ArgumentKind.text,
       describes: 'what the issuer is called, which is also the secret its account key lives in',
-      required: false,
-      defaultValue: 'letsencrypt-prod',
     ),
     ArgumentSpec(
       name: 'acme_server',
       kind: ArgumentKind.text,
       describes: 'the certificate authority every certificate on this cluster is issued by',
-      required: false,
-      defaultValue: 'https://acme-v02.api.letsencrypt.org/directory',
     ),
     ArgumentSpec(
       name: 'ingress_class',
       kind: ArgumentKind.text,
       describes: 'the ingress a request for a certificate is answered over',
-      required: false,
-      defaultValue: 'public',
     ),
     // The whole path and not a directory with a base name added here. This step and the two that
-    // apply the file are given one value under one name, so the name of the file is written once
-    // in the program and the three cannot come to mean three different files. The directory it
-    // stands in is created from the same value, so there is no second answer about where it goes.
+    // apply the file are given one value under one name, so the name of the file is written once in
+    // the program and the three cannot come to mean three different files. The directory it stands
+    // in is created from the same value, so there is no second answer about where it goes.
     ArgumentSpec(
       name: 'issuer_manifest_path',
       kind: ArgumentKind.text,
       describes:
           'the file this renders the issuer into, which the steps that apply it are given too',
-      required: false,
-      defaultValue: defaultManifestPath,
     ),
   ];
-
-  /// Where this product renders the issuer, and the ONE place its file name is written.
-  ///
-  /// The tool package that applies the file carries no name for it — cert-manager mandates none, so
-  /// a base name there would agree with this one only by accident. Here it is a fact of this
-  /// product, beside the directory this product keeps everything it renders in.
-  static const String defaultManifestPath =
-      '${ConfigureSlaveApiserverOidcTrust.defaultStateDirectory}/clusterissuer.yaml';
 
   /// The answers this step reads, which is what its registry entry declares.
   ///
   /// The mailbox the certificate authority writes to before a certificate expires. It belongs to
-  /// whoever operates this installation, so it is asked for rather than shipped.
+  /// whoever operates the installation, so it is asked for rather than shipped, and it is an ANSWER
+  /// rather than an argument because a program file ships to every installation.
   static const List<String> answers = <String>[emailAnswer];
 
-  /// The name the mailbox is answered under, which is what deploy-branch already calls it.
+  /// The name the mailbox is answered under.
   static const String emailAnswer = 'letsencrypt_email';
+
+  /// `0644` — a rendered manifest that carries nothing secret.
+  static const int manifestMode = 0x1a4;
+
+  /// `0755` — the directory it stands in.
+  static const int directoryMode = 0x1ed;
 
   /// The manifest as text, with a marked slot where each value belongs.
   @override
@@ -120,23 +118,21 @@ final class WriteClusterIssuerManifest extends ReversibleStep<String?> with File
   @override
   String pathFor(StepContext context) => path;
 
-  /// `0644` — a rendered manifest that carries nothing secret.
   @override
-  int get mode => ConfigureSlaveApiserverOidcTrust.manifestMode;
+  int get mode => manifestMode;
 
-  /// Every cluster this program runs on issues its own certificates, so there is always a manifest
-  /// to render.
+  /// Every cluster this runs on issues its own certificates, so there is always a manifest to
+  /// render.
   @override
   Future<FileContent> contentFor(StepContext context) async =>
       FileContent.text(await manifestFor(context));
 
   @override
   Future<void> apply(StepContext context) async {
-    // The directory first. It is the state directory of this installation, and a run that reached
-    // here on a machine that has never had one would otherwise fail on the write rather than on
-    // anything that says what is missing.
+    // The directory first. A run that reached here on a machine that has never had one would
+    // otherwise fail on the write rather than on anything that says what is missing.
     if (directory case final String under) {
-      await context.files.createDirectory(under, mode: 0x1ed);
+      await context.files.createDirectory(under, mode: directoryMode);
     }
     await super.apply(context);
   }

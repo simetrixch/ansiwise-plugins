@@ -2,11 +2,11 @@ import 'package:ansiwise_api/ansiwise_api.dart';
 
 /// Refuses a run whose result could not be pushed, before any of that result exists.
 ///
-/// **This is the gate the whole preflight was built around.** The failure it prevents was observed:
+/// **This is the gate a whole preflight can be built around.** The failure it prevents was observed:
 /// the work was done, the commit was made, and only then was the push refused — no write access, or
 /// the remote had moved ahead — leaving the commit stranded on the machine. A branch that was
-/// generated and then cannot be pushed is the worst of both outcomes: the trunk is untouched, the
-/// installation is not published, and somebody has to unpick a local branch by hand.
+/// generated and then cannot be pushed is the worst of both outcomes: what it was cut from is
+/// untouched, the result is not published, and somebody has to unpick a local branch by hand.
 ///
 /// **The proof is a dry run, because nothing else can prove it this early.** Write access is a
 /// property of the remote and the credential, and the only way to ask about it without changing
@@ -15,14 +15,19 @@ import 'package:ansiwise_api/ansiwise_api.dart';
 ///
 /// The three questions are asked in order and not in parallel, because each is meaningless without
 /// the one before it: there is no reachability without a remote, and no push without reachability.
-final class RequirePushableOrigin extends ObservingStep {
-  /// Refuses unless [trunk] could be pushed to `origin` from the checkout at [repository].
-  const RequirePushableOrigin({required this.repository, required this.trunk});
+final class RequirePushableRemote extends ObservingStep {
+  /// Refuses unless [branch] could be pushed to [remote] from the checkout at [repository].
+  const RequirePushableRemote({
+    required this.repository,
+    required this.remote,
+    required this.branch,
+  });
 
   /// Builds the step from what the program gave it.
-  factory RequirePushableOrigin.fromArguments(Arguments arguments) => RequirePushableOrigin(
+  factory RequirePushableRemote.fromArguments(Arguments arguments) => RequirePushableRemote(
     repository: arguments.text('repository'),
-    trunk: arguments.text('trunk'),
+    remote: arguments.text('remote'),
+    branch: arguments.text('branch'),
   );
 
   /// What this step accepts.
@@ -30,35 +35,46 @@ final class RequirePushableOrigin extends ObservingStep {
     ArgumentSpec(
       name: 'repository',
       kind: ArgumentKind.text,
-      describes: 'the checkout this installation is generated in',
+      describes: 'the checkout a push would come from',
+    ),
+    // A checkout may have any number of remotes under any name. `origin` is the name git's own
+    // clone gives the one it copied from, and a checkout made some other way carries whatever name
+    // was chosen — so the name is read from the row rather than assumed to be that one.
+    ArgumentSpec(
+      name: 'remote',
+      kind: ArgumentKind.text,
+      describes: 'the name of the remote the push is offered to, as this checkout holds it',
     ),
     ArgumentSpec(
-      name: 'trunk',
+      name: 'branch',
       kind: ArgumentKind.text,
-      describes: 'the product branch a push has to be accepted for',
+      describes: 'the branch a push has to be accepted for',
     ),
   ];
 
   /// The checkout the push would come from.
   final String repository;
 
+  /// The name the checkout holds the remote under.
+  final String remote;
+
   /// The branch the push is offered for.
-  final String trunk;
+  final String branch;
 
   @override
   Future<CheckResult> check(StepContext context) async {
-    final CommandResult remote = await _git(context, <String>['remote', 'get-url', 'origin']);
-    if (!remote.ok) {
+    final CommandResult address = await _git(context, <String>['remote', 'get-url', remote]);
+    if (!address.ok) {
       return CheckResult.blocked(
-        'this checkout has no remote called "origin", and the branch this run produces has nowhere '
-        'to go: ${remote.stderr.trim()}',
+        'this checkout has no remote called "$remote", and the branch this run produces has nowhere '
+        'to go: ${address.stderr.trim()}',
       );
     }
 
-    final CommandResult reachable = await _git(context, <String>['ls-remote', '--heads', 'origin']);
+    final CommandResult reachable = await _git(context, <String>['ls-remote', '--heads', remote]);
     if (!reachable.ok) {
       return CheckResult.blocked(
-        '${remote.trimmed} does not answer, so nothing about a push can be decided: '
+        '${address.trimmed} does not answer, so nothing about a push can be decided: '
         '${reachable.stderr.trim()}',
       );
     }
@@ -66,17 +82,17 @@ final class RequirePushableOrigin extends ObservingStep {
     final CommandResult offered = await _git(context, <String>[
       'push',
       '--dry-run',
-      'origin',
-      trunk,
+      remote,
+      branch,
     ]);
     if (!offered.ok) {
       return CheckResult.blocked(
-        '${remote.trimmed} would refuse a push of $trunk — either this credential may not write '
-        'there, or origin/$trunk has moved ahead of this checkout: ${offered.stderr.trim()}',
+        '${address.trimmed} would refuse a push of $branch — either this credential may not write '
+        'there, or $remote/$branch has moved ahead of this checkout: ${offered.stderr.trim()}',
       );
     }
 
-    return CheckResult.satisfied('${remote.trimmed} answers and would accept a push');
+    return CheckResult.satisfied('${address.trimmed} answers and would accept a push');
   }
 
   /// Runs a git command that reaches the remote, and cannot stop to ask anybody anything.

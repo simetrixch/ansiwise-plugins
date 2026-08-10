@@ -2,6 +2,11 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:ansiwise_api/ansiwise_api.dart';
+// The certificate issuer is rendered by a capability of the cluster now, so the class the fixture
+// builds comes from the kubernetes plugin. What is still this product's — the file it goes in, the
+// issuer's name, the authority and the ingress — stands in the program row and is written out here
+// the way that row writes it.
+import 'package:ansiwise_kubernetes/ansiwise_kubernetes.dart';
 import 'package:hostyour_cloud/hostyour_cloud.dart';
 import 'package:ansiwise_api/testing.dart';
 
@@ -288,8 +293,29 @@ const WriteClusterIssuerManifest clusterIssuer = WriteClusterIssuerManifest(
 );
 
 /// The file the issuer is rendered into: one value, given to the step that writes it and to the two
-/// that apply it. Read off the step that owns the name rather than written again here.
-const String clusterIssuerManifest = WriteClusterIssuerManifest.defaultManifestPath;
+/// that apply it.
+///
+/// Written out here because it is now written out in ONE place in `deploy-cluster.yaml`, in that
+/// program's own defaults block. cert-manager mandates no name for this file and the kubernetes
+/// plugin therefore carries none, so this product states it — and a fixture naming any other path
+/// would report the converged machine as still having work.
+const String clusterIssuerManifest = '/var/snap/microk8s/common/hostyour/clusterissuer.yaml';
+
+/// What the rule granting the identity provider's administrators their rights is called, as
+/// `deploy-cluster.yaml` states it.
+///
+/// The same name `deploy-gitops` re-applies on a cluster that holds the master part, so an
+/// installation carries one such binding and not two.
+const String adminsBinding = 'oidc-platform-admins';
+
+/// The group in the identity provider whose members administer the cluster.
+const String adminsGroup = 'authentik Admins';
+
+/// The network manifest the pod range is stamped into, as `deploy-cluster.yaml` states it.
+///
+/// The same reason: where the snap keeps that file is a fact of this installation, and the machine
+/// plugin that stamps it carries no path of its own.
+const String cniManifestPath = '$microk8sArgumentsDirectory/cni-network/cni.yaml';
 
 /// Where each template of the cluster area stands, as a program file names it.
 const String connmarkNftTableTemplate = 'ansiwise/templates/connmark-nft-table.tpl';
@@ -429,6 +455,25 @@ Future<ClusterMachine> convergedCluster() async {
       }),
     );
 
+  // The binding that makes the identity provider's administrators administrators here. The whole
+  // object is answered, not just its name: the step compares the role it grants and the subject it
+  // grants to, so a fixture answering only that something of that name exists would let a binding
+  // pointing at another role read as converged.
+  shell
+    ..answers(
+      'microk8s kubectl get clusterrolebinding $adminsBinding -o json',
+      jsonEncode(<String, Object>{
+        'roleRef': <String, Object>{'kind': 'ClusterRole', 'name': 'cluster-admin'},
+        'subjects': <Object>[
+          <String, Object>{'kind': 'Group', 'name': adminsGroup},
+        ],
+      }),
+    )
+    ..answers(
+      'microk8s kubectl get clusterrolebinding $adminsBinding -o name',
+      'clusterrolebinding.rbac.authorization.k8s.io/$adminsBinding',
+    );
+
   // Storage and certificates.
   shell
     ..answers(
@@ -475,7 +520,7 @@ Future<ClusterMachine> convergedCluster() async {
 
   files.contents.addAll(<String, String>{
     microk8sKubeProxyArguments: kubeProxyArgs(),
-    StampCalicoPoolCidrInCniManifest.defaultPath: cniManifest(),
+    cniManifestPath: cniManifest(),
     ConfigureKubeApiserverOidc.defaultPath: ConfigureKubeApiserverOidc.withFlags(
       '',
       apiserverOidc.flagsIn(context),

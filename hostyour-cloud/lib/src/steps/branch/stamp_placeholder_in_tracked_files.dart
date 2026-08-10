@@ -1,7 +1,7 @@
 import 'package:ansiwise_api/ansiwise_api.dart';
 
 import '../../branch/fqdn_selection.dart';
-import 'create_install_branch.dart';
+import 'require_installation_domain.dart';
 
 /// Puts this installation's own branch where the trunk carries a placeholder.
 ///
@@ -203,7 +203,7 @@ final class StampPlaceholderInTrackedFiles extends ReversibleStep<List<String>> 
 
   @override
   Future<StepPlan> plan(StepContext context) async {
-    final String branch = CreateInstallBranch.branchIn(context);
+    final String branch = RequireInstallationDomain.branchIn(context);
     final Map<String, String> left = await _stampable(context);
     for (final String path in left.keys) {
       context.log.info('$path would have $placeholder replaced by $branch');
@@ -222,7 +222,7 @@ final class StampPlaceholderInTrackedFiles extends ReversibleStep<List<String>> 
 
   @override
   Future<void> apply(StepContext context) async {
-    final String branch = CreateInstallBranch.branchIn(context);
+    final String branch = RequireInstallationDomain.branchIn(context);
     final Map<String, String> stampable = await _stampable(context);
     for (final MapEntry<String, String> file in stampable.entries) {
       final String after = file.value
@@ -268,7 +268,7 @@ final class StampPlaceholderInTrackedFiles extends ReversibleStep<List<String>> 
   /// tracked files to the few that can be in the answer; the name tests cost nothing and run next;
   /// the file is opened once, and only a file that really carries the literal is asked what it is.
   Future<Map<String, String>> _stampable(StepContext context) async {
-    final String branch = CreateInstallBranch.branchIn(context);
+    final String branch = RequireInstallationDomain.branchIn(context);
     final Map<String, String> stampable = <String, String>{};
     for (final String path in await _search(context)) {
       if (rule.excludesByName(path)) {

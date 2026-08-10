@@ -21,7 +21,8 @@ environment:
 
 dependencies:
   # The tool plugins this platform stands on. It knows what to deploy; they know how to drive a
-  # cluster, a chart, a secret store and a machine — and none of them knows this platform.
+  # cluster, a chart, a secret store, a checkout and a machine — and none of them knows this
+  # platform.
   ansiwise_kubernetes:
     git:
       url: https://github.com/simetrixch/ansiwise-plugins.git
@@ -42,6 +43,11 @@ dependencies:
       url: https://github.com/simetrixch/ansiwise-plugins.git
       ref: master
       path: ansiwise-host
+  ansiwise_git:
+    git:
+      url: https://github.com/simetrixch/ansiwise-plugins.git
+      ref: master
+      path: ansiwise-git
   ansiwise_api:
     git:
       url: https://github.com/simetrixch/ansiwise-api.git

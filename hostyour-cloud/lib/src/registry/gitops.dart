@@ -1,8 +1,6 @@
 import 'package:ansiwise_api/ansiwise_api.dart';
-import '../steps/gitops/argocd_root_app.dart';
 import '../steps/gitops/build_plane.dart';
 import '../steps/gitops/idp_discovery_reachable.dart';
-import '../steps/gitops/kubernetes_secret_from_vault.dart';
 import '../steps/gitops/stage_toggle.dart';
 
 /// Every step that puts the platform's own services on top of a standing cluster.
@@ -10,27 +8,20 @@ import '../steps/gitops/stage_toggle.dart';
 /// One file per area rather than one growing file, so two areas can be written at the same time
 /// without meeting in the same place. The composer in the parent directory is the only thing that
 /// knows about all of them.
+///
+/// **One step, and the two that stood here are now rows against tool packages.** Materializing an
+/// entry of the secret store onto the cluster is `kubernetes_secret_from_vault` of the vault
+/// package, and handing the cluster over is `kubernetes_object_irreversible` of the kubernetes
+/// package with the reason, the repair and the manifest written in the row. What is left here reads
+/// an answer this product alone knows how to derive — which cluster's identity provider an
+/// installation's tokens come from — and that rule is what keeps it in this package.
 const Map<StepName, RegisteredStep> gitopsSteps = <StepName, RegisteredStep>{
-  StepName('kubernetes_secret_from_vault'): RegisteredStep(
-    name: StepName('kubernetes_secret_from_vault'),
-    source: 'lib/src/steps/gitops/kubernetes_secret_from_vault.dart:29',
-    create: KubernetesSecretFromVault.fromArguments,
-    arguments: KubernetesSecretFromVault.arguments,
-    answers: KubernetesSecretFromVault.answers,
-  ),
   StepName('idp_discovery_reachable'): RegisteredStep(
     name: StepName('idp_discovery_reachable'),
-    source: 'lib/src/steps/gitops/idp_discovery_reachable.dart:24',
+    source: 'lib/src/steps/gitops/idp_discovery_reachable.dart:39',
     create: IdpDiscoveryReachable.fromArguments,
     arguments: IdpDiscoveryReachable.arguments,
     answers: IdpDiscoveryReachable.answers,
-  ),
-  StepName('argocd_root_app'): RegisteredStep(
-    name: StepName('argocd_root_app'),
-    source: 'lib/src/steps/gitops/argocd_root_app.dart:22',
-    create: ArgocdRootApp.fromArguments,
-    arguments: ArgocdRootApp.arguments,
-    answers: ArgocdRootApp.answers,
   ),
 };
 

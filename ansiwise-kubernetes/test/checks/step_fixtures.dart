@@ -50,4 +50,16 @@ final Map<String, Fixture> stepFixtures = <String, Fixture>{
       () => shell.answers('$_client diff --filename $file', ''),
     );
   },
+  // The same arrangement as the reversible sibling, plus the client timeout this step carries. The
+  // apply is therefore a different command line, so the sibling's fixture would leave this one
+  // recording a command the fake never carried out — which the audit reports as not covered.
+  'kubernetes_object_irreversible': (FakeShell shell, FakeFiles files, FakeHttp http) {
+    const String file = '$_plausibleText/$_plausibleText';
+    final String apply =
+        '$_client apply --filename $file '
+        '--request-timeout=${KubernetesObjectIrreversible.requestTimeout.inSeconds}s';
+    files.contents[file] = 'kind: Namespace\n';
+    shell.fails('$_client diff --filename $file');
+    shell.changes(apply, () => shell.answers('$_client diff --filename $file', ''));
+  },
 };

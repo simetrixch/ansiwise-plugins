@@ -182,9 +182,9 @@ final class ConfigureKubeApiserverOidc extends ReversibleStep<String?> {
 
   /// [issuer] with [domain] and [clientId] in its slots.
   ///
-  /// Shared with the step that points a cluster at another cluster's identity provider: the domain
-  /// SOURCES differ — the master's own answers there, the profile here — but the shape they fill
-  /// is one, so the two cannot write different addresses from the same facts.
+  /// Shared with the gate that refuses a run while the identity provider cannot be read, so the
+  /// address that is measured and the address the API server is pointed at are filled by one piece
+  /// of code from one shape.
   static String issuerWith(String issuer, {required String domain, required String clientId}) =>
       filledSlots(issuer, <String, String>{'master-domain': domain, 'client': clientId});
 
@@ -201,16 +201,12 @@ final class ConfigureKubeApiserverOidc extends ReversibleStep<String?> {
   /// What a cluster holding the master part answers as its role.
   static const String masterRole = 'master';
 
-  /// The flags this step writes, in the order they are written.
-  Map<String, String> flagsIn(StepContext context) => flagsFor(issuerUrlIn(context));
-
-  /// The same six flags for an issuer that came from somewhere else.
+  /// The six flags this step writes, in the order they are written.
   ///
-  /// A cluster holding the master part composes its issuer from the run's answers; a slave reads
-  /// its own out of the profile, which names the cluster it belongs to. Two sources, one flag set,
-  /// so the two cannot write the API server's arguments differently.
-  Map<String, String> flagsFor(String issuerUrl) => <String, String>{
-    '--oidc-issuer-url': issuerUrl,
+  /// The issuer is composed from the run's own answers: a cluster holding the master part is the one
+  /// that issues, and one that does not names the cluster that does.
+  Map<String, String> flagsIn(StepContext context) => <String, String>{
+    '--oidc-issuer-url': issuerUrlIn(context),
     '--oidc-client-id': clientId,
     '--oidc-username-claim': usernameClaim,
     '--oidc-username-prefix': usernamePrefix,
@@ -293,8 +289,8 @@ final class ConfigureKubeApiserverOidc extends ReversibleStep<String?> {
   /// [current] carrying every one of [flags]: each replaced where it is, each appended where it is
   /// not.
   ///
-  /// Shared with the step that points a cluster at another cluster's identity provider, because the
-  /// two write the same six flags at the same place and a second copy of this would let them drift.
+  /// Each flag is written by the same rule one row of `set_process_flag` writes one flag by, so a
+  /// file this step edits and a file a row edits cannot end up carrying two spellings of a line.
   static String withFlags(String current, Map<String, String> flags) {
     String written = current;
     for (final MapEntry<String, String> flag in flags.entries) {

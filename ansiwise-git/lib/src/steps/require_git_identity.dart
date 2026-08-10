@@ -2,10 +2,10 @@ import 'package:ansiwise_api/ansiwise_api.dart';
 
 /// Refuses a checkout that has nobody to make a commit as.
 ///
-/// Everything this program produces reaches the rest of the platform as a commit on a branch, and a
-/// commit needs a name and a mailbox. Without them git refuses at the moment of committing — which
-/// is after the branch was cut and every file in it was rewritten, so the run has already done all
-/// of its work by the time it learns it cannot keep any of it.
+/// Whatever a run produces in a checkout leaves it as a commit, and a commit needs a name and a
+/// mailbox. Without them git refuses at the moment of committing — which is after the branch was cut
+/// and every file in it was rewritten, so the run has already done all of its work by the time it
+/// learns it cannot keep any of it.
 ///
 /// **Both are reported at once.** An operator told about the name, who sets it, runs again and is
 /// then told about the mailbox has paid for two runs to learn what one could have said.
@@ -22,7 +22,7 @@ final class RequireGitIdentity extends ObservingStep {
     ArgumentSpec(
       name: 'repository',
       kind: ArgumentKind.text,
-      describes: 'the checkout this installation is generated in',
+      describes: 'the checkout whose committer identity is read',
     ),
   ];
 

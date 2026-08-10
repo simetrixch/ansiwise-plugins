@@ -1,5 +1,6 @@
 import 'package:ansiwise_api/ansiwise_api.dart';
 
+import 'steps/kubernetes_secret_from_vault.dart';
 import 'steps/vault_auth_method.dart';
 import 'steps/vault_auth_role.dart';
 import 'steps/vault_init.dart';
@@ -8,10 +9,15 @@ import 'steps/vault_kv_mount.dart';
 import 'steps/vault_policy.dart';
 import 'steps/vault_unsealed.dart';
 
-/// Every step this plugin contributes, keyed by the name a program file writes.
+/// Every step this plugin carries, from the names a program file writes to the classes that
+/// implement them.
 ///
-/// The composition root of a binary spreads this map into its own registry, beside the maps of the
-/// other plugins it compiles in.
+/// Written by hand, because Dart compiled ahead of time has no reflection. That is not a workaround
+/// — it is what lets a check count this against the classes on disk in both directions: no step
+/// exists unregistered, and no entry points at a class that is gone.
+///
+/// The `source` of each entry is the line its class is declared on. It is what the record reports
+/// and what an operator opens when a step fails.
 const Map<StepName, RegisteredStep> vaultSteps = <StepName, RegisteredStep>{
   StepName('vault_init'): RegisteredStep(
     name: StepName('vault_init'),
@@ -61,6 +67,15 @@ const Map<StepName, RegisteredStep> vaultSteps = <StepName, RegisteredStep>{
     create: VaultKvEntry.fromArguments,
     arguments: VaultKvEntry.arguments,
     answers: VaultKvEntry.answers,
+  ),
+  // It reads no answer by a name of its own. The one axis a product may run the same layout along
+  // more than once is named by the row under `run_answer`, exactly as it is for every other step
+  // here, so this entry declares none and the slot in the entry path is filled from that name.
+  StepName('kubernetes_secret_from_vault'): RegisteredStep(
+    name: StepName('kubernetes_secret_from_vault'),
+    source: 'lib/src/steps/kubernetes_secret_from_vault.dart:41',
+    create: KubernetesSecretFromVault.fromArguments,
+    arguments: KubernetesSecretFromVault.arguments,
   ),
 };
 

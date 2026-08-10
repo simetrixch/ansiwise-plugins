@@ -14,7 +14,7 @@ import 'composition.dart';
 /// This is the check the first gate performs on a machine, run here instead — so a program that
 /// names a step nobody registered is caught in the suite rather than on a server.
 void main() {
-  // The five plugins the shipped configuration turns on, composed the way the binary composes
+  // The six plugins the shipped configuration turns on, composed the way the binary composes
   // them. Resolved once, because reading a file per test says nothing more than reading it once.
   late final Registry shipped;
   setUpAll(() async => shipped = await shippedRegistry());

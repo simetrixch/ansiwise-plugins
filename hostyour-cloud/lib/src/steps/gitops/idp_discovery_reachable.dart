@@ -12,7 +12,22 @@ import '../cluster/configure_kube_apiserver_oidc.dart';
 /// **The address is filled by the same code that fills it for the API server, never composed
 /// here.** [ConfigureKubeApiserverOidc.issuerUrlFor] is called with this row's issuer and client,
 /// which therefore must be the words the configuring row writes — a gate measuring one issuer
-/// while the cluster is pointed at another is green either way.
+/// while the cluster is pointed at another is green either way. Writing both values ONCE, in the
+/// program's own defaults block, is what makes that agreement structural instead of a thing two
+/// rows have to keep saying the same.
+///
+/// **WHY THIS IS NOT A TOOL PACKAGE'S STEP, and it is the question it looks like it should be.**
+/// What it does is generic — an address is asked a question and the answer has to carry a named
+/// field — and a step of that shape belongs in a package that owns the NETWORK as its tool, beside
+/// the request and the address, not in this product. What keeps it here is the other half: the
+/// address is not given, it is DERIVED from a rule only this product has. An installation has one
+/// identity provider, it stands on the cluster holding the master part, and every other cluster
+/// accepts the tokens it issues — so a cluster answers with its own domain and a cluster that
+/// belongs to another answers with that one's. That branch is this product's, it is stated once for
+/// this step and for the step that points the API server at the same address, and a package that
+/// asks any address a question may not know it. Moving this as it stands would carry the rule into
+/// a package that must not hold it; splitting it would need the generic step to be TOLD the address
+/// by a step that measured it, which nothing can do.
 ///
 /// **This is a gate that verifies an earlier step, and it says so.** The document does not exist
 /// until the identity provider is deployed, so in the two modes that change nothing it reports what
@@ -22,11 +37,8 @@ import '../cluster/configure_kube_apiserver_oidc.dart';
 /// **It reads and nothing else.** One request, no credential, no state — the same document a browser
 /// fetches before it ever sees a login form.
 final class IdpDiscoveryReachable extends ObservingStep {
-  /// Refuses a run whose identity provider does not answer for the client [clientId].
-  const IdpDiscoveryReachable({
-    required this.clientId,
-    this.issuer = ConfigureKubeApiserverOidc.defaultIssuer,
-  });
+  /// Refuses a run whose identity provider at [issuer] does not answer for the client [clientId].
+  const IdpDiscoveryReachable({required this.clientId, required this.issuer});
 
   /// Builds the step from what the program gave it.
   factory IdpDiscoveryReachable.fromArguments(Arguments arguments) => IdpDiscoveryReachable(
@@ -35,12 +47,15 @@ final class IdpDiscoveryReachable extends ObservingStep {
   );
 
   /// What this step accepts.
+  ///
+  /// Neither has a default. Which client this platform issues tokens for, and the shape of the
+  /// address they are issued at, are decisions of this deployment rather than of the gate — and a
+  /// default here is the half of the pair that stops being read the day the other row changes, with
+  /// the gate then measuring an address the cluster is not pointed at and passing either way.
   static const List<ArgumentSpec> arguments = <ArgumentSpec>[
     ArgumentSpec(
       name: 'client_id',
       kind: ArgumentKind.text,
-      required: false,
-      defaultValue: 'headlamp',
       describes:
           'the client whose issuer is measured, which has to be the one the API server is '
           'configured with — the issuer address carries it',
@@ -48,8 +63,6 @@ final class IdpDiscoveryReachable extends ObservingStep {
     ArgumentSpec(
       name: 'issuer',
       kind: ArgumentKind.text,
-      required: false,
-      defaultValue: ConfigureKubeApiserverOidc.defaultIssuer,
       describes:
           'the issuer this gate measures, with its slots still in it — it has to be the text the '
           'row configuring the API server writes, or this measures an address the cluster is not '
@@ -69,7 +82,14 @@ final class IdpDiscoveryReachable extends ObservingStep {
   ];
 
   /// The name of the field a discovery document cannot be one without.
+  ///
+  /// The word is the discovery standard's own and not this platform's, which is why it stands here
+  /// rather than in a row: every provider that answers such a document names this field, so a row
+  /// that had to state it would be restating a standard on every installation.
   static const String requiredClaim = 'authorization_endpoint';
+
+  /// Where a provider answering that standard keeps the document, under the issuer.
+  static const String discoveryPath = '.well-known/openid-configuration';
 
   /// The client the tokens are issued for.
   final String clientId;
@@ -82,8 +102,7 @@ final class IdpDiscoveryReachable extends ObservingStep {
       ConfigureKubeApiserverOidc.issuerUrlFor(context, issuer: issuer, clientId: clientId);
 
   /// Where the discovery document stands.
-  String discoveryUrlIn(StepContext context) =>
-      '${issuerUrlIn(context)}/.well-known/openid-configuration';
+  String discoveryUrlIn(StepContext context) => '${issuerUrlIn(context)}/$discoveryPath';
 
   @override
   bool get verifiesAnEarlierStep => true;

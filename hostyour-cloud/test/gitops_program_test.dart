@@ -2,8 +2,10 @@
 import 'dart:io' show File;
 
 import 'package:ansiwise_api/ansiwise_api.dart';
+// The slots this program's rows write are the vault package's notation, and the handoff is a row
+// against the kubernetes package. What this file measures about either is the PROGRAM's, and the
+// program is this package's.
 import 'package:ansiwise_vault/ansiwise_vault.dart';
-import 'package:hostyour_cloud/hostyour_cloud.dart';
 import 'package:ansiwise_api/testing.dart';
 import 'package:test/test.dart';
 
@@ -18,12 +20,19 @@ import 'composition.dart';
 void main() {
   /// The slot this product's rows write where its stage belongs.
   ///
-  /// The product's own text, and no longer the vault package's: those steps take the NAME of the
+  /// The product's own text, and no longer any tool package's: those steps take the NAME of the
   /// answer as an argument and hold no word of their own. The program is where the two meet, and
-  /// the test below reads its `run_answer` back to prove that this is the same word.
+  /// the tests below read its `run_answer` back to prove that this is the same word.
   const String stagePlaceholder = '<stage>';
 
-  // The five plugins the shipped configuration turns on, composed the way the binary composes
+  /// The step the handoff is a row against.
+  ///
+  /// A capability of the kubernetes package and no longer a step of this one: applying a manifest
+  /// whose objects a controller then owns is the same act whatever the manifest declares, and what
+  /// makes THIS one the handoff is the four values in the row.
+  const StepName handoffStep = StepName('kubernetes_object_irreversible');
+
+  // The six plugins the shipped configuration turns on, composed the way the binary composes
   // them. Resolved once, because reading a file per test says nothing more than reading it once.
   late final Registry shipped;
   setUpAll(() async => shipped = await shippedRegistry());
@@ -368,12 +377,12 @@ void main() {
     final List<StepName> order = <StepName>[
       for (final ResolvedStep step in deployGitops().steps) step.entry.step,
     ];
-    expect(order.last, const StepName('argocd_root_app'));
+    expect(order.last, handoffStep);
 
     final ({RunRecord record, FakeShell shell, FakeFiles files, MemoryRecorder recorder}) it =
         await run('ENABLE_ARGOCD=true\n');
     final StepRecord handoff = it.record.steps.firstWhere(
-      (StepRecord step) => step.step == const StepName('argocd_root_app'),
+      (StepRecord step) => step.step == handoffStep,
     );
     expect(
       handoff.verdict,
@@ -382,62 +391,53 @@ void main() {
     );
   });
 
-  group('the manifest the handoff applies', () {
-    StepContext handoffContext(FakeFiles files) {
-      final FakeClock clock = FakeClock();
-      const StepName name = StepName('argocd_root_app');
-      return StepContext(
-        shell: FakeShell(),
-        files: files,
-        http: FakeHttp(),
-        clock: clock,
-        entropy: FakeEntropy(),
-        log: RecordingLogger(recorder: MemoryRecorder(clock), redactor: Redactor.none, step: name),
-        step: name,
-        arguments: Arguments.none,
-        answers: const Arguments(<String, Object>{'stage': 'dev'}),
-        facts: Facts.none,
-      );
-    }
+  group('what the handoff row says', () {
+    /// The handoff as the resolver hands it to the engine, defaults folded in.
+    ///
+    /// Read RESOLVED rather than off the file, because two of the four values it turns on are
+    /// written once for the whole program: which answer fills the manifest's slot, and how the
+    /// cluster client is invoked. Asked of the file alone, a correct program would read as a row
+    /// missing them.
+    ResolvedStep handoff() =>
+        deployGitops().steps.firstWhere((ResolvedStep step) => step.entry.step == handoffStep);
 
-    test('is a row value with the stage in a marked slot, filled from the answers', () {
+    test('it is the kind that cannot be taken back, and not the ordinary apply', () {
+      // The difference is not a nicety. The ordinary row's undo deletes what its manifest names,
+      // and deleting this object takes every application the reconciler made from it — none of
+      // which this run applied. The row that ends this program has to be the other kind.
+      expect(program().steps.where((ProgramStep entry) => entry.step == handoffStep), hasLength(1));
+      expect(handoff().registered.create(handoff().entry.arguments), isA<IrreversibleStep>());
+    });
+
+    test('the manifest is the row\'s, with the stage in a marked slot', () {
       // The path is the row's to say; what the row cannot say is which stage this installation
-      // runs, so that one value stands as a slot and the run fills it.
-      const ArgocdRootApp handoff = ArgocdRootApp(
-        repository: '/srv/hostyour-cloud',
-        trunk: 'master',
-      );
-      expect(handoff.manifest, ArgocdRootApp.defaultManifest);
+      // runs, so that one value stands as a slot and the run fills it. The name of the answer that
+      // fills it is stated once for the whole program, in its defaults block, which is what stops
+      // the slot and the answer coming apart.
+      expect(handoff().entry.arguments.text('manifest'), 'argocd/$stagePlaceholder/root-app.yaml');
       expect(
-        handoff.manifestIn(handoffContext(FakeFiles())),
-        '/srv/hostyour-cloud/argocd/dev/root-app.yaml',
+        handoff().entry.arguments.text('run_answer'),
+        'stage',
+        reason: 'the slot and the answer that fills it have to be the same word',
       );
     });
 
-    test('a manifest row carrying a slot nothing fills is refused, not looked for', () async {
-      // A misspelled slot would otherwise be looked for on disk in angle brackets, and the refusal
-      // would say the branch lost a manifest nobody ever named.
-      const ArgocdRootApp misspelled = ArgocdRootApp(
-        repository: '/srv/hostyour-cloud',
-        trunk: 'master',
-        manifest: 'argocd/<stag>/root-app.yaml',
-      );
-      final CheckResult answer = await misspelled.check(handoffContext(FakeFiles()));
-      expect(answer, isA<Blocked>());
-      expect((answer as Blocked).reason, contains('<stag>'));
-    });
-
-    test('a branch that lost the manifest is refused with the repair', () async {
-      const ArgocdRootApp handoff = ArgocdRootApp(
-        repository: '/srv/hostyour-cloud',
-        trunk: 'master',
-      );
-      final CheckResult answer = await handoff.check(handoffContext(FakeFiles()));
-      expect(answer, isA<Blocked>());
+    test('the repair is the command that puts the manifest back', () {
+      // The tool package knows how a manifest is applied and nothing about the branch it stands in,
+      // so a refusal composed there could only name the missing path. The operator needs the act.
       expect(
-        (answer as Blocked).reason,
+        handoff().entry.arguments.text('repair'),
         contains('git -C /srv/hostyour-cloud merge master'),
-        reason: 'the operator needs the command that puts it back, not a missing-file message',
+      );
+    });
+
+    test('the reason says what is lost, not that no undo was written', () {
+      final String why = handoff().entry.arguments.text('irreversible_reason');
+      expect(why, contains('reconciler'));
+      expect(
+        why.toLowerCase(),
+        isNot(anyOf(equals('irreversible'), contains('not implemented'))),
+        reason: 'this is what a dry run shows the operator at the point of no return',
       );
     });
   });

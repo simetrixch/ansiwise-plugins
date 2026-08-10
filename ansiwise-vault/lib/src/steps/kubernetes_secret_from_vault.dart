@@ -1,31 +1,43 @@
 import 'package:ansiwise_api/ansiwise_api.dart';
 
 import 'package:ansiwise_kubernetes/ansiwise_kubernetes.dart';
-import 'package:ansiwise_vault/ansiwise_vault.dart';
 
-/// Materializes an entry of the secret store into a Secret on this cluster.
+import 'argument_text.dart';
+import 'vault_api.dart';
+import 'vault_profile.dart';
+
+/// Materializes an entry of Vault into a Secret on a cluster.
+///
+/// **This is the one step of this package that knows a second tool, and it cannot be two.** It reads
+/// values out of Vault and writes them onto a cluster; as two rows it could not exist, because a
+/// step that measured something has no way to tell a later step what it found — the facts a run
+/// carries are booleans, an answer comes from the operator, and an argument is fixed when the
+/// program is resolved. The only other shape would be a row that says "for each of these, composed
+/// this way", and that is a language rather than a mechanism. So it is one step, and it lives HERE:
+/// getting a held value to the place that needs it is what a secret store is for, and the dependency
+/// runs from this package to the cluster package rather than the other way, so a product driving a
+/// cluster and keeping no Vault carries none of this.
 ///
 /// **Why this exists rather than a step that mints where the value is needed.** Two components
-/// regularly need one credential: the identity provider's blueprint creates an OIDC client with a
-/// secret, and the application authenticates with the same secret. A step that minted into the first
-/// place could not supply the second without reading back what it wrote, and reading a credential in
-/// order to hand it on is how it reaches somewhere it was not meant to be. So nothing mints here at
-/// all. The value comes into being ONCE, in the store, and this is called once per consumer.
+/// regularly need one credential: a blueprint creates a client with a secret, and the application
+/// authenticates with the same secret. A step that minted into the first place could not supply the
+/// second without reading back what it wrote, and reading a credential in order to hand it on is how
+/// it reaches somewhere it was not meant to be. So nothing mints here at all. The value comes into
+/// being ONCE, in the store, and this is called once per consuming workload.
 ///
-/// **It is the same act the secret operator performs after the handoff.** Every application of this
-/// platform reads its credentials out of the store through that operator; what makes these entries
-/// different is only that they are needed before the operator exists. So the paths are the same
-/// paths, and nothing is minted twice or held in two places.
+/// **It is the same act the cluster's own secret operator performs later.** Every workload reads its
+/// credentials out of the store through that operator; what makes these entries different is only
+/// that they are needed before the operator exists. So the paths are the same paths, and nothing is
+/// minted twice or held in two places.
 ///
 /// **Applied and not created.** The store holds the truth. If an entry gains a field, this puts it
 /// on the cluster; if the Secret was deleted by hand, this puts it back. What it never does is write
 /// something the store does not say.
 ///
 /// **The values reach the cluster through a file and never through an argument.** An argument is
-/// visible in a process listing to every process on the host — the objection that moved this
-/// platform's own work off `kubectl exec`. The file is readable by its owner alone, stands under a
-/// directory that is a memory file system on the machines this runs on, and is removed whether the
-/// apply succeeded or not.
+/// visible in a process listing to every process on the host. The file is readable by its owner
+/// alone, stands in the directory the row names — a memory file system on the machines this is meant
+/// for — and is removed whether the apply succeeded or not.
 final class KubernetesSecretFromVault extends ReversibleStep<bool> {
   /// Writes the entry at [path] into the Secret [name] in [namespace].
   const KubernetesSecretFromVault({
@@ -59,13 +71,13 @@ final class KubernetesSecretFromVault extends ReversibleStep<bool> {
       name: 'repository',
       kind: ArgumentKind.text,
       describes:
-          "the checkout this installation runs from, which carries the cluster's own profile and "
-          'the credentials of the secret store',
+          "the checkout this run reads from, which carries the profile and Vault's own credential "
+          'file',
     ),
     ArgumentSpec(
       name: 'mount',
       kind: ArgumentKind.text,
-      describes: 'the mount of the secret store the entry stands on',
+      describes: 'the mount of the store the entry stands on',
     ),
     ArgumentSpec(
       name: 'path',
@@ -98,17 +110,6 @@ final class KubernetesSecretFromVault extends ReversibleStep<bool> {
     ...VaultLayout.arguments,
   ];
 
-  /// The answers this step reads, which is what its registry entry declares.
-  ///
-  /// The stage, and it is THIS product's word rather than the vault family's: those steps take the
-  /// name of the answer as an argument and know none themselves. Named here because this step is a
-  /// step of one product, and the registry entry is what holds a program of it to declaring the
-  /// question its operator is asked.
-  static const List<String> answers = <String>[stageAnswer];
-
-  /// The name this product answers its stage under, which the row also names under `run_answer`.
-  static const String stageAnswer = 'stage';
-
   /// The checkout.
   final String repository;
 
@@ -133,9 +134,9 @@ final class KubernetesSecretFromVault extends ReversibleStep<bool> {
   /// How the cluster is reached.
   final Kubectl kubectl;
 
-  /// Where the secret store's own facts stand, and under which names.
+  /// Where Vault's own facts stand, and under which names.
   ///
-  /// This step reads the same profile and the same credential file the vault family reads, so it
+  /// The same profile and the same credential file every other step of this package reads, so it
   /// declares the same names. A step that took the layout from a row for eight of them and from a
   /// literal for the ninth would open a path the operator never configured, and only for the
   /// Secrets — the rest of the run would finish.
@@ -144,7 +145,7 @@ final class KubernetesSecretFromVault extends ReversibleStep<bool> {
   /// `0600` — the file holds every value of the Secret in the clear for as long as the apply takes.
   static const int mode = 0x180;
 
-  /// Where the manifest stands while `kubectl` reads it.
+  /// Where the manifest stands while the cluster client reads it.
   String pathFor() => '$staging/$namespace-$name.yaml';
 
   @override
@@ -159,6 +160,9 @@ final class KubernetesSecretFromVault extends ReversibleStep<bool> {
 
   @override
   Future<StepPlan> plan(StepContext context) async =>
+      // The command and the file it will read, and nothing of what the file will hold. A plan is
+      // written into the record an operator keeps, so a plan carrying the values would put every
+      // credential of this Secret into it.
       StepPlan.argv(kubectl.argv(<String>['apply', '--filename', pathFor()]));
 
   @override
@@ -219,7 +223,7 @@ final class KubernetesSecretFromVault extends ReversibleStep<bool> {
     return found.ok;
   }
 
-  /// The Secret as `kubectl` reads it.
+  /// The Secret as the cluster client reads it.
   ///
   /// `stringData` and not `data`, so nothing here encodes anything: the API server takes the values
   /// as they are. An encoding step of our own would be one more place a value is truncated without
@@ -262,7 +266,8 @@ final class KubernetesSecretFromVault extends ReversibleStep<bool> {
     );
     if (isAbsent(answer)) {
       return _Entry.unreadable(
-        '$dataPath is not in the secret store, and it is where this Secret is read from',
+        '$dataPath is not in the store, and it is where this Secret is read '
+        'from',
       );
     }
     final Object? held = decodedData(answer.body)?['data'];

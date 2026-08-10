@@ -1,7 +1,10 @@
 import 'package:ansiwise_api/ansiwise_api.dart';
+// The variable the network agent carries its range in is Calico's own name for it, and the step
+// that stamps it into the manifest on disk is a machine capability now. Read from there rather than
+// spelled again here, so the stamp and this proof cannot come to mean two different variables.
+import 'package:ansiwise_host/ansiwise_host.dart';
 import 'package:ansiwise_kubernetes/ansiwise_kubernetes.dart';
 import 'microk8s.dart';
-import 'stamp_calico_pool_cidr_in_cni_manifest.dart';
 
 /// Restarts everything that has to read the new range before the pool can be built on it.
 ///

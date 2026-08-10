@@ -13,7 +13,7 @@ import 'package:hostyour_cloud/hostyour_cloud.dart';
 /// on a machine.** So they read the tree next to this checkout, and the environment may point them
 /// somewhere else.
 ///
-/// **Where that tree is, is decided ONCE and not here.** The four tool packages this plugin stands
+/// **Where that tree is, is decided ONCE and not here.** The five tool packages this plugin stands
 /// on read the same declarations for the same reason — their probes plant the kinds and defaults the
 /// programs declare — and a second answer to "where is the installation" is a second answer that can
 /// disagree with the first. So the resolution and its refusal come out of the checks package, and
@@ -24,7 +24,7 @@ export 'package:ansiwise_checks/ansiwise_checks.dart'
 /// The registry a program of this product is actually resolved against.
 ///
 /// **Not this package's own registry.** The steps a program names come from five plugins now — the
-/// four tool packages and this product on top of them — and a test that resolved a program against
+/// five tool packages and this product on top of them — and a test that resolved a program against
 /// this package alone would report every step of the other four as unregistered. Worse, once that
 /// test were made to pass by narrowing what it checks, it would prove a program correct against a
 /// set of steps nobody ships.

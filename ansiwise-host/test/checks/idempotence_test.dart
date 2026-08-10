@@ -33,6 +33,11 @@ const Set<String> notCoveredByAFakeMachine = <String>{
   // exercised while the probe handed it a placeholder path no installation gives, which measured a
   // branch the product does not take. Closing it needs a program that answers a path, not a fixture.
   'create_storage_directory',
+  // Both leave their postcondition behind with `microk8s enable` or `microk8s disable`, and a fake
+  // shell records those without carrying them out — so the status it answers after the apply is the
+  // status it answered before, and nothing about the second run would be measured.
+  'disable_addons',
+  'enable_addons',
   'ensure_tool_prerequisites',
   'export_kubeconfig',
   // It has a fixture, and it is still not covered: its apply ends in a `chown` of the key file and

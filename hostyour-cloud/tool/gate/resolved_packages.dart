@@ -1,6 +1,6 @@
 /// Which copy of each package of this repository the checks were actually answered against.
 ///
-/// THE DEFECT THIS EXISTS FOR. The product plugin names the four tool packages by a git ref, and
+/// THE DEFECT THIS EXISTS FOR. The product plugin names the five tool packages by a git ref, and
 /// both the override file and the lock file are gitignored. Without the untracked override the
 /// composition is resolved OUT OF A COMMIT, while each tool package's own checks walk the working
 /// tree beside it — so one half of the gate judges the bytes on disk, the other half judges bytes

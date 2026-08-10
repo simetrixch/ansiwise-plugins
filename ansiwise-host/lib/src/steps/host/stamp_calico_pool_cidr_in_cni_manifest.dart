@@ -1,12 +1,11 @@
 import 'package:ansiwise_api/ansiwise_api.dart';
-import 'microk8s.dart';
 
-/// Puts this cluster's pod range into the network manifest Calico creates its address pool from.
+/// Puts a pod range into the network manifest Calico creates its address pool from.
 ///
 /// **The value is not on the line that names it.** The manifest declares an environment variable as
 /// a name on one line and its value on the NEXT, so a rewrite that looks for the range on the same
-/// line as `CALICO_IPV4POOL_CIDR` matches nothing, writes nothing, and reports success. That is why
-/// this reads the file back afterwards rather than trusting the write.
+/// line as [variable] matches nothing, writes nothing, and reports success. That is why this reads
+/// the file back afterwards rather than trusting the write.
 ///
 /// **What this file decides, and what it does not.** Calico reads it once, when it creates the pool.
 /// It never mutates an existing pool from it. So a machine can carry a perfectly stamped manifest
@@ -14,17 +13,22 @@ import 'microk8s.dart';
 /// rather than of this file.
 ///
 /// A copy of the file goes to a timestamped backup before each real change. What an undo puts back
-/// is the text read before the change; the backups stay on the machine, and the step that applies
-/// the manifest to the cluster is what names one of them.
+/// is the text read before the change; the backups stay on the machine, and whatever applies the
+/// manifest to the cluster is what names one of them.
 final class StampCalicoPoolCidrInCniManifest extends ReversibleStep<String?> {
   /// Puts [podCidr] into the manifest at [manifestPath].
-  const StampCalicoPoolCidrInCniManifest({required this.podCidr, required this.manifestPath});
+  const StampCalicoPoolCidrInCniManifest({
+    required this.podCidr,
+    required this.manifestPath,
+    required this.fileMode,
+  });
 
   /// Builds the step from what the program gave it.
   factory StampCalicoPoolCidrInCniManifest.fromArguments(Arguments arguments) =>
       StampCalicoPoolCidrInCniManifest(
         podCidr: arguments.text('pod_cidr'),
         manifestPath: arguments.text('manifest_path'),
+        fileMode: arguments.integer('file_mode'),
       );
 
   /// What this step accepts.
@@ -37,16 +41,22 @@ final class StampCalicoPoolCidrInCniManifest extends ReversibleStep<String?> {
     ArgumentSpec(
       name: 'manifest_path',
       kind: ArgumentKind.text,
-      describes: 'the network manifest Calico creates its address pool from',
-      required: false,
-      defaultValue: defaultPath,
+      describes:
+          'the network manifest Calico creates its address pool from — where whatever installed '
+          'the cluster keeps it, which is a fact of that installation and not of Calico',
+    ),
+    ArgumentSpec(
+      name: 'file_mode',
+      kind: ArgumentKind.integer,
+      describes:
+          'the permissions the manifest and its backup are written with, as the number the machine '
+          'stores — 384 is the owner-only mode a file read by a privileged service wants',
     ),
   ];
 
-  /// Where the snap keeps the network manifest.
-  static const String defaultPath = '$microk8sArgumentsDirectory/cni-network/cni.yaml';
-
   /// The environment variable whose value is the pool's range.
+  ///
+  /// Calico's own name for it, the same in every manifest that installs it.
   static const String variable = 'CALICO_IPV4POOL_CIDR';
 
   /// The range every pod gets an address out of.
@@ -55,12 +65,15 @@ final class StampCalicoPoolCidrInCniManifest extends ReversibleStep<String?> {
   /// The manifest holding the pool's declaration.
   final String manifestPath;
 
+  /// The permissions the manifest is written with.
+  final int fileMode;
+
   @override
   Future<CheckResult> check(StepContext context) async {
     if (!await context.files.exists(manifestPath)) {
       return CheckResult.blocked(
-        '$manifestPath is not there — the snap writes it when it installs, so this ran before the '
-        'install or against a machine whose snap is gone',
+        '$manifestPath is not there — whatever installed the cluster writes it, so this ran before '
+        'that install or against a machine it was removed from',
       );
     }
     final String current = await context.files.read(manifestPath);
@@ -68,7 +81,7 @@ final class StampCalicoPoolCidrInCniManifest extends ReversibleStep<String?> {
     if (stamped == null) {
       return CheckResult.blocked(
         '$manifestPath declares no $variable, so nothing here decides the pool and Calico would '
-        "create it on the shipped default — the manifest is not the one this MicroK8s ships",
+        'create it on the shipped default — the manifest is not the one this cluster ships',
       );
     }
     if (stamped == current) {
@@ -91,9 +104,9 @@ final class StampCalicoPoolCidrInCniManifest extends ReversibleStep<String?> {
       return;
     }
     final String backup = '$manifestPath.bak.${_stampOfNow(context)}';
-    await context.files.write(backup, current, mode: microk8sArgumentsFileMode);
+    await context.files.write(backup, current, mode: fileMode);
     context.log.info('the manifest as it was is at $backup');
-    await context.files.write(manifestPath, stamped, mode: microk8sArgumentsFileMode);
+    await context.files.write(manifestPath, stamped, mode: fileMode);
 
     // The write is reported the same way whether the rewrite matched anything or not, so what the
     // file holds now is read rather than assumed. This is the failure the same-line expression
@@ -120,10 +133,11 @@ final class StampCalicoPoolCidrInCniManifest extends ReversibleStep<String?> {
   @override
   Future<void> undo(StepContext context, String? captured) async {
     if (captured == null) {
-      // The snap writes this file when it installs. There was none, so there is nothing to put back.
+      // Whatever installed the cluster writes this file. There was none, so there is nothing to put
+      // back.
       return;
     }
-    await context.files.write(manifestPath, captured, mode: microk8sArgumentsFileMode);
+    await context.files.write(manifestPath, captured, mode: fileMode);
   }
 
   /// [manifest] with the value under [variable] replaced by [podCidr], or null when it declares none.

@@ -17,6 +17,16 @@ dependencies:
     git:
       url: https://github.com/simetrixch/ansiwise-api.git
       ref: master
+  # One step of this package knows a second tool: it reads an entry out of Vault and writes it onto
+  # a cluster, and it cannot be two rows because a step that measured something has no way to tell a
+  # later step what it found. The edge runs THIS way and never the other — a package that drives any
+  # cluster must not carry one particular secret store, so the specialized package takes the
+  # dependency and the general one stays free of it.
+  ansiwise_kubernetes:
+    git:
+      url: https://github.com/simetrixch/ansiwise-plugins.git
+      ref: master
+      path: ansiwise-kubernetes
   # The steps read the profile a deployment wrote, and that file is YAML. A plugin that reads its
   # own files declares the parser itself rather than leaning on a transitive dependency it does
   # not control.

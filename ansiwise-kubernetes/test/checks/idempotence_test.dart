@@ -41,4 +41,12 @@ const Set<String> notCoveredByAFakeMachine = <String>{
   'restart_cert_manager_and_reapply_cluster_issuer',
   'set_default_storage_class',
   'verify_ippool_converged_with_self_heal',
+  // NOT a machine the fake cannot arrange — a probe that cannot tell two paths apart. The audit
+  // hands every text argument the same placeholder, so the template this step renders FROM and the
+  // file it renders INTO are one path: the apply would write the finished manifest over its own
+  // template, and the second check would then be rendering from a file carrying no slot at all. A
+  // fixture cannot close that, because a fixture arranges the machine and not the arguments.
+  // Closing it needs the probe to hand distinguishable values to two text arguments of one step.
+  // The second run itself IS driven, against real paths, in write_cluster_issuer_manifest_test.dart.
+  'write_cluster_issuer_manifest',
 };

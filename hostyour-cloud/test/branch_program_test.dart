@@ -15,7 +15,7 @@ import 'composition.dart';
 /// It runs the real program file through the real registry, in every mode, and looks at what came
 /// out — which is the only way to test the thing this program mostly is: an order.
 void main() {
-  // The five plugins the shipped configuration turns on, composed the way the binary composes
+  // The six plugins the shipped configuration turns on, composed the way the binary composes
   // them. Resolved once, because reading a file per test says nothing more than reading it once.
   late final Registry shipped;
   setUpAll(() async => shipped = await shippedRegistry());
@@ -225,11 +225,12 @@ void main() {
   bool has(FakeFiles files, String path) => files.contents.containsKey('$repository/$path');
 
   test('the program resolves against the registry', () {
-    // Twelve: the seven that cut and stamp the branch, the three that write the files under
-    // configs and secrets named for this stage, and the two that render what makes it one
-    // installation — the profile every chart reads and the toggles that decide which applications
-    // run here.
-    expect(deployBranch().steps, hasLength(13));
+    // Fourteen: the five gates and cuts at the head — the domain answer, the tool, the committer
+    // identity, the push and the branch — the four that stamp the branch and write its map, the
+    // three that write the files under configs and secrets named for this stage, and the two that
+    // render what makes it one installation: the profile every chart reads and the toggles that
+    // decide which applications run here.
+    expect(deployBranch().steps, hasLength(14));
   });
 
   test('every value an installation states about itself is an answer, not an argument', () {
@@ -257,8 +258,17 @@ void main() {
         everyElement(
           isIn(<String>[
             // Where the checkout is and what the trunk is called: the same on every machine that
-            // runs this program.
-            'repository', 'trunk',
+            // runs this program. The git steps say `base` and `branch` for the same word, because
+            // the package they come from knows a branch and has never heard of a trunk.
+            'repository', 'trunk', 'base', 'branch',
+            // What this checkout calls its remote. git gives a clone's remote the name "origin"
+            // and a checkout made another way carries whatever was chosen, so the name is stated
+            // here — and it is a fact of the checkout on every machine, not of one installation.
+            'remote',
+            // The NAME of the answer the branch is named after, and never the answer itself. The
+            // value here is the word "fqdn"; what stands under that word is this run's own domain,
+            // which is read out of the run and never written into this file.
+            'name_answer',
             // The stages the PRODUCT carries, of which an installation is exactly one, and the
             // commands the program assumes. Both are facts about the product.
             'stages', 'commands',
@@ -549,8 +559,14 @@ void main() {
           step.argumentsWithDefaults.text('placeholder') == placeholder,
     );
 
+    test('the answer is refused before any machine is asked anything', () {
+      // The one question that needs no tool at all stands ahead of the tool being looked for, so an
+      // operator who typed a name that is no domain learns it without a command having run.
+      expect(at('require_installation_domain'), lessThan(at('require_commands')));
+    });
+
     test('nothing is asked of the remote before the cheap local questions', () async {
-      expect(at('require_git_identity'), lessThan(at('require_pushable_origin')));
+      expect(at('require_git_identity'), lessThan(at('require_pushable_remote')));
     });
 
     test('push ability is proven before anything changes', () {
@@ -563,7 +579,7 @@ void main() {
       );
       expect(firstChange, isNot(-1));
       expect(
-        at('require_pushable_origin'),
+        at('require_pushable_remote'),
         lessThan(firstChange),
         reason: 'a branch generated and then unpushable is the worst of both',
       );
@@ -598,9 +614,18 @@ void main() {
     });
 
     test('the branch exists before anything is stamped into it', () {
-      expect(at('create_install_branch'), lessThan(atStamp(trunk)));
-      expect(at('create_install_branch'), lessThan(atStamp(FqdnSelection.placeholder)));
-      expect(at('create_install_branch'), lessThan(at('stamp_role')));
+      expect(at('git_branch'), lessThan(atStamp(trunk)));
+      expect(at('git_branch'), lessThan(atStamp(FqdnSelection.placeholder)));
+      expect(at('git_branch'), lessThan(at('stamp_role')));
+    });
+
+    test('the branch is named from the same answer every stamp below reads', () {
+      // The row carries the NAME of the answer and never a value. A row naming another answer would
+      // cut a branch nothing else in this program is about, and every stamp would write into it
+      // under a name taken from somewhere else.
+      final ResolvedStep cut = deployBranch().steps[at('git_branch')];
+      expect(cut.argumentsWithDefaults.text('name_answer'), 'fqdn');
+      expect(cut.argumentsWithDefaults.text('base'), trunk);
     });
 
     test('the map is written after the branch is stamped and before the role reads it', () {

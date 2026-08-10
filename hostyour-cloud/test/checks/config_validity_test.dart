@@ -124,13 +124,27 @@ steps:
     on_failure: exit
 ''';
 
-/// A program file naming the registry's own first step, with a value for every argument it declares.
+/// A program file naming the registry's own first step, with a value for every argument it declares
+/// and a declaration for every answer it reads.
 final String _validProgramText = _programTextFor(executionRegistry.steps.values.first);
 
 String _programTextFor(RegisteredStep entry) {
   final Arguments given = plausibleArguments(entry.arguments);
-  final StringBuffer text = StringBuffer()
-    ..writeln('name: planted-program')
+  final StringBuffer text = StringBuffer()..writeln('name: planted-program');
+  // Every answer the step reads, declared the way a real program declares it. Without this the
+  // planted program is refused for the one thing it is not being probed for — a step reading an
+  // answer nothing declares — and which step that hits depends on what stands first in the
+  // registry, so leaving it out makes this probe pass or fail on the order of a map.
+  if (entry.answers.isNotEmpty) {
+    text.writeln('answers:');
+    for (final String answer in entry.answers) {
+      text
+        ..writeln('  - name: $answer')
+        ..writeln('    kind: text')
+        ..writeln('    describes: what the step under probe reads out of the run');
+    }
+  }
+  text
     ..writeln('roles: [master]')
     ..writeln('steps:')
     ..writeln('  - step: ${entry.name.value}')

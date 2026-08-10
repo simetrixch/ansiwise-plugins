@@ -18,7 +18,7 @@ import 'cluster_fixture.dart';
 /// an ordinary re-run, and a step that did its work again there would swap the address pool
 /// underneath every workload on it.
 void main() {
-  // The five plugins the shipped configuration turns on, composed the way the binary composes
+  // The six plugins the shipped configuration turns on, composed the way the binary composes
   // them. Resolved once, because reading a file per test says nothing more than reading it once.
   late final Registry shipped;
   setUpAll(() async => shipped = await shippedRegistry());

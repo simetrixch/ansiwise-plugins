@@ -11,7 +11,9 @@ import 'steps/host/create_storage_directory.dart';
 import 'steps/host/detect_host_iptables_backend.dart';
 import 'steps/host/detect_host_upstream_resolvers.dart';
 import 'steps/host/detect_public_nic.dart';
+import 'steps/host/disable_addons.dart';
 import 'steps/host/disable_password_login.dart';
+import 'steps/host/enable_addons.dart';
 import 'steps/host/ensure_tool_prerequisites.dart';
 import 'steps/host/export_kubeconfig.dart';
 import 'steps/host/install_authorized_key.dart';
@@ -28,6 +30,8 @@ import 'steps/host/require_key_login_possible.dart';
 import 'steps/host/require_machine_size.dart';
 import 'steps/host/require_pinned_ubuntu.dart';
 import 'steps/host/set_process_flag.dart';
+import 'steps/host/stamp_calico_pool_cidr_in_cni_manifest.dart';
+import 'steps/host/wait_for_addons_enabled.dart';
 import 'steps/host/write_connmark_nft_table.dart';
 import 'steps/host/write_netplan_public_src_routing.dart';
 import 'steps/host/write_public_src_routing_script.dart';
@@ -126,6 +130,34 @@ const Map<StepName, RegisteredStep> hostSteps = <StepName, RegisteredStep>{
     source: 'lib/src/steps/host/set_process_flag.dart:31',
     create: SetProcessFlag.fromArguments,
     arguments: SetProcessFlag.arguments,
+  ),
+  // The addons the snap ships, and the manifest one of them builds its address pool from. The
+  // entries stand in the order a program runs them: the pod range is stamped before anything is
+  // given an address out of it, the addons go on, the wait proves they took, and whatever must
+  // stay off is switched off last because some of them come on by themselves.
+  StepName('stamp_calico_pool_cidr_in_cni_manifest'): RegisteredStep(
+    name: StepName('stamp_calico_pool_cidr_in_cni_manifest'),
+    source: 'lib/src/steps/host/stamp_calico_pool_cidr_in_cni_manifest.dart:18',
+    create: StampCalicoPoolCidrInCniManifest.fromArguments,
+    arguments: StampCalicoPoolCidrInCniManifest.arguments,
+  ),
+  StepName('enable_addons'): RegisteredStep(
+    name: StepName('enable_addons'),
+    source: 'lib/src/steps/host/enable_addons.dart:31',
+    create: EnableAddons.fromArguments,
+    arguments: EnableAddons.arguments,
+  ),
+  StepName('wait_for_addons_enabled'): RegisteredStep(
+    name: StepName('wait_for_addons_enabled'),
+    source: 'lib/src/steps/host/wait_for_addons_enabled.dart:29',
+    create: WaitForAddonsEnabled.fromArguments,
+    arguments: WaitForAddonsEnabled.arguments,
+  ),
+  StepName('disable_addons'): RegisteredStep(
+    name: StepName('disable_addons'),
+    source: 'lib/src/steps/host/disable_addons.dart:16',
+    create: DisableAddons.fromArguments,
+    arguments: DisableAddons.arguments,
   ),
   // The operator's account.
   StepName('add_user_to_group'): RegisteredStep(

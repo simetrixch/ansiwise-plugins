@@ -5,11 +5,11 @@ import 'package:test/test.dart';
 
 /// The values that used to be decided here and are now stated by whoever runs the steps.
 ///
-/// Three of them, and each was a fact about how ONE installation put its cluster together: the file
-/// a rendered issuer stands in, the namespace a certificate service was installed into, and the
-/// names its release gave the deployments. None of them is mandated by cert-manager, so a value
-/// here agreed with the cluster in front of it only for as long as nobody named a release
-/// differently.
+/// Each was a fact about how ONE installation put its cluster together: the file a rendered issuer
+/// stands in, the namespace a certificate service was installed into, the names its release gave
+/// the deployments, and what the issuer itself is called and asks. None of them is mandated by
+/// cert-manager, so a value here agreed with the cluster in front of it only for as long as nobody
+/// named a release differently.
 ///
 /// **A demotion nothing measures is a demotion that comes back.** A default is one line, and adding
 /// it back breaks nothing anybody would notice: every row that already states the value goes on
@@ -23,6 +23,15 @@ void main() {
       'issuer_manifest_path',
       'namespace',
       'deployments',
+    ],
+    // What the issuer is called, which authority it asks, which ingress answers the challenge, and
+    // where the rendered file goes. cert-manager mandates none of the four: each is one product's
+    // choice, and a value here made this package make that choice for every caller.
+    'write_cluster_issuer_manifest': <String>[
+      'name',
+      'acme_server',
+      'ingress_class',
+      'issuer_manifest_path',
     ],
   };
 
@@ -100,7 +109,7 @@ void main() {
     }
   });
 
-  test('the two steps that apply the issuer take the same file, under the same name', () {
+  test('every step that touches the issuer takes the same file, under the same name', () {
     // The whole point of the demotion: one name, so a program states the path once and the step
     // that renders it, the step that applies it and the step that applies it again cannot come to
     // mean three different files.

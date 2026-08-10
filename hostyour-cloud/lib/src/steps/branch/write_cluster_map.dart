@@ -1,5 +1,5 @@
 import 'package:ansiwise_api/ansiwise_api.dart';
-import 'create_install_branch.dart';
+import 'require_installation_domain.dart';
 
 /// Writes the one file that states what this cluster is.
 ///
@@ -180,11 +180,12 @@ final class WriteClusterMap extends ReversibleStep<String?> with FileStep {
       if (!stages.contains(stage))
         '"$stage" is not a stage — this product carries ${stages.join(', ')}',
       if (!roles.contains(role)) '"$role" is not a role — a cluster is ${roles.join(' or ')}',
-      if (!CreateInstallBranch.isFqdn(fqdn)) 'the domain "$fqdn" is not a domain name',
-      if (!CreateInstallBranch.isFqdn(buildPlane))
+      if (!RequireInstallationDomain.isFqdn(fqdn)) 'the domain "$fqdn" is not a domain name',
+      if (!RequireInstallationDomain.isFqdn(buildPlane))
         'the build plane "$buildPlane" is not a domain name',
-      if (!CreateInstallBranch.isFqdn(unitApex)) 'the unit apex "$unitApex" is not a domain name',
-      if (!CreateInstallBranch.isFqdn(platformDomain))
+      if (!RequireInstallationDomain.isFqdn(unitApex))
+        'the unit apex "$unitApex" is not a domain name',
+      if (!RequireInstallationDomain.isFqdn(platformDomain))
         'the platform domain "$platformDomain" is not a domain name',
       // A slave names the cluster it belongs to, and a cluster holding the master part belongs to
       // nobody. Both mistakes produce a map that reads as the opposite of what was meant.
@@ -193,7 +194,7 @@ final class WriteClusterMap extends ReversibleStep<String?> with FileStep {
       if (role == 'master' && master != null)
         'this cluster holds the master part itself, so it cannot also name another one',
       if (master case final String held)
-        if (!CreateInstallBranch.isFqdn(held)) 'the master "$held" is not a domain name',
+        if (!RequireInstallationDomain.isFqdn(held)) 'the master "$held" is not a domain name',
       if (alertRecipients.isEmpty)
         'no alert recipient — every alert route that resolves to nobody stops the render of the '
             'whole observability app, naming a values key instead of this map',

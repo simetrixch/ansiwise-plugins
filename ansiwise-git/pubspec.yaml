@@ -1,0 +1,30 @@
+# The git plugin: the steps that drive git in one checkout on one machine.
+#
+# It knows the tool and never an application of it. Which checkout, which remote, which branch a
+# push has to be accepted for, which branch a new one is cut from, and where the name of that new
+# branch is read from — all of that is a program row's to say.
+name: ansiwise_git
+description: Steps that measure a git checkout and cut a branch in it.
+publish_to: none
+version: 0.1.0
+
+environment:
+  sdk: ^3.12.0
+
+dependencies:
+  ansiwise_api:
+    git:
+      url: https://github.com/simetrixch/ansiwise-api.git
+      ref: master
+
+dev_dependencies:
+  test: ^1.31.2
+  # The analysis rule set this package includes ends at package:lints/recommended.yaml, and a
+  # nested include resolves through THIS package's dependency graph.
+  lints: ^6.1.0
+  # The scan that keeps this package to its tool and off any application of it.
+  ansiwise_checks:
+    git:
+      url: https://github.com/simetrixch/ansiwise-api.git
+      ref: master
+      path: checks

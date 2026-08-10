@@ -28,15 +28,8 @@ Future<void> main() async => auditIdempotence(
 /// for it. A name arrives here only by somebody adding it, which is the point: a step written
 /// tomorrow either brings its fixture or is written down as unproven.
 const Set<String> notCoveredByAFakeMachine = <String>{
-  'argocd_root_app',
   'configure_kube_apiserver_oidc',
-  'configure_slave_apiserver_oidc_trust',
-  'create_install_branch',
-  'disable_addons',
-  'enable_addons',
-  'kubernetes_secret_from_vault',
   'restart_microk8s_snap_for_pod_cidr',
-  'stamp_calico_pool_cidr_in_cni_manifest',
   'stamp_placeholder_in_tracked_files',
   'stamp_role',
   'write_cluster_map',

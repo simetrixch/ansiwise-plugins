@@ -25,7 +25,7 @@
 /// here would be a second answer that can disagree with the file which actually decides.
 ///
 /// WHICH COPY OF THE PACKAGES OF THIS REPOSITORY ANSWERED IS DECIDED HERE, AND IT IS A REFUSAL.
-/// The product names its four tool packages by a git ref and the override file is gitignored, so
+/// The product names its five tool packages by a git ref and the override file is gitignored, so
 /// without it the composition comes out of a commit while each of those packages' own checks walk
 /// the working tree beside it — green across a split. tool/gate/resolved_packages.dart reads what
 /// really answered and refuses that.
