@@ -1,7 +1,7 @@
 import 'package:ansiwise_api/ansiwise_api.dart';
 
 import '../host/install_authorized_key.dart';
-import 'install_microk8s_snap.dart';
+import 'microk8s.dart';
 
 /// Lets the operator's account use the cluster without becoming root for it.
 ///
@@ -25,7 +25,7 @@ final class AddUserToGroup extends ReversibleStep<bool> {
       kind: ArgumentKind.text,
       describes: 'the group whose members may talk to the cluster',
       required: false,
-      defaultValue: InstallMicrok8sSnap.snapName,
+      defaultValue: microk8sSnap,
     ),
   ];
 

@@ -8,8 +8,16 @@ import 'enable_addons.dart';
 ///
 /// **A timeout here is worth recording and not worth ending the run over.** What it says is that the
 /// addon was asked for and has not appeared yet — which the steps after it will notice by themselves
-/// if it really did not arrive, and which resolves on its own if it was only slow.
-final class WaitForAddonsEnabled extends ObservingStep {
+/// if it really did not arrive, and which resolves on its own if it was only slow. What that costs
+/// the run is the program row's declared policy and not this step's opinion.
+///
+/// **This is the one wait that cannot be a command and an answer.** What is on stands in the section
+/// of the status between the heading for what is on and the heading for what is off, and the same
+/// names are listed again under the second heading. A wait that looked for a name anywhere in the
+/// output would find an addon in the list of what is OFF and report it as on — which is the state
+/// every one of them is in at the moment this step starts looking. Knowing about the two sections is
+/// what makes the reading right, and that knowledge is code rather than a line in a program file.
+final class WaitForAddonsEnabled extends ObservingStep with WaitStep {
   /// Waits up to [timeoutSeconds] for each of [addons] to show up as on.
   const WaitForAddonsEnabled({
     required this.addons,
@@ -56,30 +64,20 @@ final class WaitForAddonsEnabled extends ObservingStep {
   /// How long to leave between looks.
   final int intervalSeconds;
 
+  /// The addons this is waiting for, all of them, because which ones are still off is read from the
+  /// machine and a reached deadline is reported without looking again.
   @override
-  bool get verifiesAnEarlierStep => true;
+  String get waitingFor => '${addons.join(', ')} to show up as on';
 
   @override
-  Future<CheckResult> check(StepContext context) async {
-    final DateTime giveUp = context.clock.now().add(Duration(seconds: timeoutSeconds));
-    List<String> missing = addons;
+  Duration get deadline => Duration(seconds: timeoutSeconds);
 
-    while (true) {
-      final Set<String> on = await EnableAddons.enabled(context) ?? const <String>{};
-      missing = <String>[
-        for (final String addon in addons)
-          if (!on.contains(addon)) addon,
-      ];
-      if (missing.isEmpty) {
-        return CheckResult.satisfied('${addons.join(', ')} are on');
-      }
-      if (!context.clock.now().isBefore(giveUp)) {
-        return CheckResult.blocked(
-          '${missing.join(', ')} were switched on and have not shown up as on within '
-          '${timeoutSeconds}s',
-        );
-      }
-      await context.clock.sleep(Duration(seconds: intervalSeconds));
-    }
+  @override
+  Duration get interval => Duration(seconds: intervalSeconds);
+
+  @override
+  Future<bool> holds(StepContext context) async {
+    final Set<String> on = await EnableAddons.enabled(context) ?? const <String>{};
+    return addons.every(on.contains);
   }
 }

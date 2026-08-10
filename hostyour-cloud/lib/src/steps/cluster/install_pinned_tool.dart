@@ -1,0 +1,207 @@
+import 'package:ansiwise_api/ansiwise_api.dart';
+import 'assert_cli_tool_versions.dart';
+
+/// Fetches one tool's released binary at exactly the version this platform pins, and puts it where
+/// the machine looks for commands.
+///
+/// **The skip is decided on the version and never on the presence.** A binary that was on the
+/// machine before this platform existed would otherwise be left where it is, then held against the
+/// pin, and reported as wrong on every run with nothing in the run able to correct it. Deciding on
+/// the version means an ordinary re-run corrects a machine that drifted, with nothing forced.
+///
+/// **Nothing here resolves a latest release.** [url] carries the pin in a marked slot instead of a
+/// version of its own, so what is fetched and what the machine is held against are one value that
+/// cannot come apart. Two machines set up a month apart used to get different tools and neither
+/// could be built again.
+///
+/// **A release that arrives packed is unpacked into place; one that IS the binary is fetched
+/// straight to where it goes.** [archive] is what says which of the two this is, and it is also
+/// where the packed copy is put while it is being unpacked. That copy is removed afterwards whether
+/// the unpacking worked or not, because a half-finished download left in the temporary directory is
+/// what the next run would find and unpack.
+final class InstallPinnedTool extends ReversibleStep<bool> {
+  /// Fetches [tool] at [version] from [url] into [directory], out of [archive] where there is one.
+  const InstallPinnedTool({
+    required this.tool,
+    required this.version,
+    required this.url,
+    required this.directory,
+    required this.archive,
+  });
+
+  /// Builds the step from what the program gave it.
+  factory InstallPinnedTool.fromArguments(Arguments arguments) => InstallPinnedTool(
+    tool: arguments.text('tool'),
+    version: arguments.text('version'),
+    url: arguments.text('url'),
+    directory: arguments.text('directory'),
+    archive: arguments.optionalText('archive'),
+  );
+
+  /// What this step accepts.
+  static const List<ArgumentSpec> arguments = <ArgumentSpec>[
+    ArgumentSpec(
+      name: 'tool',
+      kind: ArgumentKind.text,
+      describes:
+          'what the tool is called — the command it is started as, and the name it goes on the '
+          'machine under',
+    ),
+    ArgumentSpec(
+      name: 'version',
+      kind: ArgumentKind.text,
+      describes: 'the version this platform pins, as platform/versions.yaml records it',
+    ),
+    ArgumentSpec(
+      name: 'url',
+      kind: ArgumentKind.text,
+      describes:
+          'where the release is fetched from, written with $versionPlaceholder where the pin '
+          'belongs and $bareVersionPlaceholder where it belongs without the shape its tag carries',
+    ),
+    ArgumentSpec(
+      name: 'directory',
+      kind: ArgumentKind.text,
+      describes: 'where the tool goes',
+      required: false,
+      defaultValue: defaultDirectory,
+    ),
+    ArgumentSpec(
+      name: 'archive',
+      kind: ArgumentKind.text,
+      describes:
+          'where the packed copy is put while it is being unpacked, for a release that arrives as '
+          'a zip — a release that is the binary itself names none',
+      required: false,
+    ),
+  ];
+
+  /// Where the tool goes.
+  static const String defaultDirectory = '/usr/local/bin';
+
+  /// The text a program file writes in the url where the pin belongs.
+  static const String versionPlaceholder = '<version>';
+
+  /// The text a program file writes in the url where the pin belongs without the shape its tag
+  /// carries.
+  ///
+  /// Two slots rather than one, because the projects disagree about the shape while the platform
+  /// pins one value. A release tag is written the way its own project writes it, and one of these
+  /// download paths spells the version without the leading letter that tag has — so the pin is
+  /// written once, in the shape the pins are kept in, and the url says which shape it needs.
+  static const String bareVersionPlaceholder = '<bare-version>';
+
+  /// What the tool is called.
+  final String tool;
+
+  /// The version this platform pins.
+  final String version;
+
+  /// Where the release is fetched from, with the pin still in its marked slots.
+  final String url;
+
+  /// Where the tool goes.
+  final String directory;
+
+  /// Where the packed copy is put while it is being unpacked, or null where the release is the
+  /// binary itself.
+  final String? archive;
+
+  /// Where the tool ends up.
+  ///
+  /// The name a command is started as and the name of the file it is started from are the same
+  /// thing here, which is what lets a fetch and an unpacking land in the same place: `curl` is told
+  /// this path, and `unzip` is told the directory and writes the tool under its own name into it.
+  String get path => '$directory/$tool';
+
+  /// Where it is fetched from, with the pin in it.
+  String get fetchedFrom => url
+      .replaceAll(versionPlaceholder, version)
+      .replaceAll(bareVersionPlaceholder, AssertCliToolVersions.bare(version));
+
+  @override
+  Future<CheckResult> check(StepContext context) async {
+    if (version.trim().isEmpty) {
+      return CheckResult.blocked(
+        'no version was given for $tool, and this fetches a pinned release rather than whatever is '
+        'current',
+      );
+    }
+    if (!url.contains(versionPlaceholder) && !url.contains(bareVersionPlaceholder)) {
+      return CheckResult.blocked(
+        'the url for $tool names neither $versionPlaceholder nor $bareVersionPlaceholder, so what '
+        'is fetched and what the pin says are two values that can drift apart with nothing saying '
+        'so',
+      );
+    }
+    if (AssertCliToolVersions.readers[tool] == null) {
+      return CheckResult.blocked(
+        'nothing here knows how to ask $tool what version it is, and this step decides its skip on '
+        'the version — so it would fetch the release again on every run',
+      );
+    }
+    final String? installed = await AssertCliToolVersions.installedVersion(context, tool);
+    if (installed == AssertCliToolVersions.bare(version)) {
+      return CheckResult.satisfied('$tool is at $installed');
+    }
+    return const CheckResult.ready();
+  }
+
+  @override
+  Future<StepPlan> plan(StepContext context) async => StepPlan.argv(_fetch);
+
+  @override
+  Future<void> apply(StepContext context) async {
+    final String? packed = archive;
+    if (packed == null) {
+      await _mustRun(context, _fetch);
+      // A file curl wrote carries no execute bit, and one unzip wrote carries the mode the archive
+      // recorded — so this is on the unpacked path only. 755: a tool every account on the machine
+      // runs.
+      await _mustRun(context, <String>['chmod', '755', path]);
+      return;
+    }
+    try {
+      await _mustRun(context, _fetch);
+      await _mustRun(context, <String>['unzip', '-o', '-d', directory, packed]);
+    } finally {
+      // On both paths. A half-finished download left here is what a later run would unpack, and the
+      // tool that came out of it would be a tool nobody could name a version for.
+      await context.files.delete(packed);
+    }
+  }
+
+  /// Whether a tool is already where this puts one.
+  ///
+  /// The skip is decided on the version, so this step also runs on a machine that carries the tool
+  /// at another version — and there the fetch replaces a file rather than creating one. Deleting it
+  /// at undo time would leave the machine without the tool it came with.
+  @override
+  Future<bool> capture(StepContext context) => context.files.exists(path);
+
+  @override
+  Future<void> undo(StepContext context, bool captured) async {
+    if (captured) {
+      return;
+    }
+    await context.files.delete(path);
+  }
+
+  List<String> get _fetch => <String>[
+    'curl',
+    '--silent',
+    '--show-error',
+    '--fail',
+    '--location',
+    '--output',
+    archive ?? path,
+    fetchedFrom,
+  ];
+
+  Future<void> _mustRun(StepContext context, List<String> argv) async {
+    final CommandResult answer = await context.shell.run(Command(argv.first, argv.sublist(1)));
+    if (!answer.ok) {
+      throw CommandFailed(argv: argv, exitCode: answer.exitCode, stderr: answer.stderr);
+    }
+  }
+}

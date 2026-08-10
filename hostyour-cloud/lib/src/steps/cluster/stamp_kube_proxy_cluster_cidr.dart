@@ -1,5 +1,5 @@
 import 'package:ansiwise_api/ansiwise_api.dart';
-import 'install_microk8s_snap.dart';
+import 'microk8s.dart';
 
 /// Tells kube-proxy which range the pods are on.
 ///
@@ -42,7 +42,7 @@ final class StampKubeProxyClusterCidr extends ReversibleStep<String?> {
   ];
 
   /// Where the snap keeps the arguments kube-proxy is started with.
-  static const String defaultPath = '${InstallMicrok8sSnap.argumentsDirectory}/kube-proxy';
+  static const String defaultPath = '$microk8sArgumentsDirectory/kube-proxy';
 
   /// The flag this step owns.
   static const String flag = '--cluster-cidr';

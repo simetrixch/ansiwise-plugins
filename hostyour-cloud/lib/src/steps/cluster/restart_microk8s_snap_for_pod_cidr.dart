@@ -1,8 +1,7 @@
 import 'package:ansiwise_api/ansiwise_api.dart';
-import 'install_microk8s_snap.dart';
+import 'microk8s.dart';
 import 'reapply_calico_manifest.dart';
 import 'stamp_calico_pool_cidr_in_cni_manifest.dart';
-import 'wait_for_microk8s_ready.dart';
 
 /// Restarts everything that has to read the new range before the pool can be built on it.
 ///
@@ -80,11 +79,11 @@ final class RestartMicrok8sSnapForPodCidr extends IrreversibleStep {
 
   @override
   Future<StepPlan> plan(StepContext context) async =>
-      const StepPlan.argv(<String>['snap', 'restart', InstallMicrok8sSnap.snapName]);
+      const StepPlan.argv(<String>['snap', 'restart', microk8sSnap]);
 
   @override
   Future<void> apply(StepContext context) async {
-    await _mustRun(context, <String>['snap', 'restart', InstallMicrok8sSnap.snapName]);
+    await _mustRun(context, <String>['snap', 'restart', microk8sSnap]);
 
     final CommandResult ready = await context.shell.run(
       Command.detailed(
@@ -94,7 +93,7 @@ final class RestartMicrok8sSnapForPodCidr extends IrreversibleStep {
         timeout: Duration(seconds: readyTimeoutSeconds + 30),
       ),
     );
-    if (!ready.ok || !ready.stdout.contains(WaitForMicrok8sReady.runningLine)) {
+    if (!ready.ok || !ready.stdout.contains(microk8sRunningLine)) {
       throw CommandFailed(
         argv: <String>['microk8s', 'status', '--wait-ready'],
         exitCode: ready.exitCode,

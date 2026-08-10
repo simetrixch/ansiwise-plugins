@@ -1,5 +1,5 @@
 import 'package:ansiwise_api/ansiwise_api.dart';
-import 'install_microk8s_snap.dart';
+import 'microk8s.dart';
 import 'stamp_kube_proxy_cluster_cidr.dart';
 
 /// Puts this cluster's pod range into the network manifest Calico creates its address pool from.
@@ -45,8 +45,7 @@ final class StampCalicoPoolCidrInCniManifest extends ReversibleStep<String?> {
   ];
 
   /// Where the snap keeps the network manifest.
-  static const String defaultPath =
-      '${InstallMicrok8sSnap.argumentsDirectory}/cni-network/cni.yaml';
+  static const String defaultPath = '$microk8sArgumentsDirectory/cni-network/cni.yaml';
 
   /// The environment variable whose value is the pool's range.
   static const String variable = 'CALICO_IPV4POOL_CIDR';

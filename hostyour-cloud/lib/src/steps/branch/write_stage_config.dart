@@ -1,5 +1,6 @@
 import 'package:ansiwise_api/ansiwise_api.dart';
 import 'filled_template.dart';
+import 'filled_template_step.dart';
 
 /// Turns the answers this run was given into the config file the rest of the installation reads.
 ///
@@ -21,7 +22,7 @@ import 'filled_template.dart';
 /// **A key that already carries a value is never rewritten**, and a value still equal to the
 /// template's own counts as no value at all. Both halves are in [FilledTemplate]; the second is what
 /// keeps a file somebody copied and never filled from being read as an answered one.
-final class WriteStageConfig extends ReversibleStep<String?> {
+final class WriteStageConfig extends FilledTemplateStep {
   /// Writes the config of the installation generated in [repository].
   const WriteStageConfig({required this.repository});
 
@@ -55,12 +56,15 @@ final class WriteStageConfig extends ReversibleStep<String?> {
   final String repository;
 
   /// The file the trunk carries, with every value at a placeholder.
+  @override
   String get templatePath => '$repository/configs/config.example';
 
   /// `0644` — every later program on this machine reads this file, and it holds no credential.
-  static const int mode = 0x1a4;
+  @override
+  int get mode => 0x1a4;
 
   /// Where the config of [context]'s stage stands.
+  @override
   String pathFor(StepContext context) =>
       '$repository/configs/config.${context.answers.text('stage')}';
 
@@ -68,6 +72,7 @@ final class WriteStageConfig extends ReversibleStep<String?> {
   ///
   /// `ALERT_RECIPIENTS` is one line holding several mailboxes, because that is the shape the file
   /// has always had and what reads it splits on the comma.
+  @override
   Map<String, String> valuesFrom(StepContext context) {
     final Arguments given = context.answers;
     return <String, String>{
@@ -95,10 +100,7 @@ final class WriteStageConfig extends ReversibleStep<String?> {
     }
 
     final Map<String, String> wanted = valuesFrom(context);
-    final List<String> unwritable = <String>[
-      for (final MapEntry<String, String> value in wanted.entries)
-        if (FilledTemplate.holdsQuote(value.value)) value.key,
-    ];
+    final List<String> unwritable = unwritableIn(wanted);
     if (unwritable.isNotEmpty) {
       return CheckResult.blocked(
         'these answers hold a double quote or a line break, which this file cannot carry: '
@@ -106,7 +108,7 @@ final class WriteStageConfig extends ReversibleStep<String?> {
       );
     }
 
-    final FilledTemplate file = await _read(context);
+    final FilledTemplate file = await read(context);
     final List<String> undeclared = file.missingKeys(wanted.keys);
     if (undeclared.isNotEmpty) {
       return CheckResult.blocked(
@@ -116,8 +118,8 @@ final class WriteStageConfig extends ReversibleStep<String?> {
       );
     }
 
-    final List<String> toFill = _toFill(file, wanted);
-    if (toFill.isEmpty) {
+    final List<String> filling = toFill(file, wanted);
+    if (filling.isEmpty) {
       return CheckResult.satisfied(
         '${pathFor(context)} states what this installation is, and every value in it was answered',
       );
@@ -136,13 +138,13 @@ final class WriteStageConfig extends ReversibleStep<String?> {
       );
     }
 
-    final FilledTemplate file = await _read(context);
+    final FilledTemplate file = await read(context);
     final Map<String, String> wanted = valuesFrom(context);
-    final List<String> toFill = _toFill(file, wanted);
+    final List<String> filling = toFill(file, wanted);
 
     for (final String key in wanted.keys) {
       context.log.debug(
-        toFill.contains(key)
+        filling.contains(key)
             ? '$key would be filled in'
             : '$key already carries an answer and would be left alone',
       );
@@ -150,65 +152,9 @@ final class WriteStageConfig extends ReversibleStep<String?> {
     return StepPlan.diff(
       pathFor(context),
       before: await context.files.exists(pathFor(context)) ? file.current : '',
-      after: file.filled(<String, String>{for (final String key in toFill) key: wanted[key] ?? ''}),
-    );
-  }
-
-  @override
-  Future<void> apply(StepContext context) async {
-    final FilledTemplate file = await _read(context);
-    final Map<String, String> wanted = valuesFrom(context);
-    await context.files.write(
-      pathFor(context),
-      file.filled(<String, String>{
-        for (final String key in _toFill(file, wanted)) key: wanted[key] ?? '',
+      after: file.filled(<String, String>{
+        for (final String key in filling) key: wanted[key] ?? '',
       }),
-      mode: mode,
     );
   }
-
-  /// What the config held before this run filled it, which is what [undo] writes back.
-  ///
-  /// The whole file rather than the keys this step fills, because every other line of it is the
-  /// operator's or the product's and putting the captured bytes back keeps all of them exactly as
-  /// they stood. It also settles the one question the file cannot answer afterwards: a key the
-  /// operator had already answered with the same value this run was given reads identically to one
-  /// this run wrote, and only what was read before apply tells them apart.
-  ///
-  /// Null is a branch that carried no config for this stage, and that is the one case where taking
-  /// the write back means removing the file.
-  @override
-  Future<String?> capture(StepContext context) async {
-    final String path = pathFor(context);
-    return await context.files.exists(path) ? context.files.read(path) : null;
-  }
-
-  @override
-  Future<void> undo(StepContext context, String? captured) async {
-    if (captured == null) {
-      await context.files.delete(pathFor(context));
-      return;
-    }
-    await context.files.write(pathFor(context), captured, mode: mode);
-  }
-
-  /// The file as it stands, or the template itself when the branch carries no config yet.
-  Future<FilledTemplate> _read(StepContext context) async {
-    final String template = await context.files.read(templatePath);
-    final String path = pathFor(context);
-    return FilledTemplate(
-      template: template,
-      current: await context.files.exists(path) ? await context.files.read(path) : template,
-    );
-  }
-
-  /// Which keys this step would write, which is also its postcondition.
-  ///
-  /// A key already carrying the value this step writes is not written again, whether it was written
-  /// by an earlier run or answered the same as the template — the second is not a curiosity, since
-  /// `DEPLOY_ENV` reads `prod` in the template and `prod` is a stage an installation really runs.
-  static List<String> _toFill(FilledTemplate file, Map<String, String> wanted) => <String>[
-    for (final MapEntry<String, String> value in wanted.entries)
-      if (file.isUnset(value.key) && file.valueOf(value.key) != value.value) value.key,
-  ];
 }

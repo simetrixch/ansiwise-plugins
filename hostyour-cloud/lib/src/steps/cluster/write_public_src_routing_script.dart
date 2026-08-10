@@ -14,7 +14,7 @@ import 'write_netplan_public_src_routing.dart';
 /// **The script removes any rule already at its own number before adding one, and does it in a
 /// loop.** Adding without removing leaves a second identical rule on every run, and a single removal
 /// leaves whatever a previous run added twice.
-final class WritePublicSrcRoutingScript extends ReversibleStep<String?> {
+final class WritePublicSrcRoutingScript extends ReversibleStep<String?> with FileStep {
   /// Writes the script at [path], installing the rule at [priority].
   const WritePublicSrcRoutingScript({
     required this.path,
@@ -80,7 +80,7 @@ final class WritePublicSrcRoutingScript extends ReversibleStep<String?> {
   static const int defaultPriority = 10100;
 
   /// `0755` — a script the unit runs.
-  static const int mode = 0x1ed;
+  static const int fileMode = 0x1ed;
 
   /// The script's path.
   final String path;
@@ -98,39 +98,30 @@ final class WritePublicSrcRoutingScript extends ReversibleStep<String?> {
   final int priority;
 
   @override
-  Future<CheckResult> check(StepContext context) async {
-    if (await DetectPublicNic.detect(context) == null) {
-      return const CheckResult.satisfied(
-        'nothing is steered on this machine, so there is no rule to install',
-      );
-    }
-    if (!await context.files.exists(path)) {
-      return const CheckResult.ready();
-    }
-    return await context.files.read(path) == script
-        ? CheckResult.satisfied('$path already holds what this step writes')
-        : const CheckResult.ready();
-  }
+  String pathFor(StepContext context) => path;
 
   @override
-  Future<StepPlan> plan(StepContext context) async => StepPlan.diff(
-    path,
-    before: await context.files.exists(path) ? await context.files.read(path) : '',
-    after: script,
-  );
+  int get mode => fileMode;
 
+  /// The script, on a machine that steers anything at all.
+  ///
+  /// The text itself names no interface — the script reads that at run time — but a machine with no
+  /// public interface of its own has no rule to install and no reason to carry the script that
+  /// installs it.
   @override
-  Future<void> apply(StepContext context) async {
-    await context.files.write(path, script, mode: mode);
-  }
+  Future<FileContent> contentFor(StepContext context) async =>
+      await DetectPublicNic.detect(context) == null
+      ? const FileContent.nothing(
+          'nothing is steered on this machine, so there is no rule to install',
+        )
+      : FileContent.text(script);
 
   /// What the script file held before, or null when it was not there.
   ///
   /// The rule keyed on the mark comes out of the kernel either way; what goes back on disk is the
   /// script a previous run wrote, so the service that runs it is not left pointing at nothing.
   @override
-  Future<String?> capture(StepContext context) async =>
-      await context.files.exists(path) ? context.files.read(path) : null;
+  Future<String?> capture(StepContext context) => contentBefore(context);
 
   @override
   Future<void> undo(StepContext context, String? captured) async {

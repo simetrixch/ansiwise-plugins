@@ -90,32 +90,34 @@ final class WriteClusterMap extends ReversibleStep<String?> with FileStep {
   }
 
   @override
-  Future<String> contentFor(StepContext context) async {
+  Future<FileContent> contentFor(StepContext context) async {
     final Arguments given = context.answers;
     final String? pin = await _release(context);
-    return <String>[
-      '# What this cluster is.',
-      '#',
-      '# Written by the run that generated this branch, and read by everything that has to tell one',
-      '# installation from another. Nothing else states these values.',
-      'fqdn: ${given.text('fqdn')}',
-      'stage: ${given.text('stage')}',
-      'role: ${given.text('role')}',
-      if (_master(context) case final String held) 'master: $held',
-      'build-plane: ${given.text('build_plane')}',
-      'unit-apex: ${given.text('unit_apex')}',
-      'platform-domain: ${given.text('platform_domain')}',
-      'alert-recipients: ${given.textList('alert_recipients').join(', ')}',
-      'catalog-repo: ${given.text('catalog_repo')}',
-      // Absent rather than empty when this installation has no mail service. An empty value
-      // satisfies a chart that requires the key with something nothing can be reached at, which is
-      // worse than the missing key a gate reports by name.
-      if (_postUrl(context) case final String url) 'post-url: $url',
-      // Not identity, and not this step's to write: a cluster release puts it here and a rewrite
-      // hands it back untouched.
-      if (pin case final String held) 'release: $held',
-      '',
-    ].join('\n');
+    return FileContent.text(
+      <String>[
+        '# What this cluster is.',
+        '#',
+        '# Written by the run that generated this branch, and read by everything that has to tell one',
+        '# installation from another. Nothing else states these values.',
+        'fqdn: ${given.text('fqdn')}',
+        'stage: ${given.text('stage')}',
+        'role: ${given.text('role')}',
+        if (_master(context) case final String held) 'master: $held',
+        'build-plane: ${given.text('build_plane')}',
+        'unit-apex: ${given.text('unit_apex')}',
+        'platform-domain: ${given.text('platform_domain')}',
+        'alert-recipients: ${given.textList('alert_recipients').join(', ')}',
+        'catalog-repo: ${given.text('catalog_repo')}',
+        // Absent rather than empty when this installation has no mail service. An empty value
+        // satisfies a chart that requires the key with something nothing can be reached at, which is
+        // worse than the missing key a gate reports by name.
+        if (_postUrl(context) case final String url) 'post-url: $url',
+        // Not identity, and not this step's to write: a cluster release puts it here and a rewrite
+        // hands it back untouched.
+        if (pin case final String held) 'release: $held',
+        '',
+      ].join('\n'),
+    );
   }
 
   /// What the map held before this run wrote it, which is what [undo] writes back.

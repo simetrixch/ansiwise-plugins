@@ -1,5 +1,5 @@
 import 'package:ansiwise_api/ansiwise_api.dart';
-import 'install_microk8s_snap.dart';
+import 'microk8s.dart';
 import 'preflight_docker_mirror_credential.dart';
 
 /// Sends this cluster's public-registry pulls through the registry of the cluster that builds.
@@ -57,7 +57,7 @@ final class WriteContainerdDockerMirror extends ReversibleStep<String?> {
   static const List<String> answers = PreflightDockerMirrorCredential.answers;
 
   /// Where the container runtime looks for per-registry configuration.
-  static const String defaultCertsDirectory = '${InstallMicrok8sSnap.argumentsDirectory}/certs.d';
+  static const String defaultCertsDirectory = '$microk8sArgumentsDirectory/certs.d';
 
   /// The registry whose pulls are mirrored.
   static const String mirrored = 'docker.io';

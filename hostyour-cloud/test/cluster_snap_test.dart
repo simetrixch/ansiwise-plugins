@@ -4,56 +4,189 @@ import 'package:test/test.dart';
 
 import 'cluster_fixture.dart';
 
-/// The four states a machine can be found in before MicroK8s is on it, and one that killed a run.
+/// The states a machine can be found in before MicroK8s is on it, and the one that killed a run.
 ///
-/// The one that killed a run is the snap that is installed and switched off: it is off the path, so
-/// a presence test finds nothing, while the install refuses it as already installed and the whole
+/// Three of them are ONE end state reached from three starting points — nothing installed, installed
+/// on another channel, installed and switched off — and one step answers for all three. That is what
+/// the first group proves: the same step is run against a machine in each state, and what the
+/// machines answer afterwards has to be one and the same thing. The fourth starting point is the
+/// compound of two of them, a snap that is switched off AND tracking something else, and it is here
+/// because it is the only one that takes two commands.
+///
+/// The state that killed a run is the snap that is installed and switched off: it is off the path,
+/// so a presence test finds nothing, while the install refuses it as already installed and the whole
 /// run dies there.
 void main() {
+  const String snap = microk8sSnap;
   const String channel = '1.35/stable';
+  const String anotherChannel = '1.34/stable';
   const StepName under = StepName('under_test');
 
-  const List<String> snapListHeader = <String>[
-    'Name      Version  Rev   Tracking     Publisher   Notes',
-  ];
+  /// The step as `deploy-cluster` configures it.
+  const InstallSnap install = InstallSnap(snap: snap, channel: channel, classic: true);
 
   String snapList({required String tracking, bool disabled = false}) =>
-      '${snapListHeader.first}\n'
-      'microk8s  v1.35.0  7964  $tracking  canonical   classic${disabled ? ',disabled' : ''}\n';
+      'Name      Version  Rev   Tracking     Publisher   Notes\n'
+      '$snap  v1.35.0  7964  $tracking  canonical   classic${disabled ? ',disabled' : ''}\n';
+
+  /// A machine that carries no such snap at all.
+  ClusterMachine nothingInstalled() {
+    final ClusterMachine machine = ClusterMachine();
+    machine.shell
+      ..fails('command -v $snap')
+      ..fails('snap list $snap')
+      ..changes('snap install $snap --classic --channel=$channel', () {
+        machine.shell
+          ..answers('command -v $snap', '/snap/bin/$snap\n')
+          ..answers('snap list $snap', snapList(tracking: channel));
+      });
+    return machine;
+  }
+
+  /// A machine carrying the snap, switched on, tracking something other than the pin.
+  ClusterMachine onAnotherChannel() {
+    final ClusterMachine machine = ClusterMachine();
+    machine.shell
+      ..answers('command -v $snap', '/snap/bin/$snap\n')
+      ..answers('snap list $snap', snapList(tracking: anotherChannel))
+      ..changes('snap refresh $snap --channel=$channel', () {
+        machine.shell.answers('snap list $snap', snapList(tracking: channel));
+      });
+    return machine;
+  }
+
+  /// A machine carrying the snap switched off, tracking [tracking].
+  ///
+  /// `snap disable` takes the entries out of `/snap/bin` and leaves the snap installed, which is why
+  /// the path answers nothing here while `snap list` still names a channel.
+  ClusterMachine switchedOff({required String tracking}) {
+    final ClusterMachine machine = ClusterMachine();
+    machine.shell
+      ..fails('command -v $snap')
+      ..answers('snap list $snap', snapList(tracking: tracking, disabled: true))
+      ..changes('snap enable $snap', () {
+        machine.shell
+          ..answers('command -v $snap', '/snap/bin/$snap\n')
+          ..answers('snap list $snap', snapList(tracking: tracking));
+      })
+      ..changes('snap refresh $snap --channel=$channel', () {
+        machine.shell.answers('snap list $snap', snapList(tracking: channel));
+      });
+    return machine;
+  }
+
+  /// A machine the step has nothing left to do to.
+  ClusterMachine alreadyThere() {
+    final ClusterMachine machine = ClusterMachine();
+    machine.shell
+      ..answers('command -v $snap', '/snap/bin/$snap\n')
+      ..answers('snap list $snap', snapList(tracking: channel));
+    return machine;
+  }
+
+  /// What a machine answers about the snap: whether its command is on the path, and what it tracks.
+  Future<({bool onPath, String? tracked})> snapState(ClusterMachine machine) async {
+    final StepContext context = machine.contextFor(under);
+    return (
+      onPath: await InstallSnap.onPath(context, snap),
+      tracked: await InstallSnap.trackedChannel(context, snap),
+    );
+  }
+
+  final Map<String, ClusterMachine Function()> startingPoints = <String, ClusterMachine Function()>{
+    'nothing installed': nothingInstalled,
+    'installed on another channel': onAnotherChannel,
+    'installed and switched off': () => switchedOff(tracking: channel),
+    'switched off and on another channel': () => switchedOff(tracking: anotherChannel),
+  };
+
+  group('every starting point reaches the same end state', () {
+    test('the machines are indistinguishable once the step has run', () async {
+      final Set<({bool onPath, String? tracked})> ends = <({bool onPath, String? tracked})>{};
+      for (final MapEntry<String, ClusterMachine Function()> start in startingPoints.entries) {
+        final ClusterMachine machine = start.value();
+        final StepContext context = machine.contextFor(under);
+
+        expect(
+          await install.check(context),
+          isA<Ready>(),
+          reason: '${start.key}: this machine has work to do',
+        );
+        await install.apply(context);
+        expect(
+          await install.check(context),
+          isA<Satisfied>(),
+          reason: '${start.key}: the step did not reach the state it produces',
+        );
+        ends.add(await snapState(machine));
+      }
+
+      expect(ends, <({bool onPath, String? tracked})>{
+        (onPath: true, tracked: channel),
+      }, reason: 'the starting point decides which commands run, never where the machine ends up');
+    });
+
+    test('a second run against the machine the first produced does nothing at all', () async {
+      for (final MapEntry<String, ClusterMachine Function()> start in startingPoints.entries) {
+        final ClusterMachine machine = start.value();
+        final StepContext context = machine.contextFor(under);
+        await install.apply(context);
+        final List<String> first = List<String>.of(machine.changing);
+
+        expect(
+          await install.check(context),
+          isA<Satisfied>(),
+          reason: '${start.key}: a satisfied check is what keeps the engine from applying again',
+        );
+        expect(machine.changing, first, reason: '${start.key}: the check itself changed something');
+      }
+    });
+
+    test('each starting point is answered with the commands that state calls for', () async {
+      final Map<String, List<String>> expected = <String, List<String>>{
+        'nothing installed': <String>['snap install $snap --classic --channel=$channel'],
+        'installed on another channel': <String>['snap refresh $snap --channel=$channel'],
+        'installed and switched off': <String>['snap enable $snap'],
+        // The compound one, and the only reason the enable comes first: a refresh is refused while
+        // the snap is switched off, so the channel can only be moved once it is back on.
+        'switched off and on another channel': <String>[
+          'snap enable $snap',
+          'snap refresh $snap --channel=$channel',
+        ],
+      };
+      for (final MapEntry<String, ClusterMachine Function()> start in startingPoints.entries) {
+        final ClusterMachine machine = start.value();
+        await install.apply(machine.contextFor(under));
+        expect(machine.changing, expected[start.key], reason: start.key);
+      }
+    });
+  });
 
   group('a snap that is installed and switched off', () {
     test('is switched back on rather than installed over', () async {
-      final ClusterMachine machine = ClusterMachine();
-      machine.shell
-        ..fails('command -v microk8s')
-        ..answers('snap list microk8s', snapList(tracking: channel, disabled: true))
-        ..changes('snap enable microk8s', () {
-          machine.shell
-            ..answers('command -v microk8s', '/snap/bin/microk8s\n')
-            ..answers('snap list microk8s', snapList(tracking: channel));
-        });
-
-      const EnableDisabledMicrok8sSnap step = EnableDisabledMicrok8sSnap();
+      // `snap install` answers "already installed" for exactly this state, and the run used to die
+      // on it with nothing saying which state the machine was in. The snap on the machine carries
+      // its own data directory, so installing over it would be a much larger act than switching it
+      // back on.
+      final ClusterMachine machine = switchedOff(tracking: channel);
       final StepContext context = machine.contextFor(under);
 
-      expect(await step.check(context), isA<Ready>());
-      await step.apply(context);
-      expect(await step.check(context), isA<Satisfied>());
-      expect(machine.changing, <String>['snap enable microk8s']);
+      expect(await install.check(context), isA<Ready>());
+      await install.apply(context);
+      expect(machine.changing, <String>['snap enable $snap']);
+      expect(
+        machine.changing.where((String each) => each.contains('snap install')),
+        isEmpty,
+        reason: 'installing over a disabled snap is the failure this check exists to avoid',
+      );
     });
 
-    test('is refused by the install rather than installed over', () async {
-      // `snap install` answers "already installed" for exactly this state, and the run used to die
-      // on it with nothing saying which state the machine was in.
-      final ClusterMachine machine = ClusterMachine();
-      machine.shell
-        ..fails('command -v microk8s')
-        ..answers('snap list microk8s', snapList(tracking: channel, disabled: true));
+    test('a dry run names the command that runs first', () async {
+      final ClusterMachine machine = switchedOff(tracking: anotherChannel);
+      final StepPlan plan = await install.plan(machine.contextFor(under));
 
-      const InstallMicrok8sSnap step = InstallMicrok8sSnap(channel: channel);
-      final CheckResult answer = await step.check(machine.contextFor(under));
-      expect((answer as Blocked).reason, contains('snap enable microk8s'));
-      expect(machine.changing, isEmpty);
+      expect(plan.summary, 'snap enable $snap');
+      expect(machine.changing, isEmpty, reason: 'planning may not touch the machine');
     });
   });
 
@@ -61,139 +194,92 @@ void main() {
     test('a snap already on the pinned channel is not refreshed at all', () async {
       // A plain refresh with nothing to update exits non-zero, so a step that refreshed
       // unconditionally would report a failure on every machine that is already right.
-      final ClusterMachine machine = ClusterMachine();
-      machine.shell.answers('snap list microk8s', snapList(tracking: channel));
-
-      const RefreshMicrok8sChannel step = RefreshMicrok8sChannel(channel: channel);
-      expect(await step.check(machine.contextFor(under)), isA<Satisfied>());
+      final ClusterMachine machine = alreadyThere();
+      expect(await install.check(machine.contextFor(under)), isA<Satisfied>());
       expect(machine.changing, isEmpty);
     });
 
-    test('a snap on another channel is moved onto the pin', () async {
+    test('it is what a program pins, and the step carries no channel of its own', () async {
+      const InstallSnap onto = InstallSnap(snap: snap, channel: anotherChannel, classic: true);
       final ClusterMachine machine = ClusterMachine();
       machine.shell
-        ..answers('snap list microk8s', snapList(tracking: '1.34/stable'))
-        ..changes('snap refresh microk8s --channel=$channel', () {
-          machine.shell.answers('snap list microk8s', snapList(tracking: channel));
-        });
+        ..answers('command -v $snap', '/snap/bin/$snap\n')
+        ..answers('snap list $snap', snapList(tracking: channel));
 
-      const RefreshMicrok8sChannel step = RefreshMicrok8sChannel(channel: channel);
-      final StepContext context = machine.contextFor(under);
-
-      expect(await step.check(context), isA<Ready>());
-      await step.apply(context);
-      expect(await step.check(context), isA<Satisfied>());
-    });
-
-    test('no snap at all is nothing to move', () async {
-      final ClusterMachine machine = ClusterMachine()..shell.fails('snap list microk8s');
-      const RefreshMicrok8sChannel step = RefreshMicrok8sChannel(channel: channel);
-      expect(await step.check(machine.contextFor(under)), isA<Satisfied>());
+      final StepPlan plan = await onto.plan(machine.contextFor(under));
+      expect(plan.summary, 'snap refresh $snap --channel=$anotherChannel');
     });
   });
 
-  group('the install', () {
-    test('a clean machine is installed at the pinned channel', () async {
+  group('the confinement', () {
+    test('classic is asked for and is not assumed', () async {
+      // snapd refuses --classic for a snap that does not ask for it, so a capability that always
+      // passed it would only ever install the one snap it was written for.
+      const InstallSnap strict = InstallSnap(snap: snap, channel: channel, classic: false);
+      final ClusterMachine machine = nothingInstalled();
+      final StepPlan plan = await strict.plan(machine.contextFor(under));
+      expect(plan.summary, 'snap install $snap --channel=$channel');
+    });
+  });
+
+  group('a machine nothing can be proven about', () {
+    test('the snap answers on the path and snapd names no channel for it', () async {
       final ClusterMachine machine = ClusterMachine();
       machine.shell
-        ..fails('command -v microk8s')
-        ..fails('snap list microk8s')
-        ..changes('snap install microk8s --classic --channel=$channel', () {
-          machine.shell.answers('command -v microk8s', '/snap/bin/microk8s\n');
-        });
+        ..answers('command -v $snap', '/snap/bin/$snap\n')
+        ..fails('snap list $snap');
 
-      const InstallMicrok8sSnap step = InstallMicrok8sSnap(channel: channel);
-      final StepContext context = machine.contextFor(under);
-
-      expect(await step.check(context), isA<Ready>());
-      await step.apply(context);
-      expect(await step.check(context), isA<Satisfied>());
-      expect(machine.changing, <String>['snap install microk8s --classic --channel=$channel']);
-    });
-
-    test('a machine that already carries it is left alone', () async {
-      final ClusterMachine machine = ClusterMachine()
-        ..shell.answers('command -v microk8s', '/snap/bin/microk8s\n');
-      const InstallMicrok8sSnap step = InstallMicrok8sSnap(channel: channel);
-      expect(await step.check(machine.contextFor(under)), isA<Satisfied>());
+      final CheckResult answer = await install.check(machine.contextFor(under));
+      expect(answer, isA<Blocked>());
+      expect((answer as Blocked).reason, contains(channel));
       expect(machine.changing, isEmpty);
     });
-
-    test('it says what is lost, because there is no way back from it', () {
-      const InstallMicrok8sSnap step = InstallMicrok8sSnap(channel: channel);
-      expect(step.irreversibleReason, contains('persistent volume'));
-    });
   });
 
-  group('the purge', () {
-    test('is not taken unless it was asked for', () async {
-      final ClusterMachine machine = ClusterMachine()
-        ..shell.answers('command -v microk8s', '/snap/bin/microk8s\n');
-      const RemoveMicrok8sSnapForced step = RemoveMicrok8sSnapForced(force: false);
-      expect(await step.check(machine.contextFor(under)), isA<Satisfied>());
+  group('taking the snap away', () {
+    const RemoveSnap asked = RemoveSnap(snap: snap, force: true);
+
+    test('is not done unless it was asked for', () async {
+      const RemoveSnap notAsked = RemoveSnap(snap: snap, force: false);
+      final ClusterMachine machine = alreadyThere();
+      expect(await notAsked.check(machine.contextFor(under)), isA<Satisfied>());
       expect(machine.changing, isEmpty);
     });
 
     test('takes the snap away when it was', () async {
-      final ClusterMachine machine = ClusterMachine();
-      machine.shell
-        ..answers('command -v microk8s', '/snap/bin/microk8s\n')
-        ..answers('snap list microk8s', snapList(tracking: channel))
-        ..changes('snap remove microk8s --purge', () {
-          machine.shell
-            ..fails('command -v microk8s')
-            ..fails('snap list microk8s');
-        });
+      final ClusterMachine machine = alreadyThere();
+      machine.shell.changes('snap remove $snap --purge', () {
+        machine.shell
+          ..fails('command -v $snap')
+          ..fails('snap list $snap');
+      });
 
-      const RemoveMicrok8sSnapForced step = RemoveMicrok8sSnapForced(force: true);
       final StepContext context = machine.contextFor(under);
-
-      expect(await step.check(context), isA<Ready>());
-      await step.apply(context);
-      expect(await step.check(context), isA<Satisfied>());
+      expect(await asked.check(context), isA<Ready>());
+      await asked.apply(context);
+      expect(await asked.check(context), isA<Satisfied>());
+      expect(await snapState(machine), (onPath: false, tracked: null));
     });
 
-    test('the group it created is not deleted here, because the reinstall needs it back', () async {
-      // A teardown that claims to leave nothing behind has to delete the group explicitly. Nothing
-      // in this program needs it to survive, and nothing here takes it away either.
-      final ClusterMachine machine = ClusterMachine();
-      machine.shell
-        ..answers('command -v microk8s', '/snap/bin/microk8s\n')
-        ..answers('snap list microk8s', snapList(tracking: channel));
+    test(
+      'the group the snap created is not deleted here, because the install needs it back',
+      () async {
+        // A teardown that claims to leave nothing behind has to delete the group explicitly. Nothing
+        // in this program needs it to survive, and nothing here takes it away either.
+        final ClusterMachine machine = alreadyThere();
+        await asked.apply(machine.contextFor(under));
+        expect(
+          machine.changing.where((String each) => each.contains('groupdel')),
+          isEmpty,
+          reason:
+              'installing the snap again creates the group and the account is added to it again',
+        );
+      },
+    );
 
-      const RemoveMicrok8sSnapForced step = RemoveMicrok8sSnapForced(force: true);
-      await step.apply(machine.contextFor(under));
-      expect(
-        machine.changing.where((String each) => each.contains('groupdel')),
-        isEmpty,
-        reason: 'the reinstall creates the group again and adds the account to it',
-      );
-    });
-  });
-
-  group('the wait for the node', () {
-    test('only looks, so a dry run may run it', () async {
-      final ClusterMachine machine = ClusterMachine()
-        ..shell.answers('microk8s status --wait-ready --timeout 300', 'microk8s is running\n');
-
-      const WaitForMicrok8sReady step = WaitForMicrok8sReady(timeoutSeconds: 300);
-      expect(await step.check(machine.contextFor(under)), isA<Satisfied>());
-      expect(machine.changing, isEmpty);
-    });
-
-    test('the verdict comes from what the node said, not from what the command returned', () async {
-      final ClusterMachine machine = ClusterMachine()
-        ..shell.answers('microk8s status --wait-ready --timeout 300', 'microk8s is not running\n');
-
-      const WaitForMicrok8sReady step = WaitForMicrok8sReady(timeoutSeconds: 300);
-      final CheckResult answer = await step.check(machine.contextFor(under));
-      expect(answer, isA<Blocked>());
-      expect((answer as Blocked).reason, contains('microk8s is not running'));
-    });
-
-    test('it is a gate over what an earlier step did, so a dry run does not fail on it', () {
-      const WaitForMicrok8sReady step = WaitForMicrok8sReady(timeoutSeconds: 300);
-      expect(step.verifiesAnEarlierStep, isTrue);
+    test('it says what is lost, because there is no way back from it', () {
+      expect(asked.irreversibleReason, contains('data directory'));
+      expect(install.irreversibleReason, contains('channel it left'));
     });
   });
 }

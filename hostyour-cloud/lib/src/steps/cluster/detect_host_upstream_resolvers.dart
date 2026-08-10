@@ -40,6 +40,35 @@ final class DetectHostUpstreamResolvers extends ObservingStep {
   /// The file the second source reads.
   static const String defaultResolvConf = '/etc/resolv.conf';
 
+  /// The text a program file writes where this machine's own name servers belong.
+  ///
+  /// A program file ships inside the binary to every installation and nothing rewrites it, so the
+  /// addresses of ONE machine cannot stand in it. What stands there instead is this marked slot,
+  /// and the step that writes the text fills it from what the machine says — the same shape every
+  /// other value one installation owns is written in.
+  ///
+  /// **A slot is not a template.** No expression, no condition and no loop, only a name standing for
+  /// one value this run holds.
+  static const String placeholder = '<upstream-servers>';
+
+  /// [text] with [placeholder] replaced by this machine's name servers, or null when it names none.
+  ///
+  /// The addresses stand where the slot was, one after another separated by a space, which is how
+  /// every configuration this platform writes a list of name servers into reads them.
+  ///
+  /// Text carrying no slot comes back as it is, without the machine being measured at all — so a
+  /// caller may hand any text in and does not have to know whether it names one.
+  static Future<String?> filled(StepContext context, String text) async {
+    if (!text.contains(placeholder)) {
+      return text;
+    }
+    final List<String> found = await detect(context);
+    if (found.isEmpty) {
+      return null;
+    }
+    return text.replaceAll(placeholder, found.join(' '));
+  }
+
   /// The name servers this machine reaches the internet through, in the order they were found.
   ///
   /// Shared with the step that writes them into the cluster's own resolver, so the machine is

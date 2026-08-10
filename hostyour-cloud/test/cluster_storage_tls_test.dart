@@ -33,12 +33,6 @@ void main() {
       'jsonpath={.status.conditions[?(@.type=="Ready")].status}';
   const String issuerExists =
       'microk8s kubectl get clusterissuer letsencrypt-prod -o jsonpath={.metadata.name}';
-  const String webhookPods =
-      'microk8s kubectl -n cert-manager get pods -l app=webhook -o '
-      r'jsonpath={range .items[*]}{.status.phase}{"\n"}{end}';
-  const String allCertManagerPods =
-      'microk8s kubectl -n cert-manager get pods -o '
-      r'jsonpath={range .items[*]}{.status.phase}{"\n"}{end}';
 
   group('the data filesystem', () {
     test('a path that is an ordinary directory rather than a mount is refused', () async {
@@ -210,56 +204,18 @@ void main() {
     });
   });
 
-  group('the certificate service coming up', () {
-    const WaitForCertManagerReady step = WaitForCertManagerReady(
-      namespace: 'cert-manager',
-      timeoutSeconds: 60,
-      intervalSeconds: 5,
-    );
-
-    test('readiness is decided on the part that admits certificate objects', () async {
-      final ClusterMachine machine = ClusterMachine()..shell.answers(webhookPods, 'Running\n');
-      expect(await step.check(withStorage(machine)), isA<Satisfied>());
-    });
-
-    test('a version that does not label that part falls back to three parts running', () async {
-      final ClusterMachine machine = ClusterMachine();
-      machine.shell
-        ..answers(webhookPods, '')
-        ..answers(allCertManagerPods, 'Running\nRunning\nRunning\n');
-      final CheckResult answer = await step.check(withStorage(machine));
-      expect((answer as Satisfied).because, contains('3 parts'));
-    });
-
-    test('two parts running is not up', () async {
-      final ClusterMachine machine = ClusterMachine();
-      machine.shell
-        ..answers(webhookPods, '')
-        ..answers(allCertManagerPods, 'Running\nPending\nRunning\n');
-      expect(await step.check(withStorage(machine)), isA<Blocked>());
-    });
-  });
-
   group('the certificate issuer', () {
     test('a freshly applied issuer with no status at all reports as not ready', () async {
       // A reader that expects the conditions to be there fails on the very state it is meant to
       // report.
       final ClusterMachine machine = ClusterMachine()..shell.answers(issuerReady, '');
       expect(
-        await WaitClusterIssuerReady.isReady(withStorage(machine), 'letsencrypt-prod'),
+        await RestartCertManagerAndReapplyClusterIssuer.isReady(
+          withStorage(machine),
+          'letsencrypt-prod',
+        ),
         isFalse,
       );
-    });
-
-    test('an issuer that has not registered ends the wait with what it means', () async {
-      final ClusterMachine machine = ClusterMachine()..shell.answers(issuerReady, '');
-      const WaitClusterIssuerReady step = WaitClusterIssuerReady(
-        name: 'letsencrypt-prod',
-        timeoutSeconds: 60,
-        intervalSeconds: 10,
-      );
-      final CheckResult answer = await step.check(withStorage(machine));
-      expect((answer as Blocked).reason, contains('no certificate on this cluster can be issued'));
     });
 
     test('the mailbox is the one this run answered, whatever it reads like', () async {

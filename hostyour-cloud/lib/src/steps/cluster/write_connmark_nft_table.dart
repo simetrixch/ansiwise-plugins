@@ -17,7 +17,7 @@ import 'detect_public_nic.dart';
 ///
 /// **The file begins by removing the table it is about to define.** Loading it a second time then
 /// replaces what is there instead of adding to it, which is what makes reloading safe.
-final class WriteConnmarkNftTable extends ReversibleStep<String?> {
+final class WriteConnmarkNftTable extends ReversibleStep<String?> with FileStep {
   /// Writes the rules at [path], marking connections with [mark].
   const WriteConnmarkNftTable({required this.path, required this.mark});
 
@@ -53,7 +53,7 @@ final class WriteConnmarkNftTable extends ReversibleStep<String?> {
   static const String defaultMark = '0x1000';
 
   /// `0644` — a rule set that carries nothing secret and that the loader reads.
-  static const int mode = 0x1a4;
+  static const int fileMode = 0x1a4;
 
   /// The rules' path.
   final String path;
@@ -62,38 +62,24 @@ final class WriteConnmarkNftTable extends ReversibleStep<String?> {
   final String mark;
 
   @override
-  Future<CheckResult> check(StepContext context) async {
-    final PublicNic? nic = await DetectPublicNic.detect(context);
-    if (nic == null) {
-      return const CheckResult.satisfied(
-        'nothing is steered on this machine, so no connection has to be marked',
-      );
-    }
-    if (!await context.files.exists(path)) {
-      return const CheckResult.ready();
-    }
-    return await context.files.read(path) == ruleset(nic, mark)
-        ? CheckResult.satisfied('$path already holds what this step writes')
-        : const CheckResult.ready();
-  }
+  String pathFor(StepContext context) => path;
 
   @override
-  Future<StepPlan> plan(StepContext context) async {
-    final PublicNic? nic = await DetectPublicNic.detect(context);
-    return StepPlan.diff(
-      path,
-      before: await context.files.exists(path) ? await context.files.read(path) : '',
-      after: nic == null ? '' : ruleset(nic, mark),
-    );
-  }
+  int get mode => fileMode;
 
+  /// The rules for the interface this machine's public address arrives on.
+  ///
+  /// A machine with no such interface steers nothing, so no connection has to be marked — and the
+  /// rules could not be composed there in any case, since they name the interface and the address.
+  /// One reading answers both, which is why the mixin asks one question.
   @override
-  Future<void> apply(StepContext context) async {
+  Future<FileContent> contentFor(StepContext context) async {
     final PublicNic? nic = await DetectPublicNic.detect(context);
-    if (nic == null) {
-      return;
-    }
-    await context.files.write(path, ruleset(nic, mark), mode: mode);
+    return nic == null
+        ? const FileContent.nothing(
+            'nothing is steered on this machine, so no connection has to be marked',
+          )
+        : FileContent.text(ruleset(nic, mark));
   }
 
   /// What the rules file held before, or null when it was not there.
@@ -101,8 +87,7 @@ final class WriteConnmarkNftTable extends ReversibleStep<String?> {
   /// The undo puts that text back rather than deleting whatever is at the path, so a machine that
   /// arrived with a rule set of this name keeps it — the table in the kernel goes either way.
   @override
-  Future<String?> capture(StepContext context) async =>
-      await context.files.exists(path) ? context.files.read(path) : null;
+  Future<String?> capture(StepContext context) => contentBefore(context);
 
   @override
   Future<void> undo(StepContext context, String? captured) async {

@@ -78,7 +78,7 @@ final class StampClusterProfile extends ReversibleStep<String?> with FileStep {
   }
 
   @override
-  Future<String> contentFor(StepContext context) async {
+  Future<FileContent> contentFor(StepContext context) async {
     final Arguments given = context.answers;
     final String fqdn = given.text('fqdn');
     final String name = _shortName(fqdn);
@@ -89,50 +89,52 @@ final class StampClusterProfile extends ReversibleStep<String?> with FileStep {
     final String master = holdsMaster ? fqdn : _optional(given, 'master')!;
     final String buildPlane = given.text('build_plane');
 
-    return <String>[
-      '# Where this installation\'s services are, and which of them run here.',
-      '#',
-      '# The trunk carries `global: {}` because it knows no installation. This file is written per',
-      '# install branch from the cluster map, and every application loads it LAST in its values',
-      '# chain — so what stands here wins over everything the product declares.',
-      '#',
-      '# Only global.* keys belong here: they reach every subchart through Helm\'s own `global:`',
-      '# convention. An app-specific value stays in that app\'s values-<stage>.yaml.',
-      'global:',
-      '  domain: $fqdn',
-      '  clusterName: $name',
-      '  unitApex: ${given.text('unit_apex')}',
-      '  platformDomain: ${given.text('platform_domain')}',
-      // The install branch of the cluster holding the master role, which is where this installation
-      // keeps its cluster maps and its registrations. On a slave that is a DIFFERENT branch from
-      // the one this file stands on.
-      '  booksBranch: $master',
-      // Vault serves at vault.<domain> — apps/coredns/templates/configmap.yaml rewrites exactly
-      // that name to the in-cluster Service. It follows the master part, not this cluster, or a
-      // slave would be pointed at a Vault that does not run there.
-      '  vaultUrl: https://vault.$master',
-      '  tailnetUrl: ${given.text('tailnet_url')}',
-      // Always kubernetes-<name>: the auth mount deploy-gitops creates for this cluster, and the
-      // name it creates it under. One rule, so a role binding and the client that uses it cannot
-      // disagree about the path.
-      '  vaultKubernetesAuthPath: kubernetes-$name',
-      '  endpoints:',
-      '    registry:',
-      // The registry runs on the build plane and is reached there by every cluster of this
-      // installation, which is why it follows the build plane and not this cluster.
-      '      host: zot.$buildPlane',
-      if (_optional(given, 'post_url') case final String url) ...<String>[
-        '    post:',
-        '      url: $url',
-      ],
-      // Whether each service runs HERE. A chart reads this to decide between the in-cluster Service
-      // and the public name — the same fact, asked from the other side.
-      '  servicesLocal:',
-      '    registry: ${buildPlane == fqdn}',
-      '    vault: $holdsMaster',
-      '    observabilityCentral: $holdsMaster',
-      '',
-    ].join('\n');
+    return FileContent.text(
+      <String>[
+        '# Where this installation\'s services are, and which of them run here.',
+        '#',
+        '# The trunk carries `global: {}` because it knows no installation. This file is written per',
+        '# install branch from the cluster map, and every application loads it LAST in its values',
+        '# chain — so what stands here wins over everything the product declares.',
+        '#',
+        '# Only global.* keys belong here: they reach every subchart through Helm\'s own `global:`',
+        '# convention. An app-specific value stays in that app\'s values-<stage>.yaml.',
+        'global:',
+        '  domain: $fqdn',
+        '  clusterName: $name',
+        '  unitApex: ${given.text('unit_apex')}',
+        '  platformDomain: ${given.text('platform_domain')}',
+        // The install branch of the cluster holding the master role, which is where this installation
+        // keeps its cluster maps and its registrations. On a slave that is a DIFFERENT branch from
+        // the one this file stands on.
+        '  booksBranch: $master',
+        // Vault serves at vault.<domain> — apps/coredns/templates/configmap.yaml rewrites exactly
+        // that name to the in-cluster Service. It follows the master part, not this cluster, or a
+        // slave would be pointed at a Vault that does not run there.
+        '  vaultUrl: https://vault.$master',
+        '  tailnetUrl: ${given.text('tailnet_url')}',
+        // Always kubernetes-<name>: the auth mount deploy-gitops creates for this cluster, and the
+        // name it creates it under. One rule, so a role binding and the client that uses it cannot
+        // disagree about the path.
+        '  vaultKubernetesAuthPath: kubernetes-$name',
+        '  endpoints:',
+        '    registry:',
+        // The registry runs on the build plane and is reached there by every cluster of this
+        // installation, which is why it follows the build plane and not this cluster.
+        '      host: zot.$buildPlane',
+        if (_optional(given, 'post_url') case final String url) ...<String>[
+          '    post:',
+          '      url: $url',
+        ],
+        // Whether each service runs HERE. A chart reads this to decide between the in-cluster Service
+        // and the public name — the same fact, asked from the other side.
+        '  servicesLocal:',
+        '    registry: ${buildPlane == fqdn}',
+        '    vault: $holdsMaster',
+        '    observabilityCentral: $holdsMaster',
+        '',
+      ].join('\n'),
+    );
   }
 
   /// What the profile held before this run stamped it, which is what [undo] writes back.

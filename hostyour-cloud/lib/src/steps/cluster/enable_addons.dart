@@ -13,7 +13,25 @@ import 'package:ansiwise_api/ansiwise_api.dart';
 ///
 /// **The name servers can only be given when the name addon is switched on for the first time.**
 /// After that the argument has no effect at all, and the only thing that changes them is editing the
-/// live configuration — which the step that does exactly that is for.
+/// object the addon installed.
+///
+/// **WHAT AN ADDON INSTALLED IS CHANGED BY CHANGING THE OBJECT, NEVER BY SWITCHING THE ADDON OFF AND
+/// ON.** This was paid for on real machines and it is the reason the program carries a row that
+/// edits a live object instead of a second row here.
+///
+/// - **The obvious fix is the one that fails.** Switching an addon off and on again is fragile from
+///   MicroK8s 1.32 onwards when it is driven from a script rather than typed: the disable does not
+///   always finish before the enable starts, and what comes back is a half-installed addon that
+///   reports success. Editing the object works on every version, because what an addon leaves
+///   behind is an ordinary object in the cluster and nothing about it is special.
+/// - **The name service is the case this was learned on, and the failure is silent.** The cluster's
+///   own name service inherits the machine's resolver file, which on the pinned Ubuntu names the
+///   local stub — and a pod's loopback is its own, not the machine's. So every lookup for anything
+///   outside the cluster goes to an address that answers nothing from inside a pod, while the addon
+///   reports itself enabled and healthy.
+/// - **The whole value is replaced, never merged into.** A merge drifts with whatever the addon
+///   ships next, so the same machine comes out differently depending on which version installed it.
+///   A value written out in full by the program is the same on every version and on every machine.
 final class EnableAddons extends ReversibleStep<List<String>> {
   /// Switches on each of [addons], in order.
   const EnableAddons({required this.addons, required this.dnsUpstreamServers});

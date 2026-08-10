@@ -1,7 +1,5 @@
 import 'package:ansiwise_api/ansiwise_api.dart';
 import 'configure_slave_apiserver_oidc_trust.dart';
-import 'wait_cluster_issuer_ready.dart';
-import 'wait_for_cert_manager_ready.dart';
 
 /// The one recovery an issuer that did not register gets, and the end of the budget for it.
 ///
@@ -52,7 +50,7 @@ final class RestartCertManagerAndReapplyClusterIssuer extends IrreversibleStep {
       kind: ArgumentKind.text,
       describes: 'the namespace the certificate service runs in',
       required: false,
-      defaultValue: WaitForCertManagerReady.defaultNamespace,
+      defaultValue: defaultNamespace,
     ),
     ArgumentSpec(
       name: 'state_directory',
@@ -83,6 +81,9 @@ final class RestartCertManagerAndReapplyClusterIssuer extends IrreversibleStep {
       defaultValue: 10,
     ),
   ];
+
+  /// Where the certificate service runs.
+  static const String defaultNamespace = 'cert-manager';
 
   /// The parts of the certificate service that are restarted.
   static const List<String> deployments = <String>[
@@ -121,7 +122,7 @@ final class RestartCertManagerAndReapplyClusterIssuer extends IrreversibleStep {
 
   @override
   Future<CheckResult> check(StepContext context) async {
-    if (await WaitClusterIssuerReady.isReady(context, name)) {
+    if (await isReady(context, name)) {
       return CheckResult.satisfied('$name reports that its account is registered');
     }
     if (!await context.files.exists(manifestPath)) {
@@ -168,7 +169,7 @@ final class RestartCertManagerAndReapplyClusterIssuer extends IrreversibleStep {
     }
 
     final DateTime giveUp = context.clock.now().add(Duration(seconds: waitSeconds));
-    while (!await WaitClusterIssuerReady.isReady(context, name)) {
+    while (!await isReady(context, name)) {
       if (!context.clock.now().isBefore(giveUp)) {
         throw WaitedTooLong(
           waitingFor:
@@ -180,5 +181,24 @@ final class RestartCertManagerAndReapplyClusterIssuer extends IrreversibleStep {
       }
       await context.clock.sleep(Duration(seconds: intervalSeconds));
     }
+  }
+
+  /// Whether [name] reports itself ready.
+  ///
+  /// An issuer that has just been applied carries no conditions at all, and reading them then gives
+  /// nothing rather than an answer — which is not ready, and is not an error either. A reader that
+  /// expected the conditions to be there would fail on the very state it is meant to report.
+  static Future<bool> isReady(StepContext context, String name) async {
+    final CommandResult condition = await context.shell.run(
+      Command.observing('microk8s', <String>[
+        'kubectl',
+        'get',
+        'clusterissuer',
+        name,
+        '-o',
+        'jsonpath={.status.conditions[?(@.type=="Ready")].status}',
+      ]),
+    );
+    return condition.ok && condition.trimmed == 'True';
   }
 }

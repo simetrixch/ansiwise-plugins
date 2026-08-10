@@ -3,16 +3,25 @@ import 'ensure_tool_prerequisites.dart';
 
 /// Holds every tool on the machine against the version this platform pins for it.
 ///
-/// **This is the only thing binding the list of tools to the steps that install them.** Each tool is
-/// fetched its own way — a release, a package manager, an installer somebody else wrote — so there
-/// is no loop over the list that installs them. Without this a tool added to the list would simply
-/// never be installed, and nothing would say so.
+/// **This is the only thing binding the list of tools to the steps that install them.** Each tool
+/// arrives its own way — most of them as a release fetched at a pin, one out of the package manager,
+/// one out of an installer somebody else wrote — and each of those is a row of its own in the
+/// program file, so there is no loop over this list that installs them. Without this a tool added to
+/// the list would simply never be installed, and nothing would say so.
 ///
 /// **Two of them can only be reported and never enforced, and that distinction is deliberate.** The
-/// tool from the package manager and the one from its makers' own installer take no version at all,
-/// so no re-run can reach a pinned value for them — failing there would make an install that can
-/// never end green on a machine whose package manager carries another version. Being MISSING is
+/// tool from the package manager and the one from its makers' own installer take no version at all.
+/// The package manager carries exactly ONE of the tool it ships, and the installer fetches whatever
+/// its makers publish on the day, so no re-run of this program can reach a different version for
+/// either of them — and failing on the version they do carry would make an install that can never
+/// end green on a machine whose package manager disagrees with the pin. What is left is worth
+/// having: the difference is reported, so an operator who cares can act on it. Being MISSING is
 /// still a failure, for every tool without exception.
+///
+/// **Their presence is what decides whether to install them, and their version is only reported.**
+/// That is the other half of the same fact, and it is why the two steps that put those two on the
+/// machine take no version argument at all: there is no version they could be given that would
+/// change what they fetch.
 ///
 /// **Everything wrong is reported at once.** An operator told about one tool, who fixes it, runs
 /// again and is then told about the next has paid for four runs to learn what one could have said.
@@ -70,7 +79,7 @@ final class AssertCliToolVersions extends ObservingStep {
   /// [pin] without the shapes the release tags carry, so it can be held against what a tool answers.
   ///
   /// The tags are written the way each project writes them and the readers all answer with the bare
-  /// number, so the shapes come off here rather than in five places.
+  /// number, so the shapes come off here rather than in every place that holds a pin against one.
   static String bare(String pin) {
     String value = pin.trim();
     for (final String prefix in <String>['v', 'jq-']) {
@@ -83,8 +92,8 @@ final class AssertCliToolVersions extends ObservingStep {
 
   /// The version [tool] answers with, or null when it is not on the machine.
   ///
-  /// Shared with every step that fetches a pinned tool, because the version on the machine is what
-  /// each of them decides its own skip on and a second reader would answer differently.
+  /// Shared with the step that fetches a pinned release, because the version on the machine is what
+  /// it decides its own skip on and a second reader here would answer differently.
   static Future<String?> installedVersion(StepContext context, String tool) async {
     if (!await EnsureToolPrerequisites.onPath(context, tool)) {
       return null;

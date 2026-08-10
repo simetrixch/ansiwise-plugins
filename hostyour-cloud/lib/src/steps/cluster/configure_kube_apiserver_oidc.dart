@@ -1,5 +1,5 @@
 import 'package:ansiwise_api/ansiwise_api.dart';
-import 'install_microk8s_snap.dart';
+import 'microk8s.dart';
 import 'stamp_kube_proxy_cluster_cidr.dart';
 
 /// Lets the API server accept the tokens the platform's identity provider issues.
@@ -101,7 +101,7 @@ final class ConfigureKubeApiserverOidc extends ReversibleStep<String?> {
   static const String masterAnswer = 'master';
 
   /// Where the snap keeps the arguments the API server is started with.
-  static const String defaultPath = '${InstallMicrok8sSnap.argumentsDirectory}/kube-apiserver';
+  static const String defaultPath = '$microk8sArgumentsDirectory/kube-apiserver';
 
   /// The claim the API server refuses unless the token also says the address was verified.
   static const String refusedUsernameClaim = 'email';

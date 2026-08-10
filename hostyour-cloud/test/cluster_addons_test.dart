@@ -94,19 +94,38 @@ void main() {
   });
 
   group('waiting for them to show up', () {
-    test('a wait that runs out is warned rather than fatal, and names what is missing', () async {
-      // A step that was switched on and has not shown up is not the same as one that failed, and the
-      // steps after it notice by themselves if it really did not arrive.
-      final ClusterMachine machine = ClusterMachine()
-        ..shell.answers('microk8s status', status(on: <String>['rbac'], off: <String>[]));
+    const WaitForAddonsEnabled step = WaitForAddonsEnabled(
+      addons: <String>['rbac', 'ingress'],
+      timeoutSeconds: 30,
+      intervalSeconds: 5,
+    );
 
-      const WaitForAddonsEnabled step = WaitForAddonsEnabled(
-        addons: <String>['rbac', 'ingress'],
-        timeoutSeconds: 30,
-        intervalSeconds: 5,
+    test('an addon that is listed as off is not read as on', () async {
+      // The reason this wait is not a command and an answer: every addon it is waiting for stands in
+      // the list of what is OFF at the moment it starts looking, so a reading of the whole output
+      // would answer yes straight away.
+      final ClusterMachine machine = ClusterMachine()
+        ..shell.answers('microk8s status', status(on: <String>['rbac'], off: <String>['ingress']));
+
+      expect(await step.check(machine.contextFor(under)), isA<Ready>());
+    });
+
+    test('a wait that runs out names the addons it was waiting for', () async {
+      // What it costs the run is the program row's policy: the addon was asked for and has not
+      // appeared, and the steps after it notice by themselves if it really did not arrive.
+      final ClusterMachine machine = ClusterMachine()
+        ..shell.answers('microk8s status', status(on: <String>['rbac'], off: <String>['ingress']));
+
+      await expectLater(
+        step.apply(machine.contextFor(under)),
+        throwsA(
+          isA<WaitedTooLong>().having(
+            (WaitedTooLong failure) => failure.waitingFor,
+            'what it waited for',
+            contains('ingress'),
+          ),
+        ),
       );
-      final CheckResult answer = await step.check(machine.contextFor(under));
-      expect((answer as Blocked).reason, contains('ingress'));
       expect(machine.clock.elapsed.inSeconds, greaterThanOrEqualTo(30));
     });
 
@@ -125,21 +144,19 @@ void main() {
           }
         });
 
-      const WaitForAddonsEnabled step = WaitForAddonsEnabled(
-        addons: <String>['rbac', 'ingress'],
-        timeoutSeconds: 300,
-        intervalSeconds: 5,
-      );
+      await step.apply(machine.contextFor(under));
       expect(await step.check(machine.contextFor(under)), isA<Satisfied>());
+      expect(machine.changing, isEmpty);
     });
 
-    test('it is a gate over what an earlier step did, so a dry run does not fail on it', () {
-      const WaitForAddonsEnabled step = WaitForAddonsEnabled(
-        addons: <String>['rbac'],
-        timeoutSeconds: 30,
-        intervalSeconds: 5,
-      );
-      expect(step.verifiesAnEarlierStep, isTrue);
+    test('a dry run says what it would wait for instead of waiting', () async {
+      final ClusterMachine machine = ClusterMachine()
+        ..shell.answers('microk8s status', status(on: <String>[], off: <String>['rbac']));
+
+      final StepPlan plan = await step.plan(machine.contextFor(under));
+      expect(plan.summary, contains('would wait up to 30s'));
+      expect(plan.summary, contains('ingress'));
+      expect(machine.clock.elapsed, Duration.zero);
     });
   });
 

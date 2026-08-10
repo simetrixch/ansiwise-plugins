@@ -76,7 +76,7 @@ void main() {
   }
 
   test('the program resolves against the registry', () {
-    expect(deployCluster().steps, hasLength(59));
+    expect(deployCluster().steps, hasLength(55));
   });
 
   test('every value this installation states about itself is an answer, not an argument', () {
@@ -310,9 +310,9 @@ void main() {
 
     test('what an addon installed is patched only after the addon is up', () {
       for (final String patch in <String>[
-        'patch_coredns_corefile',
+        'patch_configmap_key',
         'align_calico_backend',
-        'patch_traefik_cross_namespace',
+        'patch_container_arguments_and_ports',
       ]) {
         before(
           'enable_addons',
@@ -320,14 +320,6 @@ void main() {
           'the object $patch changes only exists once the addon is up',
         );
       }
-    });
-
-    test('the running ingress pod is compared only after its declaration was patched', () {
-      before(
-        'patch_traefik_cross_namespace',
-        'force_roll_traefik_daemonset',
-        'the comparison exists because patching the declaration does not reach the running pod',
-      );
     });
 
     test('the drop-in is proved to have merged before the configuration is applied', () {
@@ -339,37 +331,71 @@ void main() {
     });
 
     test('the structured-text reader is installed before anything reads structured output', () {
+      // jq is a package and the three released binaries are fetched, so this is the row that
+      // installs packages standing before the first row that fetches one. The ordering is all the
+      // program file can carry, and it is the whole of what keeps this true.
       before(
-        'install_jq',
-        'install_argocd_cli',
+        'install_packages',
+        'install_pinned_tool',
         'later logic in the same run reads structured output with it',
       );
     });
 
-    test('the pins are held against the machine last, after every tool step', () {
-      final List<StepName> steps = order();
-      for (final String tool in <String>[
-        'install_jq',
-        'install_argocd_cli',
-        'install_vault_cli',
-        'install_yq_cli',
-        'install_tailscale_client',
-      ]) {
+    test('every tool the pins name is put on the machine before the pins are held against it', () {
+      // Read out of the rows rather than listed here. Three of the five tools are now rows of ONE
+      // step, so a list of step names could no longer say that argocd, vault and yq each have a row
+      // — and that is exactly what the assertion at the end of the phase exists to bind.
+      final List<ResolvedStep> steps = deployCluster().steps;
+      final int assertion = steps.indexWhere(
+        (ResolvedStep s) => s.entry.step == const StepName('assert_cli_tool_versions'),
+      );
+      expect(assertion, isNot(-1), reason: 'nothing holds this program to its own list of tools');
+
+      final Map<String, int> installedAt = <String, int>{};
+      for (int at = 0; at < steps.length; at++) {
+        final ProgramStep row = steps[at].entry;
+        switch (row.step.value) {
+          case 'install_packages':
+            for (final String package in row.arguments.textList('packages')) {
+              installedAt[package] = at;
+            }
+          case 'install_pinned_tool':
+            installedAt[row.arguments.text('tool')] = at;
+          // The one tool fetched by an installer its own makers wrote, named for the tool it puts
+          // on the machine.
+          case 'install_tailscale_client':
+            installedAt['tailscale'] = at;
+        }
+      }
+
+      for (final String entry in steps[assertion].entry.arguments.textList('tools')) {
+        final String tool = entry.substring(0, entry.indexOf('='));
         expect(
-          steps.indexOf(StepName(tool)),
-          lessThan(steps.indexOf(const StepName('assert_cli_tool_versions'))),
+          installedAt[tool],
+          isNotNull,
+          reason: '$tool is pinned here and no row of this program puts it on the machine',
+        );
+        expect(
+          installedAt[tool],
+          lessThan(assertion),
           reason: 'the assertion is the only thing binding the list of tools to the steps',
         );
       }
     });
   });
 
-  test('the ten points beyond which there is no going back are named', () {
+  test('the nine points beyond which there is no going back are named', () {
     // The dry run names these in advance, which it can only do because each of them says so about
     // itself. A step moved out of this list is a point of no return the operator is not told about.
+    //
+    // Replacing the ingress pod is NOT one of them, and that is a decision rather than an omission.
+    // What the step that does it CHANGES is the declaration, and it puts that back — so a step
+    // calling itself irreversible would be claiming that what it did stands, which is not true. The
+    // interruption is what cannot be taken back, and the plan a dry run prints names the deletion
+    // that causes it.
     const List<String> irreversible = <String>[
-      'remove_microk8s_snap_forced',
-      'install_microk8s_snap',
+      'remove_snap',
+      'install_snap',
       'delete_default_ipv4_ippool',
       'verify_ippool_converged_with_self_heal',
       'recycle_kube_system_pod_ips',
@@ -377,7 +403,6 @@ void main() {
       'create_storage_directory',
       'link_microk8s_storage_path',
       'export_kubeconfig',
-      'force_roll_traefik_daemonset',
     ];
     for (final String name in irreversible) {
       final RegisteredStep? entry = executionRegistry.step(StepName(name));

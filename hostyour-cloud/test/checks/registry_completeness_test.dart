@@ -101,15 +101,30 @@ void main() {
       );
     });
 
-    test('the planted step class is found on disk', () {
-      expect(
-        stepClassesIn(planted, under: stepsDirectory).map((DeclaredStepClass c) => c.className),
-        contains('PlantedStep'),
-        reason: 'the unregistered half of this check cannot go red',
-      );
-    });
+    for (final String shape in <String>[
+      'PlantedStep',
+      'PlantedGeneric',
+      'PlantedNested',
+      'PlantedWithMixin',
+      'PlantedWrapped',
+    ]) {
+      test('$shape is found on disk', () {
+        expect(
+          stepClassesIn(planted, under: stepsDirectory).map((DeclaredStepClass c) => c.className),
+          contains(shape),
+          reason:
+              'a step class this scan cannot see is a step nothing reports as unregistered, and '
+              'the unregistered half of this check is then green for having looked past it',
+        );
+      });
+    }
 
-    for (final String allowed in <String>['PlantedBase', '_PlantedPrivate', 'PlantedHelper']) {
+    for (final String allowed in <String>[
+      'PlantedBase',
+      'PlantedGenericBase',
+      '_PlantedPrivate',
+      'PlantedHelper',
+    ]) {
       test('$allowed is not a registrable step and is not reported as one', () {
         expect(
           stepClassesIn(planted, under: stepsDirectory).map((DeclaredStepClass c) => c.className),
@@ -276,7 +291,28 @@ final String _plantedDeclarations = <String>[
   '  const PlantedStep();',
   '}',
   '',
+  // The four shapes a real step wears, and the reason this fixture lists them. It used to plant
+  // only the line above — the one form with nothing after the kind — and stayed green while
+  // forty-seven of the plugin's ninety-one step classes became invisible to the scan. A probe that
+  // plants yesterday's shape proves the check works on yesterday's code.
+  'final class PlantedGeneric extends ReversibleStep<bool> {',
+  '}',
+  '',
+  'final class PlantedNested extends ReversibleStep<List<String>> {',
+  '}',
+  '',
+  'final class PlantedWithMixin extends ReversibleStep<String?> with FileStep {',
+  '}',
+  '',
+  // What dart format does once the name and its type argument no longer fit in one line.
+  'final class PlantedWrapped',
+  '    extends ReversibleStep<({String? args, bool binding})> {',
+  '}',
+  '',
   'abstract base class PlantedBase extends Step {',
+  '}',
+  '',
+  'abstract base class PlantedGenericBase extends ReversibleStep<String?> {',
   '}',
   '',
   'final class _PlantedPrivate extends ObservingStep {',

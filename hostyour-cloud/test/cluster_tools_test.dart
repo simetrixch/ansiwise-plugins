@@ -4,6 +4,41 @@ import 'package:test/test.dart';
 
 import 'cluster_fixture.dart';
 
+/// The three released binaries `deploy-cluster` fetches, exactly as its rows write them.
+///
+/// One step now covers all three, so what separates them is only their arguments — which is the
+/// claim these tests are here to hold. Written out rather than read from the program file, because a
+/// test that read the file would pass on whatever the file happens to say.
+const InstallPinnedTool argocdCli = InstallPinnedTool(
+  tool: 'argocd',
+  version: 'v3.4.5',
+  url:
+      'https://github.com/argoproj/argo-cd/releases/download/'
+      '${InstallPinnedTool.versionPlaceholder}/argocd-linux-amd64',
+  directory: InstallPinnedTool.defaultDirectory,
+  archive: null,
+);
+
+const InstallPinnedTool vaultCli = InstallPinnedTool(
+  tool: 'vault',
+  version: 'v2.0.3',
+  url:
+      'https://releases.hashicorp.com/vault/${InstallPinnedTool.bareVersionPlaceholder}/'
+      'vault_${InstallPinnedTool.bareVersionPlaceholder}_linux_amd64.zip',
+  directory: InstallPinnedTool.defaultDirectory,
+  archive: '/tmp/vault.zip',
+);
+
+const InstallPinnedTool yqCli = InstallPinnedTool(
+  tool: 'yq',
+  version: 'v4.53.3',
+  url:
+      'https://github.com/mikefarah/yq/releases/download/'
+      '${InstallPinnedTool.versionPlaceholder}/yq_linux_amd64',
+  directory: InstallPinnedTool.defaultDirectory,
+  archive: null,
+);
+
 /// The tools an operator uses on the machine, and the pins that make two machines the same.
 void main() {
   const StepName under = StepName('under_test');
@@ -56,7 +91,7 @@ void main() {
     });
   });
 
-  group('the skip predicate, which differs by tool and must not be unified', () {
+  group('the skip predicate, which differs by where a tool comes from', () {
     test('a tool fetched at a pinned release skips on the version and not on being there', () async {
       // A binary that was on the machine before this platform existed would otherwise be left where
       // it is, held against the pin, and reported as wrong on every run with nothing able to fix it.
@@ -65,9 +100,8 @@ void main() {
         ..answers('command -v yq', '/usr/local/bin/yq\n')
         ..answers('yq --version', 'yq (https://github.com/mikefarah/yq/) version v4.40.0\n');
 
-      const InstallYqCli step = InstallYqCli(version: 'v4.53.3', path: InstallYqCli.defaultPath);
       expect(
-        await step.check(machine.contextFor(under)),
+        await yqCli.check(machine.contextFor(under)),
         isA<Ready>(),
         reason: 'an ordinary re-run corrects a machine that drifted, with nothing forced',
       );
@@ -79,43 +113,73 @@ void main() {
         ..answers('command -v yq', '/usr/local/bin/yq\n')
         ..answers('yq --version', 'yq (https://github.com/mikefarah/yq/) version v4.53.3\n');
 
-      const InstallYqCli step = InstallYqCli(version: 'v4.53.3', path: InstallYqCli.defaultPath);
-      expect(await step.check(machine.contextFor(under)), isA<Satisfied>());
+      expect(await yqCli.check(machine.contextFor(under)), isA<Satisfied>());
       expect(machine.changing, isEmpty);
     });
 
     test('a tool from the package manager skips on being there, taking no version', () async {
+      // The other half of the pair, and the reason the pins call this one unpinnable: nothing here
+      // names a version, because the package manager carries exactly one and no run could reach
+      // another.
       final ClusterMachine machine = ClusterMachine()
-        ..shell.answers('command -v jq', '/usr/bin/jq\n');
-      const InstallJq step = InstallJq();
+        ..shell.answers(r'dpkg-query -W -f=${Status} jq', 'install ok installed');
+      const InstallPackages step = InstallPackages(<String>['jq']);
       expect(await step.check(machine.contextFor(under)), isA<Satisfied>());
+      expect(machine.changing, isEmpty);
     });
 
     test('a pin nobody wrote is refused rather than resolved to whatever is current', () async {
-      const InstallArgocdCli step = InstallArgocdCli(
+      final CheckResult answer = await InstallPinnedTool(
+        tool: argocdCli.tool,
         version: '',
-        path: InstallArgocdCli.defaultPath,
-      );
-      final CheckResult answer = await step.check(ClusterMachine().contextFor(under));
+        url: argocdCli.url,
+        directory: argocdCli.directory,
+        archive: null,
+      ).check(ClusterMachine().contextFor(under));
       expect((answer as Blocked).reason, contains('pinned release'));
     });
 
+    test('a url carrying no slot for the pin is refused, because the two could disagree', () async {
+      // The hole the shared step opens and the composed ones could not have: a url with the version
+      // written into it would fetch one release while the pin claims another, and the fetch would
+      // report success either way.
+      final CheckResult answer = await const InstallPinnedTool(
+        tool: 'yq',
+        version: 'v4.53.3',
+        url: 'https://github.com/mikefarah/yq/releases/download/v4.40.0/yq_linux_amd64',
+        directory: InstallPinnedTool.defaultDirectory,
+        archive: null,
+      ).check(ClusterMachine().contextFor(under));
+      expect((answer as Blocked).reason, contains(InstallPinnedTool.versionPlaceholder));
+    });
+
+    test('a tool nothing can ask its version is refused rather than fetched every run', () async {
+      // The skip is decided on the version, so a tool the readers do not know would be fetched
+      // again on every run and nothing would notice.
+      final CheckResult answer = await const InstallPinnedTool(
+        tool: 'helm',
+        version: 'v4.2.3',
+        url: 'https://example.com/helm/${InstallPinnedTool.versionPlaceholder}/helm',
+        directory: InstallPinnedTool.defaultDirectory,
+        archive: null,
+      ).check(ClusterMachine().contextFor(under));
+      expect((answer as Blocked).reason, contains('what version it is'));
+    });
+
     test('the fetch names the pinned release and never a latest one', () {
-      const InstallArgocdCli argocd = InstallArgocdCli(
-        version: 'v3.4.5',
-        path: InstallArgocdCli.defaultPath,
-      );
-      expect(argocd.url, contains('/download/v3.4.5/'));
-      expect(argocd.url, isNot(contains('latest')));
+      expect(argocdCli.fetchedFrom, contains('/download/v3.4.5/'));
+      expect(argocdCli.fetchedFrom, isNot(contains('latest')));
 
-      const InstallVaultCli vault = InstallVaultCli(
-        version: 'v2.0.3',
-        directory: InstallVaultCli.defaultDirectory,
-      );
-      expect(vault.url, contains('/vault/2.0.3/vault_2.0.3_linux_amd64.zip'));
+      // The one download path that spells the version without the shape its tag carries, which is
+      // what the second slot exists for — the pin is still written once, as v2.0.3.
+      expect(vaultCli.fetchedFrom, contains('/vault/2.0.3/vault_2.0.3_linux_amd64.zip'));
 
-      const InstallYqCli yq = InstallYqCli(version: 'v4.53.3', path: InstallYqCli.defaultPath);
-      expect(yq.url, contains('/download/v4.53.3/'));
+      expect(yqCli.fetchedFrom, contains('/download/v4.53.3/'));
+    });
+
+    test('a release that is the binary itself is fetched to where it goes and made runnable', () {
+      expect(yqCli.archive, isNull);
+      expect(yqCli.path, '${InstallPinnedTool.defaultDirectory}/yq');
     });
 
     test('the packed copy is removed whether the unpacking worked or not', () async {
@@ -123,14 +187,10 @@ void main() {
       final ClusterMachine machine = ClusterMachine();
       machine.shell
         ..fails('command -v vault')
-        ..fails('unzip -o -d ${InstallVaultCli.defaultDirectory} ${InstallVaultCli.archive}');
+        ..fails('unzip -o -d ${vaultCli.directory} ${vaultCli.archive}');
 
-      const InstallVaultCli step = InstallVaultCli(
-        version: 'v2.0.3',
-        directory: InstallVaultCli.defaultDirectory,
-      );
-      await expectLater(step.apply(machine.contextFor(under)), throwsA(isA<CommandFailed>()));
-      expect(machine.files.deleted, contains(InstallVaultCli.archive));
+      await expectLater(vaultCli.apply(machine.contextFor(under)), throwsA(isA<CommandFailed>()));
+      expect(machine.files.deleted, contains(vaultCli.archive));
     });
   });
 

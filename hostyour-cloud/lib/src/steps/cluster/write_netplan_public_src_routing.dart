@@ -19,7 +19,7 @@ import 'detect_public_nic.dart';
 /// one that sends everything else out the public gateway. The carrier-grade range is among them
 /// because the certificate service checks its own answer over exactly that path, and steering that
 /// check out the public gateway makes every certificate on the cluster fail to be issued.
-final class WriteNetplanPublicSrcRouting extends ReversibleStep<String?> {
+final class WriteNetplanPublicSrcRouting extends ReversibleStep<String?> with FileStep {
   /// Writes the drop-in at [path], sending everything else through table [table].
   const WriteNetplanPublicSrcRouting({required this.path, required this.table});
 
@@ -55,7 +55,7 @@ final class WriteNetplanPublicSrcRouting extends ReversibleStep<String?> {
   static const int mainTable = 254;
 
   /// `0600` — the network tool refuses to read a file anyone can read.
-  static const int mode = 0x180;
+  static const int fileMode = 0x180;
 
   /// The ranges that stay on the main table, and the number each is given.
   ///
@@ -77,39 +77,25 @@ final class WriteNetplanPublicSrcRouting extends ReversibleStep<String?> {
   final int table;
 
   @override
-  Future<CheckResult> check(StepContext context) async {
-    final PublicNic? nic = await DetectPublicNic.detect(context);
-    if (nic == null) {
-      return const CheckResult.satisfied(
-        'this machine answers by the interface its public address is on, so nothing has to be '
-        'steered',
-      );
-    }
-    if (!await context.files.exists(path)) {
-      return const CheckResult.ready();
-    }
-    return await context.files.read(path) == dropIn(nic, table)
-        ? CheckResult.satisfied('$path already holds what this step writes')
-        : const CheckResult.ready();
-  }
+  String pathFor(StepContext context) => path;
 
   @override
-  Future<StepPlan> plan(StepContext context) async {
-    final PublicNic? nic = await DetectPublicNic.detect(context);
-    return StepPlan.diff(
-      path,
-      before: await context.files.exists(path) ? await context.files.read(path) : '',
-      after: nic == null ? '' : dropIn(nic, table),
-    );
-  }
+  int get mode => fileMode;
 
+  /// The drop-in for the interface this machine's public address arrives on.
+  ///
+  /// A machine that answers by the same interface its public address is on steers nothing, and the
+  /// drop-in could not be composed there in any case, since it names that interface. One reading
+  /// answers both.
   @override
-  Future<void> apply(StepContext context) async {
+  Future<FileContent> contentFor(StepContext context) async {
     final PublicNic? nic = await DetectPublicNic.detect(context);
-    if (nic == null) {
-      return;
-    }
-    await context.files.write(path, dropIn(nic, table), mode: mode);
+    return nic == null
+        ? const FileContent.nothing(
+            'this machine answers by the interface its public address is on, so nothing has to be '
+            'steered',
+          )
+        : FileContent.text(dropIn(nic, table));
   }
 
   /// What the drop-in held before, or null when it was not there.
@@ -118,8 +104,7 @@ final class WriteNetplanPublicSrcRouting extends ReversibleStep<String?> {
   /// the network tool insists on — a machine left with no drop-in would answer by whichever
   /// interface holds the default route.
   @override
-  Future<String?> capture(StepContext context) async =>
-      await context.files.exists(path) ? context.files.read(path) : null;
+  Future<String?> capture(StepContext context) => contentBefore(context);
 
   @override
   Future<void> undo(StepContext context, String? captured) async {

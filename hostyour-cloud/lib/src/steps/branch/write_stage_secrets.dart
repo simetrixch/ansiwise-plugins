@@ -1,5 +1,6 @@
 import 'package:ansiwise_api/ansiwise_api.dart';
 import 'filled_template.dart';
+import 'filled_template_step.dart';
 
 /// Puts the credentials this run was given into the file that seeds this installation's Vault.
 ///
@@ -26,7 +27,7 @@ import 'filled_template.dart';
 /// **The four of the build plane are demanded only on the cluster that carries it.** Every other
 /// cluster reads its images through that one and would never look at them, so asking there would be
 /// asking for a credential nothing on the machine ever uses.
-final class WriteStageSecrets extends ReversibleStep<String?> {
+final class WriteStageSecrets extends FilledTemplateStep {
   /// Writes the credentials of the installation generated in [repository].
   const WriteStageSecrets({required this.repository});
 
@@ -96,12 +97,15 @@ final class WriteStageSecrets extends ReversibleStep<String?> {
   final String repository;
 
   /// The file the trunk carries, with every value at a placeholder.
+  @override
   String get templatePath => '$repository/secrets/secrets.example';
 
   /// `0600` — every value in this file is a credential, so only its owner may read it.
-  static const int mode = 0x180;
+  @override
+  int get mode => 0x180;
 
   /// Where the credentials of [context]'s stage stand.
+  @override
   String pathFor(StepContext context) =>
       '$repository/secrets/secrets.${context.answers.text('stage')}';
 
@@ -114,6 +118,7 @@ final class WriteStageSecrets extends ReversibleStep<String?> {
   /// An answer nobody gave is not in the map at all, so the key keeps whatever the template ships
   /// rather than being set to the empty string — the two read the same to a shell and only one of
   /// them says "nobody answered this".
+  @override
   Map<String, String> valuesFrom(StepContext context) {
     final Arguments given = context.answers;
     return <String, String>{
@@ -152,10 +157,7 @@ final class WriteStageSecrets extends ReversibleStep<String?> {
       );
     }
 
-    final List<String> unwritable = <String>[
-      for (final MapEntry<String, String> value in wanted.entries)
-        if (FilledTemplate.holdsQuote(value.value)) value.key,
-    ];
+    final List<String> unwritable = unwritableIn(wanted);
     if (unwritable.isNotEmpty) {
       return CheckResult.blocked(
         'these credentials hold a double quote or a line break, which this file cannot carry: '
@@ -163,7 +165,7 @@ final class WriteStageSecrets extends ReversibleStep<String?> {
       );
     }
 
-    final FilledTemplate file = await _read(context);
+    final FilledTemplate file = await read(context);
     final List<String> undeclared = file.missingKeys(wanted.keys);
     if (undeclared.isNotEmpty) {
       return CheckResult.blocked(
@@ -172,7 +174,7 @@ final class WriteStageSecrets extends ReversibleStep<String?> {
       );
     }
 
-    if (_toFill(file, wanted).isEmpty) {
+    if (toFill(file, wanted).isEmpty) {
       return CheckResult.satisfied(
         '${pathFor(context)} carries every credential this installation was given',
       );
@@ -191,13 +193,13 @@ final class WriteStageSecrets extends ReversibleStep<String?> {
       );
     }
 
-    final FilledTemplate file = await _read(context);
+    final FilledTemplate file = await read(context);
     final Map<String, String> wanted = valuesFrom(context);
-    final List<String> toFill = _toFill(file, wanted);
+    final List<String> filling = toFill(file, wanted);
 
     for (final String key in wanted.keys) {
       context.log.debug(
-        toFill.contains(key)
+        filling.contains(key)
             ? '$key would be filled in'
             : '$key already carries a value and would be left alone',
       );
@@ -209,8 +211,8 @@ final class WriteStageSecrets extends ReversibleStep<String?> {
     // and the difference is what would change in it.
     return StepPlan.diff(
       pathFor(context),
-      before: toFill.map((String key) => '$key=').join('\n'),
-      after: toFill
+      before: filling.map((String key) => '$key=').join('\n'),
+      after: filling
           .map(
             (String key) =>
                 '$key=${credentials.contains(key) ? Redactor.marker : wanted[key] ?? ''}',
@@ -218,63 +220,4 @@ final class WriteStageSecrets extends ReversibleStep<String?> {
           .join('\n'),
     );
   }
-
-  @override
-  Future<void> apply(StepContext context) async {
-    final FilledTemplate file = await _read(context);
-    final Map<String, String> wanted = valuesFrom(context);
-    await context.files.write(
-      pathFor(context),
-      file.filled(<String, String>{
-        for (final String key in _toFill(file, wanted)) key: wanted[key] ?? '',
-      }),
-      mode: mode,
-    );
-  }
-
-  /// What the credential file held before this run filled it, which is what [undo] writes back.
-  ///
-  /// The whole file rather than the keys this step fills, because the file carries more than they
-  /// are: the root token and the five unseal keys of a running Vault, the generated passwords, a
-  /// rotation somebody performed by hand. Putting the captured bytes back is the only restoration
-  /// that cannot drop one of them, and it also cannot reset a key an operator had answered before
-  /// the run to the same value this run was given — the two used to be indistinguishable.
-  ///
-  /// Null is a branch that carried no such file, and that is the one case where taking the write
-  /// back means removing it, so a failed run leaves no credential on a machine whose installation
-  /// was abandoned.
-  @override
-  Future<String?> capture(StepContext context) async {
-    final String path = pathFor(context);
-    return await context.files.exists(path) ? context.files.read(path) : null;
-  }
-
-  @override
-  Future<void> undo(StepContext context, String? captured) async {
-    if (captured == null) {
-      await context.files.delete(pathFor(context));
-      return;
-    }
-    await context.files.write(pathFor(context), captured, mode: mode);
-  }
-
-  /// The file as it stands, or the template itself when the machine carries no credentials yet.
-  Future<FilledTemplate> _read(StepContext context) async {
-    final String template = await context.files.read(templatePath);
-    final String path = pathFor(context);
-    return FilledTemplate(
-      template: template,
-      current: await context.files.exists(path) ? await context.files.read(path) : template,
-    );
-  }
-
-  /// Which keys this step would write, which is also its postcondition.
-  ///
-  /// A key carrying anything other than the template's own value is live — a credential rotated by
-  /// hand, or one of the values a later phase writes back into this file — and is never touched
-  /// again.
-  static List<String> _toFill(FilledTemplate file, Map<String, String> wanted) => <String>[
-    for (final MapEntry<String, String> value in wanted.entries)
-      if (file.isUnset(value.key) && file.valueOf(value.key) != value.value) value.key,
-  ];
 }

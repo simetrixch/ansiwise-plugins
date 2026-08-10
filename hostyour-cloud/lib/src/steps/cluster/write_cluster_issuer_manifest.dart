@@ -11,7 +11,7 @@ import 'configure_slave_apiserver_oidc_trust.dart';
 /// illustrations use, because the address stood in the program file and was somebody's example.
 /// It is answered now, so there is no example left to catch — and a rule that recognised an
 /// illustration would refuse the operator whose own mailbox happens to read like one.
-final class WriteClusterIssuerManifest extends ReversibleStep<String?> {
+final class WriteClusterIssuerManifest extends ReversibleStep<String?> with FileStep {
   /// Renders the issuer [name] into [stateDirectory], for the mailbox this run names.
   const WriteClusterIssuerManifest({
     required this.name,
@@ -85,30 +85,26 @@ final class WriteClusterIssuerManifest extends ReversibleStep<String?> {
   /// Where the rendered manifest is written.
   String get path => '$stateDirectory/clusterissuer.yaml';
 
+  @override
+  String pathFor(StepContext context) => path;
+
   /// `0644` — a rendered manifest that carries nothing secret.
+  @override
   int get mode => ConfigureSlaveApiserverOidcTrust.manifestMode;
 
+  /// Every cluster this program runs on issues its own certificates, so there is always a manifest
+  /// to render.
   @override
-  Future<CheckResult> check(StepContext context) async {
-    if (!await context.files.exists(path)) {
-      return const CheckResult.ready();
-    }
-    return await context.files.read(path) == manifestFor(context)
-        ? CheckResult.satisfied('$path already holds what this step renders')
-        : const CheckResult.ready();
-  }
-
-  @override
-  Future<StepPlan> plan(StepContext context) async => StepPlan.diff(
-    path,
-    before: await context.files.exists(path) ? await context.files.read(path) : '',
-    after: manifestFor(context),
-  );
+  Future<FileContent> contentFor(StepContext context) async =>
+      FileContent.text(manifestFor(context));
 
   @override
   Future<void> apply(StepContext context) async {
+    // The directory first. It is the state directory of this installation, and a run that reached
+    // here on a machine that has never had one would otherwise fail on the write rather than on
+    // anything that says what is missing.
     await context.files.createDirectory(stateDirectory, mode: 0x1ed);
-    await context.files.write(path, manifestFor(context), mode: mode);
+    await super.apply(context);
   }
 
   /// What the file held before, or null when it was not there.
@@ -117,8 +113,7 @@ final class WriteClusterIssuerManifest extends ReversibleStep<String?> {
   /// step that applies it is what takes that away. What this puts back is the text a previous run
   /// rendered, so a machine that had one is left with it rather than with nothing.
   @override
-  Future<String?> capture(StepContext context) async =>
-      await context.files.exists(path) ? context.files.read(path) : null;
+  Future<String?> capture(StepContext context) => contentBefore(context);
 
   @override
   Future<void> undo(StepContext context, String? captured) async {

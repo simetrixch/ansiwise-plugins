@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:ansiwise_api/ansiwise_api.dart';
 import 'package:hostyour_cloud/hostyour_cloud.dart';
 import 'package:ansiwise_api/testing.dart';
@@ -86,6 +88,124 @@ const String operatorHome = '/home/$operatorUser';
 
 /// The name servers the machine in these fixtures reaches the internet through.
 const List<String> upstreamResolvers = <String>['185.12.64.1', '185.12.64.2'];
+
+/// The configuration `deploy-cluster` writes into the cluster's own name service.
+///
+/// The same text the program file holds, with the slot standing for the machine's own name servers
+/// filled by [servers]. It is written out here rather than read from a step, because no step
+/// composes it any more: the value belongs to the program, and this is what a converged machine has
+/// to be holding for that row to have nothing left to do. The double-run test is what binds the two
+/// — let them drift and it reports the row as still having work.
+String corefile(List<String> servers, {bool forceTcp = false}) {
+  final String forward = forceTcp
+      ? '    forward . ${servers.join(' ')} {\n      force_tcp\n    }'
+      : '    forward . ${servers.join(' ')}';
+  return '.:53 {\n'
+      '    errors\n'
+      '    health {\n'
+      '      lameduck 5s\n'
+      '    }\n'
+      '    ready\n'
+      '    log . {\n'
+      '      class error\n'
+      '    }\n'
+      '    kubernetes cluster.local in-addr.arpa ip6.arpa {\n'
+      '      pods insecure\n'
+      '      fallthrough in-addr.arpa ip6.arpa\n'
+      '    }\n'
+      '    prometheus :9153\n'
+      '$forward\n'
+      '    cache 30\n'
+      '    loop\n'
+      '    reload\n'
+      '    loadbalance\n'
+      '}\n';
+}
+
+/// The argument that opens middleware references across namespaces, as the program writes it.
+const String crossNamespaceArgument = '--providers.kubernetescrd.allowCrossNamespace=true';
+
+/// The command that reads the ingress controller as the cluster holds it.
+const String traefikDaemonSet = 'microk8s kubectl -n ingress get daemonset traefik -o json';
+
+/// The command that reads its pods, found through the selector the controller itself declares.
+const String traefikPods =
+    'microk8s kubectl -n ingress get pods -l app.kubernetes.io/name=traefik -o json';
+
+/// A workload holding one container called [container], started with [arguments].
+///
+/// [ports] are the ports it publishes on the machine, each written as its name and the port it
+/// answers on — the shape a container declares them in, so a step reads this the way it reads a real
+/// one. [selector] is what the workload says its own pods are labelled with.
+String workloadJson({
+  required String container,
+  required List<String> arguments,
+  Map<String, int> ports = const <String, int>{},
+  Map<String, String> selector = const <String, String>{'app.kubernetes.io/name': 'traefik'},
+}) => jsonEncode(<String, Object>{
+  'spec': <String, Object>{
+    'selector': <String, Object>{'matchLabels': selector},
+    'template': <String, Object>{
+      'spec': <String, Object>{
+        'containers': <Object>[_containerJson(container, arguments, ports)],
+      },
+    },
+  },
+});
+
+/// The pods of a workload: one per entry of [pods], in the phase and with the container that entry
+/// names.
+String podsJson(Map<String, PodState> pods, {String container = 'traefik'}) => jsonEncode(
+  <String, Object>{
+    'items': <Object>[
+      for (final MapEntry<String, PodState> pod in pods.entries)
+        <String, Object>{
+          'metadata': <String, Object>{'name': pod.key},
+          'status': <String, Object>{'phase': pod.value.phase},
+          'spec': <String, Object>{
+            'containers': <Object>[_containerJson(container, pod.value.arguments, pod.value.ports)],
+          },
+        },
+    ],
+  },
+);
+
+/// One pod of a fixture: which phase it is in and what its container is running with.
+final class PodState {
+  /// A pod in [phase], running with [arguments] and publishing [ports].
+  const PodState({
+    required this.phase,
+    this.arguments = const <String>[],
+    this.ports = const <String, int>{},
+  });
+
+  /// Which phase the pod is in.
+  final String phase;
+
+  /// What its container was started with.
+  final List<String> arguments;
+
+  /// What it publishes on the machine.
+  final Map<String, int> ports;
+}
+
+Map<String, Object> _containerJson(
+  String container,
+  List<String> arguments,
+  Map<String, int> ports,
+) => <String, Object>{
+  'name': container,
+  'args': arguments,
+  'ports': <Object>[
+    for (final MapEntry<String, int> port in ports.entries)
+      <String, Object>{
+        'name': port.key,
+        'containerPort': port.value,
+        'hostPort': port.value,
+        'protocol': 'TCP',
+      },
+  ],
+};
 
 /// The addons `deploy-cluster` switches on.
 const List<String> enabledAddons = <String>[
@@ -247,25 +367,27 @@ ClusterMachine convergedCluster() {
     ..answers('resolvectl status', 'Global\n  DNS Servers: ${upstreamResolvers.join(' ')}\n')
     ..answers(
       'microk8s kubectl -n kube-system get configmap coredns -o jsonpath={.data.Corefile}',
-      PatchCorednsCorefile.corefile(upstreamResolvers, forceTcp: false),
+      corefile(upstreamResolvers),
     )
     ..answers(
       'microk8s kubectl get felixconfiguration/default -o jsonpath={.spec.iptablesBackend}',
       'Auto\n',
     );
 
-  // The ingress controller: the declaration carries the flag and so does the pod that is serving.
+  // The ingress controller: the declaration carries the argument and so does the pod that is
+  // serving. Both are answered, because a machine where only the declaration carried it is exactly
+  // the one the step exists to repair.
+  const List<String> traefikArguments = <String>[
+    '--entrypoints.web.address=:8000/tcp',
+    crossNamespaceArgument,
+  ];
   shell
+    ..answers(traefikDaemonSet, workloadJson(container: 'traefik', arguments: traefikArguments))
     ..answers(
-      r'microk8s kubectl -n ingress get daemonset traefik -o '
-          r'jsonpath={range .spec.template.spec.containers[0].args[*]}{@}{"\n"}{end}',
-      '--entrypoints.web.address=:8000/tcp\n${PatchTraefikCrossNamespace.flag}\n',
-    )
-    ..answers(
-      'microk8s kubectl -n ingress get pods -l app.kubernetes.io/name=traefik '
-          r'--field-selector=status.phase=Running -o jsonpath={range .items[*]}{.metadata.name}{"\t"}'
-          r'{range .spec.containers[0].args[*]}{@}{" "}{end}{"\n"}{end}',
-      'traefik-abc\t--entrypoints.web.address=:8000/tcp ${PatchTraefikCrossNamespace.flag} \n',
+      traefikPods,
+      podsJson(<String, PodState>{
+        'traefik-abc': const PodState(phase: 'Running', arguments: traefikArguments),
+      }),
     );
 
   // Storage and certificates.
@@ -296,6 +418,10 @@ ClusterMachine convergedCluster() {
   for (final String tool in <String>['curl', 'unzip', 'jq', 'argocd', 'vault', 'yq', 'tailscale']) {
     shell.answers('command -v $tool', '/usr/local/bin/$tool\n');
   }
+  // The one that comes from the package manager is judged on the package manager's own record, and
+  // that is a different question from being on the path: a package removed but not purged is still
+  // known to dpkg, and a binary somebody copied in by hand is on the path and unknown to it.
+  shell.answers(r'dpkg-query -W -f=${Status} jq', 'install ok installed');
   shell
     ..answers('argocd version --client --short', 'argocd: v3.4.5+abcdef1\n')
     ..answers('vault version', 'Vault v2.0.3 (abcdef1), built 2026-01-01\n')

@@ -14,7 +14,7 @@ import 'write_public_src_routing_script.dart';
 /// **Stopping the service is what removes them, which is why it says how.** Deleting the files does
 /// not: the rules are already in the kernel. So the service carries the two commands that take them
 /// out, and stopping it is the first act of any teardown.
-final class WritePublicSrcRoutingUnit extends ReversibleStep<String?> {
+final class WritePublicSrcRoutingUnit extends ReversibleStep<String?> with FileStep {
   /// Writes the service at [path], running the script at [scriptPath].
   const WritePublicSrcRoutingUnit({
     required this.path,
@@ -88,7 +88,7 @@ final class WritePublicSrcRoutingUnit extends ReversibleStep<String?> {
   static const String unitName = 'hostyour-public-src-routing.service';
 
   /// `0644` — a service file the service manager reads.
-  static const int mode = 0x1a4;
+  static const int fileMode = 0x1a4;
 
   /// The service file's path.
   final String path;
@@ -109,30 +109,28 @@ final class WritePublicSrcRoutingUnit extends ReversibleStep<String?> {
   final int priority;
 
   @override
-  Future<CheckResult> check(StepContext context) async {
-    if (await DetectPublicNic.detect(context) == null) {
-      return const CheckResult.satisfied(
-        'nothing is steered on this machine, so there is no service to install',
-      );
-    }
-    if (!await context.files.exists(path)) {
-      return const CheckResult.ready();
-    }
-    return await context.files.read(path) == unit
-        ? CheckResult.satisfied('$path already holds what this step writes')
-        : const CheckResult.ready();
-  }
+  String pathFor(StepContext context) => path;
 
   @override
-  Future<StepPlan> plan(StepContext context) async => StepPlan.diff(
-    path,
-    before: await context.files.exists(path) ? await context.files.read(path) : '',
-    after: unit,
-  );
+  int get mode => fileMode;
+
+  /// The service, on a machine that steers anything at all.
+  ///
+  /// A machine with no public interface of its own has no rule to install, so there is no service
+  /// to run the script that installs it.
+  @override
+  Future<FileContent> contentFor(StepContext context) async =>
+      await DetectPublicNic.detect(context) == null
+      ? const FileContent.nothing(
+          'nothing is steered on this machine, so there is no service to install',
+        )
+      : FileContent.text(unit);
 
   @override
   Future<void> apply(StepContext context) async {
-    await context.files.write(path, unit, mode: mode);
+    await super.apply(context);
+    // The service manager reads its directory once at start-up and once when it is told to. A file
+    // written without telling it is a service that does not exist as far as it is concerned.
     await context.shell.run(const Command('systemctl', <String>['daemon-reload']));
   }
 
@@ -141,8 +139,7 @@ final class WritePublicSrcRoutingUnit extends ReversibleStep<String?> {
   /// A machine that arrived with a service of this name gets its file back rather than losing it,
   /// and the service manager is told to read the directory again either way.
   @override
-  Future<String?> capture(StepContext context) async =>
-      await context.files.exists(path) ? context.files.read(path) : null;
+  Future<String?> capture(StepContext context) => contentBefore(context);
 
   @override
   Future<void> undo(StepContext context, String? captured) async {

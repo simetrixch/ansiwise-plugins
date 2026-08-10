@@ -15,7 +15,7 @@ final class WritesAFile extends ReversibleStep<String?> with FileStep {
   int get mode => 0x1a4;
 
   @override
-  Future<String> contentFor(StepContext context) async => content;
+  Future<FileContent> contentFor(StepContext context) async => FileContent.text(content);
 
   @override
   Future<String?> capture(StepContext context) => contentBefore(context);

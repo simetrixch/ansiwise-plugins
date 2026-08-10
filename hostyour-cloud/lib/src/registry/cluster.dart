@@ -19,26 +19,19 @@ import '../steps/cluster/detect_host_upstream_resolvers.dart';
 import '../steps/cluster/detect_public_nic.dart';
 import '../steps/cluster/disable_addons.dart';
 import '../steps/cluster/enable_addons.dart';
-import '../steps/cluster/enable_disabled_microk8s_snap.dart';
 import '../steps/cluster/ensure_tool_prerequisites.dart';
 import '../steps/cluster/export_kubeconfig.dart';
-import '../steps/cluster/force_roll_traefik_daemonset.dart';
 import '../steps/cluster/guard_populated_cluster_pod_cidr_migration.dart';
-import '../steps/cluster/install_argocd_cli.dart';
-import '../steps/cluster/install_jq.dart';
-import '../steps/cluster/install_microk8s_snap.dart';
+import '../steps/cluster/install_pinned_tool.dart';
+import '../steps/cluster/install_snap.dart';
 import '../steps/cluster/install_tailscale_client.dart';
-import '../steps/cluster/install_vault_cli.dart';
-import '../steps/cluster/install_yq_cli.dart';
+import '../steps/cluster/remove_snap.dart';
 import '../steps/cluster/link_microk8s_storage_path.dart';
-import '../steps/cluster/patch_coredns_corefile.dart';
-import '../steps/cluster/patch_traefik_cross_namespace.dart';
-import '../steps/cluster/patch_traefik_tcp_entrypoint.dart';
+import '../steps/cluster/patch_configmap_key.dart';
+import '../steps/cluster/patch_container_arguments_and_ports.dart';
 import '../steps/cluster/preflight_docker_mirror_credential.dart';
 import '../steps/cluster/reapply_calico_manifest.dart';
 import '../steps/cluster/recycle_kube_system_pod_ips.dart';
-import '../steps/cluster/refresh_microk8s_channel.dart';
-import '../steps/cluster/remove_microk8s_snap_forced.dart';
 import '../steps/cluster/require_pod_cidr_free_of_reserved_ranges.dart';
 import '../steps/cluster/restart_cert_manager_and_reapply_cluster_issuer.dart';
 import '../steps/cluster/restart_microk8s_snap_for_pod_cidr.dart';
@@ -46,10 +39,8 @@ import '../steps/cluster/set_default_storage_class.dart';
 import '../steps/cluster/stamp_calico_pool_cidr_in_cni_manifest.dart';
 import '../steps/cluster/stamp_kube_proxy_cluster_cidr.dart';
 import '../steps/cluster/verify_ippool_converged_with_self_heal.dart';
-import '../steps/cluster/wait_cluster_issuer_ready.dart';
 import '../steps/cluster/wait_for_addons_enabled.dart';
-import '../steps/cluster/wait_for_cert_manager_ready.dart';
-import '../steps/cluster/wait_for_microk8s_ready.dart';
+import '../steps/cluster/wait_for_answer.dart';
 import '../steps/cluster/write_cluster_issuer_manifest.dart';
 import '../steps/cluster/write_connmark_nft_table.dart';
 import '../steps/cluster/write_containerd_docker_mirror.dart';
@@ -68,35 +59,23 @@ import '../steps/cluster/write_public_src_routing_unit.dart';
 /// any pod is given an address, the image mirror before any image is pulled, and the addons before
 /// anything that patches what an addon installed.
 const Map<StepName, RegisteredStep> clusterSteps = <StepName, RegisteredStep>{
-  StepName('remove_microk8s_snap_forced'): RegisteredStep(
-    name: StepName('remove_microk8s_snap_forced'),
-    source: 'lib/src/steps/cluster/remove_microk8s_snap_forced.dart:16',
-    create: RemoveMicrok8sSnapForced.fromArguments,
-    arguments: RemoveMicrok8sSnapForced.arguments,
+  StepName('remove_snap'): RegisteredStep(
+    name: StepName('remove_snap'),
+    source: 'lib/src/steps/cluster/remove_snap.dart:22',
+    create: RemoveSnap.fromArguments,
+    arguments: RemoveSnap.arguments,
   ),
-  StepName('enable_disabled_microk8s_snap'): RegisteredStep(
-    name: StepName('enable_disabled_microk8s_snap'),
-    source: 'lib/src/steps/cluster/enable_disabled_microk8s_snap.dart:16',
-    create: EnableDisabledMicrok8sSnap.fromArguments,
-    arguments: EnableDisabledMicrok8sSnap.arguments,
+  StepName('install_snap'): RegisteredStep(
+    name: StepName('install_snap'),
+    source: 'lib/src/steps/cluster/install_snap.dart:35',
+    create: InstallSnap.fromArguments,
+    arguments: InstallSnap.arguments,
   ),
-  StepName('refresh_microk8s_channel'): RegisteredStep(
-    name: StepName('refresh_microk8s_channel'),
-    source: 'lib/src/steps/cluster/refresh_microk8s_channel.dart:15',
-    create: RefreshMicrok8sChannel.fromArguments,
-    arguments: RefreshMicrok8sChannel.arguments,
-  ),
-  StepName('install_microk8s_snap'): RegisteredStep(
-    name: StepName('install_microk8s_snap'),
-    source: 'lib/src/steps/cluster/install_microk8s_snap.dart:16',
-    create: InstallMicrok8sSnap.fromArguments,
-    arguments: InstallMicrok8sSnap.arguments,
-  ),
-  StepName('wait_for_microk8s_ready'): RegisteredStep(
-    name: StepName('wait_for_microk8s_ready'),
-    source: 'lib/src/steps/cluster/wait_for_microk8s_ready.dart:13',
-    create: WaitForMicrok8sReady.fromArguments,
-    arguments: WaitForMicrok8sReady.arguments,
+  StepName('wait_for_answer'): RegisteredStep(
+    name: StepName('wait_for_answer'),
+    source: 'lib/src/steps/cluster/wait_for_answer.dart:33',
+    create: WaitForAnswer.fromArguments,
+    arguments: WaitForAnswer.arguments,
   ),
   StepName('configure_kube_proxy_nftables'): RegisteredStep(
     name: StepName('configure_kube_proxy_nftables'),
@@ -143,7 +122,7 @@ const Map<StepName, RegisteredStep> clusterSteps = <StepName, RegisteredStep>{
   ),
   StepName('restart_microk8s_snap_for_pod_cidr'): RegisteredStep(
     name: StepName('restart_microk8s_snap_for_pod_cidr'),
-    source: 'lib/src/steps/cluster/restart_microk8s_snap_for_pod_cidr.dart:19',
+    source: 'lib/src/steps/cluster/restart_microk8s_snap_for_pod_cidr.dart:18',
     create: RestartMicrok8sSnapForPodCidr.fromArguments,
     arguments: RestartMicrok8sSnapForPodCidr.arguments,
   ),
@@ -182,13 +161,13 @@ const Map<StepName, RegisteredStep> clusterSteps = <StepName, RegisteredStep>{
   ),
   StepName('enable_addons'): RegisteredStep(
     name: StepName('enable_addons'),
-    source: 'lib/src/steps/cluster/enable_addons.dart:17',
+    source: 'lib/src/steps/cluster/enable_addons.dart:35',
     create: EnableAddons.fromArguments,
     arguments: EnableAddons.arguments,
   ),
   StepName('wait_for_addons_enabled'): RegisteredStep(
     name: StepName('wait_for_addons_enabled'),
-    source: 'lib/src/steps/cluster/wait_for_addons_enabled.dart:12',
+    source: 'lib/src/steps/cluster/wait_for_addons_enabled.dart:20',
     create: WaitForAddonsEnabled.fromArguments,
     arguments: WaitForAddonsEnabled.arguments,
   ),
@@ -198,11 +177,11 @@ const Map<StepName, RegisteredStep> clusterSteps = <StepName, RegisteredStep>{
     create: DetectHostUpstreamResolvers.fromArguments,
     arguments: DetectHostUpstreamResolvers.arguments,
   ),
-  StepName('patch_coredns_corefile'): RegisteredStep(
-    name: StepName('patch_coredns_corefile'),
-    source: 'lib/src/steps/cluster/patch_coredns_corefile.dart:26',
-    create: PatchCorednsCorefile.fromArguments,
-    arguments: PatchCorednsCorefile.arguments,
+  StepName('patch_configmap_key'): RegisteredStep(
+    name: StepName('patch_configmap_key'),
+    source: 'lib/src/steps/cluster/patch_configmap_key.dart:36',
+    create: PatchConfigmapKey.fromArguments,
+    arguments: PatchConfigmapKey.arguments,
   ),
   StepName('detect_host_iptables_backend'): RegisteredStep(
     name: StepName('detect_host_iptables_backend'),
@@ -216,23 +195,11 @@ const Map<StepName, RegisteredStep> clusterSteps = <StepName, RegisteredStep>{
     create: AlignCalicoBackend.fromArguments,
     arguments: AlignCalicoBackend.arguments,
   ),
-  StepName('patch_traefik_cross_namespace'): RegisteredStep(
-    name: StepName('patch_traefik_cross_namespace'),
-    source: 'lib/src/steps/cluster/patch_traefik_cross_namespace.dart:19',
-    create: PatchTraefikCrossNamespace.fromArguments,
-    arguments: PatchTraefikCrossNamespace.arguments,
-  ),
-  StepName('patch_traefik_tcp_entrypoint'): RegisteredStep(
-    name: StepName('patch_traefik_tcp_entrypoint'),
-    source: 'lib/src/steps/cluster/patch_traefik_tcp_entrypoint.dart:19',
-    create: PatchTraefikTcpEntrypoint.fromArguments,
-    arguments: PatchTraefikTcpEntrypoint.arguments,
-  ),
-  StepName('force_roll_traefik_daemonset'): RegisteredStep(
-    name: StepName('force_roll_traefik_daemonset'),
-    source: 'lib/src/steps/cluster/force_roll_traefik_daemonset.dart:21',
-    create: ForceRollTraefikDaemonset.fromArguments,
-    arguments: ForceRollTraefikDaemonset.arguments,
+  StepName('patch_container_arguments_and_ports'): RegisteredStep(
+    name: StepName('patch_container_arguments_and_ports'),
+    source: 'lib/src/steps/cluster/patch_container_arguments_and_ports.dart:42',
+    create: PatchContainerArgumentsAndPorts.fromArguments,
+    arguments: PatchContainerArgumentsAndPorts.arguments,
   ),
   StepName('disable_addons'): RegisteredStep(
     name: StepName('disable_addons'),
@@ -329,12 +296,6 @@ const Map<StepName, RegisteredStep> clusterSteps = <StepName, RegisteredStep>{
     create: SetDefaultStorageClass.fromArguments,
     arguments: SetDefaultStorageClass.arguments,
   ),
-  StepName('wait_for_cert_manager_ready'): RegisteredStep(
-    name: StepName('wait_for_cert_manager_ready'),
-    source: 'lib/src/steps/cluster/wait_for_cert_manager_ready.dart:11',
-    create: WaitForCertManagerReady.fromArguments,
-    arguments: WaitForCertManagerReady.arguments,
-  ),
   StepName('delete_existing_cluster_issuer'): RegisteredStep(
     name: StepName('delete_existing_cluster_issuer'),
     source: 'lib/src/steps/cluster/delete_existing_cluster_issuer.dart:8',
@@ -354,15 +315,9 @@ const Map<StepName, RegisteredStep> clusterSteps = <StepName, RegisteredStep>{
     create: ApplyClusterIssuer.fromArguments,
     arguments: ApplyClusterIssuer.arguments,
   ),
-  StepName('wait_cluster_issuer_ready'): RegisteredStep(
-    name: StepName('wait_cluster_issuer_ready'),
-    source: 'lib/src/steps/cluster/wait_cluster_issuer_ready.dart:11',
-    create: WaitClusterIssuerReady.fromArguments,
-    arguments: WaitClusterIssuerReady.arguments,
-  ),
   StepName('restart_cert_manager_and_reapply_cluster_issuer'): RegisteredStep(
     name: StepName('restart_cert_manager_and_reapply_cluster_issuer'),
-    source: 'lib/src/steps/cluster/restart_cert_manager_and_reapply_cluster_issuer.dart:19',
+    source: 'lib/src/steps/cluster/restart_cert_manager_and_reapply_cluster_issuer.dart:17',
     create: RestartCertManagerAndReapplyClusterIssuer.fromArguments,
     arguments: RestartCertManagerAndReapplyClusterIssuer.arguments,
   ),
@@ -372,29 +327,11 @@ const Map<StepName, RegisteredStep> clusterSteps = <StepName, RegisteredStep>{
     create: EnsureToolPrerequisites.fromArguments,
     arguments: EnsureToolPrerequisites.arguments,
   ),
-  StepName('install_jq'): RegisteredStep(
-    name: StepName('install_jq'),
-    source: 'lib/src/steps/cluster/install_jq.dart:14',
-    create: InstallJq.fromArguments,
-    arguments: InstallJq.arguments,
-  ),
-  StepName('install_argocd_cli'): RegisteredStep(
-    name: StepName('install_argocd_cli'),
-    source: 'lib/src/steps/cluster/install_argocd_cli.dart:13',
-    create: InstallArgocdCli.fromArguments,
-    arguments: InstallArgocdCli.arguments,
-  ),
-  StepName('install_vault_cli'): RegisteredStep(
-    name: StepName('install_vault_cli'),
-    source: 'lib/src/steps/cluster/install_vault_cli.dart:9',
-    create: InstallVaultCli.fromArguments,
-    arguments: InstallVaultCli.arguments,
-  ),
-  StepName('install_yq_cli'): RegisteredStep(
-    name: StepName('install_yq_cli'),
-    source: 'lib/src/steps/cluster/install_yq_cli.dart:5',
-    create: InstallYqCli.fromArguments,
-    arguments: InstallYqCli.arguments,
+  StepName('install_pinned_tool'): RegisteredStep(
+    name: StepName('install_pinned_tool'),
+    source: 'lib/src/steps/cluster/install_pinned_tool.dart:22',
+    create: InstallPinnedTool.fromArguments,
+    arguments: InstallPinnedTool.arguments,
   ),
   StepName('install_tailscale_client'): RegisteredStep(
     name: StepName('install_tailscale_client'),
@@ -404,7 +341,7 @@ const Map<StepName, RegisteredStep> clusterSteps = <StepName, RegisteredStep>{
   ),
   StepName('assert_cli_tool_versions'): RegisteredStep(
     name: StepName('assert_cli_tool_versions'),
-    source: 'lib/src/steps/cluster/assert_cli_tool_versions.dart:19',
+    source: 'lib/src/steps/cluster/assert_cli_tool_versions.dart:28',
     create: AssertCliToolVersions.fromArguments,
     arguments: AssertCliToolVersions.arguments,
   ),
