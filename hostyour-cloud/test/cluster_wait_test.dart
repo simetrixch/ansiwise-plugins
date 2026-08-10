@@ -1,4 +1,7 @@
+import 'dart:async';
+
 import 'package:ansiwise_api/ansiwise_api.dart';
+import 'package:ansiwise_api/testing.dart';
 import 'package:hostyour_cloud/hostyour_cloud.dart';
 import 'package:test/test.dart';
 
@@ -137,6 +140,38 @@ void main() {
     });
   });
 
+  group('each poll', () {
+    test('carries a deadline derived from the row, above the row\'s own budget', () async {
+      // The wait's budget is only checked BETWEEN polls, so the poll's command must carry its own
+      // deadline or a command that blocks is never interrupted. It sits ABOVE the row's timeout on
+      // purpose: the kill must lose the race against any command that answers within the row's
+      // budget, so what the operator reads is the command's own message and never "killed".
+      final ClusterMachine machine = ClusterMachine()..shell.answers(issuerReady, 'True');
+
+      await waitingFor('True', timeoutSeconds: 300).check(machine.contextFor(under));
+
+      final Command poll = machine.shell.commands.single;
+      expect(poll.timeout, const Duration(seconds: 330));
+      expect(poll.timeout, greaterThan(const Duration(seconds: 300)));
+    });
+
+    test('a command that never returns ends the wait instead of hanging it', () async {
+      // The shell kills a command at its deadline and throws — proven against real processes in
+      // the framework's own tests. What is measured here is the step's side: the failure comes
+      // through instead of being read as a quiet no, so the run ends loud with the command named.
+      await expectLater(
+        waitingFor('True').apply(_contextWith(_WedgedShell(), under)),
+        throwsA(isA<TimeoutException>()),
+      );
+    });
+
+    test('its answer rests on the row\'s word', () {
+      // The row chose the command, so the framework cannot verify that it only looks. The step
+      // says so, and the engine records every such row as declared rather than proven.
+      expect(waitingFor('True').answersOnTrust, isTrue);
+    });
+  });
+
   group('what the program hands it', () {
     test('a row that names no arguments asks the bare command', () async {
       final ClusterMachine machine = ClusterMachine()..shell.answers('microk8s', 'anything\n');
@@ -173,4 +208,49 @@ void main() {
       expect(built.interval, const Duration(seconds: 5));
     });
   });
+}
+
+/// A context whose shell is [shell], for the one test that needs a shell no fake table can be.
+StepContext _contextWith(Shell shell, StepName step) => StepContext(
+  shell: shell,
+  files: FakeFiles(),
+  http: FakeHttp(),
+  clock: FakeClock(),
+  entropy: FakeEntropy(),
+  log: const _SilentLog(),
+  step: step,
+  arguments: Arguments.none,
+  answers: Arguments.none,
+  facts: Facts.none,
+);
+
+/// A shell whose command never returns, answered the way the real shell answers it: killed at the
+/// command's deadline, and thrown rather than dressed up as a result.
+final class _WedgedShell implements Shell {
+  @override
+  Future<CommandResult> run(Command command) async {
+    final Duration? timeout = command.timeout;
+    if (timeout == null) {
+      // The planted case this probe exists for: without a per-poll deadline the call would simply
+      // never complete, and the test would hang the way the run used to.
+      return Completer<CommandResult>().future;
+    }
+    throw TimeoutException('${command.argv.join(' ')} did not finish and was killed', timeout);
+  }
+}
+
+final class _SilentLog implements Logger {
+  const _SilentLog();
+
+  @override
+  void debug(String message) {}
+
+  @override
+  void info(String message) {}
+
+  @override
+  void warn(String message) {}
+
+  @override
+  void error(String message) {}
 }

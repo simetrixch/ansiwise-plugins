@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:ansiwise_api/ansiwise_api.dart';
 import 'package:hostyour_cloud/hostyour_cloud.dart';
 import 'package:test/test.dart';
@@ -460,18 +462,54 @@ void main() {
       );
     });
 
-    test('a port written wrong is warned about and left out', () async {
+    test('a port written wrong blocks the row, naming the entry', () async {
+      // Left out and reported green, the port is never published and nothing downstream says
+      // otherwise — a plain-TCP entry point simply does not answer.
       final ClusterMachine machine = withController(
         declared: const <String>[crossNamespaceArgument],
         pods: const <String, PodState>{
           'traefik-old': PodState(phase: 'Running', arguments: <String>[crossNamespaceArgument]),
         },
       );
-      expect(
-        await asking(ports: const <String>['postgres']).check(machine.contextFor(under)),
-        isA<Satisfied>(),
+      final CheckResult answer = await asking(
+        ports: const <String>['postgres'],
+      ).check(machine.contextFor(under));
+      expect((answer as Blocked).reason, contains('"postgres" is not a port'));
+      expect(machine.changing, isEmpty);
+    });
+
+    test('the plan of a machine short of the argument names the pod deletion', () async {
+      // On a fresh install the declaration is short of the argument AND the serving pod lags it:
+      // the apply patches and then deletes that pod, so the plan has to name the deletion — the
+      // half that cannot be taken back — and say the rest beside it.
+      final ClusterMachine machine = withController(
+        declared: const <String>['--entrypoints.web.address=:8000/tcp'],
+        pods: const <String, PodState>{
+          'traefik-old': PodState(
+            phase: 'Running',
+            arguments: <String>['--entrypoints.web.address=:8000/tcp'],
+          ),
+        },
       );
-      expect(machine.said.join('\n'), contains('is not a port'));
+      final StepContext context = machine.contextFor(under);
+      expect(await asking().check(context), isA<Ready>());
+      final StepPlan plan = await asking().plan(context);
+      expect(plan.summary, 'microk8s kubectl -n ingress delete pod traefik-old --grace-period=10');
+      expect(
+        machine.said.join('\n'),
+        contains('patch daemonset traefik'),
+        reason: 'the patch that precedes the deletion is said in the log the plan leaves behind',
+      );
+      expect(machine.said.join('\n'), contains('nothing answers on the ports'));
+    });
+
+    test('a workload with no pod to delete plans the patch itself', () async {
+      final ClusterMachine machine = withController(
+        declared: const <String>['--entrypoints.web.address=:8000/tcp'],
+      );
+      final StepPlan plan = await asking().plan(machine.contextFor(under));
+      expect(plan.summary, contains('patch daemonset traefik'));
+      expect(plan.summary, contains(crossNamespaceArgument));
     });
 
     test('asking for nothing is a step with nothing to do', () async {
@@ -577,6 +615,79 @@ void main() {
         );
       },
     );
+
+    test('an undo whose removal patch is rejected throws and deletes no pod', () async {
+      // Recorded as taken back over a rejected patch, the pods that come back still carry what
+      // the record says was removed.
+      final ClusterMachine machine = withController(
+        declared: const <String>[crossNamespaceArgument, entrypointArgument],
+        pods: const <String, PodState>{
+          'traefik-old': PodState(
+            phase: 'Running',
+            arguments: <String>[crossNamespaceArgument, entrypointArgument],
+          ),
+        },
+      );
+      machine.shell.fails(
+        'microk8s kubectl -n ingress patch daemonset traefik --type=json -p '
+        '[{"op":"remove","path":"/spec/template/spec/containers/0/args/1"}]',
+      );
+      await expectLater(
+        asking().undo(
+          machine.contextFor(under),
+          const ContainerAdditions(arguments: <String>[entrypointArgument], ports: <int>[]),
+        ),
+        throwsA(isA<CommandFailed>()),
+      );
+      expect(machine.changing.join('\n'), isNot(contains('delete pod')));
+    });
+
+    test('an undo removes a published port by its place in the whole ports list', () async {
+      // The container declares an entry publishing nothing ahead of the published one, and the
+      // patch path resolves against the whole list — a position counted among the published ports
+      // alone would remove the wrong element, one this step never added.
+      final ClusterMachine machine = ClusterMachine();
+      machine.shell
+        ..answers(
+          traefikDaemonSet,
+          jsonEncode(<String, Object>{
+            'spec': <String, Object>{
+              'selector': <String, Object>{
+                'matchLabels': <String, Object>{'app.kubernetes.io/name': 'traefik'},
+              },
+              'template': <String, Object>{
+                'spec': <String, Object>{
+                  'containers': <Object>[
+                    <String, Object>{
+                      'name': 'traefik',
+                      'args': <String>[crossNamespaceArgument],
+                      'ports': <Object>[
+                        <String, Object>{'name': 'metrics', 'containerPort': 9100},
+                        <String, Object>{
+                          'name': 'postgres',
+                          'containerPort': 5432,
+                          'hostPort': 5432,
+                          'protocol': 'TCP',
+                        },
+                      ],
+                    },
+                  ],
+                },
+              },
+            },
+          }),
+        )
+        ..answers(traefikPods, podsJson(const <String, PodState>{}));
+
+      await asking().undo(
+        machine.contextFor(under),
+        const ContainerAdditions(arguments: <String>[], ports: <int>[5432]),
+      );
+      expect(
+        machine.changing.first,
+        contains('{"op":"remove","path":"/spec/template/spec/containers/0/ports/1"}'),
+      );
+    });
   });
 }
 

@@ -182,6 +182,40 @@ void main() {
       expect(yqCli.path, '${InstallPinnedTool.defaultDirectory}/yq');
     });
 
+    test('the machine this step exists for is the one it cannot be taken back on', () async {
+      // The drifted machine, which is the whole reason the skip is decided on the version: the
+      // check finds 4.44.1 against a pin of 4.53.3, and the apply then writes the pin over it.
+      // Nothing here holds the binary that machine came with.
+      final ClusterMachine machine = ClusterMachine();
+      machine.shell
+        ..answers('command -v yq', '/usr/local/bin/yq\n')
+        ..answers('yq --version', 'yq (https://github.com/mikefarah/yq/) version v4.44.1\n');
+
+      expect(await yqCli.check(machine.contextFor(under)), isA<Ready>());
+
+      // Unwind records "taken back" whenever a reversible step's undo returns without throwing, so
+      // the only way this step cannot say that about a binary it did not keep is to not be one.
+      expect(yqCli, isNot(isA<ReversibleStep<Object?>>()));
+      expect(yqCli, isA<IrreversibleStep>());
+      expect(yqCli.irreversibleReason, contains('nothing on this machine keeping a copy'));
+
+      // And it says it CONDITIONALLY, because this step also runs on a machine carrying no such
+      // tool, where it creates the file and replaces nothing. The reason is read at the point of no
+      // return before a run, so one asserting a loss that will not happen is a refusal an operator
+      // weighs against a cost they do not have.
+      expect(yqCli.irreversibleReason, contains('where something already stood there'));
+    });
+
+    test('what a packed release has to be is stated on the argument a row writes', () async {
+      // The unpacking writes every file the archive holds into the directory and the step names
+      // none of them, so the constraint has to reach whoever writes the row.
+      final ArgumentSpec archive = InstallPinnedTool.arguments.firstWhere(
+        (ArgumentSpec spec) => spec.name == 'archive',
+      );
+      expect(archive.describes, contains('exactly one file'));
+      expect(vaultCli.irreversibleReason, contains('everything the archive holds is unpacked'));
+    });
+
     test('the packed copy is removed whether the unpacking worked or not', () async {
       // A half-finished download left behind is what the next run would unpack.
       final ClusterMachine machine = ClusterMachine();

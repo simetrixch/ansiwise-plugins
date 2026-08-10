@@ -412,7 +412,7 @@ void main() {
     });
   });
 
-  test('the nine points beyond which there is no going back are named', () {
+  test('the ten points beyond which there is no going back are named', () {
     // The dry run names these in advance, which it can only do because each of them says so about
     // itself. A step moved out of this list is a point of no return the operator is not told about.
     //
@@ -430,6 +430,7 @@ void main() {
       'apply_netplan',
       'create_storage_directory',
       'link_microk8s_storage_path',
+      'install_pinned_tool',
       'export_kubeconfig',
     ];
     for (final String name in irreversible) {

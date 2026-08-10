@@ -63,7 +63,9 @@ final class WaitForAnswer extends ObservingStep with WaitStep {
     ArgumentSpec(
       name: 'command',
       kind: ArgumentKind.text,
-      describes: 'what is run each time this looks',
+      describes:
+          'what is run each time this looks — it must only look, and the run takes the row\'s '
+          'word for that, so the record marks this row declared rather than proven',
     ),
     ArgumentSpec(
       name: 'command_arguments',
@@ -117,10 +119,34 @@ final class WaitForAnswer extends ObservingStep with WaitStep {
   @override
   Duration get interval => Duration(seconds: intervalSeconds);
 
+  /// The room a poll's command has beyond the wait's own budget.
+  ///
+  /// Every poll carries a deadline, or one command that blocks hangs the whole run: the wait's own
+  /// budget is only checked BETWEEN polls, so it never interrupts a call that does not return. And
+  /// the kill has to LOSE the race against any command that answers within the row's timeout — a
+  /// command that waits and reports on its own must get to say its own last word, because that
+  /// message is what the operator reads, and "killed" is not it.
+  static const Duration _grace = Duration(seconds: 30);
+
+  /// The command comes from the row, and nothing here chose it — so the framework cannot verify
+  /// the row's claim that it only looks. The step says so instead of claiming it: every row of
+  /// this step is recorded as declared rather than proven, the run's closing numbers carry it, and
+  /// the dry-safety check lists this step instead of counting it safe.
+  @override
+  bool get answersOnTrust => true;
+
   @override
   Future<bool> holds(StepContext context) async {
     final CommandResult answered = await context.shell.run(
-      Command.observing(command, commandArguments),
+      // Observing on the row's word — the obligation stands at the command argument — and never
+      // without a deadline: a poll that blocks is killed at the row's timeout plus the grace,
+      // which turns a wedged command into a loud failure instead of a run nothing interrupts.
+      Command.detailed(
+        command,
+        arguments: commandArguments,
+        observes: true,
+        timeout: deadline + _grace,
+      ),
     );
     return answered.ok && answered.stdout.split('\n').any((String line) => line.trim() == answer);
   }

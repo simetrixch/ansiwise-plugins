@@ -30,8 +30,10 @@ import 'package:ansiwise_api/ansiwise_api.dart';
 /// **Replacing a pod interrupts what it serves.** Nothing answers on the ports it holds between the
 /// moment it is deleted and the moment its replacement is up, and the requests refused in between
 /// are not made again. What this step CHANGES can be taken back — the arguments and ports it added
-/// are removed again and the pods replaced a second time — and the interruption itself cannot be,
-/// which is why the plan a dry run prints names the deletion.
+/// are removed again and the pods replaced a second time — and the interruption itself cannot be.
+/// A plan carries ONE command, so wherever the apply would both patch and delete, the dry run names
+/// the DELETION — the half that cannot be taken back — and the patch that precedes it and what the
+/// interruption costs are said beside it in the plan's own log.
 ///
 /// **A workload that is not there is a skip and not a failure.** This runs after the addon that
 /// installs it; on a machine where that addon is off there is nothing to patch and nothing wrong.
@@ -138,13 +140,20 @@ final class PatchContainerArgumentsAndPorts extends ReversibleStep<ContainerAddi
 
   @override
   Future<CheckResult> check(StepContext context) async {
-    for (final String written in ports) {
-      if (_PublishedPort.read(written) == null) {
-        context.log.error(
-          '"$written" is not a port — it reads as a name, a colon and a port, such as '
-          'postgres:5432 — so it is left out',
-        );
-      }
+    // A row asking for a port this cannot read must not go green: left out, the run reports
+    // success and the port is never published, and nothing downstream says otherwise.
+    final List<String> unreadable = <String>[
+      for (final String written in ports)
+        if (_PublishedPort.read(written) == null) written,
+    ];
+    if (unreadable.isNotEmpty) {
+      return CheckResult.blocked(
+        <String>[
+          for (final String written in unreadable)
+            '"$written" is not a port — it reads as a name, a colon and a port, such as '
+                'postgres:5432',
+        ].join('; '),
+      );
     }
     final List<_PublishedPort> wantedPorts = _wantedPorts();
     if (containerArguments.isEmpty && wantedPorts.isEmpty) {
@@ -203,21 +212,35 @@ final class PatchContainerArgumentsAndPorts extends ReversibleStep<ContainerAddi
       return const StepPlan.nothing('there is no such container to patch');
     }
     final List<_PublishedPort> wantedPorts = _wantedPorts();
-    // The patch where the declaration is short of something, and otherwise the deletion — which is
-    // the next command this step would run, and the one whose consequence an operator has to weigh.
     final String? patch = _addPatch(workloadNow.containers[at], at, wantedPorts);
-    if (patch != null) {
-      return StepPlan.argv(_patchCommand(patch));
-    }
     final List<_Pod> pods = await _pods(context, workloadNow.selector) ?? const <_Pod>[];
-    return StepPlan.argv(<String>[
-      ..._delete,
+    // The pods the apply would delete: the stuck ones unconditionally, and the serving ones that
+    // lag what this program asks for — which is every serving pod the patch would leave behind.
+    final List<String> podsToDelete = <String>[
       for (final _Pod pod in pods)
         if (pod.phase == pending) pod.name,
       for (final _Pod pod in _lagging(pods, wantedPorts))
         if (pod.phase == running) pod.name,
-      '--grace-period=10',
-    ]);
+    ];
+    if (podsToDelete.isEmpty) {
+      return patch == null
+          ? StepPlan.nothing(
+              'the declaration and every running pod of $name carry what this program asks for',
+            )
+          : StepPlan.argv(_patchCommand(patch));
+    }
+    // A plan carries one command. Of the two the apply would run, the deletion is the one whose
+    // consequence cannot be taken back, so the plan names it and the log beside it says the rest.
+    if (patch != null) {
+      context.log.info(
+        'before the deletion the declaration is patched: ${_patchCommand(patch).join(' ')}',
+      );
+    }
+    context.log.warn(
+      'every pod this plan names is deleted, and nothing answers on the ports it holds until its '
+      'replacement is up — the requests refused in between are not made again',
+    );
+    return StepPlan.argv(<String>[..._delete, ...podsToDelete, '--grace-period=10']);
   }
 
   @override
@@ -268,19 +291,23 @@ final class PatchContainerArgumentsAndPorts extends ReversibleStep<ContainerAddi
     }
     // WHICH arguments and ports come out is what the capture decided; WHERE they sit is read now. An
     // append leaves an entry wherever the list has grown to since, so a remembered position would
-    // take out whatever moved into that place. Highest position first within each list, so removing
-    // one does not move the next one out from under its own position.
+    // take out whatever moved into that place. A port's position is its place in the container's
+    // WHOLE ports list — entries publishing nothing count too, and the patch path resolves against
+    // that list. Highest position first within each list, so removing one does not move the next
+    // one out from under its own position.
     final _Container declared = workloadNow.containers[at];
     final List<Map<String, Object>> removals = <Map<String, Object>>[
       for (final int position in _positionsOf(captured.arguments, declared.arguments))
         <String, Object>{'op': 'remove', 'path': '${_containerPath(at)}/args/$position'},
-      for (final int position in _positionsOf(captured.ports, declared.ports))
+      for (final int position in declared.positionsOfPorts(captured.ports))
         <String, Object>{'op': 'remove', 'path': '${_containerPath(at)}/ports/$position'},
     ];
     if (removals.isEmpty) {
       return;
     }
-    await context.shell.run(Command('microk8s', _patchCommand(jsonEncode(removals)).sublist(1)));
+    // A rejected removal must throw, so it is recorded as not taken back — reported as taken back,
+    // the pods that come back still carry what the record says was removed.
+    await _mustRun(context, _patchCommand(jsonEncode(removals)));
     // The declaration no longer carries them and a pod started before this does, which is the same
     // gap the apply closes — read from the other side.
     await _replacePods(
@@ -301,7 +328,8 @@ final class PatchContainerArgumentsAndPorts extends ReversibleStep<ContainerAddi
       if (declared.contains(each)) declared.indexOf(each),
   ]..sort((int a, int b) => b.compareTo(a));
 
-  /// The ports this program asks for, leaving out anything that does not read as one.
+  /// The ports this program asks for — an entry that does not read as one has blocked the check
+  /// before any caller of this runs.
   List<_PublishedPort> _wantedPorts() => <_PublishedPort>[
     for (final String written in ports)
       if (_PublishedPort.read(written) case final _PublishedPort port) port,
@@ -535,10 +563,19 @@ final class _Workload {
 
 /// One container: what it is started with and what it publishes on the machine.
 final class _Container {
-  const _Container(this.name, this.arguments, this.ports);
+  const _Container(this.name, this.arguments, this.ports, this.portPositions);
 
   /// The container [decoded] describes, or null when it describes none.
   static _Container? read(Object? decoded) {
+    final List<Object?> declaredPorts = _list(decoded, 'ports');
+    final List<int> published = <int>[];
+    final List<int> positions = <int>[];
+    for (int at = 0; at < declaredPorts.length; at += 1) {
+      if (_at(declaredPorts[at], 'hostPort') case final int number) {
+        published.add(number);
+        positions.add(at);
+      }
+    }
     if (_at(decoded, 'name') case final String name) {
       return _Container(
         name,
@@ -546,10 +583,8 @@ final class _Container {
           for (final Object? argument in _list(decoded, 'args'))
             if (argument is String) argument,
         ],
-        <int>[
-          for (final Object? port in _list(decoded, 'ports'))
-            if (_at(port, 'hostPort') case final int number) number,
-        ],
+        published,
+        positions,
       );
     }
     return null;
@@ -560,6 +595,20 @@ final class _Container {
 
   /// The ports it publishes on the machine.
   final List<int> ports;
+
+  /// Where each of [ports] stands in the container's WHOLE ports list, position for position.
+  ///
+  /// The whole list and not only the published entries: entries that publish nothing sit in it
+  /// too, and a patch path resolves against it — so a position counted among the published ports
+  /// alone hits the wrong element as soon as such an entry sits ahead of one.
+  final List<int> portPositions;
+
+  /// Where each of [wanted] is published, as [portPositions] counts it, highest first and leaving
+  /// out what is not published.
+  List<int> positionsOfPorts(List<int> wanted) => <int>[
+    for (final int port in wanted)
+      if (ports.contains(port)) portPositions[ports.indexOf(port)],
+  ]..sort((int a, int b) => b.compareTo(a));
 }
 
 /// One pod, with the container inside it that this step is about.

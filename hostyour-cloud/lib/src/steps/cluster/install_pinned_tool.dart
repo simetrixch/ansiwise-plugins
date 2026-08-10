@@ -19,7 +19,25 @@ import 'assert_cli_tool_versions.dart';
 /// where the packed copy is put while it is being unpacked. That copy is removed afterwards whether
 /// the unpacking worked or not, because a half-finished download left in the temporary directory is
 /// what the next run would find and unpack.
-final class InstallPinnedTool extends ReversibleStep<bool> {
+///
+/// **A packed release has to hold exactly one file, named for the tool.** The unpacking writes
+/// everything the archive holds into [directory]; this step never reads what came out of it and
+/// never names it. So a second file in the archive lands on the machine beside the tool, over
+/// whatever stood there under that name, with nothing in the record saying it arrived. Whoever
+/// writes an archive into a program row is the one who holds this, and the [archive] argument says
+/// so where that row is written.
+///
+/// **It cannot be taken back, although a run that only created the file could be.** The fetch
+/// writes over whatever [path] held, and keeping the replaced binary would mean copying it aside
+/// before the apply — a change to the machine made by the capture, which is the one part of a
+/// reversible step required to change nothing, and a copy nothing would ever clear away again,
+/// because a step is told to undo and is never told the run succeeded. Which of the two machines a
+/// run meets is decided by the machine and not by the program, and this step exists for the one
+/// carrying another version. A step declares one kind for every machine, so it declares the kind
+/// that holds for the worse of them. The cost is that a run which only created a file is announced
+/// as a point of no return it was not; the other way round would be a step promising to put back a
+/// binary it never kept, which is the failure that matters.
+final class InstallPinnedTool extends IrreversibleStep {
   /// Fetches [tool] at [version] from [url] into [directory], out of [archive] where there is one.
   const InstallPinnedTool({
     required this.tool,
@@ -71,7 +89,9 @@ final class InstallPinnedTool extends ReversibleStep<bool> {
       kind: ArgumentKind.text,
       describes:
           'where the packed copy is put while it is being unpacked, for a release that arrives as '
-          'a zip — a release that is the binary itself names none',
+          'a zip — a release that is the binary itself names none. The archive has to hold exactly '
+          'one file, named for the tool: everything in it is unpacked into the directory, and '
+          'anything else it holds lands on the machine with nothing in the record naming it',
       required: false,
     ),
   ];
@@ -118,6 +138,19 @@ final class InstallPinnedTool extends ReversibleStep<bool> {
   String get fetchedFrom => url
       .replaceAll(versionPlaceholder, version)
       .replaceAll(bareVersionPlaceholder, AssertCliToolVersions.bare(version));
+
+  /// Why this cannot be taken back, written for the machine where it costs something.
+  ///
+  /// It is stated as what the step MAY do rather than as what it will: this step runs on a machine
+  /// that carries no such tool as readily as on one carrying another version, and on the first it
+  /// creates a file and replaces nothing. A reason claiming a binary of theirs is going away would
+  /// be false there, on the one surface an operator reads before deciding — the point of no return.
+  @override
+  String get irreversibleReason =>
+      'the release is written straight to $path, and where something already stood there it is '
+      'written over with nothing on this machine keeping a copy of it — and where the release '
+      'arrives packed, everything the archive holds is unpacked into $directory over whatever stood '
+      'there under those names';
 
   @override
   Future<CheckResult> check(StepContext context) async {
@@ -169,22 +202,6 @@ final class InstallPinnedTool extends ReversibleStep<bool> {
       // tool that came out of it would be a tool nobody could name a version for.
       await context.files.delete(packed);
     }
-  }
-
-  /// Whether a tool is already where this puts one.
-  ///
-  /// The skip is decided on the version, so this step also runs on a machine that carries the tool
-  /// at another version — and there the fetch replaces a file rather than creating one. Deleting it
-  /// at undo time would leave the machine without the tool it came with.
-  @override
-  Future<bool> capture(StepContext context) => context.files.exists(path);
-
-  @override
-  Future<void> undo(StepContext context, bool captured) async {
-    if (captured) {
-      return;
-    }
-    await context.files.delete(path);
   }
 
   List<String> get _fetch => <String>[

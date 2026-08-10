@@ -42,6 +42,20 @@ Future<void> main() async {
     },
   );
 
+  test('the steps that answer on the row\'s word are listed, and are not counted safe', () {
+    // For these the dry-run guarantee is the row's claim, not the framework's: the row names the
+    // command and declares that it only looks, and nothing here chose or verified it. So the check
+    // states the list for somebody to read instead of counting them among the safe ones — this
+    // assertion is exact, so a new step that takes the row's word has to be named here to pass.
+    expect(
+      reading.onTrust,
+      <String>['wait_for_answer'],
+      reason:
+          'either a step whose answer rests on the row went uncounted, or one was counted safe '
+          'on a claim the framework cannot verify',
+    );
+  });
+
   group('counter-probe', () {
     // Four steps written here, run through the same machinery, one per method a dry run drives. A
     // step that writes from its check, one that runs a changing command from its plan and one that
@@ -84,6 +98,16 @@ Future<void> main() async {
         reason:
             'the capture ran with the planning ports taken off and nothing noticed — so either the '
             'evidence is not gathered or the capture is never driven',
+      );
+    });
+
+    test('a step that answers on the row\'s word is reported as on trust, not as safe', () async {
+      expect(
+        await _ask(const AnswersOnTheRowsWord(), wrapInPlanningPorts: true),
+        isA<AnsweredOnTrust>(),
+        reason:
+            'a step planted here says its answer rests on the row and came back counted as an '
+            'ordinary plan, so the list an operator reads would miss it',
       );
     });
 
@@ -212,6 +236,27 @@ final class WritesFromItsCapture extends ReversibleStep<bool> {
 
   @override
   Future<void> undo(StepContext context, bool captured) async {}
+}
+
+/// A step that runs a command a program row would name, so its answer rests on the row's word.
+final class AnswersOnTheRowsWord extends ObservingStep {
+  /// Creates the planted step.
+  const AnswersOnTheRowsWord();
+
+  @override
+  bool get answersOnTrust => true;
+
+  @override
+  Future<CheckResult> check(StepContext context) async {
+    await context.shell.run(
+      const Command.detailed('planted', observes: true, timeout: Duration(seconds: 30)),
+    );
+    return const CheckResult.ready();
+  }
+
+  @override
+  Future<StepPlan> plan(StepContext context) async =>
+      const StepPlan.nothing('would ask what the row names');
 }
 
 /// A step that reads the machine and plans, which is what every step is meant to do.

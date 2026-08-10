@@ -190,7 +190,7 @@ const Map<StepName, RegisteredStep> clusterSteps = <StepName, RegisteredStep>{
   ),
   StepName('patch_container_arguments_and_ports'): RegisteredStep(
     name: StepName('patch_container_arguments_and_ports'),
-    source: 'lib/src/steps/cluster/patch_container_arguments_and_ports.dart:42',
+    source: 'lib/src/steps/cluster/patch_container_arguments_and_ports.dart:44',
     create: PatchContainerArgumentsAndPorts.fromArguments,
     arguments: PatchContainerArgumentsAndPorts.arguments,
   ),
@@ -322,7 +322,7 @@ const Map<StepName, RegisteredStep> clusterSteps = <StepName, RegisteredStep>{
   ),
   StepName('install_pinned_tool'): RegisteredStep(
     name: StepName('install_pinned_tool'),
-    source: 'lib/src/steps/cluster/install_pinned_tool.dart:22',
+    source: 'lib/src/steps/cluster/install_pinned_tool.dart:40',
     create: InstallPinnedTool.fromArguments,
     arguments: InstallPinnedTool.arguments,
   ),
