@@ -1,10 +1,16 @@
 import 'package:ansiwise_api/ansiwise_api.dart';
+// How the cluster client is invoked belongs to the kubernetes plugin, which knows the tool and no
+// installation's way of wrapping it.
+import 'package:ansiwise_kubernetes/ansiwise_kubernetes.dart';
+// Where the profile stands and what its keys are called is stated by the program, and the type that
+// carries those names belongs to the secret store's plugin — which knows the tool and no layout.
+import 'package:ansiwise_vault/ansiwise_vault.dart';
 import 'package:hostyour_cloud/hostyour_cloud.dart';
 import 'package:test/test.dart';
 
 import 'cluster_fixture.dart';
 
-/// The addons, the account that operates the machine, and who the API server accepts.
+/// The addons this platform switches on and off, and who the API server accepts.
 void main() {
   const StepName under = StepName('under_test');
 
@@ -195,39 +201,6 @@ void main() {
     });
   });
 
-  group('the account that operates the machine', () {
-    test('is put in the group whose members may talk to the cluster', () async {
-      final ClusterMachine machine = ClusterMachine();
-      machine.shell
-        ..answers(
-          'getent passwd $operatorUser',
-          '$operatorUser:x:1000:1000::$operatorHome:/bin/sh\n',
-        )
-        ..answers('groups $operatorUser', '$operatorUser : $operatorUser sudo\n')
-        ..changes('usermod --append --groups microk8s $operatorUser', () {
-          machine.shell.answers(
-            'groups $operatorUser',
-            '$operatorUser : $operatorUser sudo microk8s\n',
-          );
-        });
-
-      const AddUserToGroup step = AddUserToGroup(group: 'microk8s');
-      final StepContext context = machine.contextFor(under);
-
-      expect(await step.check(context), isA<Ready>());
-      await step.apply(context);
-      expect(await step.check(context), isA<Satisfied>());
-      expect(machine.said.join('\n'), contains('next login'));
-    });
-
-    test('an account that is not there is refused', () async {
-      final ClusterMachine machine = ClusterMachine()..shell.fails('getent passwd $operatorUser');
-      const AddUserToGroup step = AddUserToGroup(group: 'microk8s');
-      final CheckResult answer = await step.check(machine.contextFor(under));
-      expect((answer as Blocked).reason, contains('no account'));
-    });
-  });
-
   group('who the API server accepts', () {
     const String argsPath = ConfigureKubeApiserverOidc.defaultPath;
 
@@ -288,6 +261,23 @@ void main() {
     StepContext asRole(ClusterMachine machine, String role) =>
         machine.contextFor(under, Arguments.none, clusterAnswering(<String, Object>{'role': role}));
 
+    // Where this platform's profile stands and what its keys are called. The secret store's plugin
+    // carries no layout of its own, so this is stated here the way the program file states it —
+    // and a test that named other keys would measure a file no installation writes.
+    const VaultLayout layout = VaultLayout(
+      profile: 'cluster/profile.yaml',
+      urlKey: 'global.vaultUrl',
+      nameKey: 'global.clusterName',
+      authPathKey: 'global.vaultKubernetesAuthPath',
+      credentials: 'secrets/vault-<stage>.txt',
+    );
+
+    // The words this platform's cluster client is invoked with. The kubernetes plugin defaults to a
+    // plain kubectl on the path, which is the only invocation kubectl itself defines — a client that
+    // lives behind a wrapping command is this installation's arrangement, so the row states it and
+    // the fixture below scripts the same words.
+    const Kubectl kubectl = Kubectl(<String>['microk8s', 'kubectl']);
+
     const ConfigureSlaveApiserverOidcTrust trust = ConfigureSlaveApiserverOidcTrust(
       repository: repository,
       clientId: 'headlamp',
@@ -295,6 +285,8 @@ void main() {
       bindingName: 'authentik-admins-cluster-admin',
       stateDirectory: ConfigureSlaveApiserverOidcTrust.defaultStateDirectory,
       argsPath: argsPath,
+      layout: layout,
+      kubectl: kubectl,
     );
 
     test('a cluster that deploys the identity provider does nothing here', () async {
@@ -344,6 +336,8 @@ void main() {
         stateDirectory: ConfigureSlaveApiserverOidcTrust.defaultStateDirectory,
         argsPath: argsPath,
         issuer: 'https://idp.<master-domian>/application/o/<client>/',
+        layout: layout,
+        kubectl: kubectl,
       );
       final ClusterMachine machine = ClusterMachine();
       machine.files.contents[profilePath] = 'global:\n  vaultUrl: https://vault.m1.example.com\n';

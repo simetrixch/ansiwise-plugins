@@ -1,19 +1,29 @@
 import 'dart:io' show File;
 
 import 'package:ansiwise_api/ansiwise_api.dart';
-import 'package:hostyour_cloud/hostyour_cloud.dart';
+import 'package:ansiwise_host/ansiwise_host.dart';
 import 'package:ansiwise_api/testing.dart';
 import 'package:test/test.dart';
+
+import 'composition.dart';
 
 /// The whole of `deploy-host`, run against a machine that exists only in memory.
 ///
 /// This is the test that would have caught most of what went wrong in the shell: it runs the real
 /// program file, through the real registry, in every mode, and looks at what came out.
 void main() {
-  Program declared() =>
-      loadProgram(File('programs/deploy-host.yaml').readAsStringSync(), where: 'deploy-host.yaml');
+  // The plugins the shipped configuration turns on, composed the way the binary composes them.
+  // Every step of this program acts on a machine as a machine and comes from the machine plugin, so
+  // this package's own registry alone would report each of them as unregistered.
+  late final Registry shipped;
+  setUpAll(() async => shipped = await shippedRegistry());
 
-  ResolvedProgram deployHost() => const ProgramResolver(executionRegistry).resolve(declared());
+  Program declared() => loadProgram(
+    File(programAt('deploy-host.yaml')).readAsStringSync(),
+    where: 'deploy-host.yaml',
+  );
+
+  ResolvedProgram deployHost() => ProgramResolver(shipped).resolve(declared());
 
   /// The key this machine is to be reached by, as an operator would hand one over.
   const String operatorKey =
@@ -138,12 +148,6 @@ void main() {
             'and a program file ships to every installation',
       );
     }
-  });
-
-  test('the gate proves the key that was installed, not a second one', () {
-    // A second pair of names here would let the gate pass on a key nobody installed. It reads what
-    // install_authorized_key wrote, so it reads it under the same two names.
-    expect(RequireKeyLoginPossible.answers, same(InstallAuthorizedKey.answers));
   });
 
   group('--mode dry', () {

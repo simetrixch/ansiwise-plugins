@@ -1,5 +1,4 @@
 import 'package:ansiwise_api/ansiwise_api.dart';
-import '../template.dart';
 import 'configure_slave_apiserver_oidc_trust.dart';
 
 /// Renders the object every certificate on this cluster is issued by.

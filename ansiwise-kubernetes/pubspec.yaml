@@ -1,0 +1,31 @@
+# The kubernetes plugin: the steps that drive a cluster through kubectl.
+#
+# This is the half that knows the TOOL. It knows how kubectl is invoked, what its subcommands do,
+# and what the objects it drives call themselves — kube-system, cert-manager, default-ipv4-ippool
+# are the names those tools gave themselves. It knows no application of the tool: no default here
+# names a product, a path of one installation, or a key of one configuration. Where a value belongs
+# to an installation, the argument is required and the value stands in that installation's program
+# row.
+name: ansiwise_kubernetes
+description: Steps that drive a Kubernetes cluster through kubectl, for any product built on one.
+publish_to: none
+version: 0.1.0
+
+environment:
+  sdk: ^3.12.0
+
+dependencies:
+  ansiwise_api:
+    git:
+      url: https://github.com/simetrixch/ansiwise-api.git
+      ref: master
+
+dev_dependencies:
+  test: ^1.31.2
+  lints: ^6.1.0
+  # The scan that keeps the composer the one place a kubectl invocation is spelled.
+  ansiwise_checks:
+    git:
+      url: https://github.com/simetrixch/ansiwise-api.git
+      ref: master
+      path: checks

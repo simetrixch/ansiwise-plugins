@@ -2,9 +2,12 @@
 import 'dart:io' show File;
 
 import 'package:ansiwise_api/ansiwise_api.dart';
+import 'package:ansiwise_vault/ansiwise_vault.dart';
 import 'package:hostyour_cloud/hostyour_cloud.dart';
 import 'package:ansiwise_api/testing.dart';
 import 'package:test/test.dart';
+
+import 'composition.dart';
 
 /// The whole of `deploy-gitops`, read as the operator's own file and run against a machine that
 /// exists only in memory.
@@ -13,15 +16,20 @@ import 'package:test/test.dart';
 /// eye: that the counts of policies and roles are exactly what the platform is specified to have,
 /// and that a phase switched off leaves nothing at all behind.
 void main() {
-  ResolvedProgram deployGitops() => const ProgramResolver(executionRegistry).resolve(
+  // The five plugins the shipped configuration turns on, composed the way the binary composes
+  // them. Resolved once, because reading a file per test says nothing more than reading it once.
+  late final Registry shipped;
+  setUpAll(() async => shipped = await shippedRegistry());
+
+  ResolvedProgram deployGitops() => ProgramResolver(shipped).resolve(
     loadProgram(
-      File('programs/deploy-gitops.yaml').readAsStringSync(),
+      File(programAt('deploy-gitops.yaml')).readAsStringSync(),
       where: 'deploy-gitops.yaml',
     ),
   );
 
   Program program() => loadProgram(
-    File('programs/deploy-gitops.yaml').readAsStringSync(),
+    File(programAt('deploy-gitops.yaml')).readAsStringSync(),
     where: 'deploy-gitops.yaml',
   );
 

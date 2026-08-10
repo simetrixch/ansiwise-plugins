@@ -1,7 +1,6 @@
 import 'package:ansiwise_api/ansiwise_api.dart';
-import '../slots.dart';
+import 'package:ansiwise_host/ansiwise_host.dart';
 import 'microk8s.dart';
-import 'set_process_flag.dart';
 
 /// Lets the API server accept the tokens the platform's identity provider issues.
 ///
@@ -268,7 +267,7 @@ final class ConfigureKubeApiserverOidc extends ReversibleStep<String?> {
       withFlags(current, flagsIn(context)),
       mode: microk8sArgumentsFileMode,
     );
-    await SetProcessFlag.restartKubelite(context);
+    await SetProcessFlag.restartWith(context, microk8sArgumentsRestart);
   }
 
   /// The API server's arguments as they were, or null when the file was not there.
@@ -288,7 +287,7 @@ final class ConfigureKubeApiserverOidc extends ReversibleStep<String?> {
       return;
     }
     await context.files.write(argsPath, captured, mode: microk8sArgumentsFileMode);
-    await SetProcessFlag.restartKubelite(context);
+    await SetProcessFlag.restartWith(context, microk8sArgumentsRestart);
   }
 
   /// [current] carrying every one of [flags]: each replaced where it is, each appended where it is

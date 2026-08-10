@@ -1,0 +1,34 @@
+# The helm plugin: the steps that drive one machine's helm.
+#
+# It knows the tool and never an application of it. Which repositories exist, which releases are
+# installed, at which pinned versions, into which namespaces, configured by which values files —
+# all of that is a program row's to say.
+name: ansiwise_helm
+description: Steps that register helm chart repositories and converge pinned helm releases.
+publish_to: none
+version: 0.1.0
+
+environment:
+  sdk: ^3.12.0
+
+dependencies:
+  ansiwise_api:
+    git:
+      url: https://github.com/simetrixch/ansiwise-api.git
+      ref: master
+  # The release step compares the values file a row names with what the release currently holds,
+  # and that file is YAML. A plugin that reads its own files declares the parser itself rather than
+  # leaning on a transitive dependency it does not control.
+  yaml: ^3.1.3
+
+dev_dependencies:
+  test: ^1.31.2
+  # The analysis rule set this package includes ends at package:lints/recommended.yaml, and a
+  # nested include resolves through THIS package's dependency graph.
+  lints: ^6.1.0
+  # The scan that keeps this package to its tool and off any application of it.
+  ansiwise_checks:
+    git:
+      url: https://github.com/simetrixch/ansiwise-api.git
+      ref: master
+      path: checks

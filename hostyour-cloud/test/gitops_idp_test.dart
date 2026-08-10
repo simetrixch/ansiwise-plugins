@@ -2,11 +2,14 @@
 import 'dart:io' show File;
 
 import 'package:ansiwise_api/ansiwise_api.dart';
+// The binding that grants the administrator group its cluster rights is the kubernetes plugin's
+// step. What this file measures about it is the program's, and the program is this package's.
+import 'package:ansiwise_kubernetes/ansiwise_kubernetes.dart';
 import 'package:hostyour_cloud/hostyour_cloud.dart';
 import 'package:ansiwise_api/testing.dart';
 import 'package:test/test.dart';
 
-import 'gitops_vault_test.dart' show ScriptedHttp, answer;
+import 'composition.dart';
 
 /// The identity provider, and the half of logging in that lives outside it.
 ///
@@ -14,6 +17,11 @@ import 'gitops_vault_test.dart' show ScriptedHttp, answer;
 /// run red; and the cluster's own trust in the one it has is six arguments in a file, one of which
 /// reads correct and locks every operator out.
 void main() {
+  // The five plugins the shipped configuration turns on, composed the way the binary composes
+  // them. Resolved once, because reading a file per test says nothing more than reading it once.
+  late final Registry shipped;
+  setUpAll(() async => shipped = await shippedRegistry());
+
   const String issuer = 'https://idp.m1.example.com/application/o/headlamp/';
 
   /// What a cluster holding the master part answers, which is what the issuer is composed from.
@@ -76,9 +84,9 @@ void main() {
             recorder: recorder,
             redactor: Redactor.none,
           ).run(
-            program: const ProgramResolver(executionRegistry).resolve(
+            program: ProgramResolver(shipped).resolve(
               loadProgram(
-                File('programs/deploy-gitops.yaml').readAsStringSync(),
+                File(programAt('deploy-gitops.yaml')).readAsStringSync(),
                 where: 'deploy-gitops.yaml',
               ),
             ),
@@ -126,7 +134,7 @@ void main() {
       // needs a store to configure and something to log in through, and without the second it is
       // not half applied — it is not applied.
       final Program program = loadProgram(
-        File('programs/deploy-gitops.yaml').readAsStringSync(),
+        File(programAt('deploy-gitops.yaml')).readAsStringSync(),
         where: 'deploy-gitops.yaml',
       );
       final List<ProgramStep> forBrowsers = program.steps
@@ -159,7 +167,7 @@ void main() {
       // is the mail address unless the token also says the address was verified, which the identity
       // provider does not say for any account a fresh installation has.
       final Program program = loadProgram(
-        File('programs/deploy-gitops.yaml').readAsStringSync(),
+        File(programAt('deploy-gitops.yaml')).readAsStringSync(),
         where: 'deploy-gitops.yaml',
       );
       final ProgramStep entry = program.steps.firstWhere(
@@ -175,53 +183,36 @@ void main() {
     });
 
     test('the prefix the arguments add and the prefix the binding matches are the same', () {
-      // Set together on purpose. The cluster never sees the group the identity provider issued, it
-      // sees that name with the prefix in front of it, and a binding written without it matches
-      // nobody.
-      final Program program = loadProgram(
-        File('programs/deploy-gitops.yaml').readAsStringSync(),
-        where: 'deploy-gitops.yaml',
+      // The cluster never sees the group the identity provider issued, it sees that name with the
+      // prefix in front of it. A binding written without the same prefix matches nobody: the
+      // administrators get no rights and the run comes back green, which is the shape of failure
+      // nothing else here would catch.
+      final ResolvedProgram program = ProgramResolver(shipped).resolve(
+        loadProgram(
+          File(programAt('deploy-gitops.yaml')).readAsStringSync(),
+          where: 'deploy-gitops.yaml',
+        ),
       );
-      final ProgramStep flags = program.steps.firstWhere(
-        (ProgramStep step) => step.step == const StepName('configure_kube_apiserver_oidc'),
+      final ResolvedStep flags = program.steps.firstWhere(
+        (ResolvedStep step) => step.entry.step == const StepName('configure_kube_apiserver_oidc'),
       );
-      final ProgramStep binding = program.steps.firstWhere(
-        (ProgramStep step) => step.step == const StepName('oidc_admins_binding'),
+      final ResolvedStep binding = program.steps.firstWhere(
+        (ResolvedStep step) => step.entry.step == const StepName('oidc_admins_binding'),
       );
+
+      // Asked of the RESOLVED rows, so this holds however the program says it: written once as a
+      // program-wide default, or written out on both rows. Written DIFFERENTLY on the two rows it
+      // fails, which is the only thing that has to be true.
+      //
+      // The binding belongs to the kubernetes plugin, and that package carries no default for the
+      // prefix: a tool package that guessed one would be guessing one product's choice.
       final ArgumentSpec declared = OidcAdminsBinding.arguments.firstWhere(
         (ArgumentSpec spec) => spec.name == 'groups_prefix',
       );
+      expect(declared.defaultValue, isNull);
       expect(
-        flags.arguments.text('groups_prefix'),
-        binding.arguments.optionalText('groups_prefix') ?? declared.defaultValue,
-      );
-    });
-
-    test('the binding carries the prefix the arguments add', () async {
-      final FakeShell shell = FakeShell()
-        ..fails('microk8s kubectl get clusterrolebinding oidc-platform-admins -o json');
-      final ({StepContext context, MemoryRecorder recorder}) it = contextOf(
-        shell: shell,
-        files: FakeFiles(),
-        http: FakeHttp(),
-        step: 'oidc_admins_binding',
-      );
-
-      const OidcAdminsBinding step = OidcAdminsBinding(
-        name: 'oidc-platform-admins',
-        group: 'authentik Admins',
-        groupsPrefix: 'oidc:',
-        clusterRole: 'cluster-admin',
-      );
-      expect(await step.check(it.context), isA<Ready>());
-      await step.apply(it.context);
-
-      expect(
-        shell.ran.join('\n'),
-        contains('--group=oidc:authentik Admins'),
-        reason:
-            'the cluster never sees the group the identity provider issued, only the prefixed '
-            'name — a binding written without the prefix matches nobody',
+        binding.entry.arguments.text('groups_prefix'),
+        flags.entry.arguments.text('groups_prefix'),
       );
     });
   });
@@ -237,10 +228,7 @@ void main() {
     });
 
     test('is read with a request that only reads', () async {
-      final ScriptedHttp http = ScriptedHttp(
-        (HttpRequest request, int nth) =>
-            answer('{"authorization_endpoint": "https://example.com"}'),
-      );
+      final _Answering http = _Answering('{"authorization_endpoint": "https://example.com"}');
       final ({StepContext context, MemoryRecorder recorder}) it = contextOf(
         shell: FakeShell(),
         files: FakeFiles(),
@@ -262,7 +250,7 @@ void main() {
       final ({StepContext context, MemoryRecorder recorder}) it = contextOf(
         shell: FakeShell(),
         files: FakeFiles(),
-        http: ScriptedHttp((HttpRequest request, int nth) => answer('<html>hello</html>')),
+        http: _Answering('<html>hello</html>'),
         step: 'idp_discovery_reachable',
         answers: onTheMaster,
       );
@@ -322,7 +310,7 @@ void main() {
 
     test('the client both entries name is the same word', () {
       final Program program = loadProgram(
-        File('programs/deploy-gitops.yaml').readAsStringSync(),
+        File(programAt('deploy-gitops.yaml')).readAsStringSync(),
         where: 'deploy-gitops.yaml',
       );
       final Object? fallback = IdpDiscoveryReachable.arguments
@@ -343,7 +331,7 @@ void main() {
       // the client holds for it: a gate measuring one issuer while the cluster is configured with
       // another is green either way.
       final Program program = loadProgram(
-        File('programs/deploy-gitops.yaml').readAsStringSync(),
+        File(programAt('deploy-gitops.yaml')).readAsStringSync(),
         where: 'deploy-gitops.yaml',
       );
       String issuerOf(String step) {
@@ -375,4 +363,32 @@ void main() {
       expect((result as Blocked).reason, contains('<master-domian>'));
     });
   });
+}
+
+/// A network port that answers every request with the same document and keeps what was sent.
+///
+/// The table-driven fake answers by URL, which is no use to a gate whose whole question is what it
+/// asked for: the address is composed inside the step, so a table keyed on it would have to repeat
+/// the composition and would then agree with the step by construction. This one answers whatever is
+/// asked and records the request, so the address and the method are read off what actually went out.
+final class _Answering implements Http {
+  /// Answers every request with [body].
+  _Answering(this.body);
+
+  /// What every request is answered with.
+  final String body;
+
+  /// Every request that was sent, in the order it went out.
+  final List<HttpRequest> sent = <HttpRequest>[];
+
+  @override
+  Future<HttpAnswer> send(HttpRequest request) async {
+    sent.add(request);
+    return HttpAnswer(
+      status: 200,
+      body: body,
+      headers: const <String, String>{},
+      elapsed: Duration.zero,
+    );
+  }
 }

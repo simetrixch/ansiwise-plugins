@@ -1,22 +1,9 @@
 import 'package:ansiwise_api/ansiwise_api.dart';
 import '../steps/gitops/argocd_root_app.dart';
 import '../steps/gitops/build_plane.dart';
-import '../steps/gitops/helm_release.dart';
-import '../steps/gitops/helm_repository.dart';
 import '../steps/gitops/idp_discovery_reachable.dart';
-import '../steps/gitops/kubernetes_configmap_from_directory.dart';
-import '../steps/gitops/kubernetes_namespace.dart';
-import '../steps/gitops/kubernetes_object.dart';
 import '../steps/gitops/kubernetes_secret_from_vault.dart';
-import '../steps/gitops/oidc_admins_binding.dart';
 import '../steps/gitops/stage_toggle.dart';
-import '../steps/gitops/vault_auth_method.dart';
-import '../steps/gitops/vault_auth_role.dart';
-import '../steps/gitops/vault_init.dart';
-import '../steps/gitops/vault_kv_entry.dart';
-import '../steps/gitops/vault_kv_mount.dart';
-import '../steps/gitops/vault_policy.dart';
-import '../steps/gitops/vault_unsealed.dart';
 
 /// Every step that puts the platform's own services on top of a standing cluster.
 ///
@@ -24,91 +11,12 @@ import '../steps/gitops/vault_unsealed.dart';
 /// without meeting in the same place. The composer in the parent directory is the only thing that
 /// knows about all of them.
 const Map<StepName, RegisteredStep> gitopsSteps = <StepName, RegisteredStep>{
-  StepName('helm_repository'): RegisteredStep(
-    name: StepName('helm_repository'),
-    source: 'lib/src/steps/gitops/helm_repository.dart:15',
-    create: HelmRepository.fromArguments,
-    arguments: HelmRepository.arguments,
-  ),
-  StepName('kubernetes_namespace'): RegisteredStep(
-    name: StepName('kubernetes_namespace'),
-    source: 'lib/src/steps/gitops/kubernetes_namespace.dart:17',
-    create: KubernetesNamespace.fromArguments,
-    arguments: KubernetesNamespace.arguments,
-  ),
-  StepName('kubernetes_configmap_from_directory'): RegisteredStep(
-    name: StepName('kubernetes_configmap_from_directory'),
-    source: 'lib/src/steps/gitops/kubernetes_configmap_from_directory.dart:25',
-    create: KubernetesConfigmapFromDirectory.fromArguments,
-    arguments: KubernetesConfigmapFromDirectory.arguments,
-  ),
-  StepName('kubernetes_object'): RegisteredStep(
-    name: StepName('kubernetes_object'),
-    source: 'lib/src/steps/gitops/kubernetes_object.dart:28',
-    create: KubernetesObject.fromArguments,
-    arguments: KubernetesObject.arguments,
-  ),
   StepName('kubernetes_secret_from_vault'): RegisteredStep(
     name: StepName('kubernetes_secret_from_vault'),
-    source: 'lib/src/steps/gitops/kubernetes_secret_from_vault.dart:31',
+    source: 'lib/src/steps/gitops/kubernetes_secret_from_vault.dart:29',
     create: KubernetesSecretFromVault.fromArguments,
     arguments: KubernetesSecretFromVault.arguments,
     answers: KubernetesSecretFromVault.answers,
-  ),
-  StepName('helm_release'): RegisteredStep(
-    name: StepName('helm_release'),
-    source: 'lib/src/steps/gitops/helm_release.dart:23',
-    create: HelmRelease.fromArguments,
-    arguments: HelmRelease.arguments,
-  ),
-  StepName('vault_init'): RegisteredStep(
-    name: StepName('vault_init'),
-    source: 'lib/src/steps/gitops/vault_init.dart:33',
-    create: VaultInit.fromArguments,
-    arguments: VaultInit.arguments,
-    answers: VaultInit.answers,
-  ),
-  StepName('vault_unsealed'): RegisteredStep(
-    name: StepName('vault_unsealed'),
-    source: 'lib/src/steps/gitops/vault_unsealed.dart:19',
-    create: VaultUnsealed.fromArguments,
-    arguments: VaultUnsealed.arguments,
-    answers: VaultUnsealed.answers,
-  ),
-  StepName('vault_kv_mount'): RegisteredStep(
-    name: StepName('vault_kv_mount'),
-    source: 'lib/src/steps/gitops/vault_kv_mount.dart:14',
-    create: VaultKvMount.fromArguments,
-    arguments: VaultKvMount.arguments,
-    answers: VaultKvMount.answers,
-  ),
-  StepName('vault_auth_method'): RegisteredStep(
-    name: StepName('vault_auth_method'),
-    source: 'lib/src/steps/gitops/vault_auth_method.dart:23',
-    create: VaultAuthMethod.fromArguments,
-    arguments: VaultAuthMethod.arguments,
-    answers: VaultAuthMethod.answers,
-  ),
-  StepName('vault_policy'): RegisteredStep(
-    name: StepName('vault_policy'),
-    source: 'lib/src/steps/gitops/vault_policy.dart:33',
-    create: VaultPolicy.fromArguments,
-    arguments: VaultPolicy.arguments,
-    answers: VaultPolicy.answers,
-  ),
-  StepName('vault_auth_role'): RegisteredStep(
-    name: StepName('vault_auth_role'),
-    source: 'lib/src/steps/gitops/vault_auth_role.dart:24',
-    create: VaultAuthRole.fromArguments,
-    arguments: VaultAuthRole.arguments,
-    answers: VaultAuthRole.answers,
-  ),
-  StepName('vault_kv_entry'): RegisteredStep(
-    name: StepName('vault_kv_entry'),
-    source: 'lib/src/steps/gitops/vault_kv_entry.dart:28',
-    create: VaultKvEntry.fromArguments,
-    arguments: VaultKvEntry.arguments,
-    answers: VaultKvEntry.answers,
   ),
   StepName('idp_discovery_reachable'): RegisteredStep(
     name: StepName('idp_discovery_reachable'),
@@ -117,15 +25,9 @@ const Map<StepName, RegisteredStep> gitopsSteps = <StepName, RegisteredStep>{
     arguments: IdpDiscoveryReachable.arguments,
     answers: IdpDiscoveryReachable.answers,
   ),
-  StepName('oidc_admins_binding'): RegisteredStep(
-    name: StepName('oidc_admins_binding'),
-    source: 'lib/src/steps/gitops/oidc_admins_binding.dart:21',
-    create: OidcAdminsBinding.fromArguments,
-    arguments: OidcAdminsBinding.arguments,
-  ),
   StepName('argocd_root_app'): RegisteredStep(
     name: StepName('argocd_root_app'),
-    source: 'lib/src/steps/gitops/argocd_root_app.dart:23',
+    source: 'lib/src/steps/gitops/argocd_root_app.dart:22',
     create: ArgocdRootApp.fromArguments,
     arguments: ArgocdRootApp.arguments,
     answers: ArgocdRootApp.answers,

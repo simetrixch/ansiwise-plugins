@@ -1,7 +1,6 @@
 import 'package:ansiwise_api/ansiwise_api.dart';
 
-import '../kubectl.dart';
-import '../slots.dart';
+import 'package:ansiwise_kubernetes/ansiwise_kubernetes.dart';
 
 /// Hands the cluster over, and stops.
 ///

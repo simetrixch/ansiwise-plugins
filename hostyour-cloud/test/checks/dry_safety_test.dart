@@ -1,12 +1,19 @@
 import 'package:ansiwise_api/ansiwise_api.dart';
-import 'package:hostyour_cloud/hostyour_cloud.dart';
 import 'package:test/test.dart';
 import 'package:ansiwise_checks/ansiwise_checks.dart';
 
+import '../composition.dart';
+
 Future<void> main() async {
+  // The registry the BINARY composes, not this package's own. What an operator installs is five
+  // plugins, and a dry-run guarantee measured over one of them says nothing about the other four —
+  // the deployment's programs name `wait_for_answer` three times, and it is a step whose answer
+  // rests on the row's word. Measured here, that fact is stated; measured over this package alone,
+  // the list below would be empty and the suite would read as though nothing took the row's word.
+  final Registry shipped = await shippedRegistry();
   final DrySafety check = DrySafety(
-    registry: executionRegistry,
-    answers: await plausibleAnswers(const RealFiles(), 'programs'),
+    registry: shipped,
+    answers: await plausibleAnswers(const RealFiles(), '$installationRoot/$installationPrograms'),
   );
   final DryRunReading reading = await check.askEveryStep();
 
@@ -15,7 +22,7 @@ Future<void> main() async {
     // be green for having looked at nothing.
     expect(
       reading.outcomes,
-      hasLength(executionRegistry.steps.length),
+      hasLength(shipped.steps.length),
       reason: 'some step was never asked, so nothing about its dry run was measured',
     );
   });

@@ -1,9 +1,12 @@
 import 'dart:io' show File;
 
 import 'package:ansiwise_api/ansiwise_api.dart';
+import 'package:ansiwise_kubernetes/ansiwise_kubernetes.dart';
 import 'package:hostyour_cloud/hostyour_cloud.dart';
 import 'package:ansiwise_api/testing.dart';
 import 'package:test/test.dart';
+
+import 'composition.dart';
 
 import 'cluster_fixture.dart';
 
@@ -15,15 +18,20 @@ import 'cluster_fixture.dart';
 /// an ordinary re-run, and a step that did its work again there would swap the address pool
 /// underneath every workload on it.
 void main() {
-  ResolvedProgram deployCluster() => const ProgramResolver(executionRegistry).resolve(
+  // The five plugins the shipped configuration turns on, composed the way the binary composes
+  // them. Resolved once, because reading a file per test says nothing more than reading it once.
+  late final Registry shipped;
+  setUpAll(() async => shipped = await shippedRegistry());
+
+  ResolvedProgram deployCluster() => ProgramResolver(shipped).resolve(
     loadProgram(
-      File('programs/deploy-cluster.yaml').readAsStringSync(),
+      File(programAt('deploy-cluster.yaml')).readAsStringSync(),
       where: 'deploy-cluster.yaml',
     ),
   );
 
   Program declared() => loadProgram(
-    File('programs/deploy-cluster.yaml').readAsStringSync(),
+    File(programAt('deploy-cluster.yaml')).readAsStringSync(),
     where: 'deploy-cluster.yaml',
   );
 
@@ -132,7 +140,7 @@ void main() {
   test('every step of it is registered under the name the file writes', () {
     for (final ResolvedStep step in deployCluster().steps) {
       expect(
-        executionRegistry.step(step.entry.step),
+        shipped.step(step.entry.step),
         isNotNull,
         reason: '${step.entry.step} is in the program and not in the registry',
       );
@@ -434,7 +442,7 @@ void main() {
       'export_kubeconfig',
     ];
     for (final String name in irreversible) {
-      final RegisteredStep? entry = executionRegistry.step(StepName(name));
+      final RegisteredStep? entry = shipped.step(StepName(name));
       expect(entry, isNotNull, reason: '$name is not registered');
       final Step step = entry!.create(_plausible(entry.arguments));
       expect(step, isA<IrreversibleStep>(), reason: '$name is a point of no return');
@@ -453,7 +461,7 @@ void main() {
   });
 
   test('no customer domain reaches the program file', () {
-    final String text = File('programs/deploy-cluster.yaml').readAsStringSync();
+    final String text = File(programAt('deploy-cluster.yaml')).readAsStringSync();
     expect(text, isNot(contains('digitacloud.app')));
     expect(text, isNot(contains('digitaplatform.com')));
   });

@@ -2,6 +2,8 @@ import 'package:ansiwise_api/ansiwise_api.dart';
 import 'package:ansiwise_api/testing.dart';
 import 'package:hostyour_cloud/hostyour_cloud.dart';
 import 'package:test/test.dart';
+
+import '../composition.dart';
 import 'package:ansiwise_checks/ansiwise_checks.dart';
 
 import 'step_fixtures.dart';
@@ -9,7 +11,7 @@ import 'step_fixtures.dart';
 Future<void> main() async {
   final Idempotence check = Idempotence(
     registry: executionRegistry,
-    answers: await plausibleAnswers(const RealFiles(), 'programs'),
+    answers: await plausibleAnswers(const RealFiles(), '$installationRoot/$installationPrograms'),
     fixtures: stepFixtures,
   );
   final IdempotenceReading reading = await check.runEveryStep();
@@ -19,6 +21,19 @@ Future<void> main() async {
       reading.coverage,
       hasLength(executionRegistry.steps.length),
       reason: 'some step was never run, so nothing about its second run was measured',
+    );
+  });
+
+  test('every fixture names a step this package registers', () {
+    // A fixture keyed on a step that is no longer here is IGNORED rather than reported, so a step
+    // moving to another package leaves its arrangement behind, where it reads as coverage and is
+    // none. That is how eight of them survived the package split with nothing going red.
+    expect(
+      stepFixtures.keys.where(
+        (String name) => !executionRegistry.steps.containsKey(StepName(name)),
+      ),
+      isEmpty,
+      reason: 'a fixture for a step that is not here arranges a machine no check ever meets',
     );
   });
 
@@ -244,68 +259,17 @@ final class WorksThroughACommand extends ReversibleStep<bool> {
 /// for it. A name arrives here only by somebody adding it, which is the point: a step written
 /// tomorrow either brings its fixture or is written down as unproven.
 const Set<String> notCoveredByAFakeMachine = <String>{
-  'activate_public_src_routing',
-  'add_shell_alias',
-  'add_user_to_group',
-  'align_calico_backend',
-  'apply_cluster_issuer',
-  'apply_netplan',
   'argocd_root_app',
   'configure_kube_apiserver_oidc',
   'configure_slave_apiserver_oidc_trust',
   'create_install_branch',
-  'create_storage_directory',
-  'delete_default_ipv4_ippool',
-  'delete_existing_cluster_issuer',
   'disable_addons',
   'enable_addons',
-  'ensure_tool_prerequisites',
-  'export_kubeconfig',
-  'helm_release',
-  'helm_repository',
-  'install_authorized_key',
-  'install_pinned_tool',
-  'install_snap',
-  'install_tailscale_client',
-  // Its postcondition is a ConfigMap composed from a directory, and composing it is a kubectl call
-  // whose OUTPUT the step then applies — a fake shell answers a command, it does not compose one.
-  'kubernetes_configmap_from_directory',
-  'kubernetes_namespace',
-  // Its postcondition is a Secret carrying what an entry of the secret store holds, so measuring it
-  // needs an answer from that store — and a fixture arranges a fake shell and a fake file system,
-  // not a scripted HTTP conversation. Named here rather than counted as passing.
   'kubernetes_secret_from_vault',
-  'link_microk8s_storage_path',
-  'oidc_admins_binding',
-  // Both leave their postcondition behind with a kubectl call: the value of a key and the pods of a
-  // workload are read back out of the cluster, and a fake shell answers a command rather than
-  // carrying it out. Named here rather than counted as passing.
-  'patch_configmap_key',
-  'patch_container_arguments_and_ports',
-  'reapply_calico_manifest',
-  'recycle_kube_system_pod_ips',
-  'remove_snap',
-  'restart_cert_manager_and_reapply_cluster_issuer',
   'restart_microk8s_snap_for_pod_cidr',
-  // Its apply restarts the service that reads the file, and a fake shell records a restart without
-  // carrying it out — the same reason the two steps it replaces were named here.
-  'set_process_flag',
-  'set_default_storage_class',
   'stamp_calico_pool_cidr_in_cni_manifest',
   'stamp_placeholder_in_tracked_files',
   'stamp_role',
-  'vault_auth_method',
-  'vault_auth_role',
-  'vault_init',
-  'vault_kv_entry',
-  'vault_kv_mount',
-  'vault_policy',
-  'vault_unsealed',
-  'verify_ippool_converged_with_self_heal',
   'write_cluster_map',
-  'write_connmark_nft_table',
   'write_containerd_docker_mirror',
-  'write_netplan_public_src_routing',
-  'write_public_src_routing_script',
-  'write_public_src_routing_unit',
 };

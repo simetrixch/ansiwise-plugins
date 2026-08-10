@@ -8,21 +8,28 @@ import 'package:hostyour_cloud/hostyour_cloud.dart';
 import 'package:ansiwise_api/testing.dart';
 import 'package:test/test.dart';
 
+import 'composition.dart';
+
 /// The whole of `deploy-branch`, run against a checkout that exists only in memory.
 ///
 /// It runs the real program file through the real registry, in every mode, and looks at what came
 /// out — which is the only way to test the thing this program mostly is: an order.
 void main() {
+  // The five plugins the shipped configuration turns on, composed the way the binary composes
+  // them. Resolved once, because reading a file per test says nothing more than reading it once.
+  late final Registry shipped;
+  setUpAll(() async => shipped = await shippedRegistry());
+
   const String repository = '/srv/hostyour-cloud';
   const String fqdn = 'm1.example.com';
   const String trunk = 'master';
 
   Program declared() => loadProgram(
-    File('programs/deploy-branch.yaml').readAsStringSync(),
+    File(programAt('deploy-branch.yaml')).readAsStringSync(),
     where: 'deploy-branch.yaml',
   );
 
-  ResolvedProgram deployBranch() => const ProgramResolver(executionRegistry).resolve(declared());
+  ResolvedProgram deployBranch() => ProgramResolver(shipped).resolve(declared());
 
   /// What an operator supplies, put through the program's OWN declaration.
   ///

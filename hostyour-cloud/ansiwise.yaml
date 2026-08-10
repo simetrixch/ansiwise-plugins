@@ -4,4 +4,10 @@
 # that reads it, and one that is not is refused by name rather than ignored.
 log_level: info
 plugins:
+  # The four tool plugins, then the product that stands on them. Order is not precedence — a name
+  # registered twice is refused rather than resolved — it is only how they read.
+  - ansiwise-host
+  - ansiwise-kubernetes
+  - ansiwise-vault
+  - ansiwise-helm
   - hostyour-cloud

@@ -7,12 +7,19 @@ import 'package:ansiwise_api/ansiwise_api.dart';
 import 'package:hostyour_cloud/hostyour_cloud.dart';
 import 'package:test/test.dart';
 
+import 'composition.dart';
+
 /// Every program file this deployment ships resolves against the registry.
 ///
 /// This is the check the first gate performs on a machine, run here instead — so a program that
 /// names a step nobody registered is caught in the suite rather than on a server.
 void main() {
-  final Directory programs = Directory('programs');
+  // The five plugins the shipped configuration turns on, composed the way the binary composes
+  // them. Resolved once, because reading a file per test says nothing more than reading it once.
+  late final Registry shipped;
+  setUpAll(() async => shipped = await shippedRegistry());
+
+  final Directory programs = Directory('$installationRoot/$installationPrograms');
 
   test('there is at least one program to check', () {
     expect(programs.existsSync(), isTrue, reason: 'run this from the deployment package');
@@ -31,7 +38,7 @@ void main() {
 
       test('every step and predicate it names is registered, and every argument fits', () {
         final Program program = loadProgram(file.readAsStringSync(), where: name);
-        expect(() => const ProgramResolver(executionRegistry).resolve(program), returnsNormally);
+        expect(() => ProgramResolver(shipped).resolve(program), returnsNormally);
       });
 
       test('every step declares what a failure costs', () {
@@ -52,10 +59,10 @@ void main() {
 
   test('deploy-host measures the machine before it changes anything', () {
     final Program program = loadProgram(
-      File('programs/deploy-host.yaml').readAsStringSync(),
+      File(programAt('deploy-host.yaml')).readAsStringSync(),
       where: 'deploy-host.yaml',
     );
-    final ResolvedProgram resolved = const ProgramResolver(executionRegistry).resolve(program);
+    final ResolvedProgram resolved = ProgramResolver(shipped).resolve(program);
 
     // The ordering the whole preflight exists for: a machine that was never going to work is
     // refused before anything is written to it.
@@ -102,9 +109,8 @@ void main() {
     )) {
       final String name = file.uri.pathSegments.last;
 
-      ResolvedProgram resolvedProgram() => const ProgramResolver(
-        executionRegistry,
-      ).resolve(loadProgram(file.readAsStringSync(), where: name));
+      ResolvedProgram resolvedProgram() =>
+          ProgramResolver(shipped).resolve(loadProgram(file.readAsStringSync(), where: name));
 
       test('$name gates on its tools before it changes anything', () {
         final ResolvedProgram resolved = resolvedProgram();
@@ -145,7 +151,7 @@ void main() {
         // nothing, and it is the half of this that nobody would otherwise notice.
         final Set<String> started = <String>{
           for (final ResolvedStep step in resolved.steps) ...<String>[
-            ..._commandsStartedBy(step.registered.source),
+            ..._commandsStartedBy(step.entry.step, step.registered.source),
             ..._clientInvocationOf(step),
           ],
         };
@@ -202,15 +208,44 @@ Set<String> _clientInvocationOf(ResolvedStep resolved) {
 /// composing a command name out of a variable is not seen, and that is the known limit of reading
 /// source: this catches a demand for a tool nothing uses, which is the direction that goes
 /// unnoticed, and it does not pretend to enumerate everything a run might start.
-Set<String> _commandsStartedBy(String source) {
-  final File file = File(source.split(':').first);
-  if (!file.existsSync()) {
-    return const <String>{};
+Set<String> _commandsStartedBy(StepName step, String source) => <String>{
+  for (final RegExpMatch match in _commandName.allMatches(
+    _sourceOf(step, source).readAsStringSync(),
+  ))
+    match.group(1)!,
+};
+
+/// The file a registry entry's `<path>:<line>` names, in the plugin that declared [step].
+///
+/// **A path is relative to the package that declared it, and a program names steps from five.** The
+/// plugin is ASKED which names it holds rather than the path being searched for under each of them:
+/// two packages already carry a `lib/src/steps/template.dart`, so a search would have to choose
+/// between two real files, and choosing wrong reads a different step's source without saying so.
+///
+/// **A step no active plugin claims FAILS, and so does a path that is not there.** Answering with no
+/// commands would make every tool the gate demands look unused, and the test would report the
+/// opposite of the truth while staying green.
+File _sourceOf(StepName step, String source) {
+  final String path = source.split(':').first;
+  final List<String> claiming = <String>[
+    for (final Plugin plugin in compiledPlugins.available)
+      if (plugin.registry.steps.containsKey(step)) plugin.name,
+  ];
+  if (claiming.length != 1) {
+    throw StateError(
+      claiming.isEmpty
+          ? '$step is in the program and in no plugin of ${compiledPlugins.names.join(', ')}'
+          : '$step is registered by ${claiming.join(' and ')}, so its source is ambiguous',
+    );
   }
-  return <String>{
-    for (final RegExpMatch match in _commandName.allMatches(file.readAsStringSync()))
-      match.group(1)!,
-  };
+  final File file = File('../${claiming.single}/$path');
+  if (!file.existsSync()) {
+    throw StateError(
+      '${claiming.single} registers $step at $path, and that file is not there — the entry points at '
+      'something that was moved or deleted',
+    );
+  }
+  return file;
 }
 
 final RegExp _commandName = RegExp(r"Command(?:\.observing)?\(\s*'([a-z0-9_.-]+)'");

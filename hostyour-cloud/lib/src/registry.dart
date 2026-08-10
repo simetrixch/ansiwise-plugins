@@ -2,7 +2,6 @@ import 'package:ansiwise_api/ansiwise_api.dart';
 import 'registry/branch.dart';
 import 'registry/cluster.dart';
 import 'registry/gitops.dart';
-import 'registry/host.dart';
 
 /// The map from the names a program file writes to the classes that implement them.
 ///
@@ -17,6 +16,6 @@ import 'registry/host.dart';
 /// Composed from one map per area. An area is added by writing its file and naming it here, which is
 /// the only line two people writing two areas both touch.
 const Registry executionRegistry = Registry(
-  steps: <StepName, RegisteredStep>{...hostSteps, ...branchSteps, ...clusterSteps, ...gitopsSteps},
+  steps: <StepName, RegisteredStep>{...branchSteps, ...clusterSteps, ...gitopsSteps},
   predicates: <PredicateName, RegisteredPredicate>{...gitopsPredicates},
 );

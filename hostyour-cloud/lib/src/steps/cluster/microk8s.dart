@@ -36,3 +36,9 @@ const String microk8sKubelite = 'microk8s.daemon-kubelite';
 /// The line and not the exit code: the status returns zero on a node that answered, whatever the
 /// answer was, so anything reading the code would read a node reporting itself down as a success.
 const String microk8sRunningLine = 'microk8s is running';
+
+/// What makes a MicroK8s service read its argument file again.
+///
+/// The command rather than a step of its own: a step that writes one of those files hands this to
+/// the capability that writes it, so the file and the restart that makes it take effect are one act.
+const List<String> microk8sArgumentsRestart = <String>['snap', 'restart', microk8sKubelite];

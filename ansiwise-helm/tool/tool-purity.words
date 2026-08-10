@@ -1,0 +1,35 @@
+# What this package may never name, anywhere under lib/ and test/.
+#
+# THE TEST FOR A WORD: could a vendor with the same tool and a completely different product still
+# use this package with that word in it? A name the tool gives itself passes and stays off this
+# list. A name of one product built with the tool fails and goes on it.
+#
+# One word per line. Blank lines and lines beginning with # are ignored; everything else is matched
+# case-insensitively and word-anchored, so a longer name that merely contains a word is no
+# occurrence of it.
+#
+# THE LIST LIVES HERE, UNDER tool/, AND NOT BESIDE THE CHECK THAT READS IT. The scan reads test/ to
+# the byte, so a list written into test/checks/tool_purity_test.dart would itself be an occurrence
+# of every word on it and the check could never pass. That tool/ stays out of the scan is asserted
+# by a counter-probe of its own.
+
+# The product this package was cut out of, and the organisation behind it.
+hostyour
+digita
+simetrix
+
+# That product's choices: the distribution it installs, the components it deploys, the vendors it
+# rents from, and the name it gave its certificate issuer. Each is a fact of one product, not of
+# helm the tool.
+microk8s
+argocd
+tekton
+zot
+authentik
+cloudflare
+hetzner
+letsencrypt-prod
+
+# That product's own domain words.
+tenant
+consumer

@@ -78,7 +78,7 @@ Future<void> main(List<String> argv) async {
   // Every plugin this binary was compiled with. Dart ahead of time loads no code that was not
   // built in, so this list is a fact of the build — and the configuration below decides which of
   // them are on, which is a fact of the installation.
-  const PluginSet plugins = PluginSet(<Plugin>[HostyourCloudPlugin()]);
+  const PluginSet plugins = compiledPlugins;
 
   final String configuration = options.option('config') ?? Configuration.defaultFileName;
   final Registry registry;

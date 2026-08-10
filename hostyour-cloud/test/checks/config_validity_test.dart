@@ -3,12 +3,23 @@ import 'package:hostyour_cloud/hostyour_cloud.dart';
 import 'package:test/test.dart';
 import 'package:ansiwise_checks/ansiwise_checks.dart';
 
+import '../composition.dart';
+
 Future<void> main() async {
-  const ConfigValidity check = ConfigValidity(files: RealFiles(), registry: executionRegistry);
+  // The registry the binary composes, not this package's own. A program names steps from five
+  // plugins, so a check reading it against one of them would report the other four as unregistered
+  // — and narrowing the check to make that pass would leave the programs judged against a set of
+  // steps nobody ships.
+  final Registry shipped = await shippedRegistry();
+  final ConfigValidity check = ConfigValidity(
+    files: const RealFiles(),
+    registry: shipped,
+    directory: '$installationRoot/$installationPrograms',
+  );
   final List<String> onDisk = await check.programFiles();
   final ProgramReading reading = await check.read();
 
-  test('$programsDirectory holds program files to judge', () {
+  test('$installationPrograms holds program files to judge', () {
     expect(
       onDisk,
       isNotEmpty,
@@ -23,7 +34,7 @@ Future<void> main() async {
     expect(
       reading.outcomes.map((ProgramOutcome outcome) => outcome.file),
       unorderedEquals(onDisk),
-      reason: 'some file in $programsDirectory was never read',
+      reason: 'some file in $installationPrograms was never read',
     );
   });
 
@@ -54,11 +65,11 @@ Future<void> main() async {
     // first registered step declares, so it stays a true program on the day that step gains an
     // argument.
 
-    const ProgramResolver resolver = ProgramResolver(executionRegistry);
+    final ProgramResolver resolver = ProgramResolver(shipped);
 
     test('the registry holds a step a program could name', () {
       expect(
-        executionRegistry.steps,
+        shipped.steps,
         isNotEmpty,
         reason: 'a program can name nothing, so nothing below was measured',
       );

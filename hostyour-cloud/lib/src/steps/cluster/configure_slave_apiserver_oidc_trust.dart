@@ -1,9 +1,9 @@
 import 'package:ansiwise_api/ansiwise_api.dart';
-import '../gitops/cluster_profile.dart';
-import '../kubectl.dart';
+import 'package:ansiwise_vault/ansiwise_vault.dart';
+import 'package:ansiwise_kubernetes/ansiwise_kubernetes.dart';
+import 'package:ansiwise_host/ansiwise_host.dart';
 import 'configure_kube_apiserver_oidc.dart';
 import 'microk8s.dart';
-import 'set_process_flag.dart';
 
 /// Makes a cluster that has no identity provider of its own accept the one on the cluster that has.
 ///
@@ -29,7 +29,7 @@ final class ConfigureSlaveApiserverOidcTrust
     required this.argsPath,
     this.issuer = ConfigureKubeApiserverOidc.defaultIssuer,
     this.kubectl = const Kubectl(),
-    this.layout = const VaultLayout(),
+    required this.layout,
   });
 
   /// Builds the step from what the program gave it.
@@ -171,7 +171,7 @@ final class ConfigureSlaveApiserverOidcTrust
         'API server at it',
       );
     }
-    final ClusterProfile store = await clusterProfileFrom(context, repository, layout: layout);
+    final VaultProfile store = await vaultProfileFrom(context, repository, layout: layout);
     if (store.refusal case final String refusal) {
       // BLOCKED AND NOT SATISFIED. A profile that cannot be read at all, or that carries no address
       // under the name this run was told to look under, is not "the stamp has not run yet" — it is
@@ -213,7 +213,7 @@ final class ConfigureSlaveApiserverOidcTrust
   @override
   Future<StepPlan> plan(StepContext context) async {
     final String? issuerUrl = issuerUrlFrom(
-      (await clusterProfileFrom(context, repository, layout: layout)).url,
+      (await vaultProfileFrom(context, repository, layout: layout)).url,
     );
     final String current = await context.files.exists(argsPath)
         ? await context.files.read(argsPath)
@@ -233,7 +233,7 @@ final class ConfigureSlaveApiserverOidcTrust
   @override
   Future<void> apply(StepContext context) async {
     final String? issuerUrl = issuerUrlFrom(
-      (await clusterProfileFrom(context, repository, layout: layout)).url,
+      (await vaultProfileFrom(context, repository, layout: layout)).url,
     );
     if (issuerUrl == null ||
         ConfigureKubeApiserverOidc.issuerRefusal(row: issuer, written: issuerUrl) != null) {
@@ -247,7 +247,7 @@ final class ConfigureSlaveApiserverOidcTrust
       ConfigureKubeApiserverOidc.withFlags(current, _flags(issuerUrl)),
       mode: microk8sArgumentsFileMode,
     );
-    await SetProcessFlag.restartKubelite(context);
+    await SetProcessFlag.restartWith(context, microk8sArgumentsRestart);
 
     await context.files.createDirectory(stateDirectory, mode: 0x1ed);
     await context.files.write(manifestPath, _binding, mode: manifestMode);
@@ -280,7 +280,7 @@ final class ConfigureSlaveApiserverOidcTrust
     }
     if (captured.args case final String args) {
       await context.files.write(argsPath, args, mode: microk8sArgumentsFileMode);
-      await SetProcessFlag.restartKubelite(context);
+      await SetProcessFlag.restartWith(context, microk8sArgumentsRestart);
     }
   }
 

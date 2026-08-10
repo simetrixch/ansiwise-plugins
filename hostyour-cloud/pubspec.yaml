@@ -20,6 +20,28 @@ environment:
   sdk: ^3.12.0
 
 dependencies:
+  # The tool plugins this platform stands on. It knows what to deploy; they know how to drive a
+  # cluster, a chart, a secret store and a machine — and none of them knows this platform.
+  ansiwise_kubernetes:
+    git:
+      url: https://github.com/simetrixch/ansiwise-plugins.git
+      ref: master
+      path: ansiwise-kubernetes
+  ansiwise_vault:
+    git:
+      url: https://github.com/simetrixch/ansiwise-plugins.git
+      ref: master
+      path: ansiwise-vault
+  ansiwise_helm:
+    git:
+      url: https://github.com/simetrixch/ansiwise-plugins.git
+      ref: master
+      path: ansiwise-helm
+  ansiwise_host:
+    git:
+      url: https://github.com/simetrixch/ansiwise-plugins.git
+      ref: master
+      path: ansiwise-host
   ansiwise_api:
     git:
       url: https://github.com/simetrixch/ansiwise-api.git

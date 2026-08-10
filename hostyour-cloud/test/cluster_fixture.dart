@@ -5,6 +5,8 @@ import 'package:ansiwise_api/ansiwise_api.dart';
 import 'package:hostyour_cloud/hostyour_cloud.dart';
 import 'package:ansiwise_api/testing.dart';
 
+import 'composition.dart';
+
 /// A machine in memory, and the context one step of `deploy-cluster` is asked its questions in.
 final class ClusterMachine {
   ClusterMachine({FakeShell? shell, FakeFiles? files, FakeClock? clock})
@@ -295,19 +297,19 @@ const WriteClusterIssuerManifest clusterIssuer = WriteClusterIssuerManifest(
 );
 
 /// Where each template of the cluster area stands, as a program file names it.
-const String connmarkNftTableTemplate = 'templates/cluster/connmark-nft-table.tpl';
+const String connmarkNftTableTemplate = 'ansiwise/templates/connmark-nft-table.tpl';
 
 /// See [connmarkNftTableTemplate].
-const String netplanPublicSrcRoutingTemplate = 'templates/cluster/netplan-public-src-routing.tpl';
+const String netplanPublicSrcRoutingTemplate = 'ansiwise/templates/netplan-public-src-routing.tpl';
 
 /// See [connmarkNftTableTemplate].
-const String publicSrcRoutingScriptTemplate = 'templates/cluster/public-src-routing-script.tpl';
+const String publicSrcRoutingScriptTemplate = 'ansiwise/templates/public-src-routing-script.tpl';
 
 /// See [connmarkNftTableTemplate].
-const String publicSrcRoutingUnitTemplate = 'templates/cluster/public-src-routing-unit.tpl';
+const String publicSrcRoutingUnitTemplate = 'ansiwise/templates/public-src-routing-unit.tpl';
 
 /// See [connmarkNftTableTemplate].
-const String clusterIssuerTemplate = 'templates/cluster/cluster-issuer-manifest.tpl';
+const String clusterIssuerTemplate = 'ansiwise/templates/cluster-issuer-manifest.tpl';
 
 /// Every template of the cluster area, keyed by the path a program file names it under.
 ///
@@ -323,7 +325,10 @@ Map<String, String> shippedClusterTemplates() => <String, String>{
     publicSrcRoutingUnitTemplate,
     clusterIssuerTemplate,
   ])
-    path: File(path).readAsStringSync(),
+    // The KEY is what the program row writes, because that is the path the step asks the
+    // fake machine for. The FILE is read from the installation tree, because that is where
+    // the text actually stands now — the two differ by the root and nothing else.
+    path: File('$installationRoot/$path').readAsStringSync(),
 };
 
 /// A machine `deploy-cluster` has already brought all the way up.

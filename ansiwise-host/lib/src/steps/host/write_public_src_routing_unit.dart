@@ -1,0 +1,177 @@
+import 'package:ansiwise_api/ansiwise_api.dart';
+import 'detect_public_nic.dart';
+import 'write_connmark_nft_table.dart';
+import 'write_netplan_public_src_routing.dart';
+import 'write_public_src_routing_script.dart';
+
+/// Writes the service that runs the steering script, and takes it away again when it is stopped.
+///
+/// **What the script installs is kernel state, and kernel state does not survive.** A restart, or
+/// anything that empties the machine's rule set, takes both the marking rules and the rule keyed on
+/// the mark away — and nothing about the files on disk says so. A service that runs the script after
+/// the network is up is what puts them back.
+///
+/// **Stopping the service is what removes them, which is why it says how.** Deleting the files does
+/// not: the rules are already in the kernel. So the service carries the two commands that take them
+/// out, and stopping it is the first act of any teardown.
+final class WritePublicSrcRoutingUnit extends ReversibleStep<String?> with FileStep, TemplateStep {
+  /// Writes the service at [path], running the script at [scriptPath].
+  const WritePublicSrcRoutingUnit({
+    required this.templatePath,
+    required this.path,
+    required this.scriptPath,
+    required this.tableName,
+    required this.mark,
+    required this.table,
+    required this.priority,
+  });
+
+  /// Builds the step from what the program gave it.
+  factory WritePublicSrcRoutingUnit.fromArguments(Arguments arguments) => WritePublicSrcRoutingUnit(
+    templatePath: arguments.text('template'),
+    path: arguments.text('path'),
+    scriptPath: arguments.text('script_path'),
+    tableName: arguments.text('table_name'),
+    mark: arguments.text('mark'),
+    table: arguments.integer('table'),
+    priority: arguments.integer('priority'),
+  );
+
+  /// What this step accepts.
+  static const List<ArgumentSpec> arguments = <ArgumentSpec>[
+    ArgumentSpec(
+      name: 'template',
+      kind: ArgumentKind.text,
+      describes:
+          'the service file as text, with a marked slot where each value this run holds belongs — '
+          '<script-path>, <table-name>, <mark>, <table> and <priority>',
+    ),
+    // No defaults for the paths and the table name: they are the product's own names, so the
+    // program rows state them — each as the same value the row that writes that file names.
+    ArgumentSpec(
+      name: 'path',
+      kind: ArgumentKind.text,
+      describes: 'the service file, whose base name is the name the service is started under',
+    ),
+    ArgumentSpec(
+      name: 'script_path',
+      kind: ArgumentKind.text,
+      describes: 'the script the service runs',
+    ),
+    ArgumentSpec(
+      name: 'table_name',
+      kind: ArgumentKind.text,
+      describes: 'the nft table the stopping commands destroy — the one the rules file defines',
+    ),
+    ArgumentSpec(
+      name: 'mark',
+      kind: ArgumentKind.text,
+      describes: 'the mark the rule is keyed on',
+      required: false,
+      defaultValue: WriteConnmarkNftTable.defaultMark,
+    ),
+    ArgumentSpec(
+      name: 'table',
+      kind: ArgumentKind.integer,
+      describes: 'the routing table the marked replies are steered into',
+      required: false,
+      defaultValue: WriteNetplanPublicSrcRouting.publicTable,
+    ),
+    ArgumentSpec(
+      name: 'priority',
+      kind: ArgumentKind.integer,
+      describes: 'the number the rule keyed on the mark is installed at',
+      required: false,
+      defaultValue: WritePublicSrcRoutingScript.defaultPriority,
+    ),
+  ];
+
+  /// `0644` — a service file the service manager reads.
+  static const int fileMode = 0x1a4;
+
+  /// The service file as text, with a marked slot where each value belongs.
+  @override
+  final String templatePath;
+
+  /// The service file's path.
+  final String path;
+
+  /// The script it runs.
+  final String scriptPath;
+
+  /// The nft table the stopping commands destroy.
+  final String tableName;
+
+  /// The name the service is started under: the file's own base name, which is how the service
+  /// manager names every unit under its directory. One value, so the file this writes and the
+  /// service the undo stops cannot come apart.
+  String get unitName => path.split('/').last;
+
+  /// The mark the rule is keyed on.
+  final String mark;
+
+  /// The table the marked replies go into.
+  final int table;
+
+  /// The number the rule sits at.
+  final int priority;
+
+  @override
+  String pathFor(StepContext context) => path;
+
+  @override
+  int get mode => fileMode;
+
+  /// The service, on a machine that steers anything at all.
+  ///
+  /// A machine with no public interface of its own has no rule to install, so there is no service
+  /// to run the script that installs it.
+  @override
+  Future<FileContent> contentFor(StepContext context) async =>
+      await DetectPublicNic.detect(context) == null
+      ? const FileContent.nothing(
+          'nothing is steered on this machine, so there is no service to install',
+        )
+      : FileContent.text(await renderedWith(context, values));
+
+  @override
+  Future<void> apply(StepContext context) async {
+    await super.apply(context);
+    // The service manager reads its directory once at start-up and once when it is told to. A file
+    // written without telling it is a service that does not exist as far as it is concerned.
+    await context.shell.run(const Command('systemctl', <String>['daemon-reload']));
+  }
+
+  /// What the service file held before, or null when it was not there.
+  ///
+  /// A machine that arrived with a service of this name gets its file back rather than losing it,
+  /// and the service manager is told to read the directory again either way.
+  @override
+  Future<String?> capture(StepContext context) => contentBefore(context);
+
+  @override
+  Future<void> undo(StepContext context, String? captured) async {
+    // Stopping it first is what takes the rules out of the kernel — putting the file back or
+    // deleting it would leave them there with nothing on the machine saying they exist.
+    await context.shell.run(Command('systemctl', <String>['disable', '--now', unitName]));
+    if (captured == null) {
+      await context.files.delete(path);
+    } else {
+      await context.files.write(path, captured, mode: mode);
+    }
+    await context.shell.run(const Command('systemctl', <String>['daemon-reload']));
+  }
+
+  /// What goes in each slot of the service file.
+  ///
+  /// The rule is described by the same three numbers [WritePublicSrcRoutingScript.ruleArguments]
+  /// composes it from, so what the service takes out of the kernel and what put it there are one
+  /// description.
+  Map<String, String> get values => <String, String>{
+    'script-path': scriptPath,
+    'table-name': tableName,
+    'mark': mark,
+    'table': '$table',
+    'priority': '$priority',
+  };
+}

@@ -1,7 +1,6 @@
 import 'package:ansiwise_api/ansiwise_api.dart';
-import '../kubectl.dart';
+import 'package:ansiwise_kubernetes/ansiwise_kubernetes.dart';
 import 'microk8s.dart';
-import 'reapply_calico_manifest.dart';
 import 'stamp_calico_pool_cidr_in_cni_manifest.dart';
 
 /// Restarts everything that has to read the new range before the pool can be built on it.

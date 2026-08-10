@@ -1,9 +1,7 @@
 import 'package:ansiwise_api/ansiwise_api.dart';
 
-import '../kubectl.dart';
-import 'argument_text.dart';
-import 'cluster_profile.dart';
-import 'vault_api.dart';
+import 'package:ansiwise_kubernetes/ansiwise_kubernetes.dart';
+import 'package:ansiwise_vault/ansiwise_vault.dart';
 
 /// Materializes an entry of the secret store into a Secret on this cluster.
 ///
@@ -39,7 +37,7 @@ final class KubernetesSecretFromVault extends ReversibleStep<bool> {
     required this.fields,
     required this.staging,
     this.kubectl = const Kubectl(),
-    this.layout = const VaultLayout(),
+    required this.layout,
   });
 
   /// Builds the step from what the program gave it.
@@ -234,7 +232,7 @@ final class KubernetesSecretFromVault extends ReversibleStep<bool> {
 
   /// The fields this Secret carries, read out of the store.
   Future<_Entry> _read(StepContext context) async {
-    final ClusterProfile store = await clusterProfileFrom(context, repository, layout: layout);
+    final VaultProfile store = await vaultProfileFrom(context, repository, layout: layout);
     if (store.refusal case final String refusal) {
       return _Entry.unreadable(refusal);
     }
