@@ -24,6 +24,9 @@ void main() {
   const String fqdn = 'm1.example.com';
   const String trunk = 'master';
 
+  /// The marker the tenant generators name their catalog by, as the tree and the row write it.
+  const String catalogMarker = '__CATALOG_REPO__';
+
   /// The one template this program names, as its row names it.
   const String mailDnsTemplate = 'ansiwise/templates/mail-dns.tpl';
 
@@ -85,13 +88,31 @@ void main() {
         '  source:\n'
         '    targetRevision: &branch master # the branch this installation reads\n'
         '    host: idp.example.invalid\n',
+    // The tenant generators, in the shape the tree really carries them: the member charts pinned to
+    // the trunk by the keep marker, the catalog named by a marker with the forge around it, and the
+    // two markers no row of this program fills.
     'argocd/dev/apps/catalog.yaml':
         'spec:\n'
         '  source:\n'
         '    targetRevision: master # set-domain:keep\n'
-        '    books: __BOOKS_BRANCH__\n',
+        '    repoURL: https://github.com/__CATALOG_REPO__.git\n'
+        '    books: __BOOKS_BRANCH__\n'
+        '  selector:\n'
+        '    cluster: __CLUSTER__\n',
     'argocd/test/apps/root-app.yaml': 'targetRevision: master\n',
     'argocd/prod/apps/root-app.yaml': 'targetRevision: master\n',
+    // A marker filled by Helm at render and by no step at all, so a scan of the branch has to find
+    // it standing and not report it as unfilled work.
+    'apps/consumer-build/files/applicationset.yaml':
+        'revision: __BOOKS__\n'
+        'targetRevision: __BRANCH__\n'
+        'valueFiles: [values-__STAGE__.yaml]\n',
+    // The dashboard's values, whose two markers no row of this program fills either.
+    'bootstrap/kube/values.yaml':
+        'settings:\n'
+        '  clusterName: "__CLUSTER_NAME__"\n'
+        'config:\n'
+        '  inClusterContextName: "__MASTER_NAME__"\n',
     'apps/web/values-dev.yaml':
         'labels:\n'
         '  digitacloud.app/workload: web\n'
@@ -156,6 +177,14 @@ void main() {
       for (final MapEntry<String, String> file in tree.entries)
         if (file.value.contains('example.invalid')) file.key,
     ];
+    // Derived from the tree and not written out, exactly as the two above are: a fixture naming the
+    // one file it knows about would answer the same whether or not the marker had spread, and the
+    // pathspec is what the row states — a marker outside the generator tree is not in the answer,
+    // because git would not return it either.
+    final List<String> carryingCatalog = <String>[
+      for (final MapEntry<String, String> file in tree.entries)
+        if (file.key.startsWith('argocd/') && file.value.contains('__CATALOG_REPO__')) file.key,
+    ];
 
     final FakeShell shell = FakeShell()
       // The one tool this program is, asked for at its head before anything is written. A fixture
@@ -179,6 +208,11 @@ void main() {
       ..answers(
         'git -C $repository grep --full-name --files-with-matches --fixed-strings -e example.invalid',
         '${carryingPlaceholder.join('\n')}\n',
+      )
+      ..answers(
+        'git -C $repository grep --full-name --files-with-matches --fixed-strings -e __CATALOG_REPO__ '
+        '-- argocd',
+        carryingCatalog.isEmpty ? '' : '${carryingCatalog.join('\n')}\n',
       );
 
     return (
@@ -233,12 +267,12 @@ void main() {
   bool has(FakeFiles files, String path) => files.contents.containsKey('$repository/$path');
 
   test('the program resolves against the registry', () {
-    // Fifteen: the six gates and cuts at the head — the pair of answers about the master part, the
-    // domain answer, the tool, the committer identity, the push and the branch — the four that stamp
+    // Sixteen: the six gates and cuts at the head — the pair of answers about the master part, the
+    // domain answer, the tool, the committer identity, the push and the branch — the five that stamp
     // the branch and write its map, the three that write the files under configs and secrets named
     // for this stage, and the two that render what makes it one installation: the profile every
     // chart reads and the toggles that decide which applications run here.
-    expect(deployBranch().steps, hasLength(15));
+    expect(deployBranch().steps, hasLength(16));
   });
 
   test('every value an installation states about itself is an answer, not an argument', () {
@@ -434,6 +468,61 @@ void main() {
       expect(read(it.files, 'templates/values.yaml'), contains('example.invalid'));
     });
 
+    test('the catalog this installation named reaches the tenant generators', () async {
+      final ({RunRecord record, FakeShell shell, FakeFiles files, MemoryRecorder recorder}) it =
+          await run(Mode.run);
+
+      // READ OFF THE BRANCH, never off the row. A row naming a marker no file carries stamps
+      // nothing and reports itself satisfied, so the program file says the same thing whether the
+      // tree was rewritten or not. The forge and the suffix are the tree's own, and what the run
+      // put between them is the answer.
+      expect(
+        read(it.files, 'argocd/dev/apps/catalog.yaml'),
+        contains('repoURL: https://github.com/example-org/tenant-catalog.git'),
+      );
+    });
+
+    test('what is left between double underscores is only what nothing fills', () async {
+      final ({RunRecord record, FakeShell shell, FakeFiles files, MemoryRecorder recorder}) it =
+          await run(Mode.run);
+
+      // SCANNED off the generated branch, file by file. Asking the program which markers it stamps
+      // would answer exactly the same on a tree where every stamp had matched nothing, which is the
+      // failure this looks for.
+      final Map<String, List<String>> left = <String, List<String>>{};
+      for (final MapEntry<String, String> file in it.files.contents.entries) {
+        if (!file.key.startsWith('$repository/')) {
+          continue;
+        }
+        final List<String> markers = _markersIn(file.value);
+        if (markers.isNotEmpty) {
+          left[file.key.substring(repository.length + 1)] = markers;
+        }
+      }
+
+      expect(left, <String, List<String>>{
+        // Filled by Helm at render, from global.booksBranch, global.domain and global.env. The body
+        // is held outside templates/ so ArgoCD's own braces survive Helm, and the chart's wrapper
+        // substitutes these three — no step is meant to touch them, and one that did would be
+        // rewriting product every installation shares.
+        'apps/consumer-build/files/applicationset.yaml': <String>[
+          '__BOOKS__',
+          '__BRANCH__',
+          '__STAGE__',
+        ],
+        // FILLED BY NOTHING, and named here so it cannot go quiet. The books branch is this
+        // cluster's own domain where it holds the master role and the named master's domain where it
+        // does not; the cluster is the first DNS label of this cluster's domain, which is what the
+        // Controller writes into a registration. Neither is one answer this program holds, so no row
+        // of the stamp can write either: the stamp replaces a literal by the value of ONE answer,
+        // and a value that has to be chosen between two answers or cut out of one is not that.
+        'argocd/dev/apps/catalog.yaml': <String>['__BOOKS_BRANCH__', '__CLUSTER__'],
+        // Filled by nothing for the same reason: both are a first DNS label — this cluster's, and
+        // that of the cluster holding the master role.
+        'bootstrap/kube/values.yaml': <String>['__CLUSTER_NAME__', '__MASTER_NAME__'],
+      });
+    });
+
     test('it ends as one stage, with its books and its release pin', () async {
       final ({RunRecord record, FakeShell shell, FakeFiles files, MemoryRecorder recorder}) it =
           await run(Mode.run);
@@ -607,12 +696,23 @@ void main() {
       );
     });
 
-    test('both rows of the stamp are there, and each replaces what its half needs', () {
+    test('all three rows of the stamp are there, and each replaces what its own job needs', () {
       // The domain row replaces what the trunk carries in place of a domain, and the rule the gate
       // measures the tree by is where that literal is written down. The revision row replaces the
-      // trunk's own name under the generator tree, on the two keys that carry a branch.
+      // trunk's own name under the generator tree, on the two keys that carry a branch. The catalog
+      // row replaces the marker the tenant generators name their catalog by, under the same tree.
       expect(atStamp(FqdnSelection.placeholder), isNot(-1));
       expect(atStamp(trunk), isNot(-1));
+      expect(atStamp(catalogMarker), isNot(-1));
+
+      final ResolvedStep catalog = deployBranch().steps[atStamp(catalogMarker)];
+      expect(catalog.argumentsWithDefaults.text('tree'), RolePruning.generatorTree);
+      expect(
+        catalog.argumentsWithDefaults.has('keys'),
+        isFalse,
+        reason:
+            'the marker is a literal nothing else carries, so wherever it stands it is the value',
+      );
 
       final ResolvedStep revision = deployBranch().steps[atStamp(trunk)];
       expect(revision.argumentsWithDefaults.text('tree'), RolePruning.generatorTree);
@@ -648,7 +748,11 @@ void main() {
       // rule the gate applies is built from, and a row changing one turns this red instead of
       // leaving the gate certifying a stamp it no longer describes.
       const FqdnSelection measured = StampPlaceholderInTrackedFiles.selection;
-      for (final int row in <int>[atStamp(trunk), atStamp(FqdnSelection.placeholder)]) {
+      for (final int row in <int>[
+        atStamp(trunk),
+        atStamp(FqdnSelection.placeholder),
+        atStamp(catalogMarker),
+      ]) {
         final Arguments given = deployBranch().steps[row].argumentsWithDefaults;
         expect(given.textList('excluded_segments'), measured.excludedSegments);
         expect(given.textList('excluded_names'), measured.excludedNames);
@@ -656,18 +760,25 @@ void main() {
       }
     });
 
-    test('every stamp reads the value it writes out of the same answer', () {
+    test('every stamp names the answer its own value comes from', () {
       // The row carries the NAME of the answer and never the value, exactly as the row that cuts the
-      // branch does — so the branch and everything stamped into it are named from one place. A row
-      // naming another answer would stamp the tree with something this installation is not.
+      // branch does. The two rows that write a branch name read the same answer the branch is cut
+      // from, so the branch and everything pointing at it are named from one place; the catalog row
+      // reads the catalog, and reading the domain there would point every tenant generator at this
+      // repository instead of the one holding the member charts.
       for (final int row in <int>[atStamp(trunk), atStamp(FqdnSelection.placeholder)]) {
         expect(deployBranch().steps[row].argumentsWithDefaults.text('value_answer'), 'fqdn');
       }
+      expect(
+        deployBranch().steps[atStamp(catalogMarker)].argumentsWithDefaults.text('value_answer'),
+        'catalog_repo',
+      );
     });
 
     test('the branch exists before anything is stamped into it', () {
       expect(at('git_branch'), lessThan(atStamp(trunk)));
       expect(at('git_branch'), lessThan(atStamp(FqdnSelection.placeholder)));
+      expect(at('git_branch'), lessThan(atStamp(catalogMarker)));
       expect(at('git_branch'), lessThan(at('stamp_role')));
     });
 
@@ -693,6 +804,16 @@ void main() {
     });
   });
 }
+
+/// Every `__MARKER__` in [text], each named once, in alphabetical order.
+///
+/// Alphabetical rather than in the order they stand: what is asserted is WHICH markers a file still
+/// carries, and a line somebody moved would otherwise report a difference that is not one.
+List<String> _markersIn(String text) =>
+    _marker.allMatches(text).map((Match found) => found.group(0)!).toSet().toList()..sort();
+
+/// What a marker looks like in this tree: capitals between two double underscores.
+final RegExp _marker = RegExp('__[A-Z][A-Z0-9_]*__');
 
 /// The arguments [resolved] runs with: what the program wrote, plus what the step declares by
 /// default.

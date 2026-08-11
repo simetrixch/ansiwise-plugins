@@ -18,6 +18,7 @@ void main() {
     String? master,
     required String buildPlane,
     String? postUrl,
+    List<String> alertRecipients = const <String>['alerts@example.com'],
     Map<String, String> files = const <String, String>{},
     FakeShell? shell,
   }) => StepContext(
@@ -30,6 +31,7 @@ void main() {
       'build_plane': buildPlane,
       'unit_apex': 'units.example.com',
       'platform_domain': 'example.com',
+      'alert_recipients': alertRecipients,
       'tailnet_url': 'https://tailnet.example.com',
       'post_url': ?postUrl,
     }),
@@ -115,6 +117,54 @@ void main() {
       );
 
       expect(out.contains('post:'), isFalse);
+    });
+
+    test('every answered mailbox stands in the profile, one item per line', () async {
+      // The chart's alert route resolves its recipients through this key alone. Until it was
+      // written, every installation carried the trunk's empty list, and the observability
+      // application stopped rendering on the first sync.
+      final String out = await profileFor(
+        contextFor(
+          fqdn: 'm1.example.com',
+          role: 'master',
+          buildPlane: 'm1.example.com',
+          alertRecipients: const <String>['alerts@example.com', 'ops@example.com'],
+        ),
+      );
+
+      expect(out, contains('  alertRecipients:\n'));
+      expect(out, contains("    - 'alerts@example.com'"));
+      expect(out, contains("    - 'ops@example.com'"));
+    });
+
+    test('a mailbox that would be read as a comment is quoted, not dropped', () async {
+      // A plain scalar beginning with # is a comment, so the recipient would be absent from the
+      // rendered file and the alert route would resolve to one address fewer than was answered.
+      final String out = await profileFor(
+        contextFor(
+          fqdn: 'm1.example.com',
+          role: 'master',
+          buildPlane: 'm1.example.com',
+          alertRecipients: const <String>['#ops@example.com'],
+        ),
+      );
+
+      expect(out, contains("    - '#ops@example.com'"));
+    });
+
+    test('no mailbox is written as an empty LIST, not as a key with nothing under it', () async {
+      // A key with no items parses as null, which is a different kind under the same name from the
+      // empty list the trunk carries — and it would reach the chart as one.
+      final String out = await profileFor(
+        contextFor(
+          fqdn: 'm1.example.com',
+          role: 'master',
+          buildPlane: 'm1.example.com',
+          alertRecipients: const <String>[],
+        ),
+      );
+
+      expect(out, contains('  alertRecipients: []'));
     });
 
     test('a slave that names no master is refused rather than described with holes', () async {

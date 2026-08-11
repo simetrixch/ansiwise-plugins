@@ -1,5 +1,5 @@
 // A test may read the real files; the rule that confines `dart:io` is about the shipped library.
-import 'dart:io' show File;
+import 'dart:io' show Directory, File;
 
 import 'package:ansiwise_api/ansiwise_api.dart';
 // The slots this program's rows write are the vault package's notation, and the handoff is a row
@@ -240,7 +240,7 @@ void main() {
         <String>{'$clusterPlaceholder-deploy-pat-read', '$clusterPlaceholder-build-read'},
         reason: 'a build is stage-free, so its tier lives on exactly one cluster',
       );
-      expect(everywhere, containsAll(<String>['admin', 'controller', 'controller-host']));
+      expect(everywhere, containsAll(<String>['admin', 'controller', 'manager-host']));
     });
 
     test('seven auth roles on the build plane, six off it', () {
@@ -269,7 +269,7 @@ void main() {
           'consumer-eso',
           'tenant-eso-$stagePlaceholder',
           'controller',
-          'controller-host',
+          'manager-host',
         ]),
       );
     });
@@ -369,8 +369,171 @@ void main() {
     expect(
       rules,
       isNot(contains('system')),
-      reason: 'the system tier holds the root token and the unseal keys',
+      reason:
+          'the system tier holds the read half of the repository credential, and the tier exists '
+          'so that no workload namespace reaches it',
     );
+  });
+
+  // WHAT THIS GROUP MEASURES, AND WHAT IT DOES NOT. It holds one link of the chain: every entry a
+  // program writes is granted by a policy that some auth role of this program hands out. That is not
+  // the whole of "a reader can reach it". A login also has to be admitted, and this looks at nothing
+  // about that: an auth role binds a service account IN NAMED NAMESPACES, and a reader installed into
+  // a namespace the role does not bind is refused before any policy is consulted.
+  //
+  // The unmeasured half is not hypothetical — it is where two live defects were found. Measuring it
+  // means reading which namespace each application is installed into, and that stands in the chart
+  // tree rather than in the programs this suite already resolves.
+  //
+  // The name says the link, not the chain, because a group titled for the chain reports a green over
+  // a read that fails at login.
+  group('every credential the seed writes is granted by a policy some role hands out', () {
+    /// The entries the programs of this installation write, as the path each one is read back at.
+    ///
+    /// EVERY program and not this one alone. The policies and the roles exist only here, so an entry
+    /// written by another program is an entry no policy of this installation grants — which is the
+    /// very thing this group is asked to report, and a scan limited to this file would answer that
+    /// there was nothing to look at.
+    List<String> writtenEntries() => <String>[
+      for (final File file in Directory(
+        installationProgramsRoot,
+      ).listSync().whereType<File>().where((File each) => each.path.endsWith('.yaml')))
+        for (final ProgramStep entry in loadProgram(
+          file.readAsStringSync(),
+          where: file.uri.pathSegments.last,
+        ).steps)
+          if (entry.step == const StepName('vault_kv_entry'))
+            '${entry.arguments.text('mount')}/data/${entry.arguments.text('path')}',
+    ];
+
+    /// The paths each policy of this program grants READ on, by the name it is written under.
+    ///
+    /// A grant that interpolates the caller's own identity is left out: it never names a literal
+    /// path, so it can cover no entry written from a program file, and reading one as coverage would
+    /// report every entry as reachable by everything.
+    Map<String, List<String>> readGrants() {
+      final Map<String, List<String>> granted = <String, List<String>>{};
+      for (final ProgramStep entry in program().steps) {
+        if (entry.step != const StepName('vault_policy')) {
+          continue;
+        }
+        for (final String line in grantsOf(entry).split('\n')) {
+          if (line.contains('{{') || !line.contains('"read"')) {
+            continue;
+          }
+          final RegExpMatch? path = RegExp(r'path\s+"([^"]+)"').firstMatch(line);
+          if (path?.group(1) case final String on) {
+            granted.putIfAbsent(entry.arguments.text('name'), () => <String>[]).add(on);
+          }
+        }
+      }
+      return granted;
+    }
+
+    /// The policies some auth role of this program hands out.
+    ///
+    /// Read out of the role body's own list and not out of the whole body, so a policy is not
+    /// counted as carried because a role happens to bind an ACCOUNT of the same name.
+    Set<String> carriedPolicies() => <String>{
+      for (final ProgramStep entry in program().steps)
+        if (entry.step == const StepName('vault_auth_role'))
+          for (final RegExpMatch each in RegExp(
+            r'"token_policies"\s*:\s*\[([^\]]*)\]',
+          ).allMatches(entry.arguments.text('body')))
+            ...RegExp(
+              r'"([^"]+)"',
+            ).allMatches(each.group(1) ?? '').map((RegExpMatch policy) => policy.group(1) ?? ''),
+    };
+
+    /// Whether [grant] covers [entry], by the two wildcards a grant may carry.
+    ///
+    /// `*` stands for the rest of the path and `+` for one segment of it. Nothing else: a grant is
+    /// matched the way the store matches it, and a looser reading here would call an entry covered
+    /// that the store refuses at run time.
+    bool covers(String grant, String entry) {
+      if (!grant.contains('*') && !grant.contains('+')) {
+        return grant == entry;
+      }
+      final String pattern = grant
+          .split('/')
+          .map((String part) => part == '+' ? '[^/]+' : RegExp.escape(part).replaceAll(r'\*', '.*'))
+          .join('/');
+      return RegExp('^$pattern\$').hasMatch(entry);
+    }
+
+    /// The entries no policy of this program grants, and why each of them is right.
+    ///
+    /// Named one by one rather than counted, and each one is a claim about a reader: an entry here
+    /// is read by something other than a workload logging in through this cluster's auth mount. An
+    /// entry that lands here by accident is a credential written where nothing can read it, which is
+    /// what the rest of this group exists to refuse.
+    const Map<String, String> readByNoPolicy = <String, String>{
+      'secret/data/$stagePlaceholder/idp/database':
+          'this program materializes it onto the cluster itself, with the root token, in the row '
+          'that puts the identity provider\'s credentials in front of its release',
+      'secret/data/$stagePlaceholder/system/argocd/repo-read-pat':
+          'the system tier, which no policy here grants a workload on purpose — what syncs on a '
+          'cluster of this installation reads a copy of its own under the slaves tier',
+    };
+
+    test('there are entries and policies to measure', () {
+      // Without this the check below is satisfied by a program that seeds nothing, and empty
+      // against empty is not agreement.
+      expect(writtenEntries(), isNotEmpty);
+      expect(readGrants(), isNotEmpty);
+      expect(carriedPolicies(), isNotEmpty);
+    });
+
+    test('each one is granted by a policy some role hands out, or is named as read otherwise', () {
+      final Map<String, List<String>> granted = readGrants();
+      final Set<String> carried = carriedPolicies();
+      for (final String entry in writtenEntries()) {
+        if (readByNoPolicy.containsKey(entry)) {
+          continue;
+        }
+        final List<String> readers = <String>[
+          for (final MapEntry<String, List<String>> policy in granted.entries)
+            if (policy.value.any((String grant) => covers(grant, entry)))
+              if (carried.contains(policy.key)) policy.key,
+        ];
+        expect(
+          readers,
+          isNotEmpty,
+          reason:
+              'nothing can read $entry: no policy of this program grants read on it under a name '
+              'some auth role hands out. The seed writes the credential, the run comes back green, '
+              'and whatever needs it is refused at its first read — days later, with a message '
+              'about what it could not do rather than about the credential nobody could reach. If '
+              'its reader is not a workload of this cluster, name it in readByNoPolicy with the '
+              'reader',
+        );
+      }
+    });
+
+    test('the entry the program says has no writer still has none', () {
+      // The program states, beside the row that writes the other entry of that tier, that nothing
+      // here writes the manager's key to this host and what the installation cannot do without it.
+      // That sentence is the only place an operator is told, so it may not quietly stop being true:
+      // the day a row writes this entry, the paragraph saying there is none goes with it.
+      expect(
+        writtenEntries(),
+        isNot(contains('secret/data/$stagePlaceholder/manager-host/ssh')),
+        reason:
+            'a row writes this entry now, so the paragraph above the manager-host seed row in '
+            'deploy-gitops.yaml claims a gap that is closed — delete it, and with it the sentence '
+            'saying the manager cannot add a cluster to this installation',
+      );
+    });
+
+    test('nothing is excused that no row writes', () {
+      // The probe on the exception list. A path that stops being written leaves its excuse behind,
+      // and from then on the check above passes over a name that means nothing.
+      expect(
+        readByNoPolicy.keys.toSet().difference(writtenEntries().toSet()),
+        isEmpty,
+        reason: 'this entry is excused from needing a policy and no row of any program writes it',
+      );
+    });
   });
 
   test('the handoff is the last step and it carries a verdict of its own', () async {

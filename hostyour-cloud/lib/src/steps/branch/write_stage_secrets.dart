@@ -8,16 +8,30 @@ import 'filled_template_step.dart';
 /// has been seeded from them: the two repository credentials, the DNS token, the storage box, and
 /// the four the cluster carrying the build plane needs. None of them can be generated and none of
 /// them can be derived — they are obtained from GitHub, from Cloudflare and from Hetzner, and this
-/// step is the only way they reach the machine.
+/// step is how an answer a run was given reaches that file.
 ///
-/// **The file is never rewritten once it carries a live value, and that is the whole reason this
-/// step is not a plain write.** After the install it holds far more than it was given: the root
-/// token and the five unseal keys of a running Vault, the generated registry and database passwords,
-/// the identity provider's bootstrap password, the DKIM signing key. Rewriting the file from the
-/// template on a second run threw all of that away, and the root token of a sealed Vault is the one
-/// value nothing anywhere else holds. So a key that carries anything is left exactly as it is, and
-/// only a key that carries nothing is filled — where "nothing" includes a value that is still
-/// exactly what the template ships, because a file somebody copied and never filled looks filled.
+/// **A key that already carries a value is left exactly as it stands, and that is why this step is
+/// not a plain write.** Only an empty key, an absent one, or one still holding exactly what the
+/// template ships is filled — the last of the three because a file somebody copied and never filled
+/// looks filled. The file is this installation's hand-filled input: an operator opens it and types
+/// into it, each key under the paragraph of the template that says what to obtain and where. A run
+/// that wrote every key from its own answers would replace what somebody typed with whatever the
+/// interview happened to carry, and a credential rotated by hand would go back to the one it was
+/// rotated away from.
+///
+/// **What that costs, said here rather than left to be discovered: an answer given to a LATER run
+/// does not reach a key that already carries something.** The file keeps the value it has, the seed
+/// keeps writing that value into Vault, and nothing reports a difference because there is none —
+/// the two agree on the old value. Changing a credential of a running installation is an edit to
+/// this file, not a different answer to a re-run.
+///
+/// **What this file does NOT hold, because an operator keeping it as their disaster copy would be
+/// keeping the wrong one.** Vault's root token and its unseal keys are written by the step that
+/// initializes Vault, into the credential file that step is given, and never here — they exist
+/// nowhere else, and this file is not that place. The identity provider's credentials are generated
+/// by the seed row that puts them into Vault and pass through no file at all. Nor does any later
+/// phase add to this one: this step is the only step of the installation that writes it, so what it
+/// holds after an install is what an operator and this step put in it.
 ///
 /// **The values never reach the record.** A plan carries the names of the keys it would fill and,
 /// for a credential, [Redactor.marker] in place of the value; the file itself is written only by a

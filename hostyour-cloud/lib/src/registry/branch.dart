@@ -61,7 +61,7 @@ const Map<StepName, RegisteredStep> branchSteps = <StepName, RegisteredStep>{
   ),
   StepName('write_stage_secrets'): RegisteredStep(
     name: StepName('write_stage_secrets'),
-    source: 'lib/src/steps/branch/write_stage_secrets.dart:30',
+    source: 'lib/src/steps/branch/write_stage_secrets.dart:44',
     create: WriteStageSecrets.fromArguments,
     arguments: WriteStageSecrets.arguments,
     answers: WriteStageSecrets.answers,

@@ -60,6 +60,7 @@ final class StampClusterProfile extends ReversibleStep<String?> with FileStep {
     'build_plane',
     'unit_apex',
     'platform_domain',
+    'alert_recipients',
     'tailnet_url',
     'post_url',
   ];
@@ -108,8 +109,10 @@ final class StampClusterProfile extends ReversibleStep<String?> with FileStep {
         '# Where this installation\'s services are, and which of them run here.',
         '#',
         '# The trunk carries `global: {}` because it knows no installation. This file is written per',
-        '# install branch from the cluster map, and every application loads it LAST in its values',
-        '# chain — so what stands here wins over everything the product declares.',
+        '# install branch from the ANSWERS the generating run was given — clusters/active/<fqdn>.yaml',
+        '# is a second rendering of the same answers and is not read to produce this one — and every',
+        '# application loads it LAST in its values chain, so what stands here wins over everything the',
+        '# product declares.',
         '#',
         '# Only global.* keys belong here: they reach every subchart through Helm\'s own `global:`',
         '# convention. An app-specific value stays in that app\'s values-<stage>.yaml.',
@@ -118,6 +121,11 @@ final class StampClusterProfile extends ReversibleStep<String?> with FileStep {
         '  clusterName: $name',
         '  unitApex: ${given.text('unit_apex')}',
         '  platformDomain: ${given.text('platform_domain')}',
+        // Where this installation's platform alerts are delivered. An alert route of the
+        // observability application that names no recipients of its own resolves them through this
+        // key, and the render of the whole application stops where an enabled route resolves to
+        // neither.
+        ..._alertRecipients(given),
         // The install branch of the cluster holding the master role, which is where this installation
         // keeps its cluster maps and its registrations. On a slave that is a DIFFERENT branch from
         // the one this file stands on.
@@ -183,6 +191,26 @@ final class StampClusterProfile extends ReversibleStep<String?> with FileStep {
       if (!MasterPart.roles.contains(role))
         'the role is "$role", and a cluster holds either the master part or it does not',
       ...MasterPart.of(given).problems,
+    ];
+  }
+
+  /// This installation's alert mailboxes, as the lines they stand on.
+  ///
+  /// Each one is QUOTED. A mailbox is the one value in this file that nobody constrains to a bare
+  /// word, and a plain scalar beginning with `#` is read as a comment — the recipient would be gone
+  /// from the rendered file with nothing saying so. A quote inside the value is doubled, which is
+  /// what a single-quoted scalar means by one.
+  ///
+  /// An empty list is written out as `[]`. A key with no items under it parses as null instead of as
+  /// the empty list the trunk carries, which is a different kind under the same name.
+  static List<String> _alertRecipients(Arguments given) {
+    final List<String> mailboxes = given.textList('alert_recipients');
+    if (mailboxes.isEmpty) {
+      return const <String>['  alertRecipients: []'];
+    }
+    return <String>[
+      '  alertRecipients:',
+      for (final String mailbox in mailboxes) "    - '${mailbox.replaceAll("'", "''")}'",
     ];
   }
 
