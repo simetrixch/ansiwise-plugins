@@ -25,6 +25,17 @@ void main() {
 
   ResolvedProgram deployHost() => ProgramResolver(shipped).resolve(declared());
 
+  /// The memory floor this program's own row states, in kilobytes.
+  ///
+  /// Read out of the program rather than written here. A test carrying its own number passes a
+  /// machine the program refuses, or refuses one it admits, the moment somebody moves the floor —
+  /// and moving it is a configuration change, which is the kind nothing should be edited for.
+  int memoryFloor() => <int>[
+    for (final ProgramStep entry in declared().steps)
+      if (entry.step == const StepName('require_machine_size'))
+        entry.arguments.integer('memory_kilobytes'),
+  ].single;
+
   /// The key this machine is to be reached by, as an operator would hand one over.
   const String operatorKey =
       'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIExampleKeyForTheTemplateOnly operator@example.com';
@@ -214,10 +225,9 @@ void main() {
       expect(it.shell.ran, contains('apt-get install --yes git openssl curl jq apache2-utils'));
       expect(it.record.exitCode, 1, reason: 'the postcondition never held');
     });
-
     test('a machine below the memory floor is refused before anything is installed', () async {
       final ({FakeShell shell, FakeFiles files}) machine = bareMachine();
-      machine.files.contents['/proc/meminfo'] = 'MemTotal:       4000000 kB\n';
+      machine.files.contents['/proc/meminfo'] = 'MemTotal: ${memoryFloor() - 1} kB\n';
       final FakeClock clock = FakeClock();
 
       final RunRecord record =
@@ -294,7 +304,7 @@ void main() {
       // The distinction this rests on: too little memory is as true before a run as during one, and
       // a test run that hid it would be hiding the answer the operator came for.
       final ({FakeShell shell, FakeFiles files}) machine = bareMachine();
-      machine.files.contents['/proc/meminfo'] = 'MemTotal:       4000000 kB\n';
+      machine.files.contents['/proc/meminfo'] = 'MemTotal: ${memoryFloor() - 1} kB\n';
       final FakeClock clock = FakeClock();
 
       final RunRecord record =
