@@ -1,5 +1,7 @@
 import 'package:ansiwise_api/ansiwise_api.dart';
 
+import 'on_the_path.dart';
+
 /// Refuses a machine that does not carry every command the later steps need.
 ///
 /// **Every missing command at once, never the first one.** An operator who is told about `git`,
@@ -83,10 +85,8 @@ final class RequireCommands extends ObservingStep {
     final Map<String, String> packages = this.packages;
 
     for (final String command in commands) {
-      final CommandResult answer = await context.shell.run(
-        Command.observing('command', <String>['-v', command]),
-      );
-      if (answer.ok && answer.trimmed.isNotEmpty) {
+      final CommandResult answer = await context.shell.run(onThePath(command));
+      if (foundOnThePath(answer)) {
         found.add(command);
       } else {
         missing.add(command);

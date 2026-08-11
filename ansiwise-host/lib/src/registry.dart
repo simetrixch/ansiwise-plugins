@@ -71,7 +71,7 @@ const Map<StepName, RegisteredStep> hostSteps = <StepName, RegisteredStep>{
   ),
   StepName('require_commands'): RegisteredStep(
     name: StepName('require_commands'),
-    source: 'lib/src/steps/host/require_commands.dart:16',
+    source: 'lib/src/steps/host/require_commands.dart:18',
     create: RequireCommands.fromArguments,
     arguments: RequireCommands.arguments,
   ),
@@ -124,7 +124,7 @@ const Map<StepName, RegisteredStep> hostSteps = <StepName, RegisteredStep>{
   ),
   StepName('install_snap'): RegisteredStep(
     name: StepName('install_snap'),
-    source: 'lib/src/steps/host/install_snap.dart:35',
+    source: 'lib/src/steps/host/install_snap.dart:37',
     create: InstallSnap.fromArguments,
     arguments: InstallSnap.arguments,
   ),
@@ -227,7 +227,7 @@ const Map<StepName, RegisteredStep> hostSteps = <StepName, RegisteredStep>{
   // Tools fetched onto the machine.
   StepName('ensure_tool_prerequisites'): RegisteredStep(
     name: StepName('ensure_tool_prerequisites'),
-    source: 'lib/src/steps/host/ensure_tool_prerequisites.dart:14',
+    source: 'lib/src/steps/host/ensure_tool_prerequisites.dart:16',
     create: EnsureToolPrerequisites.fromArguments,
     arguments: EnsureToolPrerequisites.arguments,
   ),

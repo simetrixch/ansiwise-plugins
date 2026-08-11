@@ -122,9 +122,9 @@ void main() {
       final FakeShell shell = FakeShell();
       for (final String command in <String>['git', 'openssl', 'htpasswd']) {
         if (present.contains(command)) {
-          shell.answers('command -v $command', '/usr/bin/$command\n');
+          shell.answers(onThePathKey(command), '/usr/bin/$command\n');
         } else {
-          shell.fails('command -v $command');
+          shell.fails(onThePathKey(command));
         }
       }
       return shell;

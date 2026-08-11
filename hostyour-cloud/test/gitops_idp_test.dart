@@ -2,6 +2,7 @@
 import 'dart:io' show File;
 
 import 'package:ansiwise_api/ansiwise_api.dart';
+import 'package:ansiwise_host/ansiwise_host.dart';
 // The binding that grants the administrator group its cluster rights is the kubernetes plugin's
 // step. What this file measures about it is the program's, and the program is this package's.
 import 'package:ansiwise_kubernetes/ansiwise_kubernetes.dart';
@@ -76,8 +77,8 @@ void main() {
       // have to do. A machine that did not answer would stop there, and this test would then be red
       // for a reason that has nothing to do with the identity provider.
       final FakeShell shell = FakeShell()
-        ..answers('command -v helm', '/usr/local/bin/helm\n')
-        ..answers('command -v microk8s', '/snap/bin/microk8s\n');
+        ..answers(onThePathKey('helm'), '/usr/local/bin/helm\n')
+        ..answers(onThePathKey('microk8s'), '/snap/bin/microk8s\n');
       final FakeFiles files = FakeFiles(<String, String>{
         '/srv/hostyour-cloud/configs/config.dev': 'ENABLE_IDP=false\n',
       });

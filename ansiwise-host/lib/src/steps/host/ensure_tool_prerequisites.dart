@@ -1,5 +1,7 @@
 import 'package:ansiwise_api/ansiwise_api.dart';
 
+import 'on_the_path.dart';
+
 /// Puts on the machine the two things every tool download needs, and judges by the tools themselves.
 ///
 /// **The package manager's answer is not the verdict, and this is the incident.** Automatic updates
@@ -84,9 +86,7 @@ final class EnsureToolPrerequisites extends IrreversibleStep {
   /// Shared with every tool step, because the presence of a command is the one question all of them
   /// begin with and a second copy of it would be a second answer.
   static Future<bool> onPath(StepContext context, String command) async {
-    final CommandResult answer = await context.shell.run(
-      Command.observing('command', <String>['-v', command]),
-    );
-    return answer.ok && answer.trimmed.isNotEmpty;
+    final CommandResult answer = await context.shell.run(onThePath(command));
+    return foundOnThePath(answer);
   }
 }

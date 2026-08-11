@@ -52,8 +52,8 @@ void main() {
       // exits with a failure on a freshly provisioned machine that already carries both.
       final HostMachine machine = HostMachine();
       machine.shell
-        ..answers('command -v curl', '/usr/bin/curl\n')
-        ..answers('command -v unzip', '/usr/bin/unzip\n')
+        ..answers(onThePathKey('curl'), '/usr/bin/curl\n')
+        ..answers(onThePathKey('unzip'), '/usr/bin/unzip\n')
         ..fails('apt-get install --yes', exitCode: 100, stderr: 'could not get lock');
 
       expect(await step.check(machine.contextFor(under)), isA<Satisfied>());
@@ -63,11 +63,11 @@ void main() {
     test('a machine missing one of them installs it and is judged again on the command', () async {
       final HostMachine machine = HostMachine();
       machine.shell
-        ..answers('command -v curl', '/usr/bin/curl\n')
-        ..fails('command -v unzip')
+        ..answers(onThePathKey('curl'), '/usr/bin/curl\n')
+        ..fails(onThePathKey('unzip'))
         ..fails('apt-get install --yes unzip', exitCode: 100, stderr: 'could not get lock')
         ..changes('apt-get install --yes unzip', () {
-          machine.shell.answers('command -v unzip', '/usr/bin/unzip\n');
+          machine.shell.answers(onThePathKey('unzip'), '/usr/bin/unzip\n');
         });
 
       final StepContext context = machine.contextFor(under);
@@ -82,8 +82,8 @@ void main() {
 
     test('one gate up front rather than three failures further down', () async {
       final HostMachine machine = HostMachine()
-        ..shell.fails('command -v curl')
-        ..shell.fails('command -v unzip');
+        ..shell.fails(onThePathKey('curl'))
+        ..shell.fails(onThePathKey('unzip'));
       final StepPlan plan = await step.plan(machine.contextFor(under));
       expect(plan.summary, contains('curl'));
       expect(plan.summary, contains('unzip'));
@@ -96,7 +96,7 @@ void main() {
       // it is, held against the pin, and reported as wrong on every run with nothing able to fix it.
       final HostMachine machine = HostMachine();
       machine.shell
-        ..answers('command -v yq', '/usr/local/bin/yq\n')
+        ..answers(onThePathKey('yq'), '/usr/local/bin/yq\n')
         ..answers('yq --version', 'yq (https://github.com/mikefarah/yq/) version v4.40.0\n');
 
       expect(
@@ -109,7 +109,7 @@ void main() {
     test('a tool already at the pin is left alone', () async {
       final HostMachine machine = HostMachine();
       machine.shell
-        ..answers('command -v yq', '/usr/local/bin/yq\n')
+        ..answers(onThePathKey('yq'), '/usr/local/bin/yq\n')
         ..answers('yq --version', 'yq (https://github.com/mikefarah/yq/) version v4.53.3\n');
 
       expect(await yqCli.check(machine.contextFor(under)), isA<Satisfied>());
@@ -214,7 +214,7 @@ void main() {
       // Nothing here holds the binary that machine came with.
       final HostMachine machine = HostMachine();
       machine.shell
-        ..answers('command -v yq', '/usr/local/bin/yq\n')
+        ..answers(onThePathKey('yq'), '/usr/local/bin/yq\n')
         ..answers('yq --version', 'yq (https://github.com/mikefarah/yq/) version v4.44.1\n');
 
       expect(await yqCli.check(machine.contextFor(under)), isA<Ready>());
@@ -246,7 +246,7 @@ void main() {
       // A half-finished download left behind is what the next run would unpack.
       final HostMachine machine = HostMachine();
       machine.shell
-        ..fails('command -v vault')
+        ..fails(onThePathKey('vault'))
         ..fails('unzip -o -d ${vaultCli.directory} ${vaultCli.archive}');
 
       await expectLater(vaultCli.apply(machine.contextFor(under)), throwsA(isA<CommandFailed>()));
@@ -270,7 +270,7 @@ void main() {
     HostMachine withTools({Map<String, String> answers = const <String, String>{}}) {
       final HostMachine machine = HostMachine();
       for (final String tool in <String>['vault', 'yq', 'jq', 'tailscale']) {
-        machine.shell.answers('command -v $tool', '/usr/local/bin/$tool\n');
+        machine.shell.answers(onThePathKey(tool), '/usr/local/bin/$tool\n');
       }
       machine.shell
         ..answers('vault version', 'Vault v2.0.3 (abcdef1), built 2026-01-01\n')
@@ -329,8 +329,8 @@ void main() {
     test('a tool that is missing fails, whether its version could be chosen or not', () async {
       final HostMachine machine = withTools();
       machine.shell
-        ..fails('command -v jq')
-        ..fails('command -v yq');
+        ..fails(onThePathKey('jq'))
+        ..fails(onThePathKey('yq'));
 
       final CheckResult answer = await step.check(machine.contextFor(under));
       final String reason = (answer as Blocked).reason;
@@ -389,8 +389,8 @@ void main() {
     test('everything wrong is reported at once', () async {
       final HostMachine machine = withTools();
       machine.shell
-        ..fails('command -v yq')
-        ..fails('command -v vault');
+        ..fails(onThePathKey('yq'))
+        ..fails(onThePathKey('vault'));
       final CheckResult answer = await step.check(machine.contextFor(under));
       final String reason = (answer as Blocked).reason;
       expect(reason, contains('yq'));

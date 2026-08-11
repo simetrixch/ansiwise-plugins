@@ -33,11 +33,11 @@ void main() {
   HostMachine nothingInstalled() {
     final HostMachine machine = HostMachine();
     machine.shell
-      ..fails('command -v $snap')
+      ..fails(onThePathKey(snap))
       ..fails('snap list $snap')
       ..changes('snap install $snap --classic --channel=$channel', () {
         machine.shell
-          ..answers('command -v $snap', '/snap/bin/$snap\n')
+          ..answers(onThePathKey(snap), '/snap/bin/$snap\n')
           ..answers('snap list $snap', snapList(tracking: channel));
       });
     return machine;
@@ -47,7 +47,7 @@ void main() {
   HostMachine onAnotherChannel() {
     final HostMachine machine = HostMachine();
     machine.shell
-      ..answers('command -v $snap', '/snap/bin/$snap\n')
+      ..answers(onThePathKey(snap), '/snap/bin/$snap\n')
       ..answers('snap list $snap', snapList(tracking: anotherChannel))
       ..changes('snap refresh $snap --channel=$channel', () {
         machine.shell.answers('snap list $snap', snapList(tracking: channel));
@@ -62,11 +62,11 @@ void main() {
   HostMachine switchedOff({required String tracking}) {
     final HostMachine machine = HostMachine();
     machine.shell
-      ..fails('command -v $snap')
+      ..fails(onThePathKey(snap))
       ..answers('snap list $snap', snapList(tracking: tracking, disabled: true))
       ..changes('snap enable $snap', () {
         machine.shell
-          ..answers('command -v $snap', '/snap/bin/$snap\n')
+          ..answers(onThePathKey(snap), '/snap/bin/$snap\n')
           ..answers('snap list $snap', snapList(tracking: tracking));
       })
       ..changes('snap refresh $snap --channel=$channel', () {
@@ -79,7 +79,7 @@ void main() {
   HostMachine alreadyThere() {
     final HostMachine machine = HostMachine();
     machine.shell
-      ..answers('command -v $snap', '/snap/bin/$snap\n')
+      ..answers(onThePathKey(snap), '/snap/bin/$snap\n')
       ..answers('snap list $snap', snapList(tracking: channel));
     return machine;
   }
@@ -203,7 +203,7 @@ void main() {
       const InstallSnap onto = InstallSnap(snap: snap, channel: anotherChannel, classic: true);
       final HostMachine machine = HostMachine();
       machine.shell
-        ..answers('command -v $snap', '/snap/bin/$snap\n')
+        ..answers(onThePathKey(snap), '/snap/bin/$snap\n')
         ..answers('snap list $snap', snapList(tracking: channel));
 
       final StepPlan plan = await onto.plan(machine.contextFor(under));
@@ -226,7 +226,7 @@ void main() {
     test('the snap answers on the path and snapd names no channel for it', () async {
       final HostMachine machine = HostMachine();
       machine.shell
-        ..answers('command -v $snap', '/snap/bin/$snap\n')
+        ..answers(onThePathKey(snap), '/snap/bin/$snap\n')
         ..fails('snap list $snap');
 
       final CheckResult answer = await install.check(machine.contextFor(under));
@@ -250,7 +250,7 @@ void main() {
       final HostMachine machine = alreadyThere();
       machine.shell.changes('snap remove $snap --purge', () {
         machine.shell
-          ..fails('command -v $snap')
+          ..fails(onThePathKey(snap))
           ..fails('snap list $snap');
       });
 

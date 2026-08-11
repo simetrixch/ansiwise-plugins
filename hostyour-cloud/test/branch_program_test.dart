@@ -4,6 +4,7 @@
 import 'dart:io' show File;
 
 import 'package:ansiwise_api/ansiwise_api.dart';
+import 'package:ansiwise_host/ansiwise_host.dart';
 import 'package:hostyour_cloud/hostyour_cloud.dart';
 import 'package:ansiwise_api/testing.dart';
 import 'package:test/test.dart';
@@ -190,7 +191,7 @@ void main() {
       // The one tool this program is, asked for at its head before anything is written. A fixture
       // not answering for it would be a machine with no git, where every run stops at the first
       // step — which is what the gate is for and not what this fixture is for.
-      ..answers('command -v git', '/usr/bin/git\n')
+      ..answers(onThePathKey('git'), '/usr/bin/git\n')
       ..answers('git -C $repository rev-parse --git-dir', '.git\n')
       ..answers('git -C $repository config --get user.name', 'Example Operator\n')
       ..answers('git -C $repository config --get user.email', 'operator@example.com\n')

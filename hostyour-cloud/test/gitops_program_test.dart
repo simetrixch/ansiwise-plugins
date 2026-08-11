@@ -2,6 +2,7 @@
 import 'dart:io' show Directory, File;
 
 import 'package:ansiwise_api/ansiwise_api.dart';
+import 'package:ansiwise_host/ansiwise_host.dart';
 // The slots this program's rows write are the vault package's notation, and the handoff is a row
 // against the kubernetes package. What this file measures about either is the PROGRAM's, and the
 // program is this package's.
@@ -756,5 +757,5 @@ void main() {
 /// The client is `microk8s`, which is the command the steps start. A bare `kubectl` exists on such
 /// a machine too, as a shell alias the cluster program writes, but nothing here starts it.
 FakeShell gitopsToolsPresent() => FakeShell()
-  ..answers('command -v helm', '/usr/local/bin/helm\n')
-  ..answers('command -v microk8s', '/snap/bin/microk8s\n');
+  ..answers(onThePathKey('helm'), '/usr/local/bin/helm\n')
+  ..answers(onThePathKey('microk8s'), '/snap/bin/microk8s\n');

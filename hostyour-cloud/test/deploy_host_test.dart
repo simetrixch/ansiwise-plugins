@@ -69,7 +69,7 @@ void main() {
       'jq',
       'htpasswd',
     ]) {
-      shell.answers('command -v $command', '/usr/bin/$command\n');
+      shell.answers(onThePathKey(command), '/usr/bin/$command\n');
     }
 
     final FakeFiles files = FakeFiles(<String, String>{
@@ -338,7 +338,7 @@ void main() {
 
     Future<RunRecord> runWithout(String absent) async {
       final ({FakeShell shell, FakeFiles files}) machine = bareMachine();
-      machine.shell.fails('command -v $absent');
+      machine.shell.fails(onThePathKey(absent));
       final FakeClock clock = FakeClock();
       return Runner(
         machine: Machine(

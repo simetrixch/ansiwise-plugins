@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:ansiwise_api/ansiwise_api.dart';
+import 'package:ansiwise_host/ansiwise_host.dart';
 // The certificate issuer is rendered by a capability of the cluster now, so the class the fixture
 // builds comes from the kubernetes plugin. What is still this product's — the file it goes in, the
 // issuer's name, the authority and the ingress — stands in the program row and is written out here
@@ -381,12 +382,12 @@ Future<ClusterMachine> convergedCluster() async {
   final FakeFiles files = FakeFiles();
 
   for (final String command in clusterToolsAssumed) {
-    shell.answers('command -v $command', '/usr/bin/$command\n');
+    shell.answers(onThePathKey(command), '/usr/bin/$command\n');
   }
 
   // The snap: installed, on the path, on the pinned channel, and answering that it is running.
   shell
-    ..answers('command -v microk8s', '/snap/bin/microk8s\n')
+    ..answers(onThePathKey('microk8s'), '/snap/bin/microk8s\n')
     ..answers(
       'snap list microk8s',
       'Name      Version  Rev   Tracking     Publisher   Notes\n'
@@ -505,7 +506,7 @@ Future<ClusterMachine> convergedCluster() async {
 
   // The tools, each answering the version this platform pins for it.
   for (final String tool in <String>['curl', 'unzip', 'jq', 'argocd', 'vault', 'yq', 'tailscale']) {
-    shell.answers('command -v $tool', '/usr/local/bin/$tool\n');
+    shell.answers(onThePathKey(tool), '/usr/local/bin/$tool\n');
   }
   // The one that comes from the package manager is judged on the package manager's own record, and
   // that is a different question from being on the path: a package removed but not purged is still

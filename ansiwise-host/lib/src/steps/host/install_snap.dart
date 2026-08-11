@@ -1,5 +1,7 @@
 import 'package:ansiwise_api/ansiwise_api.dart';
 
+import 'on_the_path.dart';
+
 /// Puts a snap on the machine, switched on and tracking the channel a program pins it to.
 ///
 /// **One capability and not three, because three starting points reach one end state.** A machine is
@@ -73,10 +75,8 @@ final class InstallSnap extends IrreversibleStep {
   /// test can answer, and on its own it is not enough: a disabled snap is installed and off the path
   /// at the same time. [trackedChannel] is what tells the two apart.
   static Future<bool> onPath(StepContext context, String snap) async {
-    final CommandResult answer = await context.shell.run(
-      Command.observing('command', <String>['-v', snap]),
-    );
-    return answer.ok && answer.trimmed.isNotEmpty;
+    final CommandResult answer = await context.shell.run(onThePath(snap));
+    return foundOnThePath(answer);
   }
 
   /// The channel [snap] tracks, or null when no such snap is installed.
