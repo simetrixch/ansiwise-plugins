@@ -30,8 +30,15 @@ Future<void> main() async => auditIdempotence(
 const Set<String> notCoveredByAFakeMachine = <String>{
   'configure_kube_apiserver_oidc',
   'restart_microk8s_snap_for_pod_cidr',
+  // Nothing about the fake machine keeps it from being exercised: the ANSWERS do, and no fixture can
+  // reach them. A probe plants a value for every declared answer independently, and "role" and
+  // "master" are two declarations — so what it plants is a cluster that holds the master part AND
+  // names another one, which is exactly the pair this step now refuses. It used to be reported as
+  // exercised because it refused only the other half and read the second answer nowhere, which is
+  // the defect that was fixed. Closing this needs a declaration that can state a relationship
+  // between two answers; it is the same reason write_cluster_map stands below.
+  'stamp_cluster_profile',
   'stamp_placeholder_in_tracked_files',
   'stamp_role',
   'write_cluster_map',
-  'write_containerd_docker_mirror',
 };

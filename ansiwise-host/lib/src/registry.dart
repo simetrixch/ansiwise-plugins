@@ -7,6 +7,7 @@ import 'steps/host/assert_cli_tool_versions.dart';
 import 'steps/host/assert_netplan_merged.dart';
 import 'steps/host/check_storage_mount.dart';
 import 'steps/host/clean_package_cache.dart';
+import 'steps/host/create_file_from_template.dart';
 import 'steps/host/create_storage_directory.dart';
 import 'steps/host/detect_host_iptables_backend.dart';
 import 'steps/host/detect_host_upstream_resolvers.dart';
@@ -22,6 +23,7 @@ import 'steps/host/install_pinned_tool.dart';
 import 'steps/host/install_snap.dart';
 import 'steps/host/install_tailscale_client.dart';
 import 'steps/host/link_microk8s_storage_path.dart';
+import 'steps/host/preflight_registry_pull_credential.dart';
 import 'steps/host/remove_snap.dart';
 import 'steps/host/remove_unused_packages.dart';
 import 'steps/host/require_commands.dart';
@@ -33,6 +35,7 @@ import 'steps/host/set_process_flag.dart';
 import 'steps/host/stamp_calico_pool_cidr_in_cni_manifest.dart';
 import 'steps/host/wait_for_addons_enabled.dart';
 import 'steps/host/write_connmark_nft_table.dart';
+import 'steps/host/write_containerd_registry_mirror.dart';
 import 'steps/host/write_netplan_public_src_routing.dart';
 import 'steps/host/write_public_src_routing_script.dart';
 import 'steps/host/write_public_src_routing_unit.dart';
@@ -130,6 +133,24 @@ const Map<StepName, RegisteredStep> hostSteps = <StepName, RegisteredStep>{
     source: 'lib/src/steps/host/set_process_flag.dart:31',
     create: SetProcessFlag.fromArguments,
     arguments: SetProcessFlag.arguments,
+  ),
+  // The mirror this machine pulls images through. The gate stands first and the write second, and
+  // that order is a constraint rather than a preference: a credential that is merely unfilled is
+  // refused while nothing is installed, and refusing it where the mirror is written would stop a
+  // run with the machine half built. Both entries declare no answer of their own — which machine
+  // this is, and which machine the mirror runs on, are read out of the run under the names the row
+  // gives, so this package carries neither name.
+  StepName('preflight_registry_pull_credential'): RegisteredStep(
+    name: StepName('preflight_registry_pull_credential'),
+    source: 'lib/src/steps/host/preflight_registry_pull_credential.dart:28',
+    create: PreflightRegistryPullCredential.fromArguments,
+    arguments: PreflightRegistryPullCredential.arguments,
+  ),
+  StepName('write_containerd_registry_mirror'): RegisteredStep(
+    name: StepName('write_containerd_registry_mirror'),
+    source: 'lib/src/steps/host/write_containerd_registry_mirror.dart:25',
+    create: WriteContainerdRegistryMirror.fromArguments,
+    arguments: WriteContainerdRegistryMirror.arguments,
   ),
   // The addons the snap ships, and the manifest one of them builds its address pool from. The
   // entries stand in the order a program runs them: the pod range is stamped before anything is
@@ -290,6 +311,15 @@ const Map<StepName, RegisteredStep> hostSteps = <StepName, RegisteredStep>{
     source: 'lib/src/steps/host/detect_host_iptables_backend.dart:13',
     create: DetectHostIptablesBackend.fromArguments,
     arguments: DetectHostIptablesBackend.arguments,
+  ),
+  // The file system as a tool. It declares no answer of its own: which file, where it goes and
+  // which axis a caller wants one of them per are read out of the row, so this package carries no
+  // name of any file a product keeps.
+  StepName('create_file_from_template'): RegisteredStep(
+    name: StepName('create_file_from_template'),
+    source: 'lib/src/steps/host/create_file_from_template.dart:23',
+    create: CreateFileFromTemplate.fromArguments,
+    arguments: CreateFileFromTemplate.arguments,
   ),
 };
 

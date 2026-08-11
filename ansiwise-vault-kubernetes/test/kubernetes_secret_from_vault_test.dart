@@ -1,12 +1,10 @@
 import 'package:ansiwise_api/ansiwise_api.dart';
 import 'package:ansiwise_api/testing.dart';
 import 'package:ansiwise_vault/ansiwise_vault.dart';
+import 'package:ansiwise_vault_kubernetes/ansiwise_vault_kubernetes.dart';
 import 'package:test/test.dart';
 
-import 'vault_test.dart' show ScriptedHttp, answer;
-
-/// The one step of this package that knows a second tool, and the two things a move of it must not
-/// lose.
+/// The step that knows both tools, and the three things a move of it must not lose.
 ///
 /// It reads an entry out of Vault and writes it onto a cluster, so it handles credentials the whole
 /// way through. Two properties decide whether that is safe, and neither is visible from the outside:
@@ -25,6 +23,10 @@ void main() {
   const String secretValue = 'not-a-real-password-it-is-a-test-fixture';
   const String staging = '/run/staging';
   const String manifest = '$staging/apps-app-credentials.yaml';
+
+  // The one request this step sends, as the fake network is keyed: the entry the row names, on the
+  // mount it names, with the axis slot filled from this run's answer.
+  const String entryRead = 'GET $url/v1/secret/data/dev/app/database';
 
   // One deployment's layout, stated the way its program rows state it. The package itself carries
   // no layout, so the step is handed this one.
@@ -57,9 +59,11 @@ void main() {
     credentials: renderCredentials(url: url, unsealKeys: const <String>['k1'], rootToken: token),
   });
 
-  /// A Vault that answers the entry read with [body].
-  ScriptedHttp storeHolding(String body) =>
-      ScriptedHttp((HttpRequest request, int nth) => answer(body));
+  /// A store that answers the entry read with [body], and nothing else at all.
+  ///
+  /// Keyed on the exact request, so a step reaching for any other path meets an empty answer and
+  /// refuses rather than quietly being handed the entry it asked wrongly for.
+  FakeHttp storeHolding(String body) => FakeHttp()..answers(entryRead, body: body);
 
   /// The entry as Vault's key-value store answers it.
   String entryHolding(String password) =>
@@ -232,7 +236,7 @@ void main() {
       // The word is the product's and not this package's: the row names the answer under
       // `run_answer`, and every slot spelled with that name is filled from this run.
       final FakeShell shell = FakeShell()..fails(reading);
-      final ScriptedHttp http = storeHolding(entryHolding(secretValue));
+      final FakeHttp http = storeHolding(entryHolding(secretValue));
       final ({StepContext context, MemoryRecorder recorder}) it = contextOf(
         shell: shell,
         files: machineFiles(),
@@ -240,7 +244,7 @@ void main() {
       );
 
       await step.apply(it.context);
-      expect(http.sent.single.url, '$url/v1/secret/data/dev/app/database');
+      expect(http.sent.single, entryRead);
     });
 
     test('a slot no answer fills refuses rather than reading an entry nobody named', () async {
@@ -257,7 +261,7 @@ void main() {
         layout: layout,
       );
       final FakeShell shell = FakeShell()..fails(reading);
-      final ScriptedHttp http = storeHolding(entryHolding(secretValue));
+      final FakeHttp http = storeHolding(entryHolding(secretValue));
       final ({StepContext context, MemoryRecorder recorder}) it = contextOf(
         shell: shell,
         files: machineFiles(),

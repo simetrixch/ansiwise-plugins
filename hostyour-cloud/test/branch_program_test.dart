@@ -24,6 +24,9 @@ void main() {
   const String fqdn = 'm1.example.com';
   const String trunk = 'master';
 
+  /// The one template this program names, as its row names it.
+  const String mailDnsTemplate = 'ansiwise/templates/mail-dns.tpl';
+
   Program declared() => loadProgram(
     File(programAt('deploy-branch.yaml')).readAsStringSync(),
     where: 'deploy-branch.yaml',
@@ -183,6 +186,11 @@ void main() {
       files: FakeFiles(<String, String>{
         for (final MapEntry<String, String> file in tree.entries)
           '$repository/${file.key}': file.value,
+        // The template a row of this program names, at the path that row names it under — relative
+        // to where the run was started, which is where the programs are read from too. READ OFF THE
+        // DISK and never pasted in: a copy here would measure the copy, and the file that ships
+        // could lose a line or gain a slot nothing fills with every assertion below still passing.
+        mailDnsTemplate: File('$installationRoot/$mailDnsTemplate').readAsStringSync(),
       }),
     );
   }
@@ -225,12 +233,12 @@ void main() {
   bool has(FakeFiles files, String path) => files.contents.containsKey('$repository/$path');
 
   test('the program resolves against the registry', () {
-    // Fourteen: the five gates and cuts at the head — the domain answer, the tool, the committer
-    // identity, the push and the branch — the four that stamp the branch and write its map, the
-    // three that write the files under configs and secrets named for this stage, and the two that
-    // render what makes it one installation: the profile every chart reads and the toggles that
-    // decide which applications run here.
-    expect(deployBranch().steps, hasLength(14));
+    // Fifteen: the six gates and cuts at the head — the pair of answers about the master part, the
+    // domain answer, the tool, the committer identity, the push and the branch — the four that stamp
+    // the branch and write its map, the three that write the files under configs and secrets named
+    // for this stage, and the two that render what makes it one installation: the profile every
+    // chart reads and the toggles that decide which applications run here.
+    expect(deployBranch().steps, hasLength(15));
   });
 
   test('every value an installation states about itself is an answer, not an argument', () {
@@ -279,6 +287,20 @@ void main() {
             // Which part of the tree a stamp is confined to, and the keys it rewrites there. Both
             // are the shape of the product's own files.
             'tree', 'keys',
+            // The NAME of the answer a stamp reads the value it writes out of, and the marker a line
+            // of this tree carries to be left alone. The first is a question and never an answer;
+            // the second is a word written into the product's own files.
+            'value_answer', 'keep_marker',
+            // Which parts of this tree hold product material rather than installation state. Facts
+            // of the tree being generated, the same on every installation cut from it, and they
+            // stand here rather than as a default in the step because a package that knows how to
+            // rewrite a checkout must not decide what any one checkout keeps.
+            'excluded_segments', 'excluded_names', 'script_suffixes',
+            // Where a template stands, where the file it renders goes, and what may read that file.
+            // All three are the shape of the product's own tree and the same on every installation
+            // — the path carries a SLOT where one installation differs, and what fills the slot is
+            // an answer named by `run_answer` rather than a value written here.
+            'template', 'path', 'file_mode', 'run_answer',
           ]),
         ),
         reason:
@@ -605,12 +627,42 @@ void main() {
       );
 
       final ResolvedStep domain = deployBranch().steps[atStamp(FqdnSelection.placeholder)];
+      // Written as ABSENT and not as an empty value. Neither key carries a default any more, so the
+      // off state of each is the key being left out — the whole checkout, and every occurrence on
+      // the line being the value. A row writing them as empty would look the same on the machine
+      // and would be a value this program chose where it means to choose nothing.
       expect(
-        domain.argumentsWithDefaults.text('tree'),
-        '',
+        domain.argumentsWithDefaults.has('tree'),
+        isFalse,
         reason: 'the placeholder stands anywhere in the checkout, not under one directory',
       );
-      expect(domain.argumentsWithDefaults.textList('keys'), isEmpty);
+      expect(domain.argumentsWithDefaults.has('keys'), isFalse);
+    });
+
+    test('what the run selects files by is what the gate measures the tree by', () {
+      // THE GUARANTEE THAT USED TO COME FROM A DEFAULT, RESTORED AS AN ASSERTION. The three
+      // exclusion lists were `defaultValue` on the step and read off the rule object, so a row
+      // saying nothing could not disagree with the gate. They are stated by this program now — which
+      // is where a value the product chose belongs — and nothing about the declaration keeps the two
+      // in step any more. This is what does: every row of the stamp states exactly the lists the
+      // rule the gate applies is built from, and a row changing one turns this red instead of
+      // leaving the gate certifying a stamp it no longer describes.
+      const FqdnSelection measured = StampPlaceholderInTrackedFiles.selection;
+      for (final int row in <int>[atStamp(trunk), atStamp(FqdnSelection.placeholder)]) {
+        final Arguments given = deployBranch().steps[row].argumentsWithDefaults;
+        expect(given.textList('excluded_segments'), measured.excludedSegments);
+        expect(given.textList('excluded_names'), measured.excludedNames);
+        expect(given.textList('script_suffixes'), measured.scriptSuffixes);
+      }
+    });
+
+    test('every stamp reads the value it writes out of the same answer', () {
+      // The row carries the NAME of the answer and never the value, exactly as the row that cuts the
+      // branch does — so the branch and everything stamped into it are named from one place. A row
+      // naming another answer would stamp the tree with something this installation is not.
+      for (final int row in <int>[atStamp(trunk), atStamp(FqdnSelection.placeholder)]) {
+        expect(deployBranch().steps[row].argumentsWithDefaults.text('value_answer'), 'fqdn');
+      }
     });
 
     test('the branch exists before anything is stamped into it', () {

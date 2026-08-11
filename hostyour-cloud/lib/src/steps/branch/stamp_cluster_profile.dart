@@ -1,5 +1,7 @@
 import 'package:ansiwise_api/ansiwise_api.dart';
 
+import 'master_part.dart';
+
 /// Writes the one file every chart reads to learn where this installation's services are.
 ///
 /// The trunk carries `global: {}` — it is the product tree and knows no installation, so it can name
@@ -93,11 +95,12 @@ final class StampClusterProfile extends ReversibleStep<String?> with FileStep {
     final Arguments given = context.answers;
     final String fqdn = given.text('fqdn');
     final String name = _shortName(fqdn);
-    final bool holdsMaster = given.text('role') == 'master';
-    // Where the master role is. On a cluster that holds it, that is this cluster; on one that does
-    // not, the map's `master` names it. Everything that is provided ONCE per installation — the
-    // books, Vault, the tailnet coordinator, the central observability — hangs off this one answer.
-    final String master = holdsMaster ? fqdn : _optional(given, 'master')!;
+    final MasterPart part = MasterPart.of(given);
+    final bool holdsMaster = part.holdsMaster;
+    // Where the master role is, resolved by the object that owns the pair rule rather than by a
+    // second reading of the two answers here. Everything provided ONCE per installation — the
+    // books, Vault, the tailnet coordinator, the central observability — hangs off this one value.
+    final String master = part.holderFor(fqdn);
     final String buildPlane = given.text('build_plane');
 
     return FileContent.text(
@@ -167,23 +170,20 @@ final class StampClusterProfile extends ReversibleStep<String?> with FileStep {
   }
 
   /// Everything that would make an undescribable installation, all of it at once.
+  ///
+  /// The pair rule is asked of the object that owns it and never written out here. Both halves
+  /// matter to this file and not only the one it used to state: a cluster holding the master part
+  /// that ALSO names another one had that name silently dropped, because the profile hangs its
+  /// once-per-installation addresses off this cluster and never looked at the name again.
   List<String> _problems(StepContext context) {
     final Arguments given = context.answers;
-    final List<String> wrong = <String>[];
     final String role = given.text('role');
 
-    if (role != 'master' && role != 'slave') {
-      wrong.add('the role is "$role", and a cluster holds either the master part or it does not');
-    }
-    // A slave with no master names no books branch, no Vault and no tailnet — three values every
-    // chart requires — so it is refused here rather than producing a profile with three holes.
-    if (role == 'slave' && _optional(given, 'master') == null) {
-      wrong.add(
-        'this cluster does not hold the master part and names no cluster that does, so there is '
-        'nowhere for its books, its Vault or its tailnet to be',
-      );
-    }
-    return wrong;
+    return <String>[
+      if (!MasterPart.roles.contains(role))
+        'the role is "$role", and a cluster holds either the master part or it does not',
+      ...MasterPart.of(given).problems,
+    ];
   }
 
   /// The first label of [fqdn] — what this cluster is called among its siblings.

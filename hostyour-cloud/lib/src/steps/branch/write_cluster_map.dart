@@ -1,4 +1,5 @@
 import 'package:ansiwise_api/ansiwise_api.dart';
+import 'master_part.dart';
 import 'require_installation_domain.dart';
 
 /// Writes the one file that states what this cluster is.
@@ -60,8 +61,8 @@ final class WriteClusterMap extends ReversibleStep<String?> with FileStep {
     'post_url',
   ];
 
-  /// The two roles a cluster map may state.
-  static const List<String> roles = <String>['master', 'slave'];
+  /// The two roles a cluster map may state, read off the rule that owns them.
+  static const List<String> roles = MasterPart.roles;
 
   /// The checkout the map is written in.
   final String repository;
@@ -148,12 +149,11 @@ final class WriteClusterMap extends ReversibleStep<String?> with FileStep {
     return pinned?.group(1)?.trim();
   }
 
-  /// The cluster holding the master part, or null when this run named none.
+  /// The cluster this run named as holding the master part, or null when it named none.
   ///
-  /// An answer left blank and an answer nobody gave are the same thing here. The client renders an
-  /// optional field as an empty box, and an operator who tabbed past it sends the empty string —
-  /// which as a value would put `master: ` into the map of a cluster that belongs to nobody.
-  static String? _master(StepContext context) => _given(context, 'master');
+  /// Read through the rule that owns the pair, so what this map writes and what refuses an illegal
+  /// pair cannot come to disagree about which answers are blank.
+  static String? _master(StepContext context) => MasterPart.of(context.answers).named;
 
   /// This installation's mail service, or null when it has none.
   static String? _postUrl(StepContext context) => _given(context, 'post_url');
@@ -187,12 +187,10 @@ final class WriteClusterMap extends ReversibleStep<String?> with FileStep {
         'the unit apex "$unitApex" is not a domain name',
       if (!RequireInstallationDomain.isFqdn(platformDomain))
         'the platform domain "$platformDomain" is not a domain name',
-      // A slave names the cluster it belongs to, and a cluster holding the master part belongs to
-      // nobody. Both mistakes produce a map that reads as the opposite of what was meant.
-      if (role == 'slave' && master == null)
-        'a slave states the cluster holding the master part, and this map states none',
-      if (role == 'master' && master != null)
-        'this cluster holds the master part itself, so it cannot also name another one',
+      // Both halves of the pair rule, asked of the object that owns it rather than written out
+      // here. A map that states the opposite of what was meant is what either half produces, and a
+      // copy of the rule beside the file it guards is a copy that can drift from the other readers.
+      ...MasterPart.of(context.answers).problems,
       if (master case final String held)
         if (!RequireInstallationDomain.isFqdn(held)) 'the master "$held" is not a domain name',
       if (alertRecipients.isEmpty)

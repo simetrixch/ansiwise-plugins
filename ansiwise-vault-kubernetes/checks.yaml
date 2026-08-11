@@ -1,0 +1,44 @@
+# Every check this package makes, and the file that carries it.
+#
+# WHY THIS FILE EXISTS. `dart test` discovers whatever is on disk and reports whether any of it
+# failed. Delete a check file and nothing fails: the check is simply not there, and the run prints
+# that every check is green. It is worse than a missing test, because a check and its counter-probe
+# live in the same file — the thing that would have noticed goes with the thing it was watching.
+#
+# So the suite does not ask the disk what it checks. It is told here, and
+# test/checks/declared_checks_test.dart holds the disk against this file, naming whatever vanished.
+#
+# FORMAT. `<check>: <file, relative to this file>`, one per line, the reason on the comment line
+# directly above it. It is read line by line and the reader imports nothing but dart:io, because the
+# same reading is done by gate programs that have to start on a fresh clone where no package has been
+# resolved.
+#
+# ADDING A CHECK MEANS ADDING A LINE. A check file that is not declared here is reported too: an
+# undeclared check is one nobody agreed to, and it is how a suite grows a file that judges nothing.
+
+# Every Dart directive of this package spells the path it names byte for byte, so a build for Linux
+# opens what a build for Windows opened.
+case-sensitivity: test/checks/case_sensitivity_test.dart
+# The values a probe hands the steps are the kinds and defaults the shipped programs declare, so it
+# plants what an installation plants.
+declared-answers: test/checks/declared_answers_test.dart
+# This file agrees with the suite on disk, and the refusal that enforces it can really go red.
+declared-checks: test/checks/declared_checks_test.dart
+# No registered step can complete a mutation under --mode dry.
+dry-safety: test/checks/dry_safety_test.dart
+# Nothing in the shipped library outside infrastructure/ reaches the machine directly.
+exec-confinement: test/checks/exec_confinement_test.dart
+# A second run of every registered step does nothing, or the step is named as unproven.
+idempotence: test/checks/idempotence_test.dart
+# No step here spells a kubectl invocation of its own; the composer of the cluster package is asked.
+kubectl-composer: test/checks/kubectl_composer_test.dart
+# What .gitattributes declares LF is LF in the working copy.
+line-endings: test/checks/line_endings_test.dart
+# No abolished word stands in a file name, a directory name or a sub-command.
+naming: test/checks/naming_test.dart
+# Every step this package ships is registered, and every entry names a step that is there.
+registry-completeness: test/checks/registry_completeness_test.dart
+# Every reversible step takes its own work back, and every irreversible one says why it cannot.
+reversibility: test/checks/reversibility_test.dart
+# This package names its two tools and never an application of them.
+tool-purity: test/checks/tool_purity_test.dart

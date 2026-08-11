@@ -193,12 +193,16 @@ void main() {
     });
 
     test('a slave names the cluster it belongs to, and a master names none', () async {
+      // The map asks the object that owns this rule instead of stating it here, so the refusal
+      // arrives in that object's words. The assertion is the same refusal over the same pair of
+      // answers — what changed is that one sentence now serves every step that reads the pair,
+      // rather than each of them wording it for itself.
       final CheckResult orphan = await writeMap.check(
         contextOn(
           answers: answering(domain: 's1.example.com', role: 'slave'),
         ),
       );
-      expect((orphan as Blocked).reason, contains('states none'));
+      expect((orphan as Blocked).reason, contains('names no cluster that does'));
 
       final CheckResult doubled = await writeMap.check(
         contextOn(answers: answering(master: 'm0.example.com')),

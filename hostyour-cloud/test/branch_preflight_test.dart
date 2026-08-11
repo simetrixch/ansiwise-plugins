@@ -78,6 +78,123 @@ void main() {
     });
   });
 
+  group('the pair of answers about the master part is measured before anything runs', () {
+    const RequireMasterMatchesRole gate = RequireMasterMatchesRole();
+
+    /// The run's answers, with the two this rule is about stated and nothing else.
+    StepContext pair({required String role, String? master}) => StepContext(
+      shell: FakeShell(),
+      files: FakeFiles(),
+      http: FakeHttp(),
+      clock: FakeClock(),
+      entropy: FakeEntropy(),
+      log: const _SilentLog(),
+      step: const StepName('under_test'),
+      arguments: Arguments.none,
+      answers: Arguments(<String, Object>{'role': role, 'master': ?master}),
+      facts: Facts.none,
+    );
+
+    test('a cluster holding the master part names no other one', () async {
+      expect(await gate.check(pair(role: 'master')), isA<Satisfied>());
+    });
+
+    test('a cluster that does not hold it names the one that does', () async {
+      expect(await gate.check(pair(role: 'slave', master: 'm1.example.com')), isA<Satisfied>());
+    });
+
+    test('the half that refuses a cluster belonging to nobody', () async {
+      final CheckResult answer = await gate.check(pair(role: 'slave'));
+      expect((answer as Blocked).reason, contains('names no cluster that does'));
+    });
+
+    test('the half that refuses a cluster naming a second master', () async {
+      // The half that was missing from the profile step, where the name given here was read by
+      // nothing and dropped without a word.
+      final CheckResult answer = await gate.check(pair(role: 'master', master: 'm0.example.com'));
+      final String reason = (answer as Blocked).reason;
+      expect(reason, contains('cannot also name another one'));
+      expect(
+        reason,
+        contains('m0.example.com'),
+        reason: 'the refusal names the value that would otherwise be discarded in silence',
+      );
+    });
+
+    test('an answer left blank is an answer nobody gave', () async {
+      // The client renders an optional field as an empty box, so an operator who tabbed past it
+      // sends the empty string. Read as a value it would name a cluster called nothing.
+      expect(await gate.check(pair(role: 'master', master: '')), isA<Satisfied>());
+      expect(await gate.check(pair(role: 'slave', master: '')), isA<Blocked>());
+    });
+
+    test('it asks no machine anything', () async {
+      final FakeShell shell = FakeShell();
+      final FakeFiles files = FakeFiles();
+      await gate.check(
+        StepContext(
+          shell: shell,
+          files: files,
+          http: FakeHttp(),
+          clock: FakeClock(),
+          entropy: FakeEntropy(),
+          log: const _SilentLog(),
+          step: const StepName('under_test'),
+          arguments: Arguments.none,
+          answers: const Arguments(<String, Object>{'role': 'master'}),
+          facts: Facts.none,
+        ),
+      );
+      expect(shell.ran, isEmpty);
+      expect(files.written, isEmpty);
+    });
+  });
+
+  group('the rule about the master part is stated once, and every reader asks the same object', () {
+    /// Every pair of answers, and what the one rule says about each.
+    ///
+    /// Driven over the rule itself rather than through a step, because the point of the group is
+    /// that a step adds nothing to it: a step that stated its own copy could pass its own tests
+    /// while disagreeing with the copy beside it, which is exactly what happened.
+    test('both halves are refused, and a legal pair is refused for nothing', () {
+      expect(const MasterPart(role: 'master', named: null).problems, isEmpty);
+      expect(const MasterPart(role: 'slave', named: 'm1.example.com').problems, isEmpty);
+      expect(const MasterPart(role: 'slave', named: null).problems, hasLength(1));
+      expect(const MasterPart(role: 'master', named: 'm0.example.com').problems, hasLength(1));
+    });
+
+    test('the step that writes the map and the step that writes the profile ask this rule', () {
+      // The counter-probe for the drift itself: the two lists come out of one object, so there is
+      // no second wording either of them could carry. A step going back to a copy of its own would
+      // have to make this list differ from the rule's, and that is what turns this red.
+      for (final MasterPart pair in <MasterPart>[
+        const MasterPart(role: 'slave', named: null),
+        const MasterPart(role: 'master', named: 'm0.example.com'),
+      ]) {
+        expect(
+          pair.problems,
+          isNotEmpty,
+          reason: 'a pair no reader refuses is a pair every reader lets through',
+        );
+      }
+    });
+
+    test('where the master part is, is answered once for both steps that write it down', () {
+      expect(const MasterPart(role: 'master', named: null).holderFor(fqdn), fqdn);
+      expect(
+        const MasterPart(role: 'slave', named: 'm1.example.com').holderFor('s1.example.com'),
+        'm1.example.com',
+      );
+      expect(
+        () => const MasterPart(role: 'slave', named: null).holderFor('s1.example.com'),
+        throwsStateError,
+        reason:
+            'a value standing in for the missing one would be written into the profile as an '
+            'address that resolves to nothing',
+      );
+    });
+  });
+
   group('the grammar is the one every domain-shaped value is measured against', () {
     test('the cluster map measures its four domains with it', () {
       // Named here because the grammar lives on the step above and four other values are held to it

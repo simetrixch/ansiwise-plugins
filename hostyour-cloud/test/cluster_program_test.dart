@@ -295,7 +295,7 @@ void main() {
 
     test('the image mirror is written before the first image is pulled', () {
       before(
-        'write_containerd_docker_mirror',
+        'write_containerd_registry_mirror',
         'enable_addons',
         "written later, the bring-up spends the public registry's allowance",
       );

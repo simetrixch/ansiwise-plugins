@@ -28,12 +28,48 @@ void main() {
     'apply_netplan': <String>['table'],
     'assert_cli_tool_versions': <String>['pin_prefixes'],
     'assert_netplan_merged': <String>['installer_key', 'drop_in_key'],
+    // Where such a file goes and who may read it. Both are decided by what the file is FOR, which
+    // is the one thing this step is built never to know, so neither may carry an answer here.
+    'create_file_from_template': <String>['path', 'file_mode'],
     // An empty list here used to mean "switch nothing off", which is a row that does nothing at
     // all: a program wanting no addon switched off leaves the row out. Absent-or-stated instead, so
     // a row that forgot the list is refused rather than quietly running for nothing.
     'disable_addons': <String>['addons'],
     'export_kubeconfig': <String>['credentials_command'],
     'install_pinned_tool': <String>['pin_prefixes'],
+    // The whole layout of the image mirror. Where the profile and the credential file stand, which
+    // key each value is written under, what an example file writes in place of a credential, which
+    // registry is mirrored at all — and the two names the run's own answers are read under, because
+    // which machine this is and which machine the mirror runs on are things one installation states
+    // about itself and no program file that ships everywhere can carry.
+    'preflight_registry_pull_credential': <String>[
+      'repository',
+      'profile_path',
+      'mirror_host_key',
+      'secrets_path',
+      'credential_key',
+      'placeholder_prefix',
+      'mirrored_registry',
+      'this_machine_answer',
+      'mirror_machine_answer',
+    ],
+    // The same layout, and three more the writing half decides nothing about: where the container
+    // runtime reads per-registry configuration, where a pull goes when the mirror does not answer,
+    // and the permissions a file holding a live credential is written with.
+    'write_containerd_registry_mirror': <String>[
+      'repository',
+      'profile_path',
+      'mirror_host_key',
+      'secrets_path',
+      'credential_key',
+      'placeholder_prefix',
+      'mirrored_registry',
+      'this_machine_answer',
+      'mirror_machine_answer',
+      'certs_directory',
+      'fallback',
+      'file_mode',
+    ],
     // Where the manifest stands is decided by whatever installed the cluster, and the permissions
     // it is written with by whoever reads it. Neither is Calico's.
     'stamp_calico_pool_cidr_in_cni_manifest': <String>['manifest_path', 'file_mode'],
@@ -126,7 +162,7 @@ void main() {
     }
   });
 
-  group('the one demotion that is not required', () {
+  group('the demotions that are not required', () {
     // `provided_by` names the commands whose package is called something else, and a machine where
     // none of them is missing needs no entry at all. Its default is the EMPTY list, which is not a
     // product's choice but the neutral truth: every missing command is reported under its own name.
@@ -135,5 +171,25 @@ void main() {
       expect(spec.required, isFalse);
       expect(spec.defaultValue, isEmpty);
     });
+
+    // `run_answer` names the ONE axis a product may keep the same mirror layout along more than
+    // once — a stage, a region, a tenancy. A container runtime has no such axis, so absent is a
+    // first-class case and not a mistake: with nothing here, no path is filled from an answer.
+    // Absent-with-no-default rather than absent-with-a-value, because any value would be one
+    // product's word for its own axis.
+    for (final String step in <String>[
+      'preflight_registry_pull_credential',
+      'write_containerd_registry_mirror',
+    ]) {
+      test('$step names no axis of its own until a row does', () {
+        final ArgumentSpec spec = specOf(step, 'run_answer');
+        expect(spec.required, isFalse);
+        expect(
+          spec.hasDefault,
+          isFalse,
+          reason: 'a name here would make every caller carry one product\'s word for its own axis',
+        );
+      });
+    }
   });
 }

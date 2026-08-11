@@ -1,0 +1,50 @@
+# The vault-kubernetes plugin: the one step that reads a held value out of Vault and writes it onto
+# a cluster.
+#
+# The subject of this package is the PAIR, and the name says so. The step cannot be two rows — a
+# step that measured something has no way to tell a later step what it found — so it knows two
+# tools, and neither tool package is the place for it: inside the store package every vendor without
+# a cluster would resolve a cluster client, and inside the cluster package every vendor without a
+# store would resolve one particular store. Here each of them stays free of the other.
+#
+# It knows the two tools and never an application of either. Which mount, which entry, which Secret,
+# which namespace and which keys are a program row's to say, and this package carries no default
+# that belongs to any one product.
+name: ansiwise_vault_kubernetes
+description: The step that materializes one Vault entry into a Secret on a Kubernetes cluster.
+publish_to: none
+version: 0.1.0
+
+environment:
+  sdk: ^3.12.0
+
+dependencies:
+  ansiwise_api:
+    git:
+      url: https://github.com/simetrixch/ansiwise-api.git
+      ref: master
+  # Both tools, because the step is about both. The store package supplies how Vault is read and
+  # where an installation's own facts about it stand; the cluster package supplies the composer that
+  # spells the kubectl invocation, which is the one place an invocation of it is put together.
+  ansiwise_vault:
+    git:
+      url: https://github.com/simetrixch/ansiwise-plugins.git
+      ref: master
+      path: ansiwise-vault
+  ansiwise_kubernetes:
+    git:
+      url: https://github.com/simetrixch/ansiwise-plugins.git
+      ref: master
+      path: ansiwise-kubernetes
+
+dev_dependencies:
+  test: ^1.31.2
+  # The analysis rule set this package includes ends at package:lints/recommended.yaml, and a
+  # nested include resolves through THIS package's dependency graph.
+  lints: ^6.1.0
+  # The scan that keeps this package to its two tools and off any application of them.
+  ansiwise_checks:
+    git:
+      url: https://github.com/simetrixch/ansiwise-api.git
+      ref: master
+      path: checks

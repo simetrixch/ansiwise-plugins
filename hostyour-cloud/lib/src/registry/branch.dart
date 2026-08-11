@@ -1,12 +1,12 @@
 import 'package:ansiwise_api/ansiwise_api.dart';
 import '../steps/branch/require_installation_domain.dart';
+import '../steps/branch/require_master_matches_role.dart';
 import '../steps/branch/stamp_app_toggles.dart';
 import '../steps/branch/stamp_cluster_profile.dart';
 import '../steps/branch/stamp_placeholder_in_tracked_files.dart';
 import '../steps/branch/stamp_role.dart';
 import '../steps/branch/write_cluster_map.dart';
 import '../steps/branch/write_stage_config.dart';
-import '../steps/branch/write_stage_mail_dns.dart';
 import '../steps/branch/write_stage_secrets.dart';
 
 /// Every step that turns the product trunk into one installation's branch.
@@ -32,16 +32,22 @@ const Map<StepName, RegisteredStep> branchSteps = <StepName, RegisteredStep>{
     create: RequireInstallationDomain.fromArguments,
     answers: RequireInstallationDomain.answers,
   ),
+  StepName('require_master_matches_role'): RegisteredStep(
+    name: StepName('require_master_matches_role'),
+    source: 'lib/src/steps/branch/require_master_matches_role.dart:25',
+    create: RequireMasterMatchesRole.fromArguments,
+    answers: RequireMasterMatchesRole.answers,
+  ),
   StepName('stamp_placeholder_in_tracked_files'): RegisteredStep(
     name: StepName('stamp_placeholder_in_tracked_files'),
-    source: 'lib/src/steps/branch/stamp_placeholder_in_tracked_files.dart:60',
+    source: 'lib/src/steps/branch/stamp_placeholder_in_tracked_files.dart:66',
     create: StampPlaceholderInTrackedFiles.fromArguments,
     arguments: StampPlaceholderInTrackedFiles.arguments,
     answers: StampPlaceholderInTrackedFiles.answers,
   ),
   StepName('write_cluster_map'): RegisteredStep(
     name: StepName('write_cluster_map'),
-    source: 'lib/src/steps/branch/write_cluster_map.dart:25',
+    source: 'lib/src/steps/branch/write_cluster_map.dart:26',
     create: WriteClusterMap.fromArguments,
     arguments: WriteClusterMap.arguments,
     answers: WriteClusterMap.answers,
@@ -52,13 +58,6 @@ const Map<StepName, RegisteredStep> branchSteps = <StepName, RegisteredStep>{
     create: WriteStageConfig.fromArguments,
     arguments: WriteStageConfig.arguments,
     answers: WriteStageConfig.answers,
-  ),
-  StepName('write_stage_mail_dns'): RegisteredStep(
-    name: StepName('write_stage_mail_dns'),
-    source: 'lib/src/steps/branch/write_stage_mail_dns.dart:29',
-    create: WriteStageMailDns.fromArguments,
-    arguments: WriteStageMailDns.arguments,
-    answers: WriteStageMailDns.answers,
   ),
   StepName('write_stage_secrets'): RegisteredStep(
     name: StepName('write_stage_secrets'),
@@ -76,7 +75,7 @@ const Map<StepName, RegisteredStep> branchSteps = <StepName, RegisteredStep>{
   ),
   StepName('stamp_cluster_profile'): RegisteredStep(
     name: StepName('stamp_cluster_profile'),
-    source: 'lib/src/steps/branch/stamp_cluster_profile.dart:36',
+    source: 'lib/src/steps/branch/stamp_cluster_profile.dart:38',
     create: StampClusterProfile.fromArguments,
     arguments: StampClusterProfile.arguments,
     answers: StampClusterProfile.answers,

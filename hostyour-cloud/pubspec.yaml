@@ -33,6 +33,14 @@ dependencies:
       url: https://github.com/simetrixch/ansiwise-plugins.git
       ref: master
       path: ansiwise-vault
+  # The step that reads a held value out of the store and writes it onto the cluster knows both of
+  # those tools, and cannot be split into two rows — so it ships in the package whose subject is the
+  # pair. Neither tool package depends on the other because of it.
+  ansiwise_vault_kubernetes:
+    git:
+      url: https://github.com/simetrixch/ansiwise-plugins.git
+      ref: master
+      path: ansiwise-vault-kubernetes
   ansiwise_helm:
     git:
       url: https://github.com/simetrixch/ansiwise-plugins.git
@@ -52,10 +60,6 @@ dependencies:
     git:
       url: https://github.com/simetrixch/ansiwise-api.git
       ref: master
-  # Two steps read YAML the platform wrote — a chart's values and a cluster profile. The framework
-  # uses it for program files; a plugin that reads its own files declares it itself rather than
-  # leaning on a transitive dependency it does not control.
-  yaml: ^3.1.3
   # The plugin ships the command line that starts a run, and that parses arguments itself.
   args: ^2.7.0
 

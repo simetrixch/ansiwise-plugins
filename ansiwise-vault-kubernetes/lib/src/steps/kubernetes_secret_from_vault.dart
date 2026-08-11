@@ -1,22 +1,19 @@
 import 'package:ansiwise_api/ansiwise_api.dart';
 
 import 'package:ansiwise_kubernetes/ansiwise_kubernetes.dart';
-
-import 'argument_text.dart';
-import 'vault_api.dart';
-import 'vault_profile.dart';
+import 'package:ansiwise_vault/ansiwise_vault.dart';
 
 /// Materializes an entry of Vault into a Secret on a cluster.
 ///
-/// **This is the one step of this package that knows a second tool, and it cannot be two.** It reads
-/// values out of Vault and writes them onto a cluster; as two rows it could not exist, because a
-/// step that measured something has no way to tell a later step what it found — the facts a run
-/// carries are booleans, an answer comes from the operator, and an argument is fixed when the
-/// program is resolved. The only other shape would be a row that says "for each of these, composed
-/// this way", and that is a language rather than a mechanism. So it is one step, and it lives HERE:
-/// getting a held value to the place that needs it is what a secret store is for, and the dependency
-/// runs from this package to the cluster package rather than the other way, so a product driving a
-/// cluster and keeping no Vault carries none of this.
+/// **This step knows TWO tools, and that is what this package is for.** It reads values out of Vault
+/// and writes them onto a cluster; as two rows it could not exist, because a step that measured
+/// something has no way to tell a later step what it found — the facts a run carries are booleans,
+/// an answer comes from the operator, and an argument is fixed when the program is resolved. The
+/// only other shape would be a row that says "for each of these, composed this way", and that is a
+/// language rather than a mechanism. So it is one step, and it stands in a package whose subject is
+/// the PAIR rather than inside either tool package: a vendor driving Vault and no cluster resolves
+/// no cluster client because of it, and a vendor driving a cluster and keeping no Vault resolves no
+/// secret store.
 ///
 /// **Why this exists rather than a step that mints where the value is needed.** Two components
 /// regularly need one credential: a blueprint creates a client with a secret, and the application
@@ -136,9 +133,9 @@ final class KubernetesSecretFromVault extends ReversibleStep<bool> {
 
   /// Where Vault's own facts stand, and under which names.
   ///
-  /// The same profile and the same credential file every other step of this package reads, so it
-  /// declares the same names. A step that took the layout from a row for eight of them and from a
-  /// literal for the ninth would open a path the operator never configured, and only for the
+  /// The same profile and the same credential file every other step of the vault family reads, so it
+  /// declares the same names. A step that took the layout from a row for the rest of the family and
+  /// from a literal for this one would open a path the operator never configured, and only for the
   /// Secrets — the rest of the run would finish.
   final VaultLayout layout;
 

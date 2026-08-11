@@ -18,22 +18,31 @@ void main() {
   const String fqdn = 'm1.example.com';
   const String trunk = 'master';
 
+  /// The marker the tree being generated writes, as the program's defaults block states it.
+  const String keepMarker = 'set-domain:keep';
+
   /// The revision row of `deploy-branch`: the trunk's own name, under the generator tree, on a key.
   const StampPlaceholderInTrackedFiles retarget = StampPlaceholderInTrackedFiles(
     repository: repository,
     trunk: trunk,
     placeholder: trunk,
+    valueAnswer: 'fqdn',
+    keepMarker: keepMarker,
     tree: RolePruning.generatorTree,
     keys: <String>['revision', 'targetRevision'],
   );
 
   /// The domain row of `deploy-branch`: the placeholder, anywhere in the checkout, on no key.
+  ///
+  /// Neither the tree nor the keys is written here, exactly as the row does not write them: those
+  /// two are left OUT rather than stated as empty, which is what "the whole checkout" and "every
+  /// occurrence on the line is the value" are.
   const StampPlaceholderInTrackedFiles stamp = StampPlaceholderInTrackedFiles(
     repository: repository,
     trunk: trunk,
     placeholder: FqdnSelection.placeholder,
-    tree: '',
-    keys: <String>[],
+    valueAnswer: 'fqdn',
+    keepMarker: keepMarker,
   );
 
   /// The domain this installation answers on, which both stamps read out of the run by name.

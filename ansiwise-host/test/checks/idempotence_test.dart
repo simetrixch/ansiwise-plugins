@@ -26,6 +26,14 @@ const Set<String> notCoveredByAFakeMachine = <String>{
   'add_shell_alias',
   'add_user_to_group',
   'apply_netplan',
+  // Nothing about the fake machine keeps it from being exercised: the PROBE does, and no fixture can
+  // reach it. Every text argument with no default is handed the same one-character value, so the
+  // template this step is told to read and the file it is told to create are the same path — the
+  // file is therefore already there and the step is satisfied before it ever has work. A fixture
+  // arranges files and commands and cannot change what the probe hands over, so this closes only by
+  // the probe being able to hand two text arguments two different values. It is driven twice
+  // directly instead, over a machine where the two paths differ, in create_file_from_template_test.
+  'create_file_from_template',
   // Nothing about the fake machine keeps it from being exercised: the answer does. Every program
   // that runs it declares `storage_directory` with an empty default, so a run that says nothing
   // about it takes the early return — the machine has no separate data filesystem and there is no
@@ -53,6 +61,14 @@ const Set<String> notCoveredByAFakeMachine = <String>{
   // without carrying it out.
   'set_process_flag',
   'write_connmark_nft_table',
+  // Nothing about the fake machine keeps it from being exercised: the ROW does. Which machine this
+  // is, and which machine the mirror runs on, are read out of the run under the names the row
+  // gives, and a probe hands those two arguments the placeholder text — so the run holds no answer
+  // under either name and the step refuses before it starts. That refusal is the step working:
+  // reading an absent name as an empty one would decide this machine IS the mirror and leave every
+  // pull on the rate-limited public path with nothing saying so. Closing this needs a probe that
+  // can plant an answer whose NAME comes out of an argument, which nothing here can do.
+  'write_containerd_registry_mirror',
   'write_netplan_public_src_routing',
   'write_public_src_routing_script',
   'write_public_src_routing_unit',

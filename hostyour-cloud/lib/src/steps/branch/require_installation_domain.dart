@@ -50,17 +50,14 @@ final class RequireInstallationDomain extends ObservingStep {
   /// underscore is refused: it is legal in a git branch name and illegal in a host name.
   static bool isFqdn(String value) => _fqdn.hasMatch(value);
 
-  /// The branch this run is generated on, named for the domain this installation answers on.
-  ///
-  /// An answer and not an argument: it is the one value nobody can put in a file that ships to
-  /// every installation, and every step of this program that touches it reads the same one by name.
-  /// The row that cuts the branch is handed the NAME of this answer, so the branch and everything
-  /// stamped into it are named from one place.
-  static String branchIn(StepContext context) => context.answers.text('fqdn');
-
   @override
   Future<CheckResult> check(StepContext context) async {
-    final String fqdn = branchIn(context);
+    // Read here and nowhere else. It is an answer and not an argument — the one value nobody can put
+    // in a file that ships to every installation — and every other step that touches it is handed
+    // the NAME of this answer by its own row rather than reaching for a reader kept here. So the
+    // branch and everything stamped into it are named from one place, and that place is the program
+    // file.
+    final String fqdn = context.answers.text('fqdn');
     if (fqdn == FqdnSelection.placeholder) {
       return const CheckResult.blocked(
         '"${FqdnSelection.placeholder}" is what the product carries instead of a domain, and an '

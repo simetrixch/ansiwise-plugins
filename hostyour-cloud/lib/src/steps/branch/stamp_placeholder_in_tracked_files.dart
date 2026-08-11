@@ -1,7 +1,6 @@
 import 'package:ansiwise_api/ansiwise_api.dart';
 
 import '../../branch/fqdn_selection.dart';
-import 'require_installation_domain.dart';
 
 /// Puts this installation's own branch where the trunk carries a placeholder.
 ///
@@ -35,7 +34,14 @@ import 'require_installation_domain.dart';
 ///
 /// **A line carrying [keepMarker] is never stamped.** What is marked is product that every
 /// installation shares — the member charts of the tenant catalog — and retargeting those would point
-/// them at a branch that does not carry them.
+/// them at a branch that does not carry them. The marker itself is a word written into the tree
+/// being generated, so the row states it and this step carries no answer of its own about it.
+///
+/// **The replacement is an ANSWER, and the row says which one.** What one installation puts where
+/// the placeholder stands is the one value nobody can write into a file that ships to all of them,
+/// so what the row carries is the NAME of the question — `value_answer: fqdn` — and the reading
+/// happens here. A run holding no answer of that name is refused by name rather than stamping the
+/// literal out of every file and putting nothing in its place.
 ///
 /// **Scripts and product material are excluded as a class, and that is load-bearing.** The
 /// placeholder inside a script is never installation state — it is a guard, a fixture or a comment.
@@ -63,19 +69,28 @@ final class StampPlaceholderInTrackedFiles extends ReversibleStep<List<String>> 
     required this.repository,
     required this.trunk,
     required this.placeholder,
-    required this.tree,
-    required this.keys,
+    required this.valueAnswer,
+    required this.keepMarker,
+    this.tree = '',
+    this.keys = const <String>[],
     this.rule = selection,
   });
 
   /// Builds the step from what the program gave it.
+  ///
+  /// [tree] and [keys] are read as ABSENT-or-stated rather than as a value with a default. Each has
+  /// an off state that is a real case — the whole checkout, and a literal that is itself the value —
+  /// and a row wanting it leaves the key out. A default here would have been a value this package
+  /// chose for the row rather than the neutral truth the mechanism already holds.
   factory StampPlaceholderInTrackedFiles.fromArguments(Arguments arguments) =>
       StampPlaceholderInTrackedFiles(
         repository: arguments.text('repository'),
         trunk: arguments.text('trunk'),
         placeholder: arguments.text('placeholder'),
-        tree: arguments.text('tree'),
-        keys: arguments.textList('keys'),
+        valueAnswer: arguments.text('value_answer'),
+        keepMarker: arguments.text('keep_marker'),
+        tree: arguments.optionalText('tree') ?? '',
+        keys: arguments.has('keys') ? arguments.textList('keys') : const <String>[],
         rule: FqdnSelection(
           excludedSegments: arguments.textList('excluded_segments'),
           excludedNames: arguments.textList('excluded_names'),
@@ -102,32 +117,56 @@ final class StampPlaceholderInTrackedFiles extends ReversibleStep<List<String>> 
           'the literal the trunk carries where an installation carries its own branch, which is '
           "the trunk's own name where the generators name the branch they read from",
     ),
+    // The NAME of the answer, never the value. What a stamp writes is the one thing nobody can put
+    // in a file that ships to every installation, so the row carries the name of the question and
+    // the reading happens here — the same shape the row that cuts the branch uses, so the branch
+    // and everything stamped into it are named from one place.
+    ArgumentSpec(
+      name: 'value_answer',
+      kind: ArgumentKind.text,
+      describes:
+          'the name of the answer this run reads the replacement out of — write "fqdn" here and '
+          'every placeholder is replaced by whatever this run answered for "fqdn"',
+    ),
+    // The marker is a word somebody wrote into the product's own files, so it is that product's and
+    // not this step's. A default here would make a line reading somebody else's word survive a
+    // stamp on a tree that never agreed to it.
+    ArgumentSpec(
+      name: 'keep_marker',
+      kind: ArgumentKind.text,
+      describes:
+          'the trailing comment that exempts a line from every stamp, as the tree being generated '
+          'writes it — a line carrying it is product every installation shares',
+    ),
+    // Absent-or-stated, and no default. Both have an off state that is a real case rather than a
+    // value: the whole checkout, and a literal that is itself the value wherever it stands. A row
+    // wanting either leaves the key out.
     ArgumentSpec(
       name: 'tree',
       kind: ArgumentKind.text,
       describes:
-          'the directory the search is limited to, or empty for the whole checkout — a layout of '
+          'the directory the search is limited to, left out for the whole checkout — a layout of '
           'the tree being generated rather than a value of this installation',
       required: false,
-      defaultValue: '',
     ),
     ArgumentSpec(
       name: 'keys',
       kind: ArgumentKind.textList,
       describes:
-          'the keys whose value is replaced, or empty where every occurrence on the line is the '
+          'the keys whose value is replaced, left out where every occurrence on the line is the '
           'value — a common word that also stands in prose needs the key in front of it',
       required: false,
-      defaultValue: <String>[],
     ),
+    // The three exclusion lists carry no default either. Which directories hold product material,
+    // which file declares something about the stamp and which suffixes name a script are facts of
+    // the tree being generated, and a value here would be this step deciding them for whatever tree
+    // it is pointed at.
     ArgumentSpec(
       name: 'excluded_segments',
       kind: ArgumentKind.textList,
       describes:
           'path segments whose contents are product material rather than installation state — a '
           'segment and not a prefix, so a directory of that name is excluded at any depth',
-      required: false,
-      defaultValue: FqdnSelection.defaultExcludedSegments,
     ),
     ArgumentSpec(
       name: 'excluded_names',
@@ -135,8 +174,6 @@ final class StampPlaceholderInTrackedFiles extends ReversibleStep<List<String>> 
       describes:
           'files excluded by their name, because each declares something about the stamp and '
           'would read as its own opposite once stamped',
-      required: false,
-      defaultValue: FqdnSelection.defaultExcludedNames,
     ),
     ArgumentSpec(
       name: 'script_suffixes',
@@ -144,28 +181,39 @@ final class StampPlaceholderInTrackedFiles extends ReversibleStep<List<String>> 
       describes:
           'the suffixes of the scripts that carry no first line to recognise them by — a script '
           'is never stamped, whatever it is called',
-      required: false,
-      defaultValue: FqdnSelection.defaultScriptSuffixes,
     ),
   ];
 
   /// The answers this step reads, which is what its registry entry declares.
-  static const List<String> answers = <String>['fqdn'];
+  ///
+  /// Empty: which answer it reads is what the row says under `value_answer`, so a list here would
+  /// name one product's question. The row that declares the answer statically is the gate at the
+  /// head of the program, which is what keeps the resolver refusing a program that stopped
+  /// declaring it.
+  static const List<String> answers = <String>[];
 
-  /// The default rule, which is what the gate applies to the tree it walks.
+  /// The rule as the gate applies it to the tree it walks.
   ///
   /// The gate applies the SAME rule class in order to decide whether branch-classes.yaml agrees
   /// with what would really happen here. It used to restate the rule instead, and a changed
   /// exclusion left every probe over there green while it certified a stamp it was no longer
-  /// describing. The run itself stamps by [rule], built from the row — the two agree exactly as
-  /// long as the row keeps the default exclusion lists.
+  /// describing.
+  ///
+  /// The run itself stamps by [rule], built from the row. The rule's own constants are what this
+  /// object holds, and the rows state the same lists — which used to be true by construction, when
+  /// a row saying nothing took these as its defaults, and is now asserted directly by a test over
+  /// the program file. A row stating a different list is a row this object no longer describes, and
+  /// that is what the assertion turns red on.
   static const FqdnSelection selection = FqdnSelection();
 
   /// The rule this run selects files by, built from the row's exclusion lists.
   final FqdnSelection rule;
 
-  /// The trailing comment that exempts a line from every stamp.
-  static const String keepMarker = 'set-domain:keep';
+  /// The trailing comment that exempts a line from every stamp, as the row states it.
+  final String keepMarker;
+
+  /// The name of the answer the replacement is read out of.
+  final String valueAnswer;
 
   /// The checkout being stamped.
   final String repository;
@@ -184,6 +232,11 @@ final class StampPlaceholderInTrackedFiles extends ReversibleStep<List<String>> 
 
   @override
   Future<CheckResult> check(StepContext context) async {
+    final String? replacement = _replacement(context);
+    if (replacement == null) {
+      return CheckResult.blocked(_unanswered);
+    }
+
     final String? head = await _head(context);
     if (head == trunk) {
       return CheckResult.blocked(
@@ -192,7 +245,7 @@ final class StampPlaceholderInTrackedFiles extends ReversibleStep<List<String>> 
       );
     }
 
-    final Map<String, String> left = await _stampable(context);
+    final Map<String, String> left = await _stampable(context, replacement);
     if (left.isEmpty) {
       return CheckResult.satisfied(
         'no file $_under that holds installation state carries $placeholder',
@@ -203,31 +256,44 @@ final class StampPlaceholderInTrackedFiles extends ReversibleStep<List<String>> 
 
   @override
   Future<StepPlan> plan(StepContext context) async {
-    final String branch = RequireInstallationDomain.branchIn(context);
-    final Map<String, String> left = await _stampable(context);
+    final String? replacement = _replacement(context);
+    // Answered rather than thrown. A plan is what an operator reads to decide whether to let the run
+    // happen, and a plan that failed to be produced tells them nothing about what would be done.
+    if (replacement == null) {
+      return StepPlan.nothing(_unanswered);
+    }
+
+    final Map<String, String> left = await _stampable(context, replacement);
     for (final String path in left.keys) {
-      context.log.info('$path would have $placeholder replaced by $branch');
+      context.log.info('$path would have $placeholder replaced by $replacement');
     }
     final List<String> lines = <String>[
-      for (final String content in left.values) ..._changing(content, branch),
+      for (final String content in left.values) ..._changing(content, replacement),
     ];
     // One step here rewrites many files and a plan carries one path, so the path is the tree and the
     // difference is the set of lines that change — which is what an operator reads a plan for.
     return StepPlan.diff(
       _where,
       before: lines.join('\n'),
-      after: lines.map((String line) => _stamped(line, branch)).join('\n'),
+      after: lines.map((String line) => _stamped(line, replacement)).join('\n'),
     );
   }
 
   @override
   Future<void> apply(StepContext context) async {
-    final String branch = RequireInstallationDomain.branchIn(context);
-    final Map<String, String> stampable = await _stampable(context);
+    final String? replacement = _replacement(context);
+    if (replacement == null) {
+      // The engine applies a step only after its check answered ready, and that check refuses this
+      // by name — so reaching here is a call out of order. Stamping anyway would take the
+      // placeholder out of every file it touched and put nothing where it stood.
+      throw StateError(_unanswered);
+    }
+
+    final Map<String, String> stampable = await _stampable(context, replacement);
     for (final MapEntry<String, String> file in stampable.entries) {
       final String after = file.value
           .split('\n')
-          .map((String line) => _stamped(line, branch))
+          .map((String line) => _stamped(line, replacement))
           .join('\n');
       await context.files.write('$repository/${file.key}', after, mode: _trackedFile);
     }
@@ -235,13 +301,19 @@ final class StampPlaceholderInTrackedFiles extends ReversibleStep<List<String>> 
 
   /// Which files this run is about to stamp, as the checkout names them.
   ///
-  /// Read before apply, because afterwards they carry the branch and a search for the branch answers
+  /// Read before apply, because afterwards they carry the replacement and a search for it answers
   /// with every file that carries it — the ones this step wrote and any that already held it.
   /// Restoring the whole tree instead would take back every other change standing in it, including
   /// what a later step stamps and anything an operator edited on the branch.
+  ///
+  /// A run holding no answer of the row's name stamps nothing, so there is nothing to take back.
   @override
-  Future<List<String>> capture(StepContext context) async =>
-      (await _stampable(context)).keys.toList();
+  Future<List<String>> capture(StepContext context) async {
+    if (_replacement(context) case final String replacement) {
+      return (await _stampable(context, replacement)).keys.toList();
+    }
+    return const <String>[];
+  }
 
   @override
   Future<void> undo(StepContext context, List<String> captured) async {
@@ -267,8 +339,7 @@ final class StampPlaceholderInTrackedFiles extends ReversibleStep<List<String>> 
   /// The order of the tests is the point. The content search has already narrowed several hundred
   /// tracked files to the few that can be in the answer; the name tests cost nothing and run next;
   /// the file is opened once, and only a file that really carries the literal is asked what it is.
-  Future<Map<String, String>> _stampable(StepContext context) async {
-    final String branch = RequireInstallationDomain.branchIn(context);
+  Future<Map<String, String>> _stampable(StepContext context, String replacement) async {
     final Map<String, String> stampable = <String, String>{};
     for (final String path in await _search(context)) {
       if (rule.excludesByName(path)) {
@@ -287,7 +358,7 @@ final class StampPlaceholderInTrackedFiles extends ReversibleStep<List<String>> 
       if (!rule.holdsInstallationState(path, content)) {
         continue;
       }
-      if (_changing(content, branch).isEmpty) {
+      if (_changing(content, replacement).isEmpty) {
         continue;
       }
       stampable[path] = content;
@@ -325,21 +396,36 @@ final class StampPlaceholderInTrackedFiles extends ReversibleStep<List<String>> 
   }
 
   /// The lines of [content] this stamp would rewrite, in the order they stand in.
-  List<String> _changing(String content, String branch) => <String>[
+  List<String> _changing(String content, String replacement) => <String>[
     for (final String line in content.split('\n'))
-      if (_stamped(line, branch) != line) line,
+      if (_stamped(line, replacement) != line) line,
   ];
 
-  /// [line] with its value replaced by [branch], or [line] itself when it is not one to stamp.
-  String _stamped(String line, String branch) {
+  /// [line] with its value replaced by [replacement], or [line] itself when it is not one to stamp.
+  String _stamped(String line, String replacement) {
     if (line.contains(keepMarker)) {
       return line;
     }
     if (keys.isEmpty) {
-      return line.replaceAll(placeholder, branch);
+      return line.replaceAll(placeholder, replacement);
     }
-    return line.replaceFirstMapped(_pattern, (Match match) => '${match.group(1)}$branch');
+    return line.replaceFirstMapped(_pattern, (Match match) => '${match.group(1)}$replacement');
   }
+
+  /// What this run replaces every occurrence by, read out of the run under the name the row gave.
+  ///
+  /// Null where the run holds no answer of that name, or where it was left blank. Nothing stands in
+  /// for it: a stamp with an empty replacement takes the literal out of every file it touches and
+  /// leaves the value that literal stood for nowhere at all.
+  String? _replacement(StepContext context) {
+    final String? value = context.answers.optionalText(valueAnswer);
+    return value == null || value.isEmpty ? null : value;
+  }
+
+  /// What is said about a run that answers nothing under the name this row named.
+  String get _unanswered =>
+      'this run holds no answer called "$valueAnswer", and that is where this row says the value '
+      'every "$placeholder" is replaced by comes from';
 
   /// One of [keys] at the start of the line, the anchor some lines carry, and then the value itself.
   ///

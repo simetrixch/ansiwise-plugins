@@ -1,21 +1,20 @@
-/// Steps that drive one Vault over its HTTP API: minting and feeding back its quorum, shaping the
-/// mounts, policies, roles and entries a program describes, and materializing one held entry onto a
-/// cluster.
+/// Steps that drive one Vault over its HTTP API: minting and feeding back its quorum, and shaping
+/// the mounts, policies, roles and entries a program describes.
 ///
 /// This package knows the tool and never an application of it. Where the profile and the credential
 /// file stand, under which keys the profile carries its values, and what is written into Vault —
 /// all of that is a program row's to say, and none of it has a default here.
 ///
-/// **One step knows a SECOND tool, and it is the only one.** Reading a held value and writing it
-/// where it is needed cannot be split into two rows, because a step that measured something has no
-/// way to tell a later step what it found. It stands here rather than in the cluster package so the
-/// dependency runs from the specialized tool to the general one: a product driving a cluster and
-/// keeping no Vault carries none of this.
+/// **Every step here knows Vault and no second tool, and this package depends on no other plugin
+/// package.** A step that read a held value and wrote it onto a cluster would know two, and it
+/// cannot be split into two rows — so it lives in the package whose subject is that pair, and a
+/// vendor with Vault and no cluster resolves nothing of a cluster in order to use this. What that
+/// package needs from here is exported below: the layout, the profile reading and the API this
+/// package already offers every caller.
 library;
 
 export 'src/registry.dart';
 export 'src/steps/argument_text.dart';
-export 'src/steps/kubernetes_secret_from_vault.dart';
 export 'src/steps/vault_api.dart';
 export 'src/steps/vault_auth_method.dart';
 export 'src/steps/vault_auth_role.dart';
