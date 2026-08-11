@@ -261,7 +261,7 @@ void main() {
     });
 
     test('it is a gate over what an earlier step did, so a dry run does not fail on it', () {
-      expect(step.verifiesAnEarlierStep, isTrue);
+      expect(step.restsOnAnEarlierStep, isTrue);
     });
   });
 

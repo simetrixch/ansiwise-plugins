@@ -35,7 +35,7 @@ final class RequireKeyLoginPossible extends ObservingStep {
   static const List<String> answers = InstallAuthorizedKey.answers;
 
   @override
-  bool get verifiesAnEarlierStep => true;
+  bool get restsOnAnEarlierStep => true;
 
   @override
   Future<CheckResult> check(StepContext context) async {

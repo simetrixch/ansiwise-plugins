@@ -76,7 +76,7 @@ final class RequireCommands extends ObservingStep {
   }
 
   @override
-  bool get verifiesAnEarlierStep => true;
+  bool get restsOnAnEarlierStep => true;
 
   @override
   Future<CheckResult> check(StepContext context) async {

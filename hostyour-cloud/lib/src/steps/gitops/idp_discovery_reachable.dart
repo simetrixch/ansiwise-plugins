@@ -105,7 +105,7 @@ final class IdpDiscoveryReachable extends ObservingStep {
   String discoveryUrlIn(StepContext context) => '${issuerUrlIn(context)}/$discoveryPath';
 
   @override
-  bool get verifiesAnEarlierStep => true;
+  bool get restsOnAnEarlierStep => true;
 
   @override
   Future<CheckResult> check(StepContext context) async {

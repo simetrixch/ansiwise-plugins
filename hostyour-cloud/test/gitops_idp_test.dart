@@ -234,7 +234,7 @@ void main() {
 
     test('is a gate that verifies an earlier step', () {
       expect(
-        gate.verifiesAnEarlierStep,
+        gate.restsOnAnEarlierStep,
         isTrue,
         reason: 'the document does not exist until the identity provider is deployed',
       );

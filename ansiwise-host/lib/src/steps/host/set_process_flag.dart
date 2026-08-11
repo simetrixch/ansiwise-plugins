@@ -38,6 +38,16 @@ final class SetProcessFlag extends ReversibleStep<String?> {
     required this.restart,
   });
 
+  /// The argument file belongs to whatever runs the process, and that is installed by an earlier row
+  /// of the same program — so before that row has run there is no file to read and none to change.
+  ///
+  /// This step's own refusal already says it: the file "is not there — whatever owns this process
+  /// writes it when it is installed". In a real run that is a true and useful answer, and it means
+  /// the install did not happen. In the two modes that change nothing it means only that nothing has
+  /// been done yet, which is the state those modes exist to be run in.
+  @override
+  bool get restsOnAnEarlierStep => true;
+
   /// Builds the step from what the program gave it.
   factory SetProcessFlag.fromArguments(Arguments arguments) => SetProcessFlag(
     argsPath: arguments.text('args_path'),

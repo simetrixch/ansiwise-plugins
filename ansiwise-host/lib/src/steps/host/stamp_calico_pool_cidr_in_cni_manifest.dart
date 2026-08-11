@@ -23,6 +23,16 @@ final class StampCalicoPoolCidrInCniManifest extends ReversibleStep<String?> {
     required this.fileMode,
   });
 
+  /// The manifest is written by whatever installs the cluster, which is an earlier row of the same
+  /// program — so before that row has run there is no file to read and none to change.
+  ///
+  /// Without this, a dry run of a program that installs a cluster and then configures it stops here,
+  /// at its first configuring step, on a machine where nothing has been installed yet. That is
+  /// exactly the machine a dry run is pointed at, and a real run is admitted only where a dry one
+  /// came back green.
+  @override
+  bool get restsOnAnEarlierStep => true;
+
   /// Builds the step from what the program gave it.
   factory StampCalicoPoolCidrInCniManifest.fromArguments(Arguments arguments) =>
       StampCalicoPoolCidrInCniManifest(

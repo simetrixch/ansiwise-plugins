@@ -53,7 +53,7 @@ final class AssertNetplanMerged extends ObservingStep {
   final String dropInKey;
 
   @override
-  bool get verifiesAnEarlierStep => true;
+  bool get restsOnAnEarlierStep => true;
 
   @override
   Future<CheckResult> check(StepContext context) async {
