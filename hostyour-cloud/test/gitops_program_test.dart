@@ -268,7 +268,10 @@ void main() {
           'external-secrets',
           'consumer-eso',
           'tenant-eso-$stagePlaceholder',
-          'controller',
+          // The manager's two identities, and they are two on purpose: `manager` is the workload
+          // itself, `manager-host` is the read side of its own tier, which exists so that nothing
+          // else in that namespace reaches it.
+          'manager',
           'manager-host',
         ]),
       );

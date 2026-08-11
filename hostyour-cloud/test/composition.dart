@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:ansiwise_api/ansiwise_api.dart';
 import 'package:ansiwise_checks/ansiwise_checks.dart';
 import 'package:hostyour_cloud/hostyour_cloud.dart';
@@ -42,4 +44,42 @@ Future<Registry> shippedRegistry() async {
     path: '$installationRoot/${Configuration.defaultFileName}',
   );
   return compiledPlugins.activate(active.plugins);
+}
+
+/// The environment variable that names the tree an installation deploys, overriding the fallback.
+const String deployedTreeVariable = 'ANSIWISE_DEPLOYED_TREE';
+
+/// The tree an installation deploys, as the environment names it or as a checkout sits beside this
+/// one.
+///
+/// **Not the installation's tree and not this package's.** Three trees take part in a deployment and
+/// they are three repositories: this plugin ships the steps, the installation ships the programs and
+/// the answers, and the deployed tree ships the charts and the manifests a cluster renders. The
+/// second is already resolved for every package that reads answer declarations; this is the third,
+/// and it is resolved HERE rather than beside it, because only this product deploys that tree — a
+/// tool package would be naming an application of its tool.
+///
+/// **What it is for.** Several facts of this product live on BOTH sides and can drift apart with
+/// nothing reporting it: a Vault role a chart presents against the role a program creates, a key a
+/// step writes against the key a chart reads, a template a step fills against the template the tree
+/// ships. Every one of those was a defect found by hand, and each half was tested against a fixture
+/// its own author had typed.
+///
+/// **It is TEST INPUT and says so.** Nothing in this package's library is derived from it, and no
+/// step reads it — the deployed tree reaches a machine as a checkout at a path a program names.
+String get deployedTree => Platform.environment[deployedTreeVariable] ?? '../../hostyour-cloud';
+
+/// [deployedTree], proven to be there.
+///
+/// Absent FAILS rather than skips. A suite that quietly passed over the second half of a two-sided
+/// fact would report green on exactly the drift it exists to catch.
+String get deployedRoot {
+  if (!Directory('$deployedTree/charts').existsSync()) {
+    throw StateError(
+      'no charts at $deployedTree/charts — the tree an installation deploys lives in its own '
+      'repository, and these tests read it for the half of a fact this package does not hold. '
+      'Clone it beside this one, or set $deployedTreeVariable to where it is.',
+    );
+  }
+  return deployedTree;
 }
