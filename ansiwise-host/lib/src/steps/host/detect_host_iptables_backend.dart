@@ -46,7 +46,10 @@ final class DetectHostIptablesBackend extends ObservingStep {
   /// a later one — a predicate answers yes or no, and an answer comes from the operator. So the
   /// link is read twice, once on each side of that line, and what stands here is that fact rather
   /// than a claim of one implementation.
-  static Future<String> detect(StepContext context, {String link = defaultLink}) async {
+  /// **Null is not a value, it is the absence of a reading.** Answering with a backend when neither
+  /// link could be read would make "the machine filters with nft" and "nothing here could be read"
+  /// the same sentence, and the caller cannot tell them apart afterwards.
+  static Future<String?> detect(StepContext context, {String link = defaultLink}) async {
     for (final List<String> argv in <List<String>>[
       <String>['readlink', '-f', link],
       <String>['readlink', '-f', '/usr/sbin/iptables'],
@@ -65,7 +68,7 @@ final class DetectHostIptablesBackend extends ObservingStep {
         return nft;
       }
     }
-    return nft;
+    return null;
   }
 
   /// The link this step reads.
@@ -73,7 +76,16 @@ final class DetectHostIptablesBackend extends ObservingStep {
 
   @override
   Future<CheckResult> check(StepContext context) async {
-    final String backend = await detect(context, link: alternativesLink);
+    final String? backend = await detect(context, link: alternativesLink);
+    if (backend == null) {
+      // A measurement that could not be taken is not a measurement, and this step exists to take
+      // one. Answering satisfied here would put a sentence in the record naming a backend nothing
+      // read, and the engine stamps a satisfied observing row PROVEN.
+      return CheckResult.blocked(
+        'neither $alternativesLink nor /usr/sbin/iptables could be read, so nothing here says '
+        'which backend this machine filters packets with',
+      );
+    }
     return CheckResult.satisfied(
       '$alternativesLink says this machine filters packets with $backend',
     );

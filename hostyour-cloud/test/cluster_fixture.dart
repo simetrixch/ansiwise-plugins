@@ -437,7 +437,12 @@ Future<ClusterMachine> convergedCluster() async {
     ..answers(
       'microk8s kubectl get felixconfiguration/default -o jsonpath={.spec.iptablesBackend}',
       'Auto\n',
-    );
+    )
+    // A machine that is up has a readable packet-filtering link. This fixture used to leave it
+    // unanswered and still came back converged, because the step that reads it answered with a
+    // backend whether or not anything could be read. It refuses now, so a converged machine has to
+    // carry the reading like a real one does.
+    ..answers('readlink -f /etc/alternatives/iptables', '/usr/sbin/iptables-nft\n');
 
   // The ingress controller: the declaration carries the argument and so does the pod that is
   // serving. Both are answered, because a machine where only the declaration carried it is exactly

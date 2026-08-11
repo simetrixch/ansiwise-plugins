@@ -132,15 +132,44 @@ void main() {
   });
 
   group("the machine's packet-filtering backend", () {
-    test('a machine this cannot be read from is reported as being on the modern backend', () async {
+    test('a machine this cannot be read from answers nothing, not a backend', () async {
+      // It used to answer the modern backend here, which made "the machine filters with nft" and
+      // "nothing on this machine could be read" the same sentence — and the caller had no way to
+      // tell them apart afterwards.
       final HostMachine machine = HostMachine()
         ..shell.fails('readlink -f /etc/alternatives/iptables')
         ..shell.fails('readlink -f /usr/sbin/iptables');
-      expect(
-        await DetectHostIptablesBackend.detect(machine.contextFor(under)),
-        DetectHostIptablesBackend.nft,
-      );
+      expect(await DetectHostIptablesBackend.detect(machine.contextFor(under)), isNull);
     });
+
+    test('and the step blocks on it rather than reporting a reading it did not take', () async {
+      // An observing step that answers Satisfied is stamped PROVEN by the engine. Satisfied here
+      // would put a backend nothing measured into the record as a measurement.
+      final HostMachine machine = HostMachine()
+        ..shell.fails('readlink -f /etc/alternatives/iptables')
+        ..shell.fails('readlink -f /usr/sbin/iptables');
+
+      final CheckResult answer = await const DetectHostIptablesBackend(
+        alternativesLink: DetectHostIptablesBackend.defaultLink,
+      ).check(machine.contextFor(under));
+
+      expect((answer as Blocked).reason, contains('could be read'));
+    });
+
+    test(
+      'a machine that can be read is satisfied, so the refusal above is not the only answer',
+      () async {
+        final HostMachine machine = HostMachine()
+          ..shell.answers('readlink -f /etc/alternatives/iptables', '/usr/sbin/iptables-nft\n');
+
+        expect(
+          await const DetectHostIptablesBackend(
+            alternativesLink: DetectHostIptablesBackend.defaultLink,
+          ).check(machine.contextFor(under)),
+          isA<Satisfied>(),
+        );
+      },
+    );
 
     test('a machine set to the older one is reported as it is', () async {
       final HostMachine machine = HostMachine()

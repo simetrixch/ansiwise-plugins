@@ -54,14 +54,27 @@ void main() {
     expect(machine.changing, isEmpty);
   });
 
-  test('a machine this cannot be read from is held to the modern backend', () async {
-    // The fallback direction is chosen: pinning the agent to the older backend on a machine that
-    // is really on the modern one is the split this measurement exists to prevent.
+  test(
+    'a machine that can be read still answers, so the refusal below is not the only answer',
+    () async {
+      final ClusterMachine machine = ClusterMachine()
+        ..shell.answers(felixBackend, 'NFT\n')
+        ..shell.answers('readlink -f /etc/alternatives/iptables', '/usr/sbin/iptables-nft\n');
+      expect(await step.check(machine.contextFor(under)), isA<Satisfied>());
+    },
+  );
+
+  test('a machine this cannot be read from is refused, not held to a backend', () async {
+    // It used to answer Satisfied here by falling back to the modern backend, which made "the agent
+    // and this machine agree" true on a machine nothing had measured. The agent's packet filtering
+    // would then be set from a guess, and the step would report that it aligned the two.
     final ClusterMachine machine = ClusterMachine()
       ..shell.answers(felixBackend, 'NFT\n')
       ..shell.fails('readlink -f /etc/alternatives/iptables')
       ..shell.fails('readlink -f /usr/sbin/iptables');
-    expect(await step.check(machine.contextFor(under)), isA<Satisfied>());
+
+    final CheckResult answer = await step.check(machine.contextFor(under));
+    expect((answer as Blocked).reason, contains('could be read'));
   });
 
   test('the pin the agent carried is what an undo puts back', () async {

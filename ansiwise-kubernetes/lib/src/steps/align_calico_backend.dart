@@ -68,8 +68,18 @@ final class AlignCalicoBackend extends ReversibleStep<String?> {
         'nobody asked for',
       );
     }
-    final String wanted = _wanted(await _machineBackend(context));
-    if (live == wanted) {
+    final String? measured = await _machineBackend(context);
+    if (measured == null) {
+      // Nothing read the machine, so there is nothing to pin the agent TO. Pinning it to the
+      // fallback would set the cluster's packet filtering from a value nobody measured, and the
+      // step would report that it aligned the two.
+      return const CheckResult.blocked(
+        'neither /etc/alternatives/iptables nor /usr/sbin/iptables could be read, so nothing says '
+        'which backend this machine filters packets with, and the agent must not be pinned to a '
+        'guess',
+      );
+    }
+    if (live == _wanted(measured)) {
       return CheckResult.satisfied('the agent and this machine both filter packets with $live');
     }
     return const CheckResult.ready();
@@ -77,13 +87,15 @@ final class AlignCalicoBackend extends ReversibleStep<String?> {
 
   @override
   Future<StepPlan> plan(StepContext context) async {
-    final String wanted = _wanted(await _machineBackend(context));
-    return StepPlan.argv(kubectl.argv(_patch(wanted)));
+    // check blocks when nothing could be read, and a blocked step is never planned - so by here a
+    // reading exists. Stated rather than asserted with a null check nobody can reach.
+    final String measured = await _machineBackend(context) ?? _nft;
+    return StepPlan.argv(kubectl.argv(_patch(_wanted(measured))));
   }
 
   @override
   Future<void> apply(StepContext context) async {
-    final String backend = await _machineBackend(context);
+    final String backend = await _machineBackend(context) ?? _nft;
     context.log.debug(
       'this machine filters packets with $backend — pinning the network agent to it',
     );
@@ -137,7 +149,10 @@ final class AlignCalicoBackend extends ReversibleStep<String?> {
   /// framework carries no channel by which a step that MEASURED something hands the value to a
   /// later step — a predicate answers yes or no, and an answer comes from the operator. Until there
   /// is such a channel there are two readings, and this is where that costs somebody something.
-  static Future<String> _machineBackend(StepContext context) async {
+  /// **Null is not a value, it is the absence of a reading.** Answering with a backend when neither
+  /// link could be read would make "the machine filters with nft" and "nothing here could be read"
+  /// the same answer, and this step would then align the agent to a backend nobody measured.
+  static Future<String?> _machineBackend(StepContext context) async {
     for (final List<String> argv in <List<String>>[
       <String>['readlink', '-f', '/etc/alternatives/iptables'],
       <String>['readlink', '-f', '/usr/sbin/iptables'],
@@ -156,7 +171,7 @@ final class AlignCalicoBackend extends ReversibleStep<String?> {
         return _nft;
       }
     }
-    return _nft;
+    return null;
   }
 
   /// What the agent calls the backend this machine calls [backend].
