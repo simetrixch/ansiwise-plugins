@@ -144,7 +144,7 @@ void main() {
 }
 
 Directory _scratch() {
-  final Directory directory = Directory.systemTemp.createTempSync('hostyour-cloud-gate-tree-');
+  final Directory directory = Directory.systemTemp.createTempSync('hostyour-cloud-tool-tree-');
   addTearDown(() => directory.deleteSync(recursive: true));
   return directory;
 }

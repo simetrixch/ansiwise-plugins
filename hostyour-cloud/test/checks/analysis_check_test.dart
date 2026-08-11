@@ -136,8 +136,8 @@ void main() {
     late Directory clean;
 
     setUpAll(() {
-      broken = Directory.systemTemp.createTempSync('hostyour-cloud-gate-broken-');
-      clean = Directory.systemTemp.createTempSync('hostyour-cloud-gate-clean-');
+      broken = Directory.systemTemp.createTempSync('hostyour-cloud-analysis-broken-');
+      clean = Directory.systemTemp.createTempSync('hostyour-cloud-analysis-clean-');
       Directory('${broken.path}/lib').createSync(recursive: true);
       Directory('${clean.path}/lib').createSync(recursive: true);
       File('${broken.path}/pubspec.yaml').writeAsStringSync('name: planted_unresolved\n');
@@ -297,7 +297,7 @@ void main() {
 }
 
 Directory _scratch(String name) {
-  final Directory directory = Directory.systemTemp.createTempSync('hostyour-cloud-gate-$name-');
+  final Directory directory = Directory.systemTemp.createTempSync('hostyour-cloud-analysis-$name-');
   addTearDown(() => directory.deleteSync(recursive: true));
   return directory;
 }
