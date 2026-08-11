@@ -15,6 +15,13 @@ import 'stage_config.dart';
 /// platform's only secret store on a machine nobody asked to hold one is not a default anybody
 /// chose. The identity provider is the other way round — an installation that says nothing gets one,
 /// and a cluster without it stands and simply cannot log anybody in yet.
+///
+/// **UNSAID MEANS ABSENT OR EMPTY, and the second half is the one that was got wrong.** The stage
+/// config is not written by hand: it is a template filled in place, and a template stands with every
+/// key at a placeholder. So `ENABLE_IDP=` is what a machine holds until somebody answers it, and
+/// reading that as a stated "no" turns the default above upside down — the installation that said
+/// nothing gets nothing, which is the opposite of what it is promised. The writer of that same file
+/// already reads it this way: to it, empty and absent and still-the-template are one state.
 final class StageToggle implements Predicate {
   /// Reads [key] from the stage config, treating an unset value as [whenUnset].
   const StageToggle({required this.key, required this.part, required this.whenUnset});
@@ -36,15 +43,16 @@ final class StageToggle implements Predicate {
     }
 
     final String? written = config.values[key];
-    if (written == null) {
+    if (written == null || written.isEmpty) {
+      final String how = written == null
+          ? 'does not name $key'
+          : 'leaves $key empty, which is where a filled template stands until somebody answers it';
       return whenUnset
           ? PredicateResult.holds(
-              '${config.path} does not set $key, and $part is deployed unless '
-              'an installation says otherwise',
+              '${config.path} $how, and $part is deployed unless an installation says otherwise',
             )
           : PredicateResult.doesNotHold(
-              '${config.path} does not set $key, and $part is deployed only where an installation '
-              'asks for it',
+              '${config.path} $how, and $part is deployed only where an installation asks for it',
             );
     }
 

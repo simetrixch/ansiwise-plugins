@@ -36,7 +36,7 @@ const Map<PredicateName, RegisteredPredicate>
 gitopsPredicates = <PredicateName, RegisteredPredicate>{
   PredicateName('vault_enabled'): RegisteredPredicate(
     name: PredicateName('vault_enabled'),
-    source: 'lib/src/steps/gitops/stage_toggle.dart:18',
+    source: 'lib/src/steps/gitops/stage_toggle.dart:25',
     predicate: StageToggle(
       key: 'ENABLE_VAULT',
       part: 'the secret store',
@@ -49,7 +49,7 @@ gitopsPredicates = <PredicateName, RegisteredPredicate>{
   ),
   PredicateName('idp_enabled'): RegisteredPredicate(
     name: PredicateName('idp_enabled'),
-    source: 'lib/src/steps/gitops/stage_toggle.dart:18',
+    source: 'lib/src/steps/gitops/stage_toggle.dart:25',
     predicate: StageToggle(
       key: 'ENABLE_IDP',
       part: 'the identity provider',
@@ -62,7 +62,7 @@ gitopsPredicates = <PredicateName, RegisteredPredicate>{
   ),
   PredicateName('argocd_enabled'): RegisteredPredicate(
     name: PredicateName('argocd_enabled'),
-    source: 'lib/src/steps/gitops/stage_toggle.dart:18',
+    source: 'lib/src/steps/gitops/stage_toggle.dart:25',
     predicate: StageToggle(key: 'ENABLE_ARGOCD', part: 'the reconciler', whenUnset: false),
     describes: 'whether this installation hands its cluster over to a reconciler',
   ),

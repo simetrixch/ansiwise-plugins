@@ -111,7 +111,7 @@ void main() {
         'ALERT_RECIPIENTS=""\n'
         'UNIT_APEX=""\n'
         'PLATFORM_DOMAIN=""\n'
-        'BUILD_PLANE=""\n'
+        'BUILD_PLANE_FQDN=""\n'
         'CATALOG_REPO=""\n'
         '# Filled from the domain and the stage.\n'
         'CLUSTER_NAME="my-cluster"\n'

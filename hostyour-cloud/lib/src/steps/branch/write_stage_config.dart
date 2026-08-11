@@ -1,4 +1,5 @@
 import 'package:ansiwise_api/ansiwise_api.dart';
+import '../gitops/stage_config.dart';
 import 'filled_template.dart';
 import 'filled_template_step.dart';
 
@@ -56,8 +57,11 @@ final class WriteStageConfig extends FilledTemplateStep {
   final String repository;
 
   /// The file the trunk carries, with every value at a placeholder.
+  ///
+  /// Named from the same constant the READER excludes by, so the one name that has to mean the same
+  /// thing on both sides cannot drift on one of them.
   @override
-  String get templatePath => '$repository/configs/config.example';
+  String get templatePath => '$repository/configs/$stageConfigTemplate';
 
   /// `0644` — every later program on this machine reads this file, and it holds no credential.
   @override
@@ -84,7 +88,7 @@ final class WriteStageConfig extends FilledTemplateStep {
       'ALERT_RECIPIENTS': given.textList('alert_recipients').join(','),
       'UNIT_APEX': given.text('unit_apex'),
       'PLATFORM_DOMAIN': given.text('platform_domain'),
-      'BUILD_PLANE': given.text('build_plane'),
+      'BUILD_PLANE_FQDN': given.text('build_plane'),
       'CATALOG_REPO': given.text('catalog_repo'),
     };
   }

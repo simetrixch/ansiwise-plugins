@@ -27,6 +27,19 @@ const String stageConfigDirectory = '$branchCheckout/configs';
 /// The prefix of a stage config's file name, before the stage itself.
 const String stageConfigPrefix = 'config.';
 
+/// The name the TEMPLATE stands under in that same directory.
+///
+/// **It is not a stage config and must never be counted as one.** The trunk ships this file and the
+/// step that fills an installation's own config writes `config.<stage>` BESIDE it, leaving it exactly
+/// as it ships. Nothing removes it. So the directory holds two files whose names both begin with the
+/// prefix above, and a reader that only matched the prefix would find two stage configs on every
+/// machine, refuse to pick one, and report a branch that "was never reduced" — with every condition
+/// that reads this file answering no, and every row behind those conditions skipped in silence.
+///
+/// Stated here rather than in each of the two places, so the writer and the reader cannot come to
+/// disagree about the one name that has to mean the same thing to both.
+const String stageConfigTemplate = '${stageConfigPrefix}example';
+
 /// What reading the stage config produced.
 final class StageConfig {
   /// Records that [path] was read and holds [values].
@@ -58,9 +71,14 @@ Future<StageConfig> readStageConfig(PredicateContext context) async {
     );
   }
 
-  final List<String> configs = (await context.files.list(
-    stageConfigDirectory,
-  )).where((String name) => name.startsWith(stageConfigPrefix)).toList()..sort();
+  // The template is excluded by name, not by the prefix. It sits in this same directory on every
+  // machine and its name begins with the prefix, so matching the prefix alone finds two configs
+  // everywhere and picks neither.
+  final List<String> configs =
+      (await context.files.list(stageConfigDirectory))
+          .where((String name) => name.startsWith(stageConfigPrefix) && name != stageConfigTemplate)
+          .toList()
+        ..sort();
 
   if (configs.isEmpty) {
     return const StageConfig.unreadable(

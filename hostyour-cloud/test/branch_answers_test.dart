@@ -30,7 +30,7 @@ void main() {
       'ALERT_RECIPIENTS=""\n'
       'UNIT_APEX=""\n'
       'PLATFORM_DOMAIN=""\n'
-      'BUILD_PLANE=""\n'
+      'BUILD_PLANE_FQDN=""\n'
       'CATALOG_REPO=""\n'
       'CLUSTER_NAME="my-cluster"\n'
       'DOMAIN_SUFFIX="example.com"\n'

@@ -54,7 +54,7 @@ const Map<StepName, RegisteredStep> branchSteps = <StepName, RegisteredStep>{
   ),
   StepName('write_stage_config'): RegisteredStep(
     name: StepName('write_stage_config'),
-    source: 'lib/src/steps/branch/write_stage_config.dart:25',
+    source: 'lib/src/steps/branch/write_stage_config.dart:26',
     create: WriteStageConfig.fromArguments,
     arguments: WriteStageConfig.arguments,
     answers: WriteStageConfig.answers,
