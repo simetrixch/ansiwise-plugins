@@ -281,7 +281,7 @@ void main() {
       expect(gate.verdict, isA<Succeeded>());
       expect(
         it.recorder.logLines.join('\n'),
-        contains('not checked before the steps it verifies have run'),
+        contains('not answered before the steps it rests on have run'),
       );
     });
 

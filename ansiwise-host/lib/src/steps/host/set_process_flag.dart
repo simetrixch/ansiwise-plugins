@@ -36,6 +36,8 @@ final class SetProcessFlag extends ReversibleStep<String?> {
     required this.value,
     required this.fileMode,
     required this.restart,
+    this.ready = const <String>[],
+    this.readyTimeout = const Duration(seconds: 120),
   });
 
   /// The argument file belongs to whatever runs the process, and that is installed by an earlier row
@@ -55,6 +57,8 @@ final class SetProcessFlag extends ReversibleStep<String?> {
     value: arguments.text('value'),
     fileMode: arguments.integer('file_mode'),
     restart: arguments.textList('restart_command'),
+    ready: arguments.textList('ready_command'),
+    readyTimeout: Duration(seconds: arguments.integer('ready_timeout_seconds')),
   );
 
   /// What this step accepts.
@@ -88,6 +92,28 @@ final class SetProcessFlag extends ReversibleStep<String?> {
           'the command that makes the process read its argument file again, given as the program '
           'and its arguments — the file is start-up input, so nothing running takes it by itself',
     ),
+    ArgumentSpec(
+      name: 'ready_command',
+      kind: ArgumentKind.textList,
+      required: false,
+      defaultValue: <String>[],
+      describes:
+          'a command that succeeds once the restarted process answers again, given as the program '
+          'and its arguments. WITHOUT IT THIS STEP RETURNS WHILE THE PROCESS IS STILL COMING BACK: '
+          'a service manager reports success when it has accepted the request, not when the thing '
+          'is serving, and the next row then asks a process that is down. Only the caller knows '
+          'what answering means, which is why it is written here and not in the step',
+    ),
+    ArgumentSpec(
+      name: 'ready_timeout_seconds',
+      kind: ArgumentKind.integer,
+      required: false,
+      defaultValue: 120,
+      describes:
+          'how long to keep asking before giving up on the restarted process, which then fails '
+          'loudly rather than leaving the rows behind it to fail one by one on a process nobody '
+          'said was down',
+    ),
   ];
 
   /// The file holding the arguments.
@@ -104,6 +130,12 @@ final class SetProcessFlag extends ReversibleStep<String?> {
 
   /// The command that makes the process read the argument file again.
   final List<String> restart;
+
+  /// What succeeds once the restarted process answers again, or empty where the row said nothing.
+  final List<String> ready;
+
+  /// How long to keep asking before giving up on the restarted process.
+  final Duration readyTimeout;
 
   /// The line this row puts in the file.
   String get line => '$flag=$value';
@@ -132,7 +164,7 @@ final class SetProcessFlag extends ReversibleStep<String?> {
   Future<void> apply(StepContext context) async {
     final String current = await _current(context);
     await context.files.write(argsPath, withFlag(current, line), mode: fileMode);
-    await restartWith(context, restart);
+    await restartWith(context, restart, ready: ready, timeout: readyTimeout);
   }
 
   /// The argument file as it was, or null when it was not there.
@@ -149,7 +181,7 @@ final class SetProcessFlag extends ReversibleStep<String?> {
       return;
     }
     await context.files.write(argsPath, captured, mode: fileMode);
-    await restartWith(context, restart);
+    await restartWith(context, restart, ready: ready, timeout: readyTimeout);
   }
 
   /// Whether [args] carries [line] exactly.
@@ -173,13 +205,60 @@ final class SetProcessFlag extends ReversibleStep<String?> {
     return '$body$line\n';
   }
 
-  /// Runs [command] so the process reads its argument file again.
+  /// Runs [command] so the process reads its argument file again, and waits until it answers.
   ///
   /// Shared with the steps that write one of those files for a reason of their own, so a file and
   /// the restart that makes it take effect never come apart. What to run is the caller's, because
   /// only the caller knows which process the file belongs to.
-  static Future<void> restartWith(StepContext context, List<String> command) async {
+  ///
+  /// **A SERVICE MANAGER REPORTS SUCCESS WHEN IT HAS ACCEPTED THE REQUEST, not when the thing is
+  /// serving.** Without [ready] this returns while the process is still coming back, and the next
+  /// row asks a process that is down — which answers with a failure carrying no output at all, so
+  /// the row behind it reports something true about its own subject and false about the machine.
+  ///
+  /// That is how it was found, and the numbers are worth keeping: a restart at `23:14:08.670`, and
+  /// the next row's first question at `23:14:08.904`. Two hundred and thirty-four milliseconds. Run
+  /// by hand a minute later, the same question answers perfectly, which is why every check by hand
+  /// said the machine was fine.
+  ///
+  /// Where [ready] is empty this behaves as it always did and says so in the log, because a caller
+  /// that has not said what answering means cannot be given a guess.
+  static Future<void> restartWith(
+    StepContext context,
+    List<String> command, {
+    List<String> ready = const <String>[],
+    Duration timeout = const Duration(seconds: 120),
+    Duration interval = const Duration(seconds: 2),
+  }) async {
     await context.shell.run(Command(command.first, command.skip(1).toList()));
+
+    if (ready.isEmpty) {
+      context.log.warn(
+        '${command.join(' ')} was asked to restart and nothing here waits for it to answer: this '
+        'row states no ready_command, so a row behind it may reach the process while it is still '
+        'coming back',
+      );
+      return;
+    }
+
+    final DateTime giveUp = context.clock.now().add(timeout);
+    while (true) {
+      final CommandResult answered = await context.shell.run(
+        Command.observing(ready.first, ready.skip(1).toList()),
+      );
+      if (answered.ok) {
+        context.log.debug('${ready.join(' ')} answers again');
+        return;
+      }
+      if (!context.clock.now().isBefore(giveUp)) {
+        throw StateError(
+          '${ready.join(' ')} did not answer within ${timeout.inSeconds}s after '
+          '${command.join(' ')} — the flag was written and the process did not come back, so '
+          'nothing behind this row would be asking the machine this row left',
+        );
+      }
+      await context.clock.sleep(interval);
+    }
   }
 
   Future<String> _current(StepContext context) async =>
