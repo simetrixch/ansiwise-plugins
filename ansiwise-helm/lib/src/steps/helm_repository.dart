@@ -2,6 +2,8 @@ import 'dart:convert';
 
 import 'package:ansiwise_api/ansiwise_api.dart';
 
+import 'helm_command.dart';
+
 /// Makes one chart repository known to helm on this machine.
 ///
 /// A release installs from a repository helm already knows, so each repository has to be
@@ -13,14 +15,23 @@ import 'package:ansiwise_api/ansiwise_api.dart';
 /// asks what the name currently resolves to rather than whether the name is taken.
 final class HelmRepository extends ReversibleStep<String?> {
   /// Registers the chart repository at [url] under [name].
-  const HelmRepository({required this.name, required this.url});
+  const HelmRepository({
+    required this.name,
+    required this.url,
+    this.helm = const <String>['helm'],
+  });
 
   /// Builds the step from what the program gave it.
   factory HelmRepository.fromArguments(Arguments arguments) =>
-      HelmRepository(name: arguments.text('name'), url: arguments.text('url'));
+      HelmRepository(
+        name: arguments.text('name'),
+        url: arguments.text('url'),
+        helm: arguments.textList('helm_command'),
+      );
 
   /// What this step accepts.
   static const List<ArgumentSpec> arguments = <ArgumentSpec>[
+    helmCommandArgument,
     ArgumentSpec(
       name: 'name',
       kind: ArgumentKind.text,
@@ -38,6 +49,9 @@ final class HelmRepository extends ReversibleStep<String?> {
 
   /// Where it publishes.
   final String url;
+
+  /// How helm is reached on this machine, as the program and any arguments before helm's own.
+  final List<String> helm;
 
   @override
   Future<CheckResult> check(StepContext context) async {
@@ -57,7 +71,7 @@ final class HelmRepository extends ReversibleStep<String?> {
   Future<void> apply(StepContext context) async {
     // `--force-update` and not an add that fails on a name already taken: this step converges a name
     // pointing at the wrong address, which is the case its check exists to find.
-    final CommandResult added = await context.shell.run(Command('helm', _add.sublist(1)));
+    final CommandResult added = await context.shell.run(helmCommand(helm, _add.sublist(helm.length)));
     if (!added.ok) {
       throw CommandFailed(argv: _add, exitCode: added.exitCode, stderr: added.stderr);
     }
@@ -74,15 +88,15 @@ final class HelmRepository extends ReversibleStep<String?> {
   @override
   Future<void> undo(StepContext context, String? captured) async {
     if (captured == null) {
-      await context.shell.run(Command('helm', <String>['repo', 'remove', name]));
+      await context.shell.run(helmCommand(helm, <String>['repo', 'remove', name]));
       return;
     }
     await context.shell.run(
-      Command('helm', <String>['repo', 'add', name, captured, '--force-update']),
+      helmCommand(helm, <String>['repo', 'add', name, captured, '--force-update']),
     );
   }
 
-  List<String> get _add => <String>['helm', 'repo', 'add', name, url, '--force-update'];
+  List<String> get _add => <String>[...helm, 'repo', 'add', name, url, '--force-update'];
 
   /// What helm currently resolves [name] to, or null when it holds no such name.
   ///
@@ -91,7 +105,7 @@ final class HelmRepository extends ReversibleStep<String?> {
   /// this one.
   Future<String?> _registeredUrl(StepContext context) async {
     final CommandResult listed = await context.shell.run(
-      const Command.observing('helm', <String>['repo', 'list', '-o', 'json']),
+      helmCommand(helm, <String>['repo', 'list', '-o', 'json'], observes: true),
     );
     if (!listed.ok || listed.trimmed.isEmpty) {
       return null;

@@ -75,8 +75,16 @@ final class RequireCommands extends ObservingStep {
     return byCommand;
   }
 
-  @override
-  bool get restsOnAnEarlierStep => true;
+  // THIS STEP DOES NOT DECLARE THAT IT RESTS ON AN EARLIER ONE, and it used to. It is the one gate
+  // genuinely used both ways: after an install, to prove the install produced the commands; and at
+  // the HEAD of a program, to refuse a machine that does not carry what everything below it needs.
+  //
+  // Declared on the class, the second use was deferred along with the first. A program whose FIRST
+  // row demanded a tool the machine did not have reported that row as fine and failed several steps
+  // later with a message about a chart repository, where the truth was a missing command. That is a
+  // deferral turning a refusal into a pass, which is worse than having no gate.
+  //
+  // Which of the two a row is doing is a fact about the program, so the row says it.
 
   @override
   Future<CheckResult> check(StepContext context) async {

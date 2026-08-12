@@ -15,13 +15,13 @@ import 'steps/helm_repository.dart';
 const Map<StepName, RegisteredStep> helmSteps = <StepName, RegisteredStep>{
   StepName('helm_repository'): RegisteredStep(
     name: StepName('helm_repository'),
-    source: 'lib/src/steps/helm_repository.dart:14',
+    source: 'lib/src/steps/helm_repository.dart:16',
     create: HelmRepository.fromArguments,
     arguments: HelmRepository.arguments,
   ),
   StepName('helm_release'): RegisteredStep(
     name: StepName('helm_release'),
-    source: 'lib/src/steps/helm_release.dart:18',
+    source: 'lib/src/steps/helm_release.dart:20',
     create: HelmRelease.fromArguments,
     arguments: HelmRelease.arguments,
   ),

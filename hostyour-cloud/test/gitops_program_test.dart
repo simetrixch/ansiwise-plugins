@@ -121,6 +121,60 @@ void main() {
     return (record: record, shell: machine.shell, files: machine.files, recorder: recorder);
   }
 
+  test('a machine without the tools is refused at the FIRST row, in test mode too', () async {
+    // The row at the head of this program measures the machine as found, and the two modes that
+    // change nothing must answer it exactly as a real run would. It was deferred once — the step
+    // declared on its CLASS that it rests on an earlier one, which is true of the row that proves an
+    // install and false of this one — and the run then reported the missing tool as fine and failed
+    // several steps later with a message about a chart repository. A gate that passes a machine it
+    // exists to refuse is worse than no gate, and this one passed every machine there is.
+    final FakeShell without = FakeShell()..fails(onThePathKey('microk8s'));
+    final FakeClock clock = FakeClock();
+
+    final RunRecord record = await Runner(
+      machine: Machine(
+        shell: without,
+        files: FakeFiles(<String, String>{
+          '/srv/hostyour-cloud/configs/config.dev':
+              'ENABLE_VAULT=true\nBUILD_PLANE_FQDN=m1.example.com\nDOMAIN_SUFFIX=m1.example.com\n',
+        }),
+        http: FakeHttp(),
+        clock: clock,
+        entropy: FakeEntropy(),
+      ),
+      recorder: MemoryRecorder(clock),
+      redactor: Redactor.none,
+    ).run(
+      program: deployGitops(),
+      mode: Mode.test,
+      header: RunRecord(
+        id: const RunId('20260807T120000Z-2'),
+        program: const ProgramName('deploy-gitops'),
+        mode: Mode.test,
+        argv: const <String>['ansiwise', 'deploy-gitops'],
+        start: clock.now(),
+        stage: const Stage('dev'),
+        role: const Role('master'),
+        fqdn: const Fqdn('m1.example.com'),
+        commit: 'abc1234',
+        fingerprint: 'f',
+      ),
+      answers: answered(),
+    );
+
+    expect(
+      record.steps.first.verdict,
+      isA<Failed>(),
+      reason: 'the cluster distribution is not on this machine, and every row below this one is '
+          'either a release it holds or an object it applies',
+    );
+    expect(
+      record.steps,
+      hasLength(1),
+      reason: 'nothing behind a refused head row may run, in any mode',
+    );
+  });
+
   test('the program resolves against the registry', () {
     expect(deployGitops().steps, isNotEmpty);
   });
@@ -739,10 +793,21 @@ void main() {
             'BUILD_PLANE_FQDN=m1.example.com\nDOMAIN_SUFFIX=m1.example.com\n',
             mode: Mode.dry,
           );
+      // NOT "nothing is skipped": two rows belong to the cluster that does NOT carry the build
+      // plane, and this fixture carries it. They are skipped correctly and always will be. What this
+      // asserts is that no PHASE is off — that every skip here is the build-plane axis and none of
+      // them is a stage toggle.
+      //
+      // The looser form passed for the wrong reason until the modes were fixed: the run stopped
+      // before it ever reached those two rows, so an assertion about all fifty-four steps was being
+      // made about the first five.
       expect(
-        it.record.steps.where((StepRecord step) => step.verdict is Skipped),
-        isEmpty,
-        reason: 'nothing is switched off on this machine',
+        it.record.steps
+            .where((StepRecord step) => step.verdict is Skipped)
+            .map((StepRecord step) => (step.verdict as Skipped).predicate)
+            .toSet(),
+        <String>{'build_plane_elsewhere'},
+        reason: 'no phase is switched off on this machine, and the build plane is here',
       );
     });
   });

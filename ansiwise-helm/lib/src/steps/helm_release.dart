@@ -4,6 +4,8 @@ import 'package:yaml/yaml.dart';
 
 import 'package:ansiwise_api/ansiwise_api.dart';
 
+import 'helm_command.dart';
+
 /// Installs or converges one helm release, pinned to a chart version.
 ///
 /// **The version is pinned and there is no path that resolves the newest.** An unpinned upgrade asks
@@ -23,6 +25,7 @@ final class HelmRelease extends IrreversibleStep {
     required this.chartVersion,
     required this.namespace,
     this.values,
+    this.helm = const <String>['helm'],
   });
 
   /// Builds the step from what the program gave it.
@@ -32,10 +35,12 @@ final class HelmRelease extends IrreversibleStep {
     chartVersion: arguments.text('chart_version'),
     namespace: arguments.text('namespace'),
     values: arguments.optionalText('values'),
+    helm: arguments.textList('helm_command'),
   );
 
   /// What this step accepts.
   static const List<ArgumentSpec> arguments = <ArgumentSpec>[
+    helmCommandArgument,
     ArgumentSpec(
       name: 'release',
       kind: ArgumentKind.text,
@@ -80,6 +85,9 @@ final class HelmRelease extends IrreversibleStep {
 
   /// The values file, or null when the chart's own defaults are what is wanted.
   final String? values;
+
+  /// How helm is reached on this machine, as the program and any arguments before helm's own.
+  final List<String> helm;
 
   /// The chart's own name, without the repository in front of it.
   ///
@@ -135,9 +143,11 @@ final class HelmRelease extends IrreversibleStep {
   @override
   Future<void> apply(StepContext context) async {
     final CommandResult done = await context.shell.run(
-      Command.detailed(
-        'helm',
-        arguments: _upgrade.sublist(1),
+      helmCommand(
+        helm,
+        // `_upgrade` is the whole invocation including how helm is reached, because that is what a
+        // plan shows the operator. What is handed on here is helm's own half of it.
+        _upgrade.sublist(helm.length),
         // A chart that pulls its own dependencies and a cluster that is slow to admit them make this
         // the longest single call of the whole program. Explicit, because waiting forever is the
         // default and a hung upgrade is indistinguishable from one that is working.
@@ -150,7 +160,7 @@ final class HelmRelease extends IrreversibleStep {
   }
 
   List<String> get _upgrade => <String>[
-    'helm',
+    ...helm,
     'upgrade',
     '--install',
     release,
@@ -165,7 +175,7 @@ final class HelmRelease extends IrreversibleStep {
   /// What helm holds under this release name in this namespace, or null when it holds nothing.
   Future<Map<String, Object?>?> _installed(StepContext context) async {
     final CommandResult listed = await context.shell.run(
-      Command.observing('helm', <String>['list', '--namespace', namespace, '-o', 'json']),
+      helmCommand(helm, <String>['list', '--namespace', namespace, '-o', 'json'], observes: true),
     );
     if (!listed.ok || listed.trimmed.isEmpty) {
       return null;
@@ -185,7 +195,7 @@ final class HelmRelease extends IrreversibleStep {
   /// The values the release is currently holding, as helm gives them back.
   Future<Object?> _currentValues(StepContext context) async {
     final CommandResult got = await context.shell.run(
-      Command.observing('helm', <String>[
+      helmCommand(helm, <String>[
         'get',
         'values',
         release,
