@@ -47,13 +47,13 @@ final class RemoveUnusedPackages extends IrreversibleStep {
       const Command.detailed(
         'apt-get',
         arguments: <String>['autoremove', '--yes'],
-        environment: <String, String>{'DEBIAN_FRONTEND': 'noninteractive'},
-      ),
+        environment: <String, String>{'DEBIAN_FRONTEND': 'noninteractive'}, elevated: true),
     );
     if (!removed.ok) {
       throw CommandFailed(
         argv: const <String>['apt-get', 'autoremove', '--yes'],
         exitCode: removed.exitCode,
+        stdout: '',
         stderr: removed.stderr,
       );
     }

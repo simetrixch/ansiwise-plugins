@@ -78,9 +78,9 @@ final class RemoveSnap extends IrreversibleStep {
   @override
   Future<void> apply(StepContext context) async {
     context.log.warn('removing the $snap snap: everything it holds goes with it');
-    final CommandResult removed = await context.shell.run(Command('snap', _argv.sublist(1)));
+    final CommandResult removed = await context.shell.run(Command.detailed('snap', arguments: _argv.sublist(1), elevated: true));
     if (!removed.ok) {
-      throw CommandFailed(argv: _argv, exitCode: removed.exitCode, stderr: removed.stderr);
+      throw CommandFailed(argv: _argv, exitCode: removed.exitCode, stdout: removed.stdout, stderr: removed.stderr);
     }
   }
 

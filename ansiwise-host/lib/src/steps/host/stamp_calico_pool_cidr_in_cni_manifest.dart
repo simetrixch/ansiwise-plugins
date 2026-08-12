@@ -126,6 +126,7 @@ final class StampCalicoPoolCidrInCniManifest extends ReversibleStep<String?> {
       throw CommandFailed(
         argv: <String>['write', manifestPath],
         exitCode: 1,
+        stdout: '',
         stderr: 'the manifest was written and still does not declare $variable as $podCidr',
       );
     }

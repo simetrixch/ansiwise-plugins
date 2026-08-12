@@ -180,9 +180,9 @@ final class InstallSnap extends IrreversibleStep {
   List<String> get _refresh => <String>['snap', 'refresh', snap, '--channel=$channel'];
 
   Future<void> _mustRun(StepContext context, List<String> argv) async {
-    final CommandResult answer = await context.shell.run(Command(argv.first, argv.sublist(1)));
+    final CommandResult answer = await context.shell.run(Command.detailed(argv.first, arguments: argv.sublist(1), elevated: true));
     if (!answer.ok) {
-      throw CommandFailed(argv: argv, exitCode: answer.exitCode, stderr: answer.stderr);
+      throw CommandFailed(argv: argv, exitCode: answer.exitCode, stdout: answer.stdout, stderr: answer.stderr);
     }
   }
 }

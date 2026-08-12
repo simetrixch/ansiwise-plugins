@@ -52,12 +52,13 @@ final class InstallPackages extends ReversibleStep<List<String>> {
     context.log.info('installing ${missing.join(', ')}');
 
     final CommandResult refreshed = await context.shell.run(
-      const Command.detailed('apt-get', arguments: <String>['update'], environment: _quiet),
+      const Command.detailed('apt-get', arguments: <String>['update'], environment: _quiet, elevated: true),
     );
     if (!refreshed.ok) {
       throw CommandFailed(
         argv: <String>['apt-get', 'update'],
         exitCode: refreshed.exitCode,
+        stdout: '',
         stderr: refreshed.stderr,
       );
     }
@@ -66,13 +67,13 @@ final class InstallPackages extends ReversibleStep<List<String>> {
       Command.detailed(
         'apt-get',
         arguments: <String>['install', '--yes', ...missing],
-        environment: _quiet,
-      ),
+        environment: _quiet, elevated: true),
     );
     if (!installed.ok) {
       throw CommandFailed(
         argv: <String>['apt-get', 'install', '--yes', ...missing],
         exitCode: installed.exitCode,
+        stdout: '',
         stderr: installed.stderr,
       );
     }
@@ -107,8 +108,7 @@ final class InstallPackages extends ReversibleStep<List<String>> {
       Command.detailed(
         'apt-get',
         arguments: <String>['remove', '--yes', ...installed],
-        environment: _quiet,
-      ),
+        environment: _quiet, elevated: true),
     );
   }
 

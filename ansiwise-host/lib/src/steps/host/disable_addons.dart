@@ -61,9 +61,9 @@ final class DisableAddons extends ReversibleStep<List<String>> {
     final Set<String> on = await enabledAddons(context) ?? const <String>{};
     for (final String addon in _stillOn(on)) {
       final List<String> argv = <String>['microk8s', 'disable', addon];
-      final CommandResult switched = await context.shell.run(Command(argv.first, argv.sublist(1)));
+      final CommandResult switched = await context.shell.run(Command.detailed(argv.first, arguments: argv.sublist(1), elevated: true));
       if (!switched.ok) {
-        throw CommandFailed(argv: argv, exitCode: switched.exitCode, stderr: switched.stderr);
+        throw CommandFailed(argv: argv, exitCode: switched.exitCode, stdout: switched.stdout, stderr: switched.stderr);
       }
     }
   }
@@ -80,7 +80,7 @@ final class DisableAddons extends ReversibleStep<List<String>> {
   @override
   Future<void> undo(StepContext context, List<String> captured) async {
     for (final String addon in captured) {
-      await context.shell.run(Command('microk8s', <String>['enable', addon]));
+      await context.shell.run(Command.detailed('microk8s', arguments: <String>['enable', addon], elevated: true));
     }
   }
 

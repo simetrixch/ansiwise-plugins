@@ -65,14 +65,13 @@ final class EnsureToolPrerequisites extends IrreversibleStep {
     // What either of these returned is deliberately not read. The verdict comes from the check that
     // follows, which asks the machine whether the commands are there.
     await context.shell.run(
-      const Command.detailed('apt-get', arguments: <String>['update'], environment: quiet),
+      const Command.detailed('apt-get', arguments: <String>['update'], environment: quiet, elevated: true),
     );
     await context.shell.run(
       Command.detailed(
         'apt-get',
         arguments: <String>['install', '--yes', ...missing],
-        environment: quiet,
-      ),
+        environment: quiet, elevated: true),
     );
   }
 

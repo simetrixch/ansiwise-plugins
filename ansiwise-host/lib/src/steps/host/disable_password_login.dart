@@ -82,10 +82,10 @@ final class DisablePasswordLogin extends ReversibleStep<String?> {
     await context.files.write(dropIn, content, mode: _configFile);
 
     final CommandResult reloaded = await context.shell.run(
-      Command(reload.first, reload.sublist(1)),
+      Command.detailed(reload.first, arguments: reload.sublist(1), elevated: true),
     );
     if (!reloaded.ok) {
-      throw CommandFailed(argv: reload, exitCode: reloaded.exitCode, stderr: reloaded.stderr);
+      throw CommandFailed(argv: reload, exitCode: reloaded.exitCode, stdout: reloaded.stdout, stderr: reloaded.stderr);
     }
   }
 
@@ -108,7 +108,7 @@ final class DisablePasswordLogin extends ReversibleStep<String?> {
     }
     // Reloading is part of taking it back. A file removed while sshd still holds the old setting
     // leaves a machine that refuses a password for a reason nothing on disk explains any more.
-    await context.shell.run(Command(reload.first, reload.sublist(1)));
+    await context.shell.run(Command.detailed(reload.first, arguments: reload.sublist(1), elevated: true));
   }
 
   /// The lines of `sshd -T`, which are `keyword value` in lower case.

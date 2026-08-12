@@ -78,6 +78,7 @@ final class InstallAuthorizedKey extends ReversibleStep<bool> {
       throw CommandFailed(
         argv: <String>['getent', 'passwd', userIn(context)],
         exitCode: 2,
+        stdout: '',
         stderr: 'there is no account called "${userIn(context)}"',
       );
     }
@@ -166,12 +167,13 @@ final class InstallAuthorizedKey extends ReversibleStep<bool> {
 
   static Future<void> _own(StepContext context, String path) async {
     final CommandResult owned = await context.shell.run(
-      Command('chown', <String>['${userIn(context)}:${userIn(context)}', path]),
+      Command.detailed('chown', arguments: <String>['${userIn(context)}:${userIn(context)}', path], elevated: true),
     );
     if (!owned.ok) {
       throw CommandFailed(
         argv: <String>['chown', '${userIn(context)}:${userIn(context)}', path],
         exitCode: owned.exitCode,
+        stdout: '',
         stderr: owned.stderr,
       );
     }

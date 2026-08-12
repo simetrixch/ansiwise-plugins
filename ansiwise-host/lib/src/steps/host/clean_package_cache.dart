@@ -47,12 +47,13 @@ final class CleanPackageCache extends IrreversibleStep {
   @override
   Future<void> apply(StepContext context) async {
     final CommandResult cleaned = await context.shell.run(
-      const Command('apt-get', <String>['clean']),
+      const Command.detailed('apt-get', arguments: <String>['clean'], elevated: true),
     );
     if (!cleaned.ok) {
       throw CommandFailed(
         argv: const <String>['apt-get', 'clean'],
         exitCode: cleaned.exitCode,
+        stdout: '',
         stderr: cleaned.stderr,
       );
     }

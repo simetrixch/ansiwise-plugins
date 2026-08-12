@@ -68,9 +68,9 @@ final class AddUserToGroup extends ReversibleStep<bool> {
   @override
   Future<void> apply(StepContext context) async {
     final List<String> argv = _add(context);
-    final CommandResult added = await context.shell.run(Command(argv.first, argv.sublist(1)));
+    final CommandResult added = await context.shell.run(Command.detailed(argv.first, arguments: argv.sublist(1), elevated: true));
     if (!added.ok) {
-      throw CommandFailed(argv: argv, exitCode: added.exitCode, stderr: added.stderr);
+      throw CommandFailed(argv: argv, exitCode: added.exitCode, stdout: added.stdout, stderr: added.stderr);
     }
     context.log.info(
       '${InstallAuthorizedKey.userIn(context)} is in $group from the next login on — a session that is already open still meets the '
@@ -96,7 +96,7 @@ final class AddUserToGroup extends ReversibleStep<bool> {
       return;
     }
     await context.shell.run(
-      Command('gpasswd', <String>['--delete', InstallAuthorizedKey.userIn(context), group]),
+      Command.detailed('gpasswd', arguments: <String>['--delete', InstallAuthorizedKey.userIn(context), group], elevated: true),
     );
   }
 

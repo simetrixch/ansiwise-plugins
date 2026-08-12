@@ -125,7 +125,7 @@ final class WritePublicSrcRoutingScript extends ReversibleStep<String?>
 
   @override
   Future<void> undo(StepContext context, String? captured) async {
-    await context.shell.run(Command('ip', ruleArguments('del')));
+    await context.shell.run(Command.detailed('ip', arguments: ruleArguments('del'), elevated: true));
     if (captured == null) {
       await context.files.delete(path);
       return;

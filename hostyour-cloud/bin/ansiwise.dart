@@ -44,6 +44,7 @@ Future<void> main(List<String> argv) async {
     ..addOption('role', defaultsTo: 'master', help: 'what this machine is')
     ..addOption('stage', defaultsTo: 'dev')
     ..addOption('fqdn', defaultsTo: '', help: 'the domain name of this installation')
+    ..addFlag('no-unwind', help: 'disable unwinding steps on failure so evidence is preserved for debugging')
     ..addFlag('help', abbr: 'h', negatable: false);
 
   final ArgResults options;
@@ -90,6 +91,8 @@ Future<void> main(List<String> argv) async {
   // the waiver is read here rather than assumed, so the gate a run meets is the one this
   // installation configured rather than the one the code happens to default to.
   bool requireDryRun = true;
+  // Whether the engine is allowed to unwind on failure.
+  bool allowUnwind = true;
   try {
     if (!await machine.files.exists(configuration)) {
       throw PluginRejected(
@@ -104,6 +107,7 @@ Future<void> main(List<String> argv) async {
     registry = plugins.activate(active.plugins);
     logLevel = active.logLevel;
     requireDryRun = active.requireDryRun;
+    allowUnwind = active.allowUnwind;
   } on PluginRejected catch (refused) {
     stderr.writeln(refused.message);
     exit(78);
@@ -163,6 +167,7 @@ Future<void> main(List<String> argv) async {
       program: ProgramName(rest.first),
       logLevel: logLevel,
       requireDryRun: requireDryRun,
+      allowUnwind: allowUnwind && !options.flag('no-unwind'),
     ),
   );
 }
@@ -206,6 +211,7 @@ Future<int> _runProgram({
   required List<String> argv,
   required ProgramName program,
   required LogLevel logLevel,
+  required bool allowUnwind,
 }) async {
   final ResolvedProgram? resolved = catalogue.byName(program);
   if (resolved == null) {
@@ -329,6 +335,7 @@ Future<int> _runProgram({
     recorder: recorder,
     redactor: redactor,
     logLevel: logLevel,
+    allowUnwind: allowUnwind,
   ).run(program: resolved, mode: mode, header: header, answers: answers);
   await recorder.save(record);
 

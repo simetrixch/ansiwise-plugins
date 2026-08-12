@@ -125,6 +125,7 @@ final class ExportKubeconfig extends IrreversibleStep {
       throw CommandFailed(
         argv: credentialsCommand,
         exitCode: 1,
+        stdout: '',
         stderr: 'the cluster would not hand out its credentials',
       );
     }
@@ -135,11 +136,11 @@ final class ExportKubeconfig extends IrreversibleStep {
     await context.files.createDirectory(directory, mode: directoryMode);
     await context.files.write('$directory/config', credentials, mode: fileMode);
     await context.shell.run(
-      Command('chown', <String>[
+      Command.detailed('chown', arguments: <String>[
         '-R',
         '${InstallAuthorizedKey.userIn(context)}:${InstallAuthorizedKey.userIn(context)}',
         directory,
-      ]),
+      ], elevated: true),
     );
   }
 
