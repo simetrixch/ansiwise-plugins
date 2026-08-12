@@ -213,6 +213,7 @@ final class StampRole extends ReversibleStep<List<String>> {
       throw CommandFailed(
         argv: <String>['git', ...argv],
         exitCode: restored.exitCode,
+        stdout: '',
         stderr: restored.stderr,
       );
     }
@@ -298,6 +299,7 @@ final class StampRole extends ReversibleStep<List<String>> {
       throw CommandFailed(
         argv: <String>['git', '-C', repository, 'ls-files', '--full-name'],
         exitCode: listed.exitCode,
+        stdout: '',
         stderr: listed.stderr,
       );
     }

@@ -474,7 +474,8 @@ final class PatchContainerArgumentsAndPorts extends ReversibleStep<ContainerAddi
     final Command command = kubectl.command(arguments);
     final CommandResult answer = await context.shell.run(command);
     if (!answer.ok) {
-      throw CommandFailed(argv: command.argv, exitCode: answer.exitCode, stderr: answer.stderr);
+      throw CommandFailed(argv: command.argv, exitCode: answer.exitCode, stdout: '',
+        stderr: answer.stderr);
     }
   }
 

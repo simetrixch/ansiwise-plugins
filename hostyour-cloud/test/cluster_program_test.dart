@@ -474,6 +474,7 @@ Arguments _plausible(List<ArgumentSpec> specs) => Arguments(<String, Object>{
         spec.defaultValue ??
         switch (spec.kind) {
           ArgumentKind.text => 'x',
+          ArgumentKind.answerName => 'answer',
           ArgumentKind.integer => 1,
           ArgumentKind.flag => false,
           ArgumentKind.textList => const <String>['x'],

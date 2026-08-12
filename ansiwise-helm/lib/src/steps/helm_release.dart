@@ -155,7 +155,8 @@ final class HelmRelease extends IrreversibleStep {
       ),
     );
     if (!done.ok) {
-      throw CommandFailed(argv: _upgrade, exitCode: done.exitCode, stderr: done.stderr);
+      throw CommandFailed(argv: _upgrade, exitCode: done.exitCode, stdout: '',
+        stderr: done.stderr);
     }
   }
 

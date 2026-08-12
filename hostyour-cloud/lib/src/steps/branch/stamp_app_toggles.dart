@@ -222,6 +222,7 @@ final class StampAppToggles extends ReversibleStep<List<String>> {
       throw CommandFailed(
         argv: <String>['git', ...argv],
         exitCode: restored.exitCode,
+        stdout: '',
         stderr: restored.stderr,
       );
     }

@@ -189,6 +189,7 @@ final class GitBranch extends ReversibleStep<String?> {
       throw CommandFailed(
         argv: <String>['git', ...argv],
         exitCode: answer.exitCode,
+        stdout: '',
         stderr: answer.stderr,
       );
     }

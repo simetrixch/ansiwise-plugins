@@ -123,7 +123,8 @@ final class DeleteDefaultIpv4Ippool extends IrreversibleStep {
     final Command command = kubectl.command(_delete);
     final CommandResult deleted = await context.shell.run(command);
     if (!deleted.ok) {
-      throw CommandFailed(argv: command.argv, exitCode: deleted.exitCode, stderr: deleted.stderr);
+      throw CommandFailed(argv: command.argv, exitCode: deleted.exitCode, stdout: '',
+        stderr: deleted.stderr);
     }
   }
 

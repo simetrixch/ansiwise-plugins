@@ -339,7 +339,7 @@ Future<int> _runProgram({
   ).run(program: resolved, mode: mode, header: header, answers: answers);
   await recorder.save(record);
 
-  stdout.writeln('${record.id}  ${record.program} ${record.mode.name}  exit ${record.exitCode}');
+  stdout.writeln('${record.id}  ${record.program} ${record.mode.name}  exit ${record.exitCode}  ${record.standings.summary}');
   for (final String issue in record.issues) {
     stdout.writeln('  issue: $issue');
   }

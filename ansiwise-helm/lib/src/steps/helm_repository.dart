@@ -73,7 +73,8 @@ final class HelmRepository extends ReversibleStep<String?> {
     // pointing at the wrong address, which is the case its check exists to find.
     final CommandResult added = await context.shell.run(helmCommand(helm, _add.sublist(helm.length)));
     if (!added.ok) {
-      throw CommandFailed(argv: _add, exitCode: added.exitCode, stderr: added.stderr);
+      throw CommandFailed(argv: _add, exitCode: added.exitCode, stdout: '',
+        stderr: added.stderr);
     }
   }
 

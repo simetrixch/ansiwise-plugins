@@ -134,6 +134,7 @@ final class OidcAdminsBinding extends ReversibleStep<bool> {
       throw CommandFailed(
         argv: kubectl.argv(_create),
         exitCode: created.exitCode,
+        stdout: '',
         stderr: created.stderr,
       );
     }

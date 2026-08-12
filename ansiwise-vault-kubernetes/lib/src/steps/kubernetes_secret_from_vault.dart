@@ -174,7 +174,8 @@ final class KubernetesSecretFromVault extends ReversibleStep<bool> {
       final Command apply = kubectl.command(<String>['apply', '--filename', file]);
       final CommandResult applied = await context.shell.run(apply);
       if (!applied.ok) {
-        throw CommandFailed(argv: apply.argv, exitCode: applied.exitCode, stderr: applied.stderr);
+        throw CommandFailed(argv: apply.argv, exitCode: applied.exitCode, stdout: '',
+        stderr: applied.stderr);
       }
     } finally {
       // In a finally: a failed apply would otherwise leave every value of the Secret standing in

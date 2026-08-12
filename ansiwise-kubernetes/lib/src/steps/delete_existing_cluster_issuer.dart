@@ -79,7 +79,8 @@ final class DeleteExistingClusterIssuer extends IrreversibleStep {
     final Command delete = kubectl.command(_delete);
     final CommandResult deleted = await context.shell.run(delete);
     if (!deleted.ok) {
-      throw CommandFailed(argv: delete.argv, exitCode: deleted.exitCode, stderr: deleted.stderr);
+      throw CommandFailed(argv: delete.argv, exitCode: deleted.exitCode, stdout: '',
+        stderr: deleted.stderr);
     }
   }
 

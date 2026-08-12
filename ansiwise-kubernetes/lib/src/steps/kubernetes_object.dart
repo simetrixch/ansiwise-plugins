@@ -98,7 +98,8 @@ final class KubernetesObject extends ReversibleStep<bool> {
       kubectl.command(<String>['apply', '--filename', path]),
     );
     if (!applied.ok) {
-      throw CommandFailed(argv: _apply, exitCode: applied.exitCode, stderr: applied.stderr);
+      throw CommandFailed(argv: _apply, exitCode: applied.exitCode, stdout: '',
+        stderr: applied.stderr);
     }
   }
 

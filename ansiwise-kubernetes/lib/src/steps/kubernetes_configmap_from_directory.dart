@@ -130,7 +130,8 @@ final class KubernetesConfigmapFromDirectory extends ReversibleStep<bool> {
     final Command compose = kubectl.command(_compose);
     final CommandResult composed = await context.shell.run(compose);
     if (!composed.ok) {
-      throw CommandFailed(argv: compose.argv, exitCode: composed.exitCode, stderr: composed.stderr);
+      throw CommandFailed(argv: compose.argv, exitCode: composed.exitCode, stdout: '',
+        stderr: composed.stderr);
     }
     final String file = pathFor();
     await context.files.write(file, composed.stdout, mode: mode);
@@ -138,7 +139,8 @@ final class KubernetesConfigmapFromDirectory extends ReversibleStep<bool> {
       final Command apply = kubectl.command(<String>['apply', '--filename', file]);
       final CommandResult applied = await context.shell.run(apply);
       if (!applied.ok) {
-        throw CommandFailed(argv: apply.argv, exitCode: applied.exitCode, stderr: applied.stderr);
+        throw CommandFailed(argv: apply.argv, exitCode: applied.exitCode, stdout: '',
+        stderr: applied.stderr);
       }
     } finally {
       await context.files.delete(file);

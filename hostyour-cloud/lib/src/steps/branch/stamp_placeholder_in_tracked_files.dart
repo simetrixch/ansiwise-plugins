@@ -326,6 +326,7 @@ final class StampPlaceholderInTrackedFiles extends ReversibleStep<List<String>> 
       throw CommandFailed(
         argv: <String>['git', ...argv],
         exitCode: restored.exitCode,
+        stdout: '',
         stderr: restored.stderr,
       );
     }
@@ -387,6 +388,7 @@ final class StampPlaceholderInTrackedFiles extends ReversibleStep<List<String>> 
       throw CommandFailed(
         argv: <String>['git', ...argv],
         exitCode: found.exitCode,
+        stdout: '',
         stderr: found.stderr,
       );
     }
