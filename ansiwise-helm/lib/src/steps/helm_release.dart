@@ -130,7 +130,7 @@ final class HelmRelease extends IrreversibleStep {
 
     final Object? wantedValues = _plain(loadYaml(await context.files.read(path)));
     final Object? currentValues = await _currentValues(context);
-    if (jsonEncode(wantedValues) != jsonEncode(currentValues)) {
+    if (_canonical(wantedValues) != _canonical(currentValues)) {
       context.log.debug('$release is at $wanted and the values it holds differ from $path');
       return const CheckResult.ready();
     }
@@ -206,6 +206,30 @@ final class HelmRelease extends IrreversibleStep {
       ]),
     );
     return got.ok ? _decoded(got.trimmed) : null;
+  }
+
+  /// [value] as text that two equal shapes always produce, whatever order they were written in.
+  ///
+  /// **A map has no order and `jsonEncode` gives it one.** The same keys written differently encode
+  /// differently, so comparing encoded strings answers "these are not equal" for two things that are.
+  /// The values file is read in the order somebody typed it and helm gives back its own — so the
+  /// comparison was never equal, every release configured by a values file failed its own
+  /// post-check, the run unwound, and the unwind removed the chart repository the row above had
+  /// registered. The next attempt then failed at the release with "repo not found" and pointed at
+  /// the repository row, where nothing was wrong.
+  ///
+  /// Every map is sorted by key, at every depth. A list keeps its order, because a list has one.
+  static String _canonical(Object? value) => jsonEncode(_sorted(value));
+
+  static Object? _sorted(Object? value) {
+    if (value case final Map<Object?, Object?> map) {
+      final List<String> keys = map.keys.map((Object? k) => '$k').toList()..sort();
+      return <String, Object?>{for (final String key in keys) key: _sorted(map[key])};
+    }
+    if (value case final List<Object?> items) {
+      return <Object?>[for (final Object? item in items) _sorted(item)];
+    }
+    return value;
   }
 
   static Object? _decoded(String text) {
