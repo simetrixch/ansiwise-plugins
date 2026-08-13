@@ -28,7 +28,6 @@ Future<void> main() async => auditIdempotence(
 /// for it. A name arrives here only by somebody adding it, which is the point: a step written
 /// tomorrow either brings its fixture or is written down as unproven.
 const Set<String> notCoveredByAFakeMachine = <String>{
-  'configure_kube_apiserver_oidc',
   'restart_microk8s_snap_for_pod_cidr',
   // Nothing about the fake machine keeps it from being exercised: the ANSWERS do, and no fixture can
   // reach them. A probe plants a value for every declared answer independently, and "role" and

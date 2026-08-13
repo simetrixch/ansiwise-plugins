@@ -823,4 +823,5 @@ void main() {
 /// a machine too, as a shell alias the cluster program writes, but nothing here starts it.
 FakeShell gitopsToolsPresent() => FakeShell()
   ..answers(onThePathKey('helm'), '/usr/local/bin/helm\n')
-  ..answers(onThePathKey('microk8s'), '/snap/bin/microk8s\n');
+  ..answers(onThePathKey('microk8s'), '/snap/bin/microk8s\n')
+  ..answers('curl -s -o /dev/null -w %{http_code} https://idp.m1.example.com/application/o/headlamp/', '200');

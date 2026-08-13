@@ -274,15 +274,17 @@ String cniManifest({String cidr = podCidr}) =>
 String kubeProxyArgs({String cidr = podCidr, String proxyMode = 'nftables'}) =>
     '--proxy-mode=$proxyMode\n--cluster-cidr=$cidr\n';
 
-/// The arguments the API server is started with once it accepts this platform's tokens.
-const ConfigureKubeApiserverOidc apiserverOidc = ConfigureKubeApiserverOidc(
-  clientId: 'headlamp',
-  usernameClaim: 'preferred_username',
-  usernamePrefix: 'oidc:',
-  groupsClaim: 'groups',
-  groupsPrefix: '',
-  argsPath: ConfigureKubeApiserverOidc.defaultPath,
-);
+/// The arguments the API server is started with once all OIDC flags are on it.
+String kubeApiserverArgs({String fqdn = clusterFqdn}) =>
+    '--oidc-issuer-url=https://idp.$fqdn/application/o/headlamp/\n'
+    '--oidc-client-id=headlamp\n'
+    '--oidc-username-claim=preferred_username\n'
+    '--oidc-username-prefix=oidc:\n'
+    '--oidc-groups-claim=groups\n'
+    '--oidc-groups-prefix=\n';
+
+
+
 
 /// The certificate issuer as the program renders it.
 const WriteClusterIssuerManifest clusterIssuer = WriteClusterIssuerManifest(
@@ -526,11 +528,9 @@ Future<ClusterMachine> convergedCluster() async {
 
   files.contents.addAll(<String, String>{
     microk8sKubeProxyArguments: kubeProxyArgs(),
+    '/var/snap/microk8s/current/args/kube-apiserver': kubeApiserverArgs(),
     cniManifestPath: cniManifest(),
-    ConfigureKubeApiserverOidc.defaultPath: ConfigureKubeApiserverOidc.withFlags(
-      '',
-      apiserverOidc.flagsIn(context),
-    ),
+
     clusterIssuer.path: await clusterIssuer.manifestFor(context),
     '$operatorHome/.bashrc': "alias kubectl='microk8s.kubectl'\nalias helm='microk8s.helm3'\n",
     '$operatorHome/.kube/config': 'apiVersion: v1\nkind: Config\nclusters: []\n',

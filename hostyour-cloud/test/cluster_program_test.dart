@@ -84,7 +84,7 @@ void main() {
   }
 
   test('the program resolves against the registry', () {
-    expect(deployCluster().steps, hasLength(55));
+    expect(deployCluster().steps, hasLength(57));
   });
 
   test('every value this installation states about itself is an answer, not an argument', () {
@@ -174,7 +174,14 @@ void main() {
     test('it plans nothing at all, because the machine is already converged', () async {
       final ({RunRecord record, FakeShell shell, FakeFiles files, MemoryRecorder recorder}) it =
           await run(Mode.dry);
-      for (final StepRecord step in it.record.steps) {
+      final ResolvedProgram program = deployCluster();
+      for (int i = 0; i < it.record.steps.length; i++) {
+        final StepRecord step = it.record.steps[i];
+        final ResolvedStep resolved = program.steps[i];
+        if (resolved.measured.isNotEmpty) {
+          expect(step.plan, isA<NotKnownYetPlan>());
+          continue;
+        }
         expect(
           step.plan,
           isA<NothingPlan>(),
@@ -206,6 +213,13 @@ void main() {
       final ({RunRecord record, FakeShell shell, FakeFiles files, MemoryRecorder recorder}) it =
           await run(Mode.run);
 
+      if (it.record.exitCode != 0) {
+        for (final step in it.record.steps) {
+          if (step.verdict is! Succeeded) {
+            print('Step failed: ${step.step} - Verdict: ${step.verdict}');
+          }
+        }
+      }
       expect(it.record.exitCode, 0);
       expect(it.files.written, isEmpty, reason: 'a converged machine is written to by nothing');
       expect(it.files.deleted, isEmpty);

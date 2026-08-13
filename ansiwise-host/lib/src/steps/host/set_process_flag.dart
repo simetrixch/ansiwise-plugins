@@ -54,7 +54,7 @@ final class SetProcessFlag extends ReversibleStep<String?> {
   factory SetProcessFlag.fromArguments(Arguments arguments) => SetProcessFlag(
     argsPath: arguments.text('args_path'),
     flag: arguments.text('flag'),
-    value: arguments.text('value'),
+    value: arguments.optionalText('value') ?? '',
     fileMode: arguments.integer('file_mode'),
     restart: arguments.textList('restart_command'),
     ready: arguments.textList('ready_command'),

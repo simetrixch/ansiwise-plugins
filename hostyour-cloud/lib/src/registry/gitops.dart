@@ -1,6 +1,5 @@
 import 'package:ansiwise_api/ansiwise_api.dart';
 import '../steps/gitops/build_plane.dart';
-import '../steps/gitops/idp_discovery_reachable.dart';
 import '../steps/gitops/stage_toggle.dart';
 
 /// Every step that puts the platform's own services on top of a standing cluster.
@@ -15,15 +14,7 @@ import '../steps/gitops/stage_toggle.dart';
 /// package with the reason, the repair and the manifest written in the row. What is left here reads
 /// an answer this product alone knows how to derive — which cluster's identity provider an
 /// installation's tokens come from — and that rule is what keeps it in this package.
-const Map<StepName, RegisteredStep> gitopsSteps = <StepName, RegisteredStep>{
-  StepName('idp_discovery_reachable'): RegisteredStep(
-    name: StepName('idp_discovery_reachable'),
-    source: 'lib/src/steps/gitops/idp_discovery_reachable.dart:39',
-    create: IdpDiscoveryReachable.fromArguments,
-    arguments: IdpDiscoveryReachable.arguments,
-    answers: IdpDiscoveryReachable.answers,
-  ),
-};
+const Map<StepName, RegisteredStep> gitopsSteps = <StepName, RegisteredStep>{};
 
 /// Every condition a program of this area may put behind `when:`.
 ///

@@ -3,6 +3,8 @@ import 'package:ansiwise_api/ansiwise_api.dart';
 import 'steps/git_branch.dart';
 import 'steps/require_git_identity.dart';
 import 'steps/require_pushable_remote.dart';
+import 'steps/replace_text_in_tracked_files.dart';
+import 'steps/replace_regex_in_tracked_file.dart';
 
 /// Every step this plugin contributes, keyed by the name a program file writes.
 ///
@@ -31,6 +33,18 @@ const Map<StepName, RegisteredStep> gitSteps = <StepName, RegisteredStep>{
     source: 'lib/src/steps/git_branch.dart:20',
     create: GitBranch.fromArguments,
     arguments: GitBranch.arguments,
+  ),
+  StepName('replace_text_in_tracked_files'): RegisteredStep(
+    name: StepName('replace_text_in_tracked_files'),
+    source: 'lib/src/steps/replace_text_in_tracked_files.dart:12',
+    create: ReplaceTextInTrackedFiles.fromArguments,
+    arguments: ReplaceTextInTrackedFiles.arguments,
+  ),
+  StepName('replace_regex_in_tracked_file'): RegisteredStep(
+    name: StepName('replace_regex_in_tracked_file'),
+    source: 'lib/src/steps/replace_regex_in_tracked_file.dart:9',
+    create: ReplaceRegexInTrackedFile.fromArguments,
+    arguments: ReplaceRegexInTrackedFile.arguments,
   ),
 };
 

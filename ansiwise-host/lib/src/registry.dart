@@ -23,17 +23,21 @@ import 'steps/host/install_pinned_tool.dart';
 import 'steps/host/install_snap.dart';
 import 'steps/host/install_tailscale_client.dart';
 import 'steps/host/link_microk8s_storage_path.dart';
+import 'steps/host/measure_coalesced.dart';
 import 'steps/host/preflight_registry_pull_credential.dart';
 import 'steps/host/remove_snap.dart';
 import 'steps/host/remove_unused_packages.dart';
 import 'steps/host/require_commands.dart';
 import 'steps/host/require_free_disk.dart';
+import 'steps/host/require_answer_matches.dart';
 import 'steps/host/require_key_login_possible.dart';
 import 'steps/host/require_machine_size.dart';
 import 'steps/host/require_pinned_ubuntu.dart';
 import 'steps/host/set_process_flag.dart';
+import 'steps/host/set_process_flags.dart';
 import 'steps/host/stamp_calico_pool_cidr_in_cni_manifest.dart';
 import 'steps/host/wait_for_addons_enabled.dart';
+import 'steps/host/wait_for_http.dart';
 import 'steps/host/write_connmark_nft_table.dart';
 import 'steps/host/write_containerd_registry_mirror.dart';
 import 'steps/host/write_netplan_public_src_routing.dart';
@@ -62,6 +66,12 @@ const Map<StepName, RegisteredStep> hostSteps = <StepName, RegisteredStep>{
     source: 'lib/src/steps/host/require_machine_size.dart:12',
     create: RequireMachineSize.fromArguments,
     arguments: RequireMachineSize.arguments,
+  ),
+  StepName('require_answer_matches'): RegisteredStep(
+    name: StepName('require_answer_matches'),
+    source: 'lib/src/steps/host/require_answer_matches.dart:8',
+    create: RequireAnswerMatches.fromArguments,
+    arguments: RequireAnswerMatches.arguments,
   ),
   StepName('require_free_disk'): RegisteredStep(
     name: StepName('require_free_disk'),
@@ -134,6 +144,12 @@ const Map<StepName, RegisteredStep> hostSteps = <StepName, RegisteredStep>{
     create: SetProcessFlag.fromArguments,
     arguments: SetProcessFlag.arguments,
   ),
+  StepName('set_process_flags'): RegisteredStep(
+    name: StepName('set_process_flags'),
+    source: 'lib/src/steps/host/set_process_flags.dart:5',
+    create: SetProcessFlags.fromArguments,
+    arguments: SetProcessFlags.arguments,
+  ),
   // The mirror this machine pulls images through. The gate stands first and the write second, and
   // that order is a constraint rather than a preference: a credential that is merely unfilled is
   // refused while nothing is installed, and refusing it where the mirror is written would stop a
@@ -170,9 +186,15 @@ const Map<StepName, RegisteredStep> hostSteps = <StepName, RegisteredStep>{
   ),
   StepName('wait_for_addons_enabled'): RegisteredStep(
     name: StepName('wait_for_addons_enabled'),
-    source: 'lib/src/steps/host/wait_for_addons_enabled.dart:29',
+    source: 'lib/src/steps/host/wait_for_addons_enabled.dart:18',
     create: WaitForAddonsEnabled.fromArguments,
     arguments: WaitForAddonsEnabled.arguments,
+  ),
+  StepName('wait_for_http'): RegisteredStep(
+    name: StepName('wait_for_http'),
+    source: 'lib/src/steps/host/wait_for_http.dart:10',
+    create: WaitForHttp.fromArguments,
+    arguments: WaitForHttp.arguments,
   ),
   StepName('disable_addons'): RegisteredStep(
     name: StepName('disable_addons'),
@@ -311,6 +333,13 @@ const Map<StepName, RegisteredStep> hostSteps = <StepName, RegisteredStep>{
     source: 'lib/src/steps/host/detect_host_iptables_backend.dart:13',
     create: DetectHostIptablesBackend.fromArguments,
     arguments: DetectHostIptablesBackend.arguments,
+  ),
+  StepName('measure_coalesced'): RegisteredStep(
+    name: StepName('measure_coalesced'),
+    source: 'lib/src/steps/host/measure_coalesced.dart:10',
+    create: MeasureCoalesced.fromArguments,
+    arguments: MeasureCoalesced.arguments,
+    publishes: MeasureCoalesced.publishes,
   ),
   // The file system as a tool. It declares no answer of its own: which file, where it goes and
   // which axis a caller wants one of them per are read out of the row, so this package carries no

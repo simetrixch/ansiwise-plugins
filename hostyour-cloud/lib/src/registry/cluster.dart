@@ -1,5 +1,4 @@
 import 'package:ansiwise_api/ansiwise_api.dart';
-import '../steps/cluster/configure_kube_apiserver_oidc.dart';
 import '../steps/cluster/restart_microk8s_snap_for_pod_cidr.dart';
 
 /// Every step that turns a prepared machine into a cluster the platform can be deployed onto and
@@ -25,12 +24,5 @@ const Map<StepName, RegisteredStep> clusterSteps = <StepName, RegisteredStep>{
     source: 'lib/src/steps/cluster/restart_microk8s_snap_for_pod_cidr.dart:21',
     create: RestartMicrok8sSnapForPodCidr.fromArguments,
     arguments: RestartMicrok8sSnapForPodCidr.arguments,
-  ),
-  StepName('configure_kube_apiserver_oidc'): RegisteredStep(
-    name: StepName('configure_kube_apiserver_oidc'),
-    source: 'lib/src/steps/cluster/configure_kube_apiserver_oidc.dart:16',
-    create: ConfigureKubeApiserverOidc.fromArguments,
-    arguments: ConfigureKubeApiserverOidc.arguments,
-    answers: ConfigureKubeApiserverOidc.answers,
   ),
 };

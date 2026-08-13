@@ -47,45 +47,7 @@ final Map<String, Fixture> stepFixtures = <String, Fixture>{
     }
   },
 
-  // Both writers fill a template in place, so without the template on the machine they have nothing
-  // to fill and refuse. The template is what a branch cut from the trunk carries, which is the
-  // machine these two really meet.
-  //
-  // Every placeholder here differs from what the check answers, so every key counts as unset and is
-  // filled — which is what lets the second check see the step from having work to having none.
-  'write_stage_config': (FakeShell shell, FakeFiles files, FakeHttp http) {
-    files.contents['$_plausibleText/configs/config.example'] = _lines(<String>[
-      'LETSENCRYPT_EMAIL="user@example.com"',
-      'IDP_BOOTSTRAP_EMAIL="user@example.com"',
-      'ALERT_RECIPIENTS=""',
-      'UNIT_APEX=""',
-      'PLATFORM_DOMAIN=""',
-      'BUILD_PLANE_FQDN=""',
-      'CATALOG_REPO=""',
-      'CLUSTER_NAME="my-cluster"',
-      'DOMAIN_SUFFIX="example.com"',
-      'DEPLOY_ENV="prod"',
-      '# A platform default nobody is asked for.',
-      'POD_CIDR="10.244.0.0/16"',
-    ]);
-  },
 
-  'write_stage_secrets': (FakeShell shell, FakeFiles files, FakeHttp http) {
-    files.contents['$_plausibleText/secrets/secrets.example'] = _lines(<String>[
-      'GITOPS_REPO_PAT=""',
-      'GITOPS_REPO_READ_PAT=""',
-      'CLOUDFLARE_API_TOKEN=""',
-      'STORAGE_BOX_HOST=""',
-      'STORAGE_BOX_USER=""',
-      'STORAGE_BOX_PASSWORD=""',
-      'REGISTRY_DOCKERHUB_USER=""',
-      'REGISTRY_DOCKERHUB_TOKEN=""',
-      'BUILD_HOSTYOUR_CLOUD_REPO_PAT=""',
-      'BUILD_CATALOG_REPO_PAT=""',
-      '# Written back once this installation is running.',
-      'VAULT_ROOT_TOKEN=""',
-    ]);
-  },
 };
 
 /// [lines] as the text of a file, ending in a newline the way every file these steps read does.
