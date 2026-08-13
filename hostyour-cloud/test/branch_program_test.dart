@@ -54,7 +54,6 @@ void main() {
     'catalog_repo': 'example-org/tenant-catalog',
     'tailnet_url': 'https://tailnet.example.com',
     'letsencrypt_email': 'certs@example.com',
-    'idp_bootstrap_email': 'admin@example.com',
     'gitops_repo_pat': 'writer-credential-0001',
     'gitops_repo_read_pat': 'reader-credential-0001',
     'cloudflare_api_token': 'cloudflare-credential-0001',
