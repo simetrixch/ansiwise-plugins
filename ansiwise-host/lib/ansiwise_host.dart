@@ -31,7 +31,7 @@ export 'src/steps/host/install_packages.dart';
 export 'src/steps/host/install_pinned_tool.dart';
 export 'src/steps/host/install_snap.dart';
 export 'src/steps/host/install_tailscale_client.dart';
-export 'src/steps/host/ipv4.dart';
+
 export 'src/steps/host/link_microk8s_storage_path.dart';
 export 'src/steps/host/on_the_path.dart';
 export 'src/steps/host/preflight_registry_pull_credential.dart';
