@@ -18,6 +18,7 @@ export 'src/steps/branch/require_installation_domain.dart';
 export 'src/steps/branch/require_master_matches_role.dart';
 export 'src/steps/branch/stamp_app_toggles.dart';
 export 'src/steps/branch/stamp_cluster_profile.dart';
+export 'src/steps/branch/stamp_derived_placeholder.dart';
 export 'src/steps/branch/stamp_placeholder_in_tracked_files.dart';
 export 'src/steps/branch/stamp_role.dart';
 export 'src/steps/branch/write_cluster_map.dart';

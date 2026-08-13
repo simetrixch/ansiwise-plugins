@@ -3,6 +3,7 @@ import '../steps/branch/require_installation_domain.dart';
 import '../steps/branch/require_master_matches_role.dart';
 import '../steps/branch/stamp_app_toggles.dart';
 import '../steps/branch/stamp_cluster_profile.dart';
+import '../steps/branch/stamp_derived_placeholder.dart';
 import '../steps/branch/stamp_placeholder_in_tracked_files.dart';
 import '../steps/branch/stamp_role.dart';
 import '../steps/branch/write_cluster_map.dart';
@@ -44,6 +45,13 @@ const Map<StepName, RegisteredStep> branchSteps = <StepName, RegisteredStep>{
     create: StampPlaceholderInTrackedFiles.fromArguments,
     arguments: StampPlaceholderInTrackedFiles.arguments,
     answers: StampPlaceholderInTrackedFiles.answers,
+  ),
+  StepName('stamp_derived_placeholder'): RegisteredStep(
+    name: StepName('stamp_derived_placeholder'),
+    source: 'lib/src/steps/branch/stamp_derived_placeholder.dart:67',
+    create: StampDerivedPlaceholder.fromArguments,
+    arguments: StampDerivedPlaceholder.arguments,
+    answers: StampDerivedPlaceholder.answers,
   ),
   StepName('write_cluster_map'): RegisteredStep(
     name: StepName('write_cluster_map'),
