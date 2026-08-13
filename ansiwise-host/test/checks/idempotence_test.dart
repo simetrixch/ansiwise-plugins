@@ -60,6 +60,7 @@ const Set<String> notCoveredByAFakeMachine = <String>{
   // Its apply restarts the service that reads the file it wrote, and a fake shell records a restart
   // without carrying it out.
   'set_process_flag',
+  'set_process_flags',
   'write_connmark_nft_table',
   // Nothing about the fake machine keeps it from being exercised: the ROW does. Which machine this
   // is, and which machine the mirror runs on, are read out of the run under the names the row
