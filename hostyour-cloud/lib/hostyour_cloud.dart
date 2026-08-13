@@ -24,8 +24,6 @@ export 'src/steps/branch/stamp_role.dart';
 export 'src/steps/branch/write_cluster_map.dart';
 export 'src/steps/branch/write_stage_config.dart';
 export 'src/steps/branch/write_stage_secrets.dart';
-export 'src/steps/cluster/microk8s.dart';
-export 'src/steps/cluster/restart_microk8s_snap_for_pod_cidr.dart';
 export 'src/steps/gitops/build_plane.dart';
 export 'src/steps/gitops/stage_config.dart';
 export 'src/steps/gitops/stage_toggle.dart';

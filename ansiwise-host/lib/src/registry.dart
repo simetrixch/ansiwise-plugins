@@ -27,6 +27,7 @@ import 'steps/host/measure_coalesced.dart';
 import 'steps/host/preflight_registry_pull_credential.dart';
 import 'steps/host/remove_snap.dart';
 import 'steps/host/remove_unused_packages.dart';
+import 'steps/host/restart_microk8s_snap_for_pod_cidr.dart';
 import 'steps/host/require_commands.dart';
 import 'steps/host/require_free_disk.dart';
 import 'steps/host/require_answer_matches.dart';
@@ -172,6 +173,12 @@ const Map<StepName, RegisteredStep> hostSteps = <StepName, RegisteredStep>{
   // entries stand in the order a program runs them: the pod range is stamped before anything is
   // given an address out of it, the addons go on, the wait proves they took, and whatever must
   // stay off is switched off last because some of them come on by themselves.
+    StepName('restart_microk8s_snap_for_pod_cidr'): RegisteredStep(
+    name: StepName('restart_microk8s_snap_for_pod_cidr'),
+    source: 'lib/src/steps/host/restart_microk8s_snap_for_pod_cidr.dart:21',
+    create: RestartMicrok8sSnapForPodCidr.fromArguments,
+    arguments: RestartMicrok8sSnapForPodCidr.arguments,
+  ),
   StepName('stamp_calico_pool_cidr_in_cni_manifest'): RegisteredStep(
     name: StepName('stamp_calico_pool_cidr_in_cni_manifest'),
     source: 'lib/src/steps/host/stamp_calico_pool_cidr_in_cni_manifest.dart:18',

@@ -17,6 +17,8 @@ environment:
   sdk: ^3.12.0
 
 dependencies:
+  ansiwise_kubernetes:
+    path: ../ansiwise-kubernetes
   ansiwise_api:
     git:
       url: https://github.com/simetrixch/ansiwise-api.git

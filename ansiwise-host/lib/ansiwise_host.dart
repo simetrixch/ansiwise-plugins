@@ -51,4 +51,6 @@ export 'src/steps/host/write_containerd_registry_mirror.dart';
 export 'src/steps/host/write_netplan_public_src_routing.dart';
 export 'src/steps/host/write_public_src_routing_script.dart';
 export 'src/steps/host/write_public_src_routing_unit.dart';
+export 'src/steps/host/restart_microk8s_snap_for_pod_cidr.dart';
+export 'src/steps/host/microk8s.dart';
 export 'src/plugin.dart';

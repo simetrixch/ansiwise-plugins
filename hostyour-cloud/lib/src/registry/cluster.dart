@@ -1,5 +1,4 @@
 import 'package:ansiwise_api/ansiwise_api.dart';
-import '../steps/cluster/restart_microk8s_snap_for_pod_cidr.dart';
 
 /// Every step that turns a prepared machine into a cluster the platform can be deployed onto and
 /// that no tool package carries yet.
@@ -19,10 +18,5 @@ import '../steps/cluster/restart_microk8s_snap_for_pod_cidr.dart';
 /// constraint: the pod range before any pod is given an address, and who the API server accepts
 /// after the addons that installed it are on.
 const Map<StepName, RegisteredStep> clusterSteps = <StepName, RegisteredStep>{
-  StepName('restart_microk8s_snap_for_pod_cidr'): RegisteredStep(
-    name: StepName('restart_microk8s_snap_for_pod_cidr'),
-    source: 'lib/src/steps/cluster/restart_microk8s_snap_for_pod_cidr.dart:21',
-    create: RestartMicrok8sSnapForPodCidr.fromArguments,
-    arguments: RestartMicrok8sSnapForPodCidr.arguments,
-  ),
+
 };

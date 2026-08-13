@@ -51,7 +51,7 @@ Future<void> main() async {
 
   test('the steps of those files are bound to real registry entries', () {
     expect(
-      reading.stepCount,
+      reading.outcomes.whereType<ProgramResolved>().fold<int>(0, (int count, ProgramResolved resolved) => count + resolved.steps),
       greaterThan(0),
       reason: 'every program resolved to nothing, so the binding was never exercised',
     );

@@ -8,7 +8,6 @@ import 'package:ansiwise_host/ansiwise_host.dart';
 // issuer's name, the authority and the ingress — stands in the program row and is written out here
 // the way that row writes it.
 import 'package:ansiwise_kubernetes/ansiwise_kubernetes.dart';
-import 'package:hostyour_cloud/hostyour_cloud.dart';
 import 'package:ansiwise_api/testing.dart';
 
 import 'composition.dart';
