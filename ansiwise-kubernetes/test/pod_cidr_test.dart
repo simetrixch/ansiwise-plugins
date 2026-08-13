@@ -43,16 +43,16 @@ void main() {
   group('the ranges a pod network may not overlap', () {
     test('two ranges overlap under the SHORTER of the two prefixes', () {
       // The obvious implementation gets containment right in one direction and wrong in the other.
-      expect(RequirePodCidrFreeOfReservedRanges.overlap('10.1.0.0/16', '10.1.1.0/24'), isTrue);
-      expect(RequirePodCidrFreeOfReservedRanges.overlap('10.1.1.0/24', '10.1.0.0/16'), isTrue);
-      expect(RequirePodCidrFreeOfReservedRanges.overlap('10.244.0.0/16', '10.1.0.0/16'), isFalse);
+      expect(cidrOverlap('10.1.0.0/16', '10.1.1.0/24'), isTrue);
+      expect(cidrOverlap('10.1.1.0/24', '10.1.0.0/16'), isTrue);
+      expect(cidrOverlap('10.244.0.0/16', '10.1.0.0/16'), isFalse);
     });
 
     test('a zero-length prefix overlaps everything', () {
       // The arithmetic is done wide and masked back to 32 bits at the end. A 32-bit implementation
       // overflows here and answers the opposite.
-      expect(RequirePodCidrFreeOfReservedRanges.overlap('0.0.0.0/0', '10.244.0.0/16'), isTrue);
-      expect(RequirePodCidrFreeOfReservedRanges.overlap('192.168.1.0/24', '0.0.0.0/0'), isTrue);
+      expect(cidrOverlap('0.0.0.0/0', '10.244.0.0/16'), isTrue);
+      expect(cidrOverlap('192.168.1.0/24', '0.0.0.0/0'), isTrue);
     });
 
     test('the range the cluster hands service addresses out of is refused', () async {

@@ -334,7 +334,7 @@ const Map<StepName, RegisteredStep> hostSteps = <StepName, RegisteredStep>{
     source: 'lib/src/steps/host/detect_host_upstream_resolvers.dart:21',
     create: DetectHostUpstreamResolvers.fromArguments,
     arguments: DetectHostUpstreamResolvers.arguments,
-    publishes: const <MeasurementSpec>[
+    publishes: <MeasurementSpec>[
       MeasurementSpec(
         name: MeasurementName('upstream_servers'),
         describes: 'the name servers this machine forwards to',
@@ -346,7 +346,7 @@ const Map<StepName, RegisteredStep> hostSteps = <StepName, RegisteredStep>{
     source: 'lib/src/steps/host/detect_host_iptables_backend.dart:13',
     create: DetectHostIptablesBackend.fromArguments,
     arguments: DetectHostIptablesBackend.arguments,
-    publishes: const <MeasurementSpec>[
+    publishes: <MeasurementSpec>[
       MeasurementSpec(
         name: MeasurementName('backend'),
         describes: 'the packet-filtering backend this machine is on',

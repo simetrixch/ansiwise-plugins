@@ -1,5 +1,5 @@
 import 'package:ansiwise_api/ansiwise_api.dart';
-import 'package:hostyour_cloud/hostyour_cloud.dart';
+import 'package:ansiwise_git/ansiwise_git.dart';
 import 'package:ansiwise_api/testing.dart';
 import 'package:test/test.dart';
 
@@ -28,7 +28,7 @@ void main() {
     placeholder: trunk,
     valueAnswer: 'fqdn',
     keepMarker: keepMarker,
-    tree: RolePruning.generatorTree,
+    tree: 'argocd',
     keys: <String>['revision', 'targetRevision'],
   );
 

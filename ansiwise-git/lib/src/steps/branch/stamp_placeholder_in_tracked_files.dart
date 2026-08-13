@@ -1,6 +1,6 @@
 import 'package:ansiwise_api/ansiwise_api.dart';
 
-import '../../branch/fqdn_selection.dart';
+import 'fqdn_selection.dart';
 
 /// Puts this installation's own branch where the trunk carries a placeholder.
 ///

@@ -21,6 +21,7 @@ import 'reapply_calico_manifest.dart';
 /// changed, because pinning it would be a change nobody asked for and a needless replacement of
 /// every agent pod with it.
 final class AlignCalicoBackend extends ReversibleStep<String?> {
+  /// Ensures the Calico node pods are running with the given [backend].
   const AlignCalicoBackend({
     required this.rolloutTimeoutSeconds,
     this.backend,

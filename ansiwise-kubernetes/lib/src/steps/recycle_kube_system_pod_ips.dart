@@ -1,7 +1,6 @@
 import 'package:ansiwise_api/ansiwise_api.dart';
 import 'kubectl.dart';
 import 'guard_populated_cluster_pod_cidr_migration.dart';
-import 'require_pod_cidr_free_of_reserved_ranges.dart';
 
 /// Gives the system pods that came up before the conversion an address out of the new pool.
 ///
@@ -99,7 +98,7 @@ final class RecycleKubeSystemPodIps extends IrreversibleStep {
     for (final _Pod pod in pods)
       if (!pod.hostNetwork &&
           pod.address.isNotEmpty &&
-          !RequirePodCidrFreeOfReservedRanges.contains(podCidr, pod.address))
+          !cidrContains(podCidr, pod.address))
         pod,
   ];
 
