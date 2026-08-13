@@ -72,6 +72,7 @@ final class DetectHostUpstreamResolvers extends ObservingStep {
         'nowhere to go',
       );
     }
+    context.measurements.publish(const MeasurementName('upstream_servers'), found.join(', '));
     return CheckResult.satisfied('this machine reaches the internet through ${found.join(', ')}');
   }
 

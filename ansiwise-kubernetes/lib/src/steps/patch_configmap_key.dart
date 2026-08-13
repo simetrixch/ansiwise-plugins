@@ -43,6 +43,7 @@ final class PatchConfigmapKey extends ReversibleStep<String?> {
     required this.rollout,
     required this.backupPath,
     required this.rolloutTimeoutSeconds,
+    this.upstreamServers,
     this.kubectl = const Kubectl(),
   });
 
@@ -55,6 +56,7 @@ final class PatchConfigmapKey extends ReversibleStep<String?> {
     rollout: arguments.text('rollout'),
     backupPath: arguments.text('backup_path'),
     rolloutTimeoutSeconds: arguments.integer('rollout_timeout_seconds'),
+    upstreamServers: arguments.optionalText('upstream_servers'),
     kubectl: Kubectl.fromArguments(arguments),
   );
 
@@ -98,6 +100,12 @@ final class PatchConfigmapKey extends ReversibleStep<String?> {
       required: false,
       defaultValue: 60,
     ),
+    ArgumentSpec(
+      name: 'upstream_servers',
+      kind: ArgumentKind.text,
+      describes: 'the name servers the machine forwards to, passed from a measurement',
+      required: false,
+    ),
     Kubectl.argument,
   ];
 
@@ -138,6 +146,9 @@ final class PatchConfigmapKey extends ReversibleStep<String?> {
   /// How long the workload is given to come back.
   final int rolloutTimeoutSeconds;
 
+  /// The name servers the machine forwards to, passed from a measurement.
+  final String? upstreamServers;
+
   /// How the cluster is reached.
   final Kubectl kubectl;
 
@@ -150,7 +161,7 @@ final class PatchConfigmapKey extends ReversibleStep<String?> {
         'before one of its keys can be set',
       );
     }
-    final String? wanted = await _filled(context, content);
+    final String? wanted = await _filled(context, content, upstreamServers);
     if (wanted == null) {
       return CheckResult.blocked(
         'the content of $key carries $placeholder and this machine names no name server a pod '
@@ -167,14 +178,14 @@ final class PatchConfigmapKey extends ReversibleStep<String?> {
   Future<StepPlan> plan(StepContext context) async => StepPlan.diff(
     '$namespace/$configMap.$key',
     before: await _live(context) ?? '',
-    after: await _filled(context, content) ?? '',
+    after: await _filled(context, content, upstreamServers) ?? '',
   );
 
   @override
   Future<void> apply(StepContext context) async {
     // What is written is worked out before anything is touched, so a machine that cannot fill the
     // slot leaves no half-finished copy of the value it was about to replace.
-    final String? wanted = await _filled(context, content);
+    final String? wanted = await _filled(context, content, upstreamServers);
     if (wanted == null) {
       throw StateError(
         'the content of $key carries $placeholder and this machine names no name server a pod '
@@ -282,9 +293,12 @@ final class PatchConfigmapKey extends ReversibleStep<String?> {
   ///
   /// The addresses stand where the slot was, one after another separated by a space. Text carrying
   /// no slot comes back as it is, without the machine being measured at all.
-  static Future<String?> _filled(StepContext context, String text) async {
+  static Future<String?> _filled(StepContext context, String text, String? providedServers) async {
     if (!text.contains(placeholder)) {
       return text;
+    }
+    if (providedServers != null) {
+      return text.replaceAll(placeholder, providedServers);
     }
     final List<String> found = _usable(await _fromSystemResolver(context));
     final List<String> servers = found.isNotEmpty

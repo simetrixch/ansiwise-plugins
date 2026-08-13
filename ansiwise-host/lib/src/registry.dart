@@ -69,7 +69,7 @@ const Map<StepName, RegisteredStep> hostSteps = <StepName, RegisteredStep>{
   ),
   StepName('require_answer_matches'): RegisteredStep(
     name: StepName('require_answer_matches'),
-    source: 'lib/src/steps/host/require_answer_matches.dart:8',
+    source: 'lib/src/steps/host/require_answer_matches.dart:7',
     create: RequireAnswerMatches.fromArguments,
     arguments: RequireAnswerMatches.arguments,
   ),
@@ -146,7 +146,7 @@ const Map<StepName, RegisteredStep> hostSteps = <StepName, RegisteredStep>{
   ),
   StepName('set_process_flags'): RegisteredStep(
     name: StepName('set_process_flags'),
-    source: 'lib/src/steps/host/set_process_flags.dart:5',
+    source: 'lib/src/steps/host/set_process_flags.dart:8',
     create: SetProcessFlags.fromArguments,
     arguments: SetProcessFlags.arguments,
   ),
@@ -186,7 +186,7 @@ const Map<StepName, RegisteredStep> hostSteps = <StepName, RegisteredStep>{
   ),
   StepName('wait_for_addons_enabled'): RegisteredStep(
     name: StepName('wait_for_addons_enabled'),
-    source: 'lib/src/steps/host/wait_for_addons_enabled.dart:18',
+    source: 'lib/src/steps/host/wait_for_addons_enabled.dart:29',
     create: WaitForAddonsEnabled.fromArguments,
     arguments: WaitForAddonsEnabled.arguments,
   ),
@@ -327,16 +327,28 @@ const Map<StepName, RegisteredStep> hostSteps = <StepName, RegisteredStep>{
     source: 'lib/src/steps/host/detect_host_upstream_resolvers.dart:21',
     create: DetectHostUpstreamResolvers.fromArguments,
     arguments: DetectHostUpstreamResolvers.arguments,
+    publishes: const <MeasurementSpec>[
+      MeasurementSpec(
+        name: MeasurementName('upstream_servers'),
+        describes: 'the name servers this machine forwards to',
+      ),
+    ],
   ),
   StepName('detect_host_iptables_backend'): RegisteredStep(
     name: StepName('detect_host_iptables_backend'),
     source: 'lib/src/steps/host/detect_host_iptables_backend.dart:13',
     create: DetectHostIptablesBackend.fromArguments,
     arguments: DetectHostIptablesBackend.arguments,
+    publishes: const <MeasurementSpec>[
+      MeasurementSpec(
+        name: MeasurementName('backend'),
+        describes: 'the packet-filtering backend this machine is on',
+      ),
+    ],
   ),
   StepName('measure_coalesced'): RegisteredStep(
     name: StepName('measure_coalesced'),
-    source: 'lib/src/steps/host/measure_coalesced.dart:10',
+    source: 'lib/src/steps/host/measure_coalesced.dart:12',
     create: MeasureCoalesced.fromArguments,
     arguments: MeasureCoalesced.arguments,
     publishes: MeasureCoalesced.publishes,

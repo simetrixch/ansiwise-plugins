@@ -21,12 +21,16 @@ import 'reapply_calico_manifest.dart';
 /// changed, because pinning it would be a change nobody asked for and a needless replacement of
 /// every agent pod with it.
 final class AlignCalicoBackend extends ReversibleStep<String?> {
-  /// Pins the agent to the machine's backend, giving the replacement [rolloutTimeoutSeconds].
-  const AlignCalicoBackend({required this.rolloutTimeoutSeconds, this.kubectl = const Kubectl()});
+  const AlignCalicoBackend({
+    required this.rolloutTimeoutSeconds,
+    this.backend,
+    this.kubectl = const Kubectl(),
+  });
 
   /// Builds the step from what the program gave it.
   factory AlignCalicoBackend.fromArguments(Arguments arguments) => AlignCalicoBackend(
     rolloutTimeoutSeconds: arguments.integer('rollout_timeout_seconds'),
+    backend: arguments.optionalText('backend'),
     kubectl: Kubectl.fromArguments(arguments),
   );
 
@@ -39,6 +43,12 @@ final class AlignCalicoBackend extends ReversibleStep<String?> {
       required: false,
       defaultValue: 120,
     ),
+    ArgumentSpec(
+      name: 'backend',
+      kind: ArgumentKind.text,
+      describes: 'the packet-filtering backend the machine is on, passed from a measurement',
+      required: false,
+    ),
     Kubectl.argument,
   ];
 
@@ -50,6 +60,9 @@ final class AlignCalicoBackend extends ReversibleStep<String?> {
 
   /// How long the replacement is given.
   final int rolloutTimeoutSeconds;
+
+  /// The packet-filtering backend the machine is on, passed from a measurement.
+  final String? backend;
 
   /// How the cluster is reached.
   final Kubectl kubectl;
@@ -68,7 +81,7 @@ final class AlignCalicoBackend extends ReversibleStep<String?> {
         'nobody asked for',
       );
     }
-    final String? measured = await _machineBackend(context);
+    final String? measured = await _machineBackend(context, backend);
     if (measured == null) {
       // Nothing read the machine, so there is nothing to pin the agent TO. Pinning it to the
       // fallback would set the cluster's packet filtering from a value nobody measured, and the
@@ -89,17 +102,17 @@ final class AlignCalicoBackend extends ReversibleStep<String?> {
   Future<StepPlan> plan(StepContext context) async {
     // check blocks when nothing could be read, and a blocked step is never planned - so by here a
     // reading exists. Stated rather than asserted with a null check nobody can reach.
-    final String measured = await _machineBackend(context) ?? _nft;
+    final String measured = await _machineBackend(context, backend) ?? _nft;
     return StepPlan.argv(kubectl.argv(_patch(_wanted(measured))));
   }
 
   @override
   Future<void> apply(StepContext context) async {
-    final String backend = await _machineBackend(context) ?? _nft;
+    final String measured = await _machineBackend(context, backend) ?? _nft;
     context.log.debug(
-      'this machine filters packets with $backend — pinning the network agent to it',
+      'this machine filters packets with $measured — pinning the network agent to it',
     );
-    await _mustRun(context, _patch(_wanted(backend)));
+    await _mustRun(context, _patch(_wanted(measured)));
     await _rollAgent(context);
   }
 
@@ -152,7 +165,10 @@ final class AlignCalicoBackend extends ReversibleStep<String?> {
   /// **Null is not a value, it is the absence of a reading.** Answering with a backend when neither
   /// link could be read would make "the machine filters with nft" and "nothing here could be read"
   /// the same answer, and this step would then align the agent to a backend nobody measured.
-  static Future<String?> _machineBackend(StepContext context) async {
+  static Future<String?> _machineBackend(StepContext context, String? providedBackend) async {
+    if (providedBackend != null) {
+      return providedBackend;
+    }
     for (final List<String> argv in <List<String>>[
       <String>['readlink', '-f', '/etc/alternatives/iptables'],
       <String>['readlink', '-f', '/usr/sbin/iptables'],

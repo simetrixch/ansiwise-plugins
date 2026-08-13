@@ -86,6 +86,7 @@ final class DetectHostIptablesBackend extends ObservingStep {
         'which backend this machine filters packets with',
       );
     }
+    context.measurements.publish(const MeasurementName('backend'), backend);
     return CheckResult.satisfied(
       '$alternativesLink says this machine filters packets with $backend',
     );

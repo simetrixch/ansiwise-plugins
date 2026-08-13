@@ -22,6 +22,9 @@ final class HostMachine {
   /// Everything the log was told, so a test can assert what a step said about what it found.
   final List<String> said = <String>[];
 
+  /// Everything published to the measurements sink.
+  final Map<MeasurementName, String> published = <MeasurementName, String>{};
+
   /// The context [step] is run in, with [arguments] where the step reads any.
   ///
   /// [answers] carries what an operator stated about this installation, and every step gets them
@@ -42,6 +45,7 @@ final class HostMachine {
     arguments: arguments,
     answers: answers,
     facts: Facts.none,
+    measurements: _FakeMeasurementSink(published),
   );
 
   /// Every command that changed something, in the order it ran.
@@ -115,3 +119,18 @@ final class _CollectingLog implements Logger {
   @override
   void error(String message) => said.add(message);
 }
+
+final class _FakeMeasurementSink implements MeasurementSink {
+  const _FakeMeasurementSink(this.published);
+  
+  final Map<MeasurementName, String> published;
+
+  @override
+  void publish(MeasurementName name, String value) {
+    if (value.isEmpty) {
+      throw ArgumentError.value(value, 'value', 'cannot be empty');
+    }
+    published[name] = value;
+  }
+}
+
