@@ -67,7 +67,8 @@ void main() {
 
   test('a list keeps its order, because a list has one', () async {
     // The innocent neighbour of the rule above: sorting a map is right and sorting a list is a lie.
-    // Two lists with the same entries in another order are two different values to every consumer.
+    // Two lists with the same entries in another order are two different values to whatever reads
+    // them.
     final CheckResult answer = await release.check(
       machine(file: 'hosts:\n  - a\n  - b\n', held: '{"hosts":["b","a"]}'),
     );
