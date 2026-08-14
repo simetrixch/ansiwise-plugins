@@ -144,9 +144,20 @@ void main() {
       // The shell kills a command at its deadline and throws — proven against real processes in
       // the framework's own tests. What is measured here is the step's side: the failure comes
       // through instead of being read as a quiet no, so the run ends loud with the command named.
+      //
+      // The wait REPHRASES that failure rather than letting it through raw: an operator told only
+      // "TimeoutException" is told about a mechanism, while what they need is what was waited for.
+      // So the type is the wait's own — and what it carries must still name the command, or this
+      // test would pass on a wait that swallowed the reason and reported a plain deadline.
       await expectLater(
         waitingFor('True').apply(_contextWith(_WedgedShell(), under)),
-        throwsA(isA<TimeoutException>()),
+        throwsA(
+          isA<WaitedTooLong>().having(
+            (WaitedTooLong reached) => reached.message,
+            'message',
+            allOf(contains('my-issuer'), contains('clusterissuer')),
+          ),
+        ),
       );
     });
 
