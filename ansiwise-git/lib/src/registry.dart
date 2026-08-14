@@ -37,19 +37,19 @@ const Map<StepName, RegisteredStep> gitSteps = <StepName, RegisteredStep>{
   ),
   StepName('replace_text_in_tracked_files'): RegisteredStep(
     name: StepName('replace_text_in_tracked_files'),
-    source: 'lib/src/steps/replace_text_in_tracked_files.dart:12',
+    source: 'lib/src/steps/replace_text_in_tracked_files.dart:10',
     create: ReplaceTextInTrackedFiles.fromArguments,
     arguments: ReplaceTextInTrackedFiles.arguments,
   ),
   StepName('replace_regex_in_tracked_file'): RegisteredStep(
     name: StepName('replace_regex_in_tracked_file'),
-    source: 'lib/src/steps/replace_regex_in_tracked_file.dart:9',
+    source: 'lib/src/steps/replace_regex_in_tracked_file.dart:7',
     create: ReplaceRegexInTrackedFile.fromArguments,
     arguments: ReplaceRegexInTrackedFile.arguments,
   ),
   StepName('stamp_placeholder_in_tracked_files'): RegisteredStep(
     name: StepName('stamp_placeholder_in_tracked_files'),
-    source: 'lib/src/steps/branch/stamp_placeholder_in_tracked_files.dart:22',
+    source: 'lib/src/steps/branch/stamp_placeholder_in_tracked_files.dart:66',
     create: StampPlaceholderInTrackedFiles.fromArguments,
     arguments: StampPlaceholderInTrackedFiles.arguments,
   ),

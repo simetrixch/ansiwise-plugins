@@ -68,7 +68,7 @@ const Map<StepName, RegisteredStep> kubernetesSteps = <StepName, RegisteredStep>
   ),
   StepName('recycle_kube_system_pod_ips'): RegisteredStep(
     name: StepName('recycle_kube_system_pod_ips'),
-    source: 'lib/src/steps/recycle_kube_system_pod_ips.dart:19',
+    source: 'lib/src/steps/recycle_kube_system_pod_ips.dart:18',
     create: RecycleKubeSystemPodIps.fromArguments,
     arguments: RecycleKubeSystemPodIps.arguments,
   ),

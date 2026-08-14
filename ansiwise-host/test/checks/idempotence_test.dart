@@ -57,6 +57,12 @@ const Set<String> notCoveredByAFakeMachine = <String>{
   'install_tailscale_client',
   'link_microk8s_storage_path',
   'remove_snap',
+  // Its apply ends by proving the node came back, and a fake shell answers a status with exit zero
+  // and no output — while what this step reads is the LINE the status writes, not its code. So the
+  // apply throws on a fake machine that is neither up nor down, and the second run measures nothing.
+  // Making it reachable needs a fixture that can answer one command with text, which is what a
+  // fixture is for; until one exists this step's repeatability rests on nothing here.
+  'restart_microk8s_snap_for_pod_cidr',
   // Its apply restarts the service that reads the file it wrote, and a fake shell records a restart
   // without carrying it out.
   'set_process_flag',
