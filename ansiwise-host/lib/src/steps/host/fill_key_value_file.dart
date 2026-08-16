@@ -228,9 +228,19 @@ final class FillKeyValueFile extends ReversibleStep<String?> {
   );
 
   /// What this run holds, by the key each value belongs under.
+  ///
+  /// **An answer holding nothing is not a value to write**, and leaving it out is the difference
+  /// between a row that finishes and one that never does. These files count an empty value as
+  /// unanswered — that is what stops a file somebody copied and never filled from reading as an
+  /// answered one — so writing an empty one would leave the key unanswered by the file's own rule,
+  /// the check would say there is still work, and the row would report work for ever.
+  ///
+  /// An answer that is REQUIRED cannot be empty; one that is optional is a value this installation
+  /// does not have, and a key it does not have belongs in the file as the template left it.
   Map<String, String> _wanted(StepContext context) => <String, String>{
     for (final MapEntry<String, KeyBinding> each in values.entries)
-      each.key: each.value.valueFrom(context.answers),
+      if (each.value.valueFrom(context.answers) case final String value when value.isNotEmpty)
+        each.key: value,
   };
 
   /// The keys that still need a value, which is every declared key nobody has answered.

@@ -144,6 +144,46 @@ void main() {
     });
   });
 
+  group('an answer holding nothing', () {
+    test('is left as the template had it, rather than written empty', () async {
+      // Writing an empty value would leave the key unanswered by the file's OWN rule — these files
+      // count empty as unanswered — so the check would say there is still work and the row would
+      // report work for ever. An optional answer nobody gave is a value this installation does not
+      // have, and a key it does not have belongs in the file as the template left it.
+      final HostMachine machine = machineWith();
+      final StepContext context = machine.contextFor(
+        const StepName('under_test'),
+        Arguments.none,
+        const Arguments(<String, Object>{'fqdn': 'm1.example.com', 'stage': ''}),
+      );
+      final FillKeyValueFile step = stepWith(
+        values: const <String, KeyBinding>{
+          'DOMAIN_SUFFIX': KeyBinding(answer: 'fqdn'),
+          'DEPLOY_ENV': KeyBinding(answer: 'stage'),
+        },
+      );
+
+      await step.apply(context);
+
+      expect(machine.files.contents[path], contains('DOMAIN_SUFFIX="m1.example.com"'));
+      expect(machine.files.contents[path], contains('DEPLOY_ENV=""'));
+      expect(
+        await step.check(context),
+        isA<Satisfied>(),
+        reason: 'the row is finished; without this it would report work on every run for ever',
+      );
+    });
+
+    test('THE INNOCENT NEIGHBOUR: an answer that holds something is still written', () async {
+      // Without this, a step that skipped every value would pass the assertion above and write a
+      // file of nothing at all.
+      final HostMachine machine = machineWith();
+      await stepWith().apply(contextOn(machine));
+
+      expect(machine.files.contents[path], contains('DEPLOY_ENV="dev"'));
+    });
+  });
+
   group('what it refuses rather than writes', () {
     test('a key the template does not declare, by name', () async {
       final CheckResult answer = await stepWith(
