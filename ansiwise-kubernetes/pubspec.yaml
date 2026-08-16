@@ -26,6 +26,5 @@ dev_dependencies:
   # The scan that keeps the composer the one place a kubectl invocation is spelled.
   ansiwise_checks:
     git:
-      url: https://github.com/simetrixch/ansiwise-api.git
+      url: https://github.com/simetrixch/ansiwise-checks.git
       ref: master
-      path: checks

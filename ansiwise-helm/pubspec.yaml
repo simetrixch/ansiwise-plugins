@@ -29,6 +29,5 @@ dev_dependencies:
   # The scan that keeps this package to its tool and off any application of it.
   ansiwise_checks:
     git:
-      url: https://github.com/simetrixch/ansiwise-api.git
+      url: https://github.com/simetrixch/ansiwise-checks.git
       ref: master
-      path: checks
