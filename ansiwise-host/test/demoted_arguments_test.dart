@@ -33,8 +33,11 @@ void main() {
     'create_file_from_template': <String>['path', 'file_mode'],
     // An empty list here used to mean "switch nothing off", which is a row that does nothing at
     // all: a program wanting no addon switched off leaves the row out. Absent-or-stated instead, so
-    // a row that forgot the list is refused rather than quietly running for nothing.
-    'disable_addons': <String>['addons'],
+    // a row that forgot the list is refused rather than quietly running for nothing. The three
+    // commands used to be spelled in this package under the name of one product's cluster snap;
+    // which snap runs a cluster is the product's substrate choice, so each command is the row's.
+    'disable_addons': <String>['addons', 'status_command', 'enable_command', 'disable_command'],
+    'enable_addons': <String>['status_command', 'enable_command', 'disable_command'],
     'export_kubeconfig': <String>['credentials_command'],
     'install_pinned_tool': <String>['pin_prefixes'],
     // The whole layout of the image mirror. Where the profile and the credential file stand, which
@@ -74,8 +77,9 @@ void main() {
     // it is written with by whoever reads it. Neither is Calico's.
     'stamp_calico_pool_cidr_in_cni_manifest': <String>['manifest_path', 'file_mode'],
     // How long an addon is given, and how often it is looked at. Both are one deployment's patience
-    // with one machine, and a number here made this package decide it for every caller.
-    'wait_for_addons_enabled': <String>['timeout_seconds', 'interval_seconds'],
+    // with one machine, and a number here made this package decide it for every caller. The status
+    // command is the row's for the same reason it is on the switching steps.
+    'wait_for_addons_enabled': <String>['timeout_seconds', 'interval_seconds', 'status_command'],
     'write_connmark_nft_table': <String>['mark'],
     'write_netplan_public_src_routing': <String>['path', 'table'],
     'write_public_src_routing_script': <String>['mark', 'table', 'priority'],

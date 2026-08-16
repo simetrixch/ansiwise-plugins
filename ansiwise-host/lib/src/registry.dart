@@ -22,12 +22,11 @@ import 'steps/host/install_packages.dart';
 import 'steps/host/install_pinned_tool.dart';
 import 'steps/host/install_snap.dart';
 import 'steps/host/install_tailscale_client.dart';
-import 'steps/host/link_microk8s_storage_path.dart';
+import 'steps/host/link_storage_path.dart';
 import 'steps/host/measure_coalesced.dart';
 import 'steps/host/preflight_registry_pull_credential.dart';
 import 'steps/host/remove_snap.dart';
 import 'steps/host/remove_unused_packages.dart';
-import 'steps/host/restart_microk8s_snap_for_pod_cidr.dart';
 import 'steps/host/require_commands.dart';
 import 'steps/host/require_free_disk.dart';
 import 'steps/host/require_answer_matches.dart';
@@ -185,12 +184,6 @@ const Map<StepName, RegisteredStep> hostSteps = <StepName, RegisteredStep>{
   // entries stand in the order a program runs them: the pod range is stamped before anything is
   // given an address out of it, the addons go on, the wait proves they took, and whatever must
   // stay off is switched off last because some of them come on by themselves.
-  StepName('restart_microk8s_snap_for_pod_cidr'): RegisteredStep(
-    name: StepName('restart_microk8s_snap_for_pod_cidr'),
-    source: 'lib/src/steps/host/restart_microk8s_snap_for_pod_cidr.dart:21',
-    create: RestartMicrok8sSnapForPodCidr.fromArguments,
-    arguments: RestartMicrok8sSnapForPodCidr.arguments,
-  ),
   StepName('stamp_calico_pool_cidr_in_cni_manifest'): RegisteredStep(
     name: StepName('stamp_calico_pool_cidr_in_cni_manifest'),
     source: 'lib/src/steps/host/stamp_calico_pool_cidr_in_cni_manifest.dart:18',
@@ -199,7 +192,7 @@ const Map<StepName, RegisteredStep> hostSteps = <StepName, RegisteredStep>{
   ),
   StepName('enable_addons'): RegisteredStep(
     name: StepName('enable_addons'),
-    source: 'lib/src/steps/host/enable_addons.dart:31',
+    source: 'lib/src/steps/host/enable_addons.dart:32',
     create: EnableAddons.fromArguments,
     arguments: EnableAddons.arguments,
   ),
@@ -258,12 +251,12 @@ const Map<StepName, RegisteredStep> hostSteps = <StepName, RegisteredStep>{
     arguments: CreateStorageDirectory.arguments,
     answers: CreateStorageDirectory.answers,
   ),
-  StepName('link_microk8s_storage_path'): RegisteredStep(
-    name: StepName('link_microk8s_storage_path'),
-    source: 'lib/src/steps/host/link_microk8s_storage_path.dart:13',
-    create: LinkMicrok8sStoragePath.fromArguments,
-    arguments: LinkMicrok8sStoragePath.arguments,
-    answers: LinkMicrok8sStoragePath.answers,
+  StepName('link_storage_path'): RegisteredStep(
+    name: StepName('link_storage_path'),
+    source: 'lib/src/steps/host/link_storage_path.dart:13',
+    create: LinkStoragePath.fromArguments,
+    arguments: LinkStoragePath.arguments,
+    answers: LinkStoragePath.answers,
   ),
   // Tools fetched onto the machine.
   StepName('ensure_tool_prerequisites'): RegisteredStep(

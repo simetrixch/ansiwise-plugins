@@ -8,7 +8,7 @@ import 'host_fixture.dart';
 /// machine: its real name servers, and its packet-filtering backend.
 void main() {
   const StepName under = StepName('under_test');
-  const String argsPath = '/var/snap/microk8s/current/args/kube-proxy';
+  const String argsPath = '/etc/proxy/args';
 
   group('a flag in the file a process is started with', () {
     // The row a program writes: which backend a service paints its rules into is one line of one
@@ -20,7 +20,7 @@ void main() {
       flag: '--proxy-mode',
       value: 'nftables',
       fileMode: 384,
-      restart: <String>['snap', 'restart', 'microk8s.daemon-kubelite'],
+      restart: <String>['snap', 'restart', 'proxy-daemon'],
     );
 
     test('the arguments carry the flag exactly once', () async {

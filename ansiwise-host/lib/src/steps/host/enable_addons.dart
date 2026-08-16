@@ -18,11 +18,12 @@ import 'addon_status.dart';
 /// **WHAT AN ADDON INSTALLED IS CHANGED BY CHANGING THE OBJECT, NEVER BY SWITCHING THE ADDON OFF AND
 /// ON.** This was paid for on real machines.
 ///
-/// - **The obvious fix is the one that fails.** Switching an addon off and on again is fragile from
-///   MicroK8s 1.32 onwards when it is driven from a script rather than typed: the disable does not
-///   always finish before the enable starts, and what comes back is a half-installed addon that
-///   reports success. Editing the object works on every version, because what an addon leaves behind
-///   is an ordinary object in the cluster and nothing about it is special.
+/// - **The obvious fix is the one that fails.** On the snap this was learned on, switching an addon
+///   off and on again is fragile from its 1.32 release onwards when it is driven from a script
+///   rather than typed: the disable does not always finish before the enable starts, and what comes
+///   back is a half-installed addon that reports success. Editing the object works on every version,
+///   because what an addon leaves behind is an ordinary object in the cluster and nothing about it
+///   is special.
 /// - **The name service is the case this was learned on, and the failure is silent.** The cluster's
 ///   own name service inherits the machine's resolver file, which on some releases names the local
 ///   stub — and a pod's loopback is its own, not the machine's. So every lookup for anything outside
@@ -30,11 +31,20 @@ import 'addon_status.dart';
 ///   itself enabled and healthy.
 final class EnableAddons extends ReversibleStep<List<String>> {
   /// Switches on each of [addons], in order.
-  const EnableAddons({required this.addons});
+  const EnableAddons({
+    required this.addons,
+    required this.statusCommand,
+    required this.enableCommand,
+    required this.disableCommand,
+  });
 
   /// Builds the step from what the program gave it.
-  factory EnableAddons.fromArguments(Arguments arguments) =>
-      EnableAddons(addons: arguments.textList('addons'));
+  factory EnableAddons.fromArguments(Arguments arguments) => EnableAddons(
+    addons: arguments.textList('addons'),
+    statusCommand: arguments.textList('status_command'),
+    enableCommand: arguments.textList('enable_command'),
+    disableCommand: arguments.textList('disable_command'),
+  );
 
   /// What this step accepts.
   static const List<ArgumentSpec> arguments = <ArgumentSpec>[
@@ -47,17 +57,31 @@ final class EnableAddons extends ReversibleStep<List<String>> {
           'addon is switched on with. Access control belongs first, or every access rule after it '
           'is accepted and enforces nothing',
     ),
+    statusCommandArgument,
+    enableCommandArgument,
+    // For the undo alone: cleaning up after a failure switches off exactly what this run switched
+    // on, and which command does that is as much the row's to write as the one that switched it on.
+    disableCommandArgument,
   ];
 
   /// The addons this cluster runs, as they are asked for.
   final List<String> addons;
+
+  /// The command that prints the state of the node with its addons.
+  final List<String> statusCommand;
+
+  /// The command an addon request is appended to in order to switch it on.
+  final List<String> enableCommand;
+
+  /// The command an addon name is appended to in order to switch it off, used by the undo.
+  final List<String> disableCommand;
 
   /// The names behind those requests, which is what the status answers under.
   List<String> get names => <String>[for (final String asked in addons) addonNameIn(asked)];
 
   @override
   Future<CheckResult> check(StepContext context) async {
-    final Set<String>? on = await enabledAddons(context);
+    final Set<String>? on = await enabledAddons(context, statusCommand);
     if (on == null) {
       return const CheckResult.blocked(
         'the addons could not be read, so nothing says which of them are on',
@@ -71,17 +95,17 @@ final class EnableAddons extends ReversibleStep<List<String>> {
 
   @override
   Future<StepPlan> plan(StepContext context) async {
-    final Set<String> on = await enabledAddons(context) ?? const <String>{};
-    return StepPlan.argv(<String>['microk8s', 'enable', ..._missing(on)]);
+    final Set<String> on = await enabledAddons(context, statusCommand) ?? const <String>{};
+    return StepPlan.argv(<String>[...enableCommand, ..._missing(on)]);
   }
 
   @override
   Future<void> apply(StepContext context) async {
-    final Set<String> on = await enabledAddons(context) ?? const <String>{};
+    final Set<String> on = await enabledAddons(context, statusCommand) ?? const <String>{};
     // One at a time and in the order the program wrote them, so an addon that fails is named and
     // nothing after it is switched on against a cluster that is missing what comes before it.
     for (final String asked in _missing(on)) {
-      final List<String> argv = <String>['microk8s', 'enable', asked];
+      final List<String> argv = <String>[...enableCommand, asked];
       final CommandResult switched = await context.shell.run(
         Command.detailed(argv.first, arguments: argv.sublist(1), elevated: true),
       );
@@ -105,7 +129,9 @@ final class EnableAddons extends ReversibleStep<List<String>> {
   /// there before.
   @override
   Future<List<String>> capture(StepContext context) async => <String>[
-    for (final String asked in _missing(await enabledAddons(context) ?? const <String>{}))
+    for (final String asked in _missing(
+      await enabledAddons(context, statusCommand) ?? const <String>{},
+    ))
       addonNameIn(asked),
   ];
 
@@ -114,8 +140,9 @@ final class EnableAddons extends ReversibleStep<List<String>> {
     // In reverse, because the order they went on in is load-bearing: whatever the row put first is
     // switched off last.
     for (final String addon in captured.reversed) {
+      final List<String> argv = <String>[...disableCommand, addon];
       await context.shell.run(
-        Command.detailed('microk8s', arguments: <String>['disable', addon], elevated: true),
+        Command.detailed(argv.first, arguments: argv.sublist(1), elevated: true),
       );
     }
   }

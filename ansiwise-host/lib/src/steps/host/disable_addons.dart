@@ -15,11 +15,20 @@ import 'addon_status.dart';
 /// against two runs racing each other.
 final class DisableAddons extends ReversibleStep<List<String>> {
   /// Switches off each of [addons] that is on.
-  const DisableAddons({required this.addons});
+  const DisableAddons({
+    required this.addons,
+    required this.statusCommand,
+    required this.enableCommand,
+    required this.disableCommand,
+  });
 
   /// Builds the step from what the program gave it.
-  factory DisableAddons.fromArguments(Arguments arguments) =>
-      DisableAddons(addons: arguments.textList('addons'));
+  factory DisableAddons.fromArguments(Arguments arguments) => DisableAddons(
+    addons: arguments.textList('addons'),
+    statusCommand: arguments.textList('status_command'),
+    enableCommand: arguments.textList('enable_command'),
+    disableCommand: arguments.textList('disable_command'),
+  );
 
   /// What this step accepts.
   static const List<ArgumentSpec> arguments = <ArgumentSpec>[
@@ -28,17 +37,31 @@ final class DisableAddons extends ReversibleStep<List<String>> {
       kind: ArgumentKind.textList,
       describes: 'the addons that must be off on this cluster, whatever switched them on',
     ),
+    statusCommandArgument,
+    // For the undo alone: cleaning up after a failure switches back on exactly what this run
+    // switched off, and which command does that is as much the row's to write as the disable.
+    enableCommandArgument,
+    disableCommandArgument,
   ];
 
   /// The addons that must be off.
   final List<String> addons;
+
+  /// The command that prints the state of the node with its addons.
+  final List<String> statusCommand;
+
+  /// The command an addon name is appended to in order to switch it back on, used by the undo.
+  final List<String> enableCommand;
+
+  /// The command an addon name is appended to in order to switch it off.
+  final List<String> disableCommand;
 
   @override
   Future<CheckResult> check(StepContext context) async {
     if (addons.isEmpty) {
       return const CheckResult.satisfied('no addon is declared to be off');
     }
-    final Set<String>? on = await enabledAddons(context);
+    final Set<String>? on = await enabledAddons(context, statusCommand);
     if (on == null) {
       return const CheckResult.blocked(
         'the addons could not be read, so nothing says which of them are on',
@@ -52,15 +75,15 @@ final class DisableAddons extends ReversibleStep<List<String>> {
 
   @override
   Future<StepPlan> plan(StepContext context) async {
-    final Set<String> on = await enabledAddons(context) ?? const <String>{};
-    return StepPlan.argv(<String>['microk8s', 'disable', ..._stillOn(on)]);
+    final Set<String> on = await enabledAddons(context, statusCommand) ?? const <String>{};
+    return StepPlan.argv(<String>[...disableCommand, ..._stillOn(on)]);
   }
 
   @override
   Future<void> apply(StepContext context) async {
-    final Set<String> on = await enabledAddons(context) ?? const <String>{};
+    final Set<String> on = await enabledAddons(context, statusCommand) ?? const <String>{};
     for (final String addon in _stillOn(on)) {
-      final List<String> argv = <String>['microk8s', 'disable', addon];
+      final List<String> argv = <String>[...disableCommand, addon];
       final CommandResult switched = await context.shell.run(
         Command.detailed(argv.first, arguments: argv.sublist(1), elevated: true),
       );
@@ -82,13 +105,14 @@ final class DisableAddons extends ReversibleStep<List<String>> {
   /// an undo, and a program names an addon here in order not to run it.
   @override
   Future<List<String>> capture(StepContext context) async =>
-      _stillOn(await enabledAddons(context) ?? const <String>{});
+      _stillOn(await enabledAddons(context, statusCommand) ?? const <String>{});
 
   @override
   Future<void> undo(StepContext context, List<String> captured) async {
     for (final String addon in captured) {
+      final List<String> argv = <String>[...enableCommand, addon];
       await context.shell.run(
-        Command.detailed('microk8s', arguments: <String>['enable', addon], elevated: true),
+        Command.detailed(argv.first, arguments: argv.sublist(1), elevated: true),
       );
     }
   }

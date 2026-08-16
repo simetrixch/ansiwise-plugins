@@ -8,7 +8,7 @@ import 'host_fixture.dart';
 /// when the file carries none of it, and that the process is made to read the file again.
 void main() {
   const StepName under = StepName('under_test');
-  const String argsPath = '/var/snap/microk8s/current/args/kube-proxy';
+  const String argsPath = '/etc/proxy/args';
 
   // The row a program writes. Which file, which flag, what it is set to, and — because the step
   // knows no product — with which permissions the file is written and which command makes the
@@ -18,7 +18,7 @@ void main() {
     flag: '--cluster-cidr',
     value: '10.244.0.0/16',
     fileMode: 384,
-    restart: <String>['snap', 'restart', 'microk8s.daemon-kubelite'],
+    restart: <String>['snap', 'restart', 'proxy-daemon'],
   );
 
   test('a file carrying no such flag gains the line at the end', () async {
@@ -44,7 +44,7 @@ void main() {
     machine.files.contents[argsPath] = '';
 
     await clusterCidr.apply(machine.contextFor(under));
-    expect(machine.changing, contains('snap restart microk8s.daemon-kubelite'));
+    expect(machine.changing, contains('snap restart proxy-daemon'));
   });
 
   group('waiting for the restarted process to answer again', () {
@@ -58,8 +58,8 @@ void main() {
       flag: '--cluster-cidr',
       value: '10.244.0.0/16',
       fileMode: 384,
-      restart: <String>['snap', 'restart', 'microk8s.daemon-kubelite'],
-      ready: <String>['microk8s', 'status', '--wait-ready'],
+      restart: <String>['snap', 'restart', 'proxy-daemon'],
+      ready: <String>['cluster', 'status', '--wait-ready'],
       readyTimeout: Duration(seconds: 30),
     );
 
@@ -69,12 +69,12 @@ void main() {
       // Down at first, up on the third ask: the shape a restart really has.
       // The effect runs BEFORE the answer is looked up, so the third ask is the one that succeeds.
       int asked = 0;
-      const String ask = 'microk8s status --wait-ready';
+      const String ask = 'cluster status --wait-ready';
       machine.shell.fails(ask);
       machine.shell.changes(ask, () {
         asked += 1;
         if (asked >= 3) {
-          machine.shell.answers(ask, 'microk8s is running');
+          machine.shell.answers(ask, 'the node is running');
         }
       });
 
@@ -82,8 +82,8 @@ void main() {
 
       expect(asked, 3, reason: 'it stopped at the first success rather than asking on');
       expect(
-        machine.shell.ran.indexOf('snap restart microk8s.daemon-kubelite'),
-        lessThan(machine.shell.ran.indexOf('microk8s status --wait-ready')),
+        machine.shell.ran.indexOf('snap restart proxy-daemon'),
+        lessThan(machine.shell.ran.indexOf('cluster status --wait-ready')),
         reason: 'the wait is after the restart, which is the only order that means anything',
       );
     });
@@ -91,7 +91,7 @@ void main() {
     test('a process that never answers fails loudly, naming both commands', () async {
       final HostMachine machine = HostMachine();
       machine.files.contents[argsPath] = '';
-      machine.shell.fails('microk8s status --wait-ready');
+      machine.shell.fails('cluster status --wait-ready');
 
       await expectLater(
         waiting.apply(machine.contextFor(under)),
@@ -100,7 +100,7 @@ void main() {
               .having(
                 (StateError e) => e.message,
                 'names what did not answer',
-                contains('microk8s status --wait-ready'),
+                contains('cluster status --wait-ready'),
               )
               .having(
                 (StateError e) => e.message,

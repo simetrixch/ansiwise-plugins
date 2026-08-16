@@ -1,8 +1,7 @@
 # The host plugin: steps that act on a Linux machine as a machine.
 #
 # This package knows TOOLS — apt, dpkg, snap, sshd, systemd, netplan, nft, ip, curl, mount,
-# the container runtime, the MicroK8s snap — and never an application of them. No default in
-# here names a product:
+# the container runtime — and never an application of them. No default in here names a product:
 # every file path, table name or unit name a product decides is a required argument, and the
 # value stands in that product's program row.
 #
@@ -17,15 +16,6 @@ environment:
   sdk: ^3.12.0
 
 dependencies:
-  # NAMED BY GIT REF like every other sibling, and not by a directory path. A path here is resolved
-  # inside whatever checkout pub fetched and recorded as a commit, while the binary that composes
-  # this package names the same package at a ref — and pub refuses to reconcile the two, so nothing
-  # resolved from a clone at all.
-  ansiwise_kubernetes:
-    git:
-      url: https://github.com/simetrixch/ansiwise-plugins.git
-      ref: master
-      path: ansiwise-kubernetes
   ansiwise_api:
     git:
       url: https://github.com/simetrixch/ansiwise-api.git

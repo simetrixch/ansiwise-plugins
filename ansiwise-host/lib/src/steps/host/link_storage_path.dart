@@ -10,25 +10,25 @@ import 'package:ansiwise_api/ansiwise_api.dart';
 /// **A link pointing somewhere else is left alone unless the operator asks for it.** It is the only
 /// thing saying where this cluster's volumes are, and repointing it silently would strand every one
 /// of them. Asking for it by name is what says the operator knows.
-final class LinkMicrok8sStoragePath extends IrreversibleStep {
-  /// Points [microk8sStoragePath] at the answered storage directory, replacing a wrong link only
-  /// under [force].
-  const LinkMicrok8sStoragePath({required this.microk8sStoragePath, required this.force});
+final class LinkStoragePath extends IrreversibleStep {
+  /// Points [linkPath] at the answered storage directory, replacing a wrong link only under
+  /// [force].
+  const LinkStoragePath({required this.linkPath, required this.force});
 
   /// Builds the step from what the program gave it.
-  factory LinkMicrok8sStoragePath.fromArguments(Arguments arguments) => LinkMicrok8sStoragePath(
-    microk8sStoragePath: arguments.text('microk8s_storage_path'),
-    force: arguments.flag('force'),
-  );
+  factory LinkStoragePath.fromArguments(Arguments arguments) =>
+      LinkStoragePath(linkPath: arguments.text('link_path'), force: arguments.flag('force'));
 
   /// What this step accepts.
   static const List<ArgumentSpec> arguments = <ArgumentSpec>[
-    // No default: where the volume provider writes is decided by how the snap was installed, so
+    // No default: where the volume provider writes is decided by how the cluster was installed, so
     // the program row states it.
     ArgumentSpec(
-      name: 'microk8s_storage_path',
+      name: 'link_path',
       kind: ArgumentKind.text,
-      describes: "the directory the cluster's own volume provider writes into",
+      describes:
+          "the path the cluster's volume provider writes through, which becomes a link to the "
+          'storage directory',
     ),
     ArgumentSpec(
       name: 'force',
@@ -47,8 +47,8 @@ final class LinkMicrok8sStoragePath extends IrreversibleStep {
   /// somewhere nothing was created.
   static const List<String> answers = <String>['storage_directory'];
 
-  /// The directory the volume provider writes into.
-  final String microk8sStoragePath;
+  /// The path the volume provider writes through.
+  final String linkPath;
 
   /// Whether a link pointing elsewhere may be repointed.
   final bool force;
@@ -71,68 +71,64 @@ final class LinkMicrok8sStoragePath extends IrreversibleStep {
     final String? target = await _linkTarget(context);
     if (target == context.answers.text('storage_directory')) {
       return CheckResult.satisfied(
-        '$microk8sStoragePath points at ${context.answers.text('storage_directory')}',
+        '$linkPath points at ${context.answers.text('storage_directory')}',
       );
     }
     if (target != null && !force) {
       context.log.warn(
-        '$microk8sStoragePath points at $target rather than at ${context.answers.text('storage_directory')}. It is left where '
-        'it is: every volume this cluster has already handed out lives under $target, and '
-        'repointing the link strands all of them. Set force to repoint it.',
+        '$linkPath points at $target rather than at ${context.answers.text('storage_directory')}. '
+        'It is left where it is: every volume this cluster has already handed out lives under '
+        '$target, and repointing the link strands all of them. Set force to repoint it.',
       );
-      return CheckResult.satisfied('$microk8sStoragePath points at $target and was left alone');
+      return CheckResult.satisfied('$linkPath points at $target and was left alone');
     }
     return const CheckResult.ready();
   }
 
   @override
-  Future<StepPlan> plan(StepContext context) async => StepPlan.argv(<String>[
-    'ln',
-    '-s',
-    context.answers.text('storage_directory'),
-    microk8sStoragePath,
-  ]);
+  Future<StepPlan> plan(StepContext context) async =>
+      StepPlan.argv(<String>['ln', '-s', context.answers.text('storage_directory'), linkPath]);
 
   @override
   Future<void> apply(StepContext context) async {
     final String? target = await _linkTarget(context);
     if (target != null) {
       // Only reached under force, because the check answers satisfied otherwise.
-      context.log.warn('repointing $microk8sStoragePath away from $target');
-      await _mustRun(context, <String>['rm', microk8sStoragePath]);
+      context.log.warn('repointing $linkPath away from $target');
+      await _mustRun(context, <String>['rm', linkPath]);
     } else if (await _isRealDirectory(context)) {
-      final String moved = '$microk8sStoragePath.orig.${_stampOfNow(context)}';
+      final String moved = '$linkPath.orig.${_stampOfNow(context)}';
       context.log.info(
-        '$microk8sStoragePath is a directory the cluster may already have written into — it is at '
+        '$linkPath is a directory the cluster may already have written into — it is at '
         '$moved from now on',
       );
-      await _mustRun(context, <String>['mv', microk8sStoragePath, moved]);
+      await _mustRun(context, <String>['mv', linkPath, moved]);
     }
     await _mustRun(context, <String>[
       'ln',
       '-s',
       context.answers.text('storage_directory'),
-      microk8sStoragePath,
+      linkPath,
     ]);
   }
 
   /// Where the link points, or null when there is no link there.
   Future<String?> _linkTarget(StepContext context) async {
     final CommandResult isLink = await context.shell.run(
-      Command.observing('test', <String>['-L', microk8sStoragePath]),
+      Command.observing('test', <String>['-L', linkPath]),
     );
     if (!isLink.ok) {
       return null;
     }
     final CommandResult target = await context.shell.run(
-      Command.observing('readlink', <String>['-f', microk8sStoragePath]),
+      Command.observing('readlink', <String>['-f', linkPath]),
     );
     return target.ok && target.trimmed.isNotEmpty ? target.trimmed : null;
   }
 
   Future<bool> _isRealDirectory(StepContext context) async {
     final CommandResult directory = await context.shell.run(
-      Command.observing('test', <String>['-d', microk8sStoragePath]),
+      Command.observing('test', <String>['-d', linkPath]),
     );
     return directory.ok;
   }

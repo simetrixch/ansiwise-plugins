@@ -1,9 +1,12 @@
-/// How the MicroK8s snap is asked which of its addons are on, and how its answer is read.
+/// How a cluster snap is asked about its addons, and how its answer is read.
 ///
-/// **These are facts about that snap, and no single step owns them.** Three steps ask the same
-/// question — the one that switches addons on, the one that switches them off, and the one that
-/// waits for them — so the command and the shape of its answer stand here once instead of on
-/// whichever of the three happened to be written first.
+/// **The COMMANDS come from the row, and the shape of the answer is code.** Three steps ask the
+/// same question — the one that switches addons on, the one that switches them off, and the one
+/// that waits for them — so the reading stands here once instead of on whichever of the three
+/// happened to be written first. Which snap runs the cluster is a product's choice, so the words
+/// each command is run with are required arguments and stand in that product's program row; the
+/// exit-code and section knowledge below is a fact of the answer format and is mechanism, not
+/// configuration.
 ///
 /// **THE ANSWER IS THE OUTPUT AND NEVER THE EXIT CODE.** The status returns zero on a node that
 /// answered, whatever the answer was: a stopped node prints that it is not running, tells the
@@ -19,10 +22,36 @@ library;
 
 import 'package:ansiwise_api/ansiwise_api.dart';
 
-/// What is run to learn which addons are on.
+/// The argument every step that reads the addon status declares.
 ///
-/// Observing: it prints the state of the node and changes nothing, so a dry run may ask it.
-const Command addonStatusCommand = Command.observing('microk8s', <String>['status']);
+/// Required and without a default: the verbs are the cluster snap's own, and which snap runs the
+/// cluster is the product's choice, so a value here would decide it for every caller.
+const ArgumentSpec statusCommandArgument = ArgumentSpec(
+  name: 'status_command',
+  kind: ArgumentKind.textList,
+  describes:
+      'the command that prints the state of the node with its addons, given as the program and '
+      'its arguments — it must only look, and its output carries the enabled and disabled sections '
+      'this step reads',
+);
+
+/// The argument every step that switches an addon on declares.
+const ArgumentSpec enableCommandArgument = ArgumentSpec(
+  name: 'enable_command',
+  kind: ArgumentKind.textList,
+  describes:
+      'the command an addon request is appended to in order to switch that addon on, given as the '
+      'program and its arguments',
+);
+
+/// The argument every step that switches an addon off declares.
+const ArgumentSpec disableCommandArgument = ArgumentSpec(
+  name: 'disable_command',
+  kind: ArgumentKind.textList,
+  describes:
+      'the command an addon name is appended to in order to switch that addon off, given as the '
+      'program and its arguments',
+);
 
 /// The heading the status writes above what is on.
 const String addonsEnabledHeading = 'enabled:';
@@ -30,12 +59,17 @@ const String addonsEnabledHeading = 'enabled:';
 /// The heading it writes above what is off.
 const String addonsDisabledHeading = 'disabled:';
 
-/// Which addons are on, or null when the status could not be run at all.
+/// Which addons are on, asked with [statusCommand], or null when it could not be run at all.
+///
+/// Observing on the row's word: the command prints the state of the node and changes nothing, so a
+/// dry run may ask it.
 ///
 /// Null and an empty set are different answers and a caller has to tell them apart: nothing could be
 /// read, against a node that answered and named no addon as on.
-Future<Set<String>?> enabledAddons(StepContext context) async {
-  final CommandResult status = await context.shell.run(addonStatusCommand);
+Future<Set<String>?> enabledAddons(StepContext context, List<String> statusCommand) async {
+  final CommandResult status = await context.shell.run(
+    Command.observing(statusCommand.first, statusCommand.sublist(1)),
+  );
   if (!status.ok) {
     return null;
   }

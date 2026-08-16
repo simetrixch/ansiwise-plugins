@@ -47,7 +47,7 @@ const Set<String> notCoveredByAFakeMachine = <String>{
   // exercised while the probe handed it a placeholder path no installation gives, which measured a
   // branch the product does not take. Closing it needs a program that answers a path, not a fixture.
   'create_storage_directory',
-  // Both leave their postcondition behind with `microk8s enable` or `microk8s disable`, and a fake
+  // Both leave their postcondition behind with the row's enable or disable command, and a fake
   // shell records those without carrying them out — so the status it answers after the apply is the
   // status it answered before, and nothing about the second run would be measured.
   'disable_addons',
@@ -61,14 +61,8 @@ const Set<String> notCoveredByAFakeMachine = <String>{
   'install_pinned_tool',
   'install_snap',
   'install_tailscale_client',
-  'link_microk8s_storage_path',
+  'link_storage_path',
   'remove_snap',
-  // Its apply ends by proving the node came back, and a fake shell answers a status with exit zero
-  // and no output — while what this step reads is the LINE the status writes, not its code. So the
-  // apply throws on a fake machine that is neither up nor down, and the second run measures nothing.
-  // Making it reachable needs a fixture that can answer one command with text, which is what a
-  // fixture is for; until one exists this step's repeatability rests on nothing here.
-  'restart_microk8s_snap_for_pod_cidr',
   // Its apply restarts the service that reads the file it wrote, and a fake shell records a restart
   // without carrying it out.
   'set_process_flag',

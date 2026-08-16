@@ -9,10 +9,10 @@ import 'host_fixture.dart';
 void main() {
   const StepName under = StepName('under_test');
   const String storagePath = '/mnt/data';
-  const String storageDirectory = '$storagePath/microk8s';
+  const String storageDirectory = '$storagePath/volumes';
 
-  /// The path MicroK8s really writes through, as a program row would state it.
-  const String linkPath = '/var/snap/microk8s/common/default-storage';
+  /// The path the cluster's volume provider really writes through, as a program row would state it.
+  const String linkPath = '/var/lib/cluster/default-storage';
 
   /// A run on a machine with a separate filesystem, or on one without where both are empty.
   ///
@@ -76,8 +76,7 @@ void main() {
   });
 
   group('the link the volume provider writes through', () {
-    LinkMicrok8sStoragePath link({bool force = false}) =>
-        LinkMicrok8sStoragePath(microk8sStoragePath: linkPath, force: force);
+    LinkStoragePath link({bool force = false}) => LinkStoragePath(linkPath: linkPath, force: force);
 
     test('a real directory already there is moved aside before the link is made', () async {
       // The cluster may already have written volumes into it, and replacing it with a link would
@@ -131,10 +130,7 @@ void main() {
     });
 
     test('a machine with no separate filesystem is not linked at all', () async {
-      const LinkMicrok8sStoragePath none = LinkMicrok8sStoragePath(
-        microk8sStoragePath: linkPath,
-        force: false,
-      );
+      const LinkStoragePath none = LinkStoragePath(linkPath: linkPath, force: false);
       final HostMachine machine = HostMachine();
       expect(await none.check(withStorage(machine, path: '', directory: '')), isA<Satisfied>());
       expect(machine.changing, isEmpty);

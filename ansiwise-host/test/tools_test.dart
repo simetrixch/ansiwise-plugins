@@ -401,7 +401,7 @@ void main() {
   group('the shell aliases', () {
     const AddShellAlias step = AddShellAlias(
       alias: 'kubectl',
-      command: 'microk8s.kubectl',
+      command: 'cluster.kubectl',
       rcFiles: <String>['.bashrc', '.zshrc'],
     );
 
@@ -439,7 +439,7 @@ void main() {
 
     test('a second run adds no second line', () async {
       final HostMachine machine = account(
-        rcFiles: <String, String>{'.bashrc': "alias kubectl='microk8s.kubectl'\n"},
+        rcFiles: <String, String>{'.bashrc': "alias kubectl='cluster.kubectl'\n"},
       );
       final StepContext context = machine.contextFor(under);
       expect(await step.check(context), isA<Satisfied>());
@@ -460,7 +460,7 @@ void main() {
   });
 
   group('the credentials for this cluster', () {
-    const List<String> credentialsCommand = <String>['microk8s', 'config'];
+    const List<String> credentialsCommand = <String>['cluster', 'config'];
     const ExportKubeconfig step = ExportKubeconfig(credentialsCommand: credentialsCommand);
     const String credentials = 'apiVersion: v1\nkind: Config\nclusters: []\n';
 
@@ -471,7 +471,7 @@ void main() {
           'getent passwd $operatorUser',
           '$operatorUser:x:1000:1000::$operatorHome:/bin/bash\n',
         )
-        ..answers('microk8s config', credentials);
+        ..answers('cluster config', credentials);
 
       final StepContext context = machine.contextFor(under);
       expect(await step.check(context), isA<Ready>());
@@ -490,7 +490,7 @@ void main() {
           'getent passwd $operatorUser',
           '$operatorUser:x:1000:1000::$operatorHome:/bin/bash\n',
         )
-        ..answers('microk8s config', 'apiVersion: v1\nusers:\n- name: admin\n  token: s3cr3t\n');
+        ..answers('cluster config', 'apiVersion: v1\nusers:\n- name: admin\n  token: s3cr3t\n');
 
       final StepPlan plan = await step.plan(machine.contextFor(under));
       expect((plan as DiffPlan).after, isNot(contains('s3cr3t')));

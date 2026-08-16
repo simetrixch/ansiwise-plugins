@@ -4,7 +4,8 @@ import 'package:test/test.dart';
 
 import 'host_fixture.dart';
 
-/// The states a machine can be found in before MicroK8s is on it, and the one that killed a run.
+/// The states a machine can be found in before the pinned snap is on it, and the one that killed a
+/// run.
 ///
 /// Three of them are ONE end state reached from three starting points — nothing installed, installed
 /// on another channel, installed and switched off — and one step answers for all three. That is what
@@ -17,7 +18,7 @@ import 'host_fixture.dart';
 /// so a presence test finds nothing, while the install refuses it as already installed and the whole
 /// run dies there.
 void main() {
-  const String snap = 'microk8s';
+  const String snap = 'somesnap';
   const String channel = '1.35/stable';
   const String anotherChannel = '1.34/stable';
   const StepName under = StepName('under_test');

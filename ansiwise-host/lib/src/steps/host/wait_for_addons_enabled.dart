@@ -30,6 +30,7 @@ final class WaitForAddonsEnabled extends ObservingStep with WaitStep {
   /// Waits up to [timeoutSeconds] for each of [addons] to show up as on.
   const WaitForAddonsEnabled({
     required this.addons,
+    required this.statusCommand,
     required this.timeoutSeconds,
     required this.intervalSeconds,
   });
@@ -37,6 +38,7 @@ final class WaitForAddonsEnabled extends ObservingStep with WaitStep {
   /// Builds the step from what the program gave it.
   factory WaitForAddonsEnabled.fromArguments(Arguments arguments) => WaitForAddonsEnabled(
     addons: arguments.textList('addons'),
+    statusCommand: arguments.textList('status_command'),
     timeoutSeconds: arguments.integer('timeout_seconds'),
     intervalSeconds: arguments.integer('interval_seconds'),
   );
@@ -50,6 +52,7 @@ final class WaitForAddonsEnabled extends ObservingStep with WaitStep {
           'the addons that have to show up as on — written as their names, or as the same requests '
           'the row switching them on writes, of which only the name is held against the status',
     ),
+    statusCommandArgument,
     ArgumentSpec(
       name: 'timeout_seconds',
       kind: ArgumentKind.integer,
@@ -64,6 +67,9 @@ final class WaitForAddonsEnabled extends ObservingStep with WaitStep {
 
   /// The addons that have to show up.
   final List<String> addons;
+
+  /// The command that prints the state of the node with its addons.
+  final List<String> statusCommand;
 
   /// How long they are given.
   final int timeoutSeconds;
@@ -93,7 +99,7 @@ final class WaitForAddonsEnabled extends ObservingStep with WaitStep {
     // The OUTPUT and not the exit code, and the enabled section of it and not the whole. A node that
     // is not running exits zero and prints no such section, so it names nothing here and the wait
     // goes on rather than ending on a cluster that is down.
-    final Set<String> on = await enabledAddons(context) ?? const <String>{};
+    final Set<String> on = await enabledAddons(context, statusCommand) ?? const <String>{};
     return names.every(on.contains);
   }
 }

@@ -4,12 +4,6 @@
 # use this package with that word in it? A name the tool gives itself passes and stays off this
 # list. A name of one product built on a Linux host fails and goes on it.
 #
-# microk8s is NOT on this list, and that is a decision rather than an oversight: the MicroK8s snap
-# is one of the tools this package declares and drives — its manifest names it beside apt, dpkg,
-# snap, sshd, systemd and netplan — and the word is the name that snap gives itself. On the lists
-# of the other tool packages the same word IS forbidden, because there it names a product's choice
-# of substrate rather than the tool in front of the step.
-#
 # One word per line. Blank lines and lines beginning with # are ignored; everything else is matched
 # case-insensitively and word-anchored, so a longer name that merely contains a word is no
 # occurrence of it.
@@ -24,8 +18,12 @@ hostyour
 digita
 simetrix
 
-# That product's choices: the components it deploys, the vendors it rents from, and the name it
-# gave its certificate issuer. Each is a fact of one product, not of any tool this package drives.
+# That product's choices: the distribution it runs its clusters on, the components it deploys, the
+# vendors it rents from, and the name it gave its certificate issuer. Each is a fact of one product,
+# not of any tool this package drives — the snap client is this package's tool, and WHICH snap runs
+# a cluster is the product's substrate choice, so the word stands here as it does on the lists of
+# the other tool packages.
+microk8s
 argocd
 tekton
 zot
