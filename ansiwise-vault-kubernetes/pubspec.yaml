@@ -47,3 +47,4 @@ dev_dependencies:
     git:
       url: https://github.com/simetrixch/ansiwise-checks.git
       ref: master
+      path: registry
