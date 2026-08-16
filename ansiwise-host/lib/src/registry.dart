@@ -35,6 +35,7 @@ import 'steps/host/require_key_login_possible.dart';
 import 'steps/host/require_machine_size.dart';
 import 'steps/host/require_pinned_ubuntu.dart';
 import 'steps/host/set_process_flag.dart';
+import 'steps/host/fill_key_value_file.dart';
 import 'steps/host/set_process_flags.dart';
 import 'steps/host/stamp_calico_pool_cidr_in_cni_manifest.dart';
 import 'steps/host/wait_for_addons_enabled.dart';
@@ -144,6 +145,17 @@ const Map<StepName, RegisteredStep> hostSteps = <StepName, RegisteredStep>{
     source: 'lib/src/steps/host/set_process_flag.dart:31',
     create: SetProcessFlag.fromArguments,
     arguments: SetProcessFlag.arguments,
+  ),
+  // The two files an installation's answers become: what the rest of it reads about itself, and
+  // what its secret store is seeded from. ONE entry for both, because they are the same act on
+  // different files — the template, the target, the permissions, the keys and the word every
+  // refusal uses are all values the row states. It declares no answer of its own: which answer
+  // fills which key is what the row says, so a list here would name one product's questions.
+  StepName('fill_key_value_file'): RegisteredStep(
+    name: StepName('fill_key_value_file'),
+    source: 'lib/src/steps/host/fill_key_value_file.dart:29',
+    create: FillKeyValueFile.fromArguments,
+    arguments: FillKeyValueFile.arguments,
   ),
   StepName('set_process_flags'): RegisteredStep(
     name: StepName('set_process_flags'),

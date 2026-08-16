@@ -26,6 +26,12 @@ const Set<String> notCoveredByAFakeMachine = <String>{
   'add_shell_alias',
   'add_user_to_group',
   'apply_netplan',
+  // Nothing about the fake machine keeps it from being exercised, and no fixture can reach it: the
+  // PROBE hands every text argument with no default the same one-character value, so the template
+  // this step reads and the file it writes are the same path. Filling a file from itself is not the
+  // act this step performs, and a fixture arranges files rather than what the probe hands over. It
+  // is driven directly instead, over two paths that differ, in fill_key_value_file_test.
+  'fill_key_value_file',
   // Nothing about the fake machine keeps it from being exercised: the PROBE does, and no fixture can
   // reach it. Every text argument with no default is handed the same one-character value, so the
   // template this step is told to read and the file it is told to create are the same path — the
