@@ -134,7 +134,9 @@ final class WritePublicSrcRoutingUnit extends ReversibleStep<String?> with FileS
     await super.apply(context);
     // The service manager reads its directory once at start-up and once when it is told to. A file
     // written without telling it is a service that does not exist as far as it is concerned.
-    await context.shell.run(const Command.detailed('systemctl', arguments: <String>['daemon-reload'], elevated: true));
+    await context.shell.run(
+      const Command.detailed('systemctl', arguments: <String>['daemon-reload'], elevated: true),
+    );
   }
 
   /// What the service file held before, or null when it was not there.
@@ -148,13 +150,21 @@ final class WritePublicSrcRoutingUnit extends ReversibleStep<String?> with FileS
   Future<void> undo(StepContext context, String? captured) async {
     // Stopping it first is what takes the rules out of the kernel — putting the file back or
     // deleting it would leave them there with nothing on the machine saying they exist.
-    await context.shell.run(Command.detailed('systemctl', arguments: <String>['disable', '--now', unitName], elevated: true));
+    await context.shell.run(
+      Command.detailed(
+        'systemctl',
+        arguments: <String>['disable', '--now', unitName],
+        elevated: true,
+      ),
+    );
     if (captured == null) {
       await context.files.delete(path);
     } else {
       await context.files.write(path, captured, mode: mode);
     }
-    await context.shell.run(const Command.detailed('systemctl', arguments: <String>['daemon-reload'], elevated: true));
+    await context.shell.run(
+      const Command.detailed('systemctl', arguments: <String>['daemon-reload'], elevated: true),
+    );
   }
 
   /// What goes in each slot of the service file.

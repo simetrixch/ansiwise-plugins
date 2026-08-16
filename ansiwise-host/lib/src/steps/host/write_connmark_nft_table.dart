@@ -109,7 +109,13 @@ final class WriteConnmarkNftTable extends ReversibleStep<String?> with FileStep,
 
   @override
   Future<void> undo(StepContext context, String? captured) async {
-    await context.shell.run(Command.detailed('nft', arguments: <String>['destroy', 'table', 'inet', tableName], elevated: true));
+    await context.shell.run(
+      Command.detailed(
+        'nft',
+        arguments: <String>['destroy', 'table', 'inet', tableName],
+        elevated: true,
+      ),
+    );
     if (captured == null) {
       await context.files.delete(path);
       return;

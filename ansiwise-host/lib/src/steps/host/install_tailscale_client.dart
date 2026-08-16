@@ -97,19 +97,34 @@ final class InstallTailscaleClient extends ReversibleStep<bool> {
     if (captured) {
       return;
     }
-    await context.shell.run(const Command.detailed('systemctl', arguments: <String>['disable', '--now', service], elevated: true));
+    await context.shell.run(
+      const Command.detailed(
+        'systemctl',
+        arguments: <String>['disable', '--now', service],
+        elevated: true,
+      ),
+    );
     await context.shell.run(
       const Command.detailed(
         'apt-get',
         arguments: <String>['remove', '--yes', tool],
-        environment: EnsureToolPrerequisites.quiet, elevated: true),
+        environment: EnsureToolPrerequisites.quiet,
+        elevated: true,
+      ),
     );
   }
 
   Future<void> _mustRun(StepContext context, List<String> argv) async {
-    final CommandResult answer = await context.shell.run(Command.detailed(argv.first, arguments: argv.sublist(1), elevated: true));
+    final CommandResult answer = await context.shell.run(
+      Command.detailed(argv.first, arguments: argv.sublist(1), elevated: true),
+    );
     if (!answer.ok) {
-      throw CommandFailed(argv: argv, exitCode: answer.exitCode, stdout: answer.stdout, stderr: answer.stderr);
+      throw CommandFailed(
+        argv: argv,
+        exitCode: answer.exitCode,
+        stdout: answer.stdout,
+        stderr: answer.stderr,
+      );
     }
   }
 }

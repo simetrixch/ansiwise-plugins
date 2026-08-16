@@ -37,7 +37,7 @@ final class CreateFileFromTemplate extends ReversibleStep<bool> with FileStep, T
     if (rawSkippable != null && rawSkippable.isNotEmpty) {
       skippable.add(rawSkippable);
     }
-    
+
     return CreateFileFromTemplate(
       templatePath: arguments.text('template'),
       path: arguments.text('path'),
@@ -154,7 +154,7 @@ final class CreateFileFromTemplate extends ReversibleStep<bool> with FileStep, T
     }
     final String text = await context.files.read(templatePath);
     final List<Slot> slots = slotsIn(text);
-    
+
     final Map<String, String> values = <String, String>{};
     for (final Slot slot in slots) {
       if (context.answers.has(slot.name)) {
@@ -166,9 +166,9 @@ final class CreateFileFromTemplate extends ReversibleStep<bool> with FileStep, T
         }
       }
     }
-    
+
     String rendered = await renderedWith(context, values);
-    
+
     // Remove lines with placeholders for any answer that is in skippableAnswers and has no value
     for (final String skippable in skippableAnswers) {
       if (!values.containsKey(skippable)) {

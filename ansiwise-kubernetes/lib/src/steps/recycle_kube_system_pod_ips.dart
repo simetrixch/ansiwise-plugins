@@ -84,8 +84,12 @@ final class RecycleKubeSystemPodIps extends IrreversibleStep {
       final Command delete = kubectl.command(<String>[..._delete, pod.name, '--wait=false']);
       final CommandResult deleted = await context.shell.run(delete);
       if (!deleted.ok) {
-        throw CommandFailed(argv: delete.argv, exitCode: deleted.exitCode, stdout: '',
-        stderr: deleted.stderr);
+        throw CommandFailed(
+          argv: delete.argv,
+          exitCode: deleted.exitCode,
+          stdout: '',
+          stderr: deleted.stderr,
+        );
       }
     }
   }
@@ -96,10 +100,7 @@ final class RecycleKubeSystemPodIps extends IrreversibleStep {
   /// pod with no address yet is left out because there is nothing stale about it.
   List<_Pod> _stale(List<_Pod> pods) => <_Pod>[
     for (final _Pod pod in pods)
-      if (!pod.hostNetwork &&
-          pod.address.isNotEmpty &&
-          !cidrContains(podCidr, pod.address))
-        pod,
+      if (!pod.hostNetwork && pod.address.isNotEmpty && !cidrContains(podCidr, pod.address)) pod,
   ];
 
   Future<List<_Pod>?> _pods(StepContext context) async {

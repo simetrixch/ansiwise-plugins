@@ -56,10 +56,7 @@ void main() {
 
   test('the same keys nested deeper are still compared by shape, not by text', () async {
     final CheckResult answer = await release.check(
-      machine(
-        file: 'a:\n  b:\n    c: 1\n    d: 2\n',
-        held: '{"a":{"b":{"d":2,"c":1}}}',
-      ),
+      machine(file: 'a:\n  b:\n    c: 1\n    d: 2\n', held: '{"a":{"b":{"d":2,"c":1}}}'),
     );
 
     expect(answer, isA<Satisfied>());
@@ -91,11 +88,10 @@ void main() {
   test('a release at another chart version is not already so', () async {
     final CheckResult answer = await release.check(
       _contextOn(
-        FakeShell()
-          ..answers(
-            'helm list --namespace vault -o json',
-            '[{"name":"vault","status":"deployed","chart":"vault-0.33.0"}]',
-          ),
+        FakeShell()..answers(
+          'helm list --namespace vault -o json',
+          '[{"name":"vault","status":"deployed","chart":"vault-0.33.0"}]',
+        ),
         FakeFiles(<String, String>{path: 'ui:\n  enabled: true\n'}),
       ),
     );

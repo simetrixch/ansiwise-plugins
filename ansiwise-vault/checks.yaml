@@ -16,6 +16,9 @@
 # ADDING A CHECK MEANS ADDING A LINE. A check file that is not declared here is reported too: an
 # undeclared check is one nobody agreed to, and it is how a suite grows a file that judges nothing.
 
+# The analyzer with infos and warnings fatal and the formatter find nothing to change in this
+# package's own tree.
+analysis: test/checks/analysis_test.dart
 # Every Dart directive of this package spells the path it names byte for byte, so a build for Linux
 # opens what a build for Windows opened.
 case-sensitivity: test/checks/case_sensitivity_test.dart

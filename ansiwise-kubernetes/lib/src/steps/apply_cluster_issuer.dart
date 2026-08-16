@@ -74,8 +74,12 @@ final class ApplyClusterIssuer extends ReversibleStep<bool> {
     final Command apply = kubectl.command(_apply);
     final CommandResult applied = await context.shell.run(apply);
     if (!applied.ok) {
-      throw CommandFailed(argv: apply.argv, exitCode: applied.exitCode, stdout: '',
-        stderr: applied.stderr);
+      throw CommandFailed(
+        argv: apply.argv,
+        exitCode: applied.exitCode,
+        stdout: '',
+        stderr: applied.stderr,
+      );
     }
   }
 

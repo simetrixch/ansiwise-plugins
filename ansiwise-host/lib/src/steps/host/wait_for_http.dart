@@ -9,10 +9,7 @@ import 'package:ansiwise_api/ansiwise_api.dart';
 /// be replaced with the value of the answer with that name from the current run.
 final class WaitForHttp extends ObservingStep {
   /// Polls [url] until it returns a 2xx status code.
-  const WaitForHttp({
-    required this.url,
-    required this.timeoutSeconds,
-  });
+  const WaitForHttp({required this.url, required this.timeoutSeconds});
 
   /// Builds the step from what the program gave it.
   factory WaitForHttp.fromArguments(Arguments arguments) => WaitForHttp(
@@ -25,7 +22,8 @@ final class WaitForHttp extends ObservingStep {
     ArgumentSpec(
       name: 'url',
       kind: ArgumentKind.text,
-      describes: 'the URL to poll. Placeholders like <answer_name> are replaced with answer values.',
+      describes:
+          'the URL to poll. Placeholders like <answer_name> are replaced with answer values.',
     ),
     ArgumentSpec(
       name: 'timeout_seconds',
@@ -63,30 +61,34 @@ final class WaitForHttp extends ObservingStep {
   @override
   Future<void> apply(StepContext context) async {
     final String resolvedUrl = _interpolateUrl(context);
-    
+
     final int end = DateTime.now().millisecondsSinceEpoch + (timeoutSeconds * 1000);
     int delayMs = 1000;
-    
+
     while (DateTime.now().millisecondsSinceEpoch < end) {
-      final Command cmd = Command(
-        'curl',
-        <String>['-s', '-o', '/dev/null', '-w', '%{http_code}', resolvedUrl],
-      );
-      
+      final Command cmd = Command('curl', <String>[
+        '-s',
+        '-o',
+        '/dev/null',
+        '-w',
+        '%{http_code}',
+        resolvedUrl,
+      ]);
+
       final CommandResult result = await context.shell.run(cmd);
-      
+
       if (result.ok) {
         final String stdout = result.stdout.trim();
         if (stdout.startsWith('2') || stdout.startsWith('3')) {
           return;
         }
       }
-      
+
       await Future<void>.delayed(Duration(milliseconds: delayMs));
       // Backoff up to 10 seconds
       if (delayMs < 10000) delayMs *= 2;
     }
-    
+
     throw CommandFailed(
       argv: <String>['curl', resolvedUrl],
       exitCode: 1,

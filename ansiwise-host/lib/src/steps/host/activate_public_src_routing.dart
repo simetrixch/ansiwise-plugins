@@ -99,7 +99,13 @@ final class ActivatePublicSrcRouting extends ReversibleStep<bool> {
     }
     // This is what takes the kernel state away — the service's own stopping commands remove the
     // marking rules and the rule keyed on the mark.
-    await context.shell.run(Command.detailed('systemctl', arguments: <String>['disable', '--now', unitName], elevated: true));
+    await context.shell.run(
+      Command.detailed(
+        'systemctl',
+        arguments: <String>['disable', '--now', unitName],
+        elevated: true,
+      ),
+    );
   }
 
   Future<bool> _answers(StepContext context, String question, String wanted) async {
@@ -122,9 +128,16 @@ final class ActivatePublicSrcRouting extends ReversibleStep<bool> {
   }
 
   Future<void> _mustRun(StepContext context, List<String> argv) async {
-    final CommandResult answer = await context.shell.run(Command.detailed(argv.first, arguments: argv.sublist(1), elevated: true));
+    final CommandResult answer = await context.shell.run(
+      Command.detailed(argv.first, arguments: argv.sublist(1), elevated: true),
+    );
     if (!answer.ok) {
-      throw CommandFailed(argv: argv, exitCode: answer.exitCode, stdout: answer.stdout, stderr: answer.stderr);
+      throw CommandFailed(
+        argv: argv,
+        exitCode: answer.exitCode,
+        stdout: answer.stdout,
+        stderr: answer.stderr,
+      );
     }
   }
 }

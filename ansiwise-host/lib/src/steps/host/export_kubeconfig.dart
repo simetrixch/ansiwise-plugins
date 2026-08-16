@@ -136,11 +136,15 @@ final class ExportKubeconfig extends IrreversibleStep {
     await context.files.createDirectory(directory, mode: directoryMode);
     await context.files.write('$directory/config', credentials, mode: fileMode);
     await context.shell.run(
-      Command.detailed('chown', arguments: <String>[
-        '-R',
-        '${InstallAuthorizedKey.userIn(context)}:${InstallAuthorizedKey.userIn(context)}',
-        directory,
-      ], elevated: true),
+      Command.detailed(
+        'chown',
+        arguments: <String>[
+          '-R',
+          '${InstallAuthorizedKey.userIn(context)}:${InstallAuthorizedKey.userIn(context)}',
+          directory,
+        ],
+        elevated: true,
+      ),
     );
   }
 

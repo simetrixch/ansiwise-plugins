@@ -15,19 +15,14 @@ import 'helm_command.dart';
 /// asks what the name currently resolves to rather than whether the name is taken.
 final class HelmRepository extends ReversibleStep<String?> {
   /// Registers the chart repository at [url] under [name].
-  const HelmRepository({
-    required this.name,
-    required this.url,
-    this.helm = const <String>['helm'],
-  });
+  const HelmRepository({required this.name, required this.url, this.helm = const <String>['helm']});
 
   /// Builds the step from what the program gave it.
-  factory HelmRepository.fromArguments(Arguments arguments) =>
-      HelmRepository(
-        name: arguments.text('name'),
-        url: arguments.text('url'),
-        helm: arguments.textList('helm_command'),
-      );
+  factory HelmRepository.fromArguments(Arguments arguments) => HelmRepository(
+    name: arguments.text('name'),
+    url: arguments.text('url'),
+    helm: arguments.textList('helm_command'),
+  );
 
   /// What this step accepts.
   static const List<ArgumentSpec> arguments = <ArgumentSpec>[
@@ -71,10 +66,11 @@ final class HelmRepository extends ReversibleStep<String?> {
   Future<void> apply(StepContext context) async {
     // `--force-update` and not an add that fails on a name already taken: this step converges a name
     // pointing at the wrong address, which is the case its check exists to find.
-    final CommandResult added = await context.shell.run(helmCommand(helm, _add.sublist(helm.length)));
+    final CommandResult added = await context.shell.run(
+      helmCommand(helm, _add.sublist(helm.length)),
+    );
     if (!added.ok) {
-      throw CommandFailed(argv: _add, exitCode: added.exitCode, stdout: '',
-        stderr: added.stderr);
+      throw CommandFailed(argv: _add, exitCode: added.exitCode, stdout: '', stderr: added.stderr);
     }
   }
 

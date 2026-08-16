@@ -1,6 +1,5 @@
 import 'package:ansiwise_api/ansiwise_api.dart';
 
-
 /// Finds the interface a machine's public address arrives on, when that is not the one it answers by.
 ///
 /// **The problem, on a machine with two interfaces.** One carries the public address — the ingress

@@ -97,10 +97,19 @@ void main() {
         waiting.apply(machine.contextFor(under)),
         throwsA(
           isA<StateError>()
-              .having((StateError e) => e.message, 'names what did not answer', contains('microk8s status --wait-ready'))
-              .having((StateError e) => e.message, 'names what was restarted', contains('snap restart')),
+              .having(
+                (StateError e) => e.message,
+                'names what did not answer',
+                contains('microk8s status --wait-ready'),
+              )
+              .having(
+                (StateError e) => e.message,
+                'names what was restarted',
+                contains('snap restart'),
+              ),
         ),
-        reason: 'the rows behind this one would otherwise fail one by one on a process nobody said '
+        reason:
+            'the rows behind this one would otherwise fail one by one on a process nobody said '
             'was down',
       );
     });

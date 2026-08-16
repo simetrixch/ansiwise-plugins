@@ -163,8 +163,12 @@ final class RestartCertManagerAndReapplyClusterIssuer extends IrreversibleStep {
     final Command apply = kubectl.command(<String>['apply', '-f', manifestPath]);
     final CommandResult applied = await context.shell.run(apply);
     if (!applied.ok) {
-      throw CommandFailed(argv: apply.argv, exitCode: applied.exitCode, stdout: '',
-        stderr: applied.stderr);
+      throw CommandFailed(
+        argv: apply.argv,
+        exitCode: applied.exitCode,
+        stdout: '',
+        stderr: applied.stderr,
+      );
     }
 
     final DateTime giveUp = context.clock.now().add(Duration(seconds: waitSeconds));

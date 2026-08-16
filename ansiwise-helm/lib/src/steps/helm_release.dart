@@ -155,8 +155,7 @@ final class HelmRelease extends IrreversibleStep {
       ),
     );
     if (!done.ok) {
-      throw CommandFailed(argv: _upgrade, exitCode: done.exitCode, stdout: '',
-        stderr: done.stderr);
+      throw CommandFailed(argv: _upgrade, exitCode: done.exitCode, stdout: '', stderr: done.stderr);
     }
   }
 
@@ -196,15 +195,7 @@ final class HelmRelease extends IrreversibleStep {
   /// The values the release is currently holding, as helm gives them back.
   Future<Object?> _currentValues(StepContext context) async {
     final CommandResult got = await context.shell.run(
-      helmCommand(helm, <String>[
-        'get',
-        'values',
-        release,
-        '--namespace',
-        namespace,
-        '-o',
-        'json',
-      ]),
+      helmCommand(helm, <String>['get', 'values', release, '--namespace', namespace, '-o', 'json']),
     );
     return got.ok ? _decoded(got.trimmed) : null;
   }

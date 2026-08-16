@@ -11,10 +11,7 @@ import 'package:ansiwise_api/ansiwise_api.dart';
 /// this is a slave, and the `fqdn` when this is the master.
 final class MeasureCoalesced extends ObservingStep {
   /// Publishes coalesced_value based on the first non-empty value from [answers].
-  const MeasureCoalesced({
-    required this.answers,
-    required this.format,
-  });
+  const MeasureCoalesced({required this.answers, required this.format});
 
   /// Builds the step from what the program gave it.
   factory MeasureCoalesced.fromArguments(Arguments arguments) {
@@ -65,7 +62,9 @@ final class MeasureCoalesced extends ObservingStep {
         if (rawValue.isNotEmpty) {
           final String value = format.replaceAll('<value>', rawValue);
           context.measurements.publish(const MeasurementName('coalesced_value'), value);
-          return CheckResult.satisfied('measured coalesced_value as "$value" from answer "$answerName"');
+          return CheckResult.satisfied(
+            'measured coalesced_value as "$value" from answer "$answerName"',
+          );
         }
       }
     }

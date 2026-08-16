@@ -173,7 +173,7 @@ const Map<StepName, RegisteredStep> hostSteps = <StepName, RegisteredStep>{
   // entries stand in the order a program runs them: the pod range is stamped before anything is
   // given an address out of it, the addons go on, the wait proves they took, and whatever must
   // stay off is switched off last because some of them come on by themselves.
-    StepName('restart_microk8s_snap_for_pod_cidr'): RegisteredStep(
+  StepName('restart_microk8s_snap_for_pod_cidr'): RegisteredStep(
     name: StepName('restart_microk8s_snap_for_pod_cidr'),
     source: 'lib/src/steps/host/restart_microk8s_snap_for_pod_cidr.dart:21',
     create: RestartMicrok8sSnapForPodCidr.fromArguments,
@@ -282,7 +282,7 @@ const Map<StepName, RegisteredStep> hostSteps = <StepName, RegisteredStep>{
   // owns the default route. The entries stand in the order a program runs them.
   StepName('detect_public_nic'): RegisteredStep(
     name: StepName('detect_public_nic'),
-    source: 'lib/src/steps/host/detect_public_nic.dart:19',
+    source: 'lib/src/steps/host/detect_public_nic.dart:18',
     create: DetectPublicNic.fromArguments,
     arguments: DetectPublicNic.arguments,
   ),

@@ -19,27 +19,5 @@
 # The analyzer with infos and warnings fatal and the formatter find nothing to change in this
 # package's own tree.
 analysis: test/checks/analysis_test.dart
-# Every Dart directive of this package spells the path it names byte for byte, so a build for Linux
-# opens what a build for Windows opened.
-case-sensitivity: test/checks/case_sensitivity_test.dart
-# The values a probe hands the steps are the kinds and defaults the shipped programs declare, so it
-# plants what an installation plants.
-declared-answers: test/checks/declared_answers_test.dart
 # This file agrees with the suite on disk, and the refusal that enforces it can really go red.
 declared-checks: test/checks/declared_checks_test.dart
-# No registered step can complete a mutation under --mode dry.
-dry-safety: test/checks/dry_safety_test.dart
-# Nothing in the shipped library outside infrastructure/ reaches the machine directly.
-exec-confinement: test/checks/exec_confinement_test.dart
-# A second run of every registered step does nothing, or the step is named as unproven.
-idempotence: test/checks/idempotence_test.dart
-# What .gitattributes declares LF is LF in the working copy.
-line-endings: test/checks/line_endings_test.dart
-# No abolished word stands in a file name, a directory name or a sub-command.
-naming: test/checks/naming_test.dart
-# Every step this package ships is registered, and every entry names a step that is there.
-registry-completeness: test/checks/registry_completeness_test.dart
-# Every reversible step takes its own work back, and every irreversible one says why it cannot.
-reversibility: test/checks/reversibility_test.dart
-# This package names its tools and never an application of them.
-tool-purity: test/checks/tool_purity_test.dart

@@ -122,7 +122,7 @@ final class _CollectingLog implements Logger {
 
 final class _FakeMeasurementSink implements MeasurementSink {
   const _FakeMeasurementSink(this.published);
-  
+
   final Map<MeasurementName, String> published;
 
   @override
@@ -133,4 +133,3 @@ final class _FakeMeasurementSink implements MeasurementSink {
     published[name] = value;
   }
 }
-

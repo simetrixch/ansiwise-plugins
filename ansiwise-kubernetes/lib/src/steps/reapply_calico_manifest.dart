@@ -142,8 +142,12 @@ final class ReapplyCalicoManifest extends ReversibleStep<String?> {
     final Command apply = kubectl.command(<String>['apply', '-f', path]);
     final CommandResult applied = await context.shell.run(apply);
     if (!applied.ok) {
-      throw CommandFailed(argv: apply.argv, exitCode: applied.exitCode, stdout: '',
-        stderr: applied.stderr);
+      throw CommandFailed(
+        argv: apply.argv,
+        exitCode: applied.exitCode,
+        stdout: '',
+        stderr: applied.stderr,
+      );
     }
   }
 }

@@ -49,7 +49,6 @@ final class RequirePodCidrFreeOfReservedRanges extends ObservingStep {
   /// is the operator's own network and cannot be known by a program file.
   static const List<String> answers = <String>['lan_cidr'];
 
-
   /// The range every pod gets an address out of.
   final String podCidr;
 
@@ -109,4 +108,3 @@ final class RequirePodCidrFreeOfReservedRanges extends ObservingStep {
     );
   }
 }
-

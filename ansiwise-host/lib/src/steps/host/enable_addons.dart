@@ -82,9 +82,16 @@ final class EnableAddons extends ReversibleStep<List<String>> {
     // nothing after it is switched on against a cluster that is missing what comes before it.
     for (final String asked in _missing(on)) {
       final List<String> argv = <String>['microk8s', 'enable', asked];
-      final CommandResult switched = await context.shell.run(Command.detailed(argv.first, arguments: argv.sublist(1), elevated: true));
+      final CommandResult switched = await context.shell.run(
+        Command.detailed(argv.first, arguments: argv.sublist(1), elevated: true),
+      );
       if (!switched.ok) {
-        throw CommandFailed(argv: argv, exitCode: switched.exitCode, stdout: switched.stdout, stderr: switched.stderr);
+        throw CommandFailed(
+          argv: argv,
+          exitCode: switched.exitCode,
+          stdout: switched.stdout,
+          stderr: switched.stderr,
+        );
       }
     }
   }
@@ -107,7 +114,9 @@ final class EnableAddons extends ReversibleStep<List<String>> {
     // In reverse, because the order they went on in is load-bearing: whatever the row put first is
     // switched off last.
     for (final String addon in captured.reversed) {
-      await context.shell.run(Command.detailed('microk8s', arguments: <String>['disable', addon], elevated: true));
+      await context.shell.run(
+        Command.detailed('microk8s', arguments: <String>['disable', addon], elevated: true),
+      );
     }
   }
 

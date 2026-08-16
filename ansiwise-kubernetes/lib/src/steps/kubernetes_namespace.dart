@@ -51,8 +51,12 @@ final class KubernetesNamespace extends ReversibleStep<bool> {
       kubectl.command(<String>['create', 'namespace', namespace]),
     );
     if (!created.ok) {
-      throw CommandFailed(argv: _create, exitCode: created.exitCode, stdout: '',
-        stderr: created.stderr);
+      throw CommandFailed(
+        argv: _create,
+        exitCode: created.exitCode,
+        stdout: '',
+        stderr: created.stderr,
+      );
     }
   }
 

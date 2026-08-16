@@ -230,7 +230,9 @@ final class SetProcessFlag extends ReversibleStep<String?> {
     Duration timeout = const Duration(seconds: 120),
     Duration interval = const Duration(seconds: 2),
   }) async {
-    await context.shell.run(Command.detailed(command.first, arguments: command.skip(1).toList(), elevated: true));
+    await context.shell.run(
+      Command.detailed(command.first, arguments: command.skip(1).toList(), elevated: true),
+    );
 
     if (ready.isEmpty) {
       context.log.warn(

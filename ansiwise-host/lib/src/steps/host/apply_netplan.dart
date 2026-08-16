@@ -68,9 +68,16 @@ final class ApplyNetplan extends IrreversibleStep {
       'applying the network configuration — a session that arrived on the public address is on the '
       'path this is about to change',
     );
-    final CommandResult applied = await context.shell.run(Command.detailed(_argv.first, arguments: _argv.sublist(1), elevated: true));
+    final CommandResult applied = await context.shell.run(
+      Command.detailed(_argv.first, arguments: _argv.sublist(1), elevated: true),
+    );
     if (!applied.ok) {
-      throw CommandFailed(argv: _argv, exitCode: applied.exitCode, stdout: applied.stdout, stderr: applied.stderr);
+      throw CommandFailed(
+        argv: _argv,
+        exitCode: applied.exitCode,
+        stdout: applied.stdout,
+        stderr: applied.stderr,
+      );
     }
   }
 

@@ -104,7 +104,7 @@ final class SetProcessFlags extends ReversibleStep<String?> {
     for (final String rawFlag in flags) {
       mutated = SetProcessFlag.withFlag(mutated, _interpolate(rawFlag, context));
     }
-    
+
     return current == mutated
         ? CheckResult.satisfied('$argsPath carries all specified flags')
         : const CheckResult.ready();
@@ -112,7 +112,9 @@ final class SetProcessFlags extends ReversibleStep<String?> {
 
   @override
   Future<StepPlan> plan(StepContext context) async {
-    final String current = await context.files.exists(argsPath) ? await context.files.read(argsPath) : '';
+    final String current = await context.files.exists(argsPath)
+        ? await context.files.read(argsPath)
+        : '';
     String mutated = current;
     for (final String rawFlag in flags) {
       mutated = SetProcessFlag.withFlag(mutated, _interpolate(rawFlag, context));
@@ -122,7 +124,9 @@ final class SetProcessFlags extends ReversibleStep<String?> {
 
   @override
   Future<void> apply(StepContext context) async {
-    final String current = await context.files.exists(argsPath) ? await context.files.read(argsPath) : '';
+    final String current = await context.files.exists(argsPath)
+        ? await context.files.read(argsPath)
+        : '';
     String mutated = current;
     for (final String rawFlag in flags) {
       mutated = SetProcessFlag.withFlag(mutated, _interpolate(rawFlag, context));

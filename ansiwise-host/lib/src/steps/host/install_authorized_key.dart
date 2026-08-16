@@ -167,7 +167,11 @@ final class InstallAuthorizedKey extends ReversibleStep<bool> {
 
   static Future<void> _own(StepContext context, String path) async {
     final CommandResult owned = await context.shell.run(
-      Command.detailed('chown', arguments: <String>['${userIn(context)}:${userIn(context)}', path], elevated: true),
+      Command.detailed(
+        'chown',
+        arguments: <String>['${userIn(context)}:${userIn(context)}', path],
+        elevated: true,
+      ),
     );
     if (!owned.ok) {
       throw CommandFailed(

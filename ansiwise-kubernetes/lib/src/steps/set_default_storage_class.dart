@@ -199,8 +199,12 @@ final class SetDefaultStorageClass extends ReversibleStep<String?> {
     ]);
     final CommandResult marked = await context.shell.run(mark);
     if (!marked.ok) {
-      throw CommandFailed(argv: mark.argv, exitCode: marked.exitCode, stdout: '',
-        stderr: marked.stderr);
+      throw CommandFailed(
+        argv: mark.argv,
+        exitCode: marked.exitCode,
+        stdout: '',
+        stderr: marked.stderr,
+      );
     }
   }
 
