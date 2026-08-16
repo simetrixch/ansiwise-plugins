@@ -53,17 +53,12 @@ final class ReplaceRegexInTrackedFile extends ReversibleStep<void> {
   @override
   Future<CheckResult> check(StepContext context) async {
     if (!await context.files.exists(path)) {
-      return CheckResult.blocked(
-        '$path does not exist: the file to modify must exist',
-      );
+      return CheckResult.blocked('$path does not exist: the file to modify must exist');
     }
-    
+
     // Check if there's any match using grep
-    final Command grep = Command(
-      'grep',
-      <String>['-q', '-E', pattern, path],
-    );
-    
+    final Command grep = Command('grep', <String>['-q', '-E', pattern, path]);
+
     final CommandResult grepResult = await context.shell.run(grep);
     if (!grepResult.ok && grepResult.exitCode != 1) {
       throw CommandFailed(
@@ -83,17 +78,12 @@ final class ReplaceRegexInTrackedFile extends ReversibleStep<void> {
 
   @override
   Future<StepPlan> plan(StepContext context) async {
-    return StepPlan.argv(
-      <String>['sed', '-i', '-E', 's/$pattern/$replacement/g', path],
-    );
+    return StepPlan.argv(<String>['sed', '-i', '-E', 's/$pattern/$replacement/g', path]);
   }
 
   @override
   Future<void> apply(StepContext context) async {
-    final Command sed = Command(
-      'sed',
-      <String>['-i', '-E', 's/$pattern/$replacement/g', path],
-    );
+    final Command sed = Command('sed', <String>['-i', '-E', 's/$pattern/$replacement/g', path]);
     final CommandResult result = await context.shell.run(sed);
     if (!result.ok) {
       throw CommandFailed(
@@ -107,10 +97,7 @@ final class ReplaceRegexInTrackedFile extends ReversibleStep<void> {
 
   @override
   Future<void> undo(StepContext context, void captured) async {
-    final Command git = Command(
-      'git',
-      <String>['checkout', '--', path],
-    );
+    final Command git = Command('git', <String>['checkout', '--', path]);
     final CommandResult result = await context.shell.run(git);
     if (!result.ok) {
       throw CommandFailed(

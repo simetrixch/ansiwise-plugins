@@ -46,7 +46,8 @@ final class ReplaceTextInTrackedFiles extends ReversibleStep<List<String>> {
       name: 'replacement_format',
       kind: ArgumentKind.text,
       required: false,
-      describes: 'a format string for the replacement, where <value> is replaced by the answer value. Defaults to <value>.',
+      describes:
+          'a format string for the replacement, where <value> is replaced by the answer value. Defaults to <value>.',
     ),
   ];
 
@@ -65,10 +66,7 @@ final class ReplaceTextInTrackedFiles extends ReversibleStep<List<String>> {
   @override
   Future<List<String>> capture(StepContext context) async {
     final String where = tree ?? '.';
-    final Command grep = Command(
-      'git',
-      <String>['grep', '-l', '-F', placeholder, '--', where],
-    );
+    final Command grep = Command('git', <String>['grep', '-l', '-F', placeholder, '--', where]);
     final CommandResult grepResult = await context.shell.run(grep);
     if (!grepResult.ok && grepResult.exitCode != 1) {
       throw CommandFailed(
@@ -87,10 +85,7 @@ final class ReplaceTextInTrackedFiles extends ReversibleStep<List<String>> {
   @override
   Future<CheckResult> check(StepContext context) async {
     final String where = tree ?? '.';
-    final Command grep = Command(
-      'git',
-      <String>['grep', '-l', '-F', placeholder, '--', where],
-    );
+    final Command grep = Command('git', <String>['grep', '-l', '-F', placeholder, '--', where]);
     final CommandResult grepResult = await context.shell.run(grep);
     if (!grepResult.ok && grepResult.exitCode != 1) {
       throw CommandFailed(
@@ -111,29 +106,24 @@ final class ReplaceTextInTrackedFiles extends ReversibleStep<List<String>> {
   @override
   Future<StepPlan> plan(StepContext context) async {
     final String rawValue = context.answers.text(valueAnswer);
-    final String value = replacementFormat != null 
+    final String value = replacementFormat != null
         ? replacementFormat!.replaceAll('<value>', rawValue)
         : rawValue;
-    
+
     final List<String> files = await capture(context);
-    return StepPlan.argv(
-      <String>['sed', '-i', 's/$placeholder/$value/g', ...files],
-    );
+    return StepPlan.argv(<String>['sed', '-i', 's/$placeholder/$value/g', ...files]);
   }
 
   @override
   Future<void> apply(StepContext context) async {
     final String rawValue = context.answers.text(valueAnswer);
-    final String value = replacementFormat != null 
+    final String value = replacementFormat != null
         ? replacementFormat!.replaceAll('<value>', rawValue)
         : rawValue;
-    
+
     final List<String> files = await capture(context);
     for (final String file in files) {
-      final Command sed = Command(
-        'sed',
-        <String>['-i', 's/$placeholder/$value/g', file],
-      );
+      final Command sed = Command('sed', <String>['-i', 's/$placeholder/$value/g', file]);
       final CommandResult result = await context.shell.run(sed);
       if (!result.ok) {
         throw CommandFailed(
@@ -149,11 +139,8 @@ final class ReplaceTextInTrackedFiles extends ReversibleStep<List<String>> {
   @override
   Future<void> undo(StepContext context, List<String> captured) async {
     if (captured.isEmpty) return;
-    
-    final Command git = Command(
-      'git',
-      <String>['checkout', '--', ...captured],
-    );
+
+    final Command git = Command('git', <String>['checkout', '--', ...captured]);
     final CommandResult result = await context.shell.run(git);
     if (!result.ok) {
       throw CommandFailed(

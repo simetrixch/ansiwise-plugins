@@ -1,14 +1,14 @@
 import 'package:ansiwise_api/ansiwise_api.dart';
 
-import 'fqdn_selection.dart';
+import 'stamp_selection.dart';
 
-/// Puts this installation's own branch where the trunk carries a placeholder.
+/// Replaces a literal in the tracked files of a checkout with a value this run holds.
 ///
-/// The trunk is domain-agnostic and installation-agnostic: it carries a stand-in everywhere an
-/// installation carries something of its own, so that nothing on the trunk belongs to anybody and
-/// every installation is cut from the same tree. This step is what turns one copy of that tree into
-/// one installation, and it does it twice — once for the domain the installation answers on, and
-/// once for the branch its generators read from, where the stand-in is the trunk's own name.
+/// A tree written to serve many installations carries a stand-in everywhere one installation would
+/// carry something of its own, so that nothing in it belongs to anybody and every installation is
+/// cut from the same source. This step is what turns one copy of such a tree into one installation.
+/// It is run once per literal: the row names the literal, and names the answer that holds what goes
+/// in its place.
 ///
 /// **The set of files is FOUND, not named.** A content search over the tracked files answers with
 /// the few that can possibly be in it, and git is what puts them back: an undo restores exactly the
@@ -27,15 +27,15 @@ import 'fqdn_selection.dart';
 /// English word that stands all over a tree, so replacing it wherever it occurs would rewrite it
 /// inside a trailing comment and leave an installation branch explaining itself with a sentence its
 /// own code contradicted. Where [keys] are named, the expression anchors on one of them at the start
-/// of the line, allows the YAML anchor some of those lines carry (`targetRevision: &branch master`),
+/// of the line, allows the YAML anchor some of those lines carry (`targetRevision: &ref example`),
 /// and rewrites the value alone. The lookahead after the literal refuses a longer value that merely
-/// begins with it — `master-of-record` is not the trunk. Where no [keys] are named, every occurrence
-/// on the line is the value, which is what a domain placeholder is.
+/// begins with it — `example-of-record` is not `example`. Where no [keys] are named, every
+/// occurrence on the line is the value, which is what an unmistakable stand-in is.
 ///
-/// **A line carrying [keepMarker] is never stamped.** What is marked is product that every
-/// installation shares — the member charts of the tenant catalog — and retargeting those would point
-/// them at a branch that does not carry them. The marker itself is a word written into the tree
-/// being generated, so the row states it and this step carries no answer of its own about it.
+/// **A line carrying [keepMarker] is never stamped.** What is marked is material every installation
+/// shares and reads from one place, so pointing it at this installation's own branch would point it
+/// at a branch that does not carry it. The marker itself is a word written into the tree being
+/// stamped, so the row states it and this step carries no answer of its own about it.
 ///
 /// **The replacement is an ANSWER, and the row says which one.** What one installation puts where
 /// the placeholder stands is the one value nobody can write into a file that ships to all of them,
@@ -64,16 +64,16 @@ import 'fqdn_selection.dart';
 /// while the file kept what it always held. A rewrite that silently matched nothing cannot report
 /// itself as done here, and a second run finds nothing left to do.
 final class StampPlaceholderInTrackedFiles extends ReversibleStep<List<String>> {
-  /// Replaces [placeholder] with this run's own branch everywhere in [repository] that holds it.
+  /// Replaces [placeholder] with what this run answers, everywhere in [repository] that holds it.
   const StampPlaceholderInTrackedFiles({
     required this.repository,
-    required this.trunk,
+    required this.refuseOnBranch,
     required this.placeholder,
     required this.valueAnswer,
     required this.keepMarker,
+    required this.rule,
     this.tree = '',
     this.keys = const <String>[],
-    this.rule = selection,
   });
 
   /// Builds the step from what the program gave it.
@@ -85,13 +85,13 @@ final class StampPlaceholderInTrackedFiles extends ReversibleStep<List<String>> 
   factory StampPlaceholderInTrackedFiles.fromArguments(Arguments arguments) =>
       StampPlaceholderInTrackedFiles(
         repository: arguments.text('repository'),
-        trunk: arguments.text('trunk'),
+        refuseOnBranch: arguments.text('refuse_on_branch'),
         placeholder: arguments.text('placeholder'),
         valueAnswer: arguments.text('value_answer'),
         keepMarker: arguments.text('keep_marker'),
         tree: arguments.optionalText('tree') ?? '',
         keys: arguments.has('keys') ? arguments.textList('keys') : const <String>[],
-        rule: FqdnSelection(
+        rule: StampSelection(
           excludedSegments: arguments.textList('excluded_segments'),
           excludedNames: arguments.textList('excluded_names'),
           scriptSuffixes: arguments.textList('script_suffixes'),
@@ -106,16 +106,18 @@ final class StampPlaceholderInTrackedFiles extends ReversibleStep<List<String>> 
       describes: 'the checkout this installation is generated in',
     ),
     ArgumentSpec(
-      name: 'trunk',
+      name: 'refuse_on_branch',
       kind: ArgumentKind.text,
-      describes: 'the product branch, which this refuses to stamp',
+      describes:
+          'the branch this row refuses to run on: a checkout standing on it is the source every '
+          'installation is cut from, and not one installation',
     ),
     ArgumentSpec(
       name: 'placeholder',
       kind: ArgumentKind.text,
       describes:
-          'the literal the trunk carries where an installation carries its own branch, which is '
-          "the trunk's own name where the generators name the branch they read from",
+          'the literal this checkout carries wherever one installation would carry a value of its '
+          'own — an unmistakable stand-in, or a common word narrowed by the keys below',
     ),
     // The NAME of the answer, never the value. What a stamp writes is the one thing nobody can put
     // in a file that ships to every installation, so the row carries the name of the question and
@@ -192,22 +194,12 @@ final class StampPlaceholderInTrackedFiles extends ReversibleStep<List<String>> 
   /// declaring it.
   static const List<String> answers = <String>[];
 
-  /// The rule as the gate applies it to the tree it walks.
-  ///
-  /// The gate applies the SAME rule class in order to decide whether branch-classes.yaml agrees
-  /// with what would really happen here. It used to restate the rule instead, and a changed
-  /// exclusion left every probe over there green while it certified a stamp it was no longer
-  /// describing.
-  ///
-  /// The run itself stamps by [rule], built from the row. The rule's own constants are what this
-  /// object holds, and the rows state the same lists — which used to be true by construction, when
-  /// a row saying nothing took these as its defaults, and is now asserted directly by a test over
-  /// the program file. A row stating a different list is a row this object no longer describes, and
-  /// that is what the assertion turns red on.
-  static const FqdnSelection selection = FqdnSelection();
-
   /// The rule this run selects files by, built from the row's exclusion lists.
-  final FqdnSelection rule;
+  ///
+  /// It carries no default, and that is the whole of it: which directories hold material rather
+  /// than state is a fact of the tree being stamped, so a value chosen here would be this package
+  /// deciding it for whatever tree it is pointed at.
+  final StampSelection rule;
 
   /// The trailing comment that exempts a line from every stamp, as the row states it.
   final String keepMarker;
@@ -218,10 +210,10 @@ final class StampPlaceholderInTrackedFiles extends ReversibleStep<List<String>> 
   /// The checkout being stamped.
   final String repository;
 
-  /// The product branch, which this step refuses to stamp.
-  final String trunk;
+  /// The branch this step refuses to run on, as the row names it.
+  final String refuseOnBranch;
 
-  /// What the trunk carries where this installation carries its own branch.
+  /// The literal this checkout carries wherever one installation would carry a value of its own.
   final String placeholder;
 
   /// The directory the search is limited to, or empty for the whole checkout.
@@ -238,10 +230,11 @@ final class StampPlaceholderInTrackedFiles extends ReversibleStep<List<String>> 
     }
 
     final String? head = await _head(context);
-    if (head == trunk) {
+    if (head == refuseOnBranch) {
       return CheckResult.blocked(
-        'the trunk "$trunk" is checked out, and stamping it would hand this installation\'s own '
-        'values to every installation cut from it afterwards — cut the branch first',
+        '"$refuseOnBranch" is checked out, and this row refuses to stamp it: doing so would '
+        "hand this installation's own values to every installation cut from it afterwards — "
+        'cut the branch first',
       );
     }
 
@@ -356,7 +349,7 @@ final class StampPlaceholderInTrackedFiles extends ReversibleStep<List<String>> 
       // What the name test above already settled is settled again here and costs nothing; what it
       // could not settle — a first line that makes this a script whatever it is called — is settled
       // by the same object the gate asks, so the two cannot answer differently.
-      if (!rule.holdsInstallationState(path, content)) {
+      if (!rule.holdsStampableValue(path, content)) {
         continue;
       }
       if (_changing(content, replacement).isEmpty) {

@@ -11,5 +11,5 @@ export 'src/steps/git_branch.dart';
 export 'src/steps/require_git_identity.dart';
 export 'src/steps/require_pushable_remote.dart';
 export 'src/steps/branch/stamp_placeholder_in_tracked_files.dart';
-export 'src/steps/branch/fqdn_selection.dart';
+export 'src/steps/branch/stamp_selection.dart';
 export 'src/plugin.dart';

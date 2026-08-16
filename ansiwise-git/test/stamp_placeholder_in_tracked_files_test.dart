@@ -3,32 +3,48 @@ import 'package:ansiwise_git/ansiwise_git.dart';
 import 'package:ansiwise_api/testing.dart';
 import 'package:test/test.dart';
 
-/// The two rows of one stamp that turn a copy of the product trunk into one installation.
+/// The two rows of one stamp that turn a copy of a shared source tree into one installation.
 ///
-/// One capability, two rows: the domain row replaces a placeholder wherever it stands, and the
-/// revision row replaces the trunk's own name where a named key carries it. Both are asserted here
-/// against the same class, which is what says the one class still does both jobs.
+/// One capability, two rows: one replaces a stand-in wherever it stands, and the other replaces a
+/// common word only where a named key carries it. Both are asserted here against the same class,
+/// which is what says the one class still does both jobs.
 ///
 /// Everything asserted here was found on a real tree. A stamp that rewrote a script turned that
 /// script's own guard into a refusal of the very domain it was installed for; a stamp that rewrote a
 /// whole line rewrote the word inside a trailing comment; a stamp that tested every tracked file
 /// before narrowing the set took eight and a half seconds per call.
 void main() {
-  const String repository = '/srv/hostyour-cloud';
+  const String repository = '/srv/checkout';
   const String fqdn = 'm1.example.com';
-  const String trunk = 'master';
+
+  /// The branch a checkout of the shared source stands on, which neither row may stamp.
+  const String sourceBranch = 'master';
+
+  /// The stand-in the shared source carries where one installation carries its own domain.
+  ///
+  /// Written out here rather than read off the class under test: a test that takes its input from
+  /// the subject asserts that the subject agrees with itself, which is true however wrong both are.
+  const String standIn = 'example.invalid';
+
+  /// The exclusion lists, exactly as the program's defaults block states them.
+  const StampSelection rule = StampSelection(
+    excludedSegments: <String>['docs', 'templates'],
+    excludedNames: <String>['branch-classes.yaml'],
+    scriptSuffixes: <String>['.sh', '.ps1'],
+  );
 
   /// The marker the tree being generated writes, as the program's defaults block states it.
   const String keepMarker = 'set-domain:keep';
 
-  /// The revision row of `deploy-branch`: the trunk's own name, under the generator tree, on a key.
+  /// The revision row: a common word, under one directory, only where a named key carries it.
   const StampPlaceholderInTrackedFiles retarget = StampPlaceholderInTrackedFiles(
     repository: repository,
-    trunk: trunk,
-    placeholder: trunk,
+    refuseOnBranch: sourceBranch,
+    placeholder: sourceBranch,
     valueAnswer: 'fqdn',
     keepMarker: keepMarker,
-    tree: 'argocd',
+    rule: rule,
+    tree: 'rendered',
     keys: <String>['revision', 'targetRevision'],
   );
 
@@ -39,10 +55,11 @@ void main() {
   /// occurrence on the line is the value" are.
   const StampPlaceholderInTrackedFiles stamp = StampPlaceholderInTrackedFiles(
     repository: repository,
-    trunk: trunk,
-    placeholder: FqdnSelection.placeholder,
+    refuseOnBranch: sourceBranch,
+    placeholder: standIn,
     valueAnswer: 'fqdn',
     keepMarker: keepMarker,
+    rule: rule,
   );
 
   /// The domain this installation answers on, which both stamps read out of the run by name.
@@ -99,51 +116,51 @@ void main() {
   group('the revision retarget rewrites the value and nothing else', () {
     test('a plain revision becomes this installation\'s branch', () async {
       final FakeFiles files = tree(<String, String>{
-        'argocd/dev/apps/root-app.yaml': 'spec:\n  source:\n    targetRevision: master\n',
+        'rendered/dev/apps/root-app.yaml': 'spec:\n  source:\n    targetRevision: master\n',
       });
       final FakeShell shell = searching(
-        carrying: <String>['argocd/dev/apps/root-app.yaml'],
-        literal: trunk,
-        within: 'argocd',
+        carrying: <String>['rendered/dev/apps/root-app.yaml'],
+        literal: sourceBranch,
+        within: 'rendered',
       );
 
       await retarget.apply(contextOn(shell: shell, files: files));
-      expect(read(files, 'argocd/dev/apps/root-app.yaml'), contains('targetRevision: $fqdn'));
+      expect(read(files, 'rendered/dev/apps/root-app.yaml'), contains('targetRevision: $fqdn'));
     });
 
     test('a YAML anchor survives, and the word in a trailing comment is untouched', () async {
       // The looser expression that rewrote the whole line also rewrote the comment, and left an
       // installation branch explaining itself with a sentence its own code contradicted.
       const String line = 'targetRevision: &branch master # cut from master by the installer';
-      final FakeFiles files = tree(<String, String>{'argocd/dev/apps/appset.yaml': '$line\n'});
+      final FakeFiles files = tree(<String, String>{'rendered/dev/apps/appset.yaml': '$line\n'});
       final FakeShell shell = searching(
-        carrying: <String>['argocd/dev/apps/appset.yaml'],
-        literal: trunk,
-        within: 'argocd',
+        carrying: <String>['rendered/dev/apps/appset.yaml'],
+        literal: sourceBranch,
+        within: 'rendered',
       );
 
       await retarget.apply(contextOn(shell: shell, files: files));
       expect(
-        read(files, 'argocd/dev/apps/appset.yaml').trim(),
+        read(files, 'rendered/dev/apps/appset.yaml').trim(),
         'targetRevision: &branch $fqdn # cut from master by the installer',
       );
     });
 
-    test('a line carrying the keep marker still reads the trunk', () async {
-      // What is marked is product every installation shares — the member charts of the tenant
+    test('a line carrying the keep marker still reads the sourceBranch', () async {
+      // What is marked is material every installation shares — charts read from one place
       // catalog. Retargeted, they would be read from a branch that does not carry them.
       const String content =
           'targetRevision: master\n'
           'targetRevision: master # set-domain:keep\n';
-      final FakeFiles files = tree(<String, String>{'argocd/dev/apps/catalog.yaml': content});
+      final FakeFiles files = tree(<String, String>{'rendered/dev/apps/catalog.yaml': content});
       final FakeShell shell = searching(
-        carrying: <String>['argocd/dev/apps/catalog.yaml'],
-        literal: trunk,
-        within: 'argocd',
+        carrying: <String>['rendered/dev/apps/catalog.yaml'],
+        literal: sourceBranch,
+        within: 'rendered',
       );
 
       await retarget.apply(contextOn(shell: shell, files: files));
-      final List<String> lines = read(files, 'argocd/dev/apps/catalog.yaml').split('\n');
+      final List<String> lines = read(files, 'rendered/dev/apps/catalog.yaml').split('\n');
       expect(lines[0], 'targetRevision: $fqdn');
       expect(lines[1], 'targetRevision: master # set-domain:keep');
     });
@@ -154,26 +171,26 @@ void main() {
       const String content =
           'revision: master\n'
           'revision: __BOOKS_BRANCH__\n';
-      final FakeFiles files = tree(<String, String>{'argocd/dev/apps/books.yaml': content});
+      final FakeFiles files = tree(<String, String>{'rendered/dev/apps/books.yaml': content});
       final FakeShell shell = searching(
-        carrying: <String>['argocd/dev/apps/books.yaml'],
-        literal: trunk,
-        within: 'argocd',
+        carrying: <String>['rendered/dev/apps/books.yaml'],
+        literal: sourceBranch,
+        within: 'rendered',
       );
 
       await retarget.apply(contextOn(shell: shell, files: files));
-      expect(read(files, 'argocd/dev/apps/books.yaml'), contains('revision: __BOOKS_BRANCH__'));
-      expect(read(files, 'argocd/dev/apps/books.yaml'), contains('revision: $fqdn'));
+      expect(read(files, 'rendered/dev/apps/books.yaml'), contains('revision: __BOOKS_BRANCH__'));
+      expect(read(files, 'rendered/dev/apps/books.yaml'), contains('revision: $fqdn'));
     });
 
-    test('a longer branch name that merely begins with the trunk is left alone', () async {
+    test('a longer branch name that merely begins with the sourceBranch is left alone', () async {
       final FakeFiles files = tree(<String, String>{
-        'argocd/dev/apps/other.yaml': 'revision: master-of-record\n',
+        'rendered/dev/apps/other.yaml': 'revision: master-of-record\n',
       });
       final FakeShell shell = searching(
-        carrying: <String>['argocd/dev/apps/other.yaml'],
-        literal: trunk,
-        within: 'argocd',
+        carrying: <String>['rendered/dev/apps/other.yaml'],
+        literal: sourceBranch,
+        within: 'rendered',
       );
 
       final StepContext context = contextOn(shell: shell, files: files);
@@ -182,12 +199,12 @@ void main() {
 
     test('a key that is not a revision is left alone', () async {
       final FakeFiles files = tree(<String, String>{
-        'argocd/dev/apps/other.yaml': 'branch: master\nname: master\n',
+        'rendered/dev/apps/other.yaml': 'branch: master\nname: master\n',
       });
       final FakeShell shell = searching(
-        carrying: <String>['argocd/dev/apps/other.yaml'],
-        literal: trunk,
-        within: 'argocd',
+        carrying: <String>['rendered/dev/apps/other.yaml'],
+        literal: sourceBranch,
+        within: 'rendered',
       );
 
       expect(await retarget.check(contextOn(shell: shell, files: files)), isA<Satisfied>());
@@ -195,50 +212,53 @@ void main() {
 
     test('a second run finds nothing to do, and writes nothing', () async {
       final FakeFiles files = tree(<String, String>{
-        'argocd/dev/apps/root-app.yaml': 'targetRevision: master\n',
+        'rendered/dev/apps/root-app.yaml': 'targetRevision: master\n',
       });
       final FakeShell shell = searching(
-        carrying: <String>['argocd/dev/apps/root-app.yaml'],
-        literal: trunk,
-        within: 'argocd',
+        carrying: <String>['rendered/dev/apps/root-app.yaml'],
+        literal: sourceBranch,
+        within: 'rendered',
       );
       final StepContext context = contextOn(shell: shell, files: files);
 
       await retarget.apply(context);
-      final String once = read(files, 'argocd/dev/apps/root-app.yaml');
+      final String once = read(files, 'rendered/dev/apps/root-app.yaml');
       files.written.clear();
 
       expect(await retarget.check(context), isA<Satisfied>());
       await retarget.apply(context);
       expect(files.written, isEmpty);
-      expect(read(files, 'argocd/dev/apps/root-app.yaml'), once);
+      expect(read(files, 'rendered/dev/apps/root-app.yaml'), once);
     });
 
-    test('a chart template naming the trunk is product material and is left alone', () async {
-      // One file rule for every row of this stamp: what a chart keeps under its own templates/ is
-      // shipped to every installation and belongs to none, whatever literal it carries.
-      const String content = 'targetRevision: master\n';
+    test(
+      'a chart template naming the sourceBranch is product material and is left alone',
+      () async {
+        // One file rule for every row of this stamp: what a chart keeps under its own templates/ is
+        // shipped to every installation and belongs to none, whatever literal it carries.
+        const String content = 'targetRevision: master\n';
+        final FakeFiles files = tree(<String, String>{
+          'rendered/dev/apps/templates/member.yaml': content,
+        });
+        final FakeShell shell = searching(
+          carrying: <String>['rendered/dev/apps/templates/member.yaml'],
+          literal: sourceBranch,
+          within: 'rendered',
+        );
+
+        expect(await retarget.check(contextOn(shell: shell, files: files)), isA<Satisfied>());
+      },
+    );
+
+    test('the sourceBranch is refused, whatever it carries', () async {
       final FakeFiles files = tree(<String, String>{
-        'argocd/dev/apps/templates/member.yaml': content,
+        'rendered/dev/apps/root-app.yaml': 'targetRevision: master\n',
       });
       final FakeShell shell = searching(
-        carrying: <String>['argocd/dev/apps/templates/member.yaml'],
-        literal: trunk,
-        within: 'argocd',
-      );
-
-      expect(await retarget.check(contextOn(shell: shell, files: files)), isA<Satisfied>());
-    });
-
-    test('the trunk is refused, whatever it carries', () async {
-      final FakeFiles files = tree(<String, String>{
-        'argocd/dev/apps/root-app.yaml': 'targetRevision: master\n',
-      });
-      final FakeShell shell = searching(
-        carrying: <String>['argocd/dev/apps/root-app.yaml'],
-        head: trunk,
-        literal: trunk,
-        within: 'argocd',
+        carrying: <String>['rendered/dev/apps/root-app.yaml'],
+        head: sourceBranch,
+        literal: sourceBranch,
+        within: 'rendered',
       );
 
       final CheckResult answer = await retarget.check(contextOn(shell: shell, files: files));
@@ -274,22 +294,22 @@ void main() {
       expect(after, contains('domain: $fqdn'));
     });
 
-    test('a label key of the platform namespace is unchanged', () async {
+    test('a label key whose prefix is domain-shaped is unchanged', () async {
       // A label key is a namespace in the Kubernetes convention: a product identifier nothing
       // resolves and nothing addresses. Renaming one reaches every selector at once.
       const String content =
           'metadata:\n'
           '  labels:\n'
-          '    digitacloud.app/consumer: "example"\n'
-          '    digitacloud.app/workload: "web"\n'
+          '    labels.example/tier: "example"\n'
+          '    labels.example/workload: "web"\n'
           'domain: example.invalid\n';
       final FakeFiles files = tree(<String, String>{'apps/web/values-dev.yaml': content});
       final FakeShell shell = searching(carrying: <String>['apps/web/values-dev.yaml']);
 
       await stamp.apply(contextOn(shell: shell, files: files));
       final String after = read(files, 'apps/web/values-dev.yaml');
-      expect(after, contains('digitacloud.app/consumer: "example"'));
-      expect(after, contains('digitacloud.app/workload: "web"'));
+      expect(after, contains('labels.example/tier: "example"'));
+      expect(after, contains('labels.example/workload: "web"'));
       expect(after, contains('domain: $fqdn'));
     });
 
@@ -356,24 +376,24 @@ void main() {
     });
 
     test('documentation and chart templates are unchanged', () async {
-      const String doc = 'The trunk carries example.invalid until a branch is cut.\n';
+      const String doc = 'The sourceBranch carries example.invalid until a branch is cut.\n';
       const String template = 'host: example.invalid\n';
       final FakeFiles files = tree(<String, String>{
         'docs/branching.md': doc,
-        'charts/tenant/templates/ingress.yaml': template,
+        'charts/shared/templates/ingress.yaml': template,
         'templates/values.yaml': template,
       });
       final FakeShell shell = searching(
         carrying: <String>[
           'docs/branching.md',
-          'charts/tenant/templates/ingress.yaml',
+          'charts/shared/templates/ingress.yaml',
           'templates/values.yaml',
         ],
       );
 
       await stamp.apply(contextOn(shell: shell, files: files));
       expect(read(files, 'docs/branching.md'), doc);
-      expect(read(files, 'charts/tenant/templates/ingress.yaml'), template);
+      expect(read(files, 'charts/shared/templates/ingress.yaml'), template);
       expect(read(files, 'templates/values.yaml'), template);
       expect(files.written, isEmpty);
     });
@@ -459,13 +479,13 @@ void main() {
       expect(lines[1], 'domain: example.invalid # set-domain:keep');
     });
 
-    test('the trunk is refused, so no run can put a domain on it', () async {
+    test('the sourceBranch is refused, so no run can put a domain on it', () async {
       final FakeFiles files = tree(<String, String>{
         'platform/values-dev.yaml': 'domain: example.invalid\n',
       });
       final FakeShell shell = searching(
         carrying: <String>['platform/values-dev.yaml'],
-        head: trunk,
+        head: sourceBranch,
       );
 
       final CheckResult answer = await stamp.check(contextOn(shell: shell, files: files));
