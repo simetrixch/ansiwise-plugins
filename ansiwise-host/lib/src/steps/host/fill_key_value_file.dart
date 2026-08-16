@@ -149,6 +149,23 @@ final class FillKeyValueFile extends ReversibleStep<String?> {
       );
     }
 
+    // A key the TEMPLATE declares whose line is not in the FILE. Filling happens in place, so
+    // there would be no line to rewrite: the write would leave the key out, the check afterwards
+    // would say there is still work, and the row would report doing something it did not do. It is
+    // refused instead, because a file missing a line its template declares is not a file this
+    // template made.
+    final List<String> lost = <String>[
+      for (final String key in _toFill(file, wanted).keys)
+        if (!file.declares(key)) key,
+    ];
+    if (lost.isNotEmpty) {
+      return CheckResult.blocked(
+        '$path carries no line for ${lost.join(', ')}, which $templatePath declares — filling '
+        'happens in place, so there is nothing here to rewrite. Take the file away and let this '
+        'row make it again from the template, or put the line back under its paragraph',
+      );
+    }
+
     return _toFill(file, wanted).isEmpty
         ? CheckResult.satisfied('$path states this $subject, and every value in it was answered')
         : const CheckResult.ready();

@@ -67,6 +67,16 @@ final class KeyValueFile {
     return held == _valueIn(template, key);
   }
 
+  /// Whether the FILE as it stands carries a line assigning [key].
+  ///
+  /// Asked because filling happens in place: a key the template declares whose line is not in the
+  /// file has nothing to rewrite, and writing anyway would leave it out while reporting success.
+  bool declares(String key) => _assignedKeyIn(current, key);
+
+  /// Whether [text] holds a line assigning [key].
+  static bool _assignedKeyIn(String text, String key) =>
+      text.split('\n').any((String line) => _assignedKey(line) == key);
+
   /// Which of [keys] the TEMPLATE does not declare, in the order given.
   ///
   /// A key nothing declares cannot be filled in place, and writing it anyway would put a bare

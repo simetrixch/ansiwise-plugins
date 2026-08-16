@@ -27,6 +27,8 @@ export 'src/steps/host/enable_addons.dart';
 export 'src/steps/host/ensure_tool_prerequisites.dart';
 export 'src/steps/host/export_kubeconfig.dart';
 export 'src/steps/host/install_authorized_key.dart';
+export 'src/steps/host/fill_key_value_file.dart';
+export 'src/steps/host/key_value_file.dart';
 export 'src/steps/host/install_packages.dart';
 export 'src/steps/host/install_pinned_tool.dart';
 export 'src/steps/host/install_snap.dart';
