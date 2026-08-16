@@ -22,6 +22,7 @@ export 'src/steps/patch_configmap_key.dart';
 export 'src/steps/patch_container_arguments_and_ports.dart';
 export 'src/steps/reapply_calico_manifest.dart';
 export 'src/steps/recycle_kube_system_pod_ips.dart';
+export 'src/steps/replace_calico_agent_for_pod_cidr.dart';
 export 'src/steps/require_pod_cidr_free_of_reserved_ranges.dart';
 export 'src/steps/restart_cert_manager_and_reapply_cluster_issuer.dart';
 export 'src/steps/set_default_storage_class.dart';

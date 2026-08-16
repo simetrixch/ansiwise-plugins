@@ -13,6 +13,7 @@ import 'steps/patch_configmap_key.dart';
 import 'steps/patch_container_arguments_and_ports.dart';
 import 'steps/reapply_calico_manifest.dart';
 import 'steps/recycle_kube_system_pod_ips.dart';
+import 'steps/replace_calico_agent_for_pod_cidr.dart';
 import 'steps/require_pod_cidr_free_of_reserved_ranges.dart';
 import 'steps/restart_cert_manager_and_reapply_cluster_issuer.dart';
 import 'steps/set_default_storage_class.dart';
@@ -59,6 +60,12 @@ const Map<StepName, RegisteredStep> kubernetesSteps = <StepName, RegisteredStep>
     source: 'lib/src/steps/reapply_calico_manifest.dart:14',
     create: ReapplyCalicoManifest.fromArguments,
     arguments: ReapplyCalicoManifest.arguments,
+  ),
+  StepName('replace_calico_agent_for_pod_cidr'): RegisteredStep(
+    name: StepName('replace_calico_agent_for_pod_cidr'),
+    source: 'lib/src/steps/replace_calico_agent_for_pod_cidr.dart:17',
+    create: ReplaceCalicoAgentForPodCidr.fromArguments,
+    arguments: ReplaceCalicoAgentForPodCidr.arguments,
   ),
   StepName('verify_ippool_converged_with_self_heal'): RegisteredStep(
     name: StepName('verify_ippool_converged_with_self_heal'),

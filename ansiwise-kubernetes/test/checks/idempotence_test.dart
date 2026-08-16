@@ -38,6 +38,11 @@ const Set<String> notCoveredByAFakeMachine = <String>{
   'patch_container_arguments_and_ports',
   'reapply_calico_manifest',
   'recycle_kube_system_pod_ips',
+  // Its apply ends by proving the running agent pods carry the range, and a blank fake shell
+  // answers that read with exit zero and no output — nothing proven, so the apply throws before a
+  // second run could measure anything. Its repeatability against real answers is driven directly in
+  // replace_calico_agent_for_pod_cidr_test.dart.
+  'replace_calico_agent_for_pod_cidr',
   'restart_cert_manager_and_reapply_cluster_issuer',
   'set_default_storage_class',
   'verify_ippool_converged_with_self_heal',
