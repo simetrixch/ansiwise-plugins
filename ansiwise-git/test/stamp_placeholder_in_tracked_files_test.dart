@@ -430,11 +430,9 @@ void main() {
       final int firstRead = trace.indexWhere((String e) => e.startsWith('read'));
       expect(searched, isNot(-1));
       expect(firstRead, greaterThan(searched), reason: 'the search narrows the set first');
-      expect(
-        trace.where((String e) => e.startsWith('read')),
-        <String>['read $repository/platform/values-dev.yaml'],
-        reason: 'a file the search did not return is never asked what it is',
-      );
+      expect(trace.where((String e) => e.startsWith('read')), <String>[
+        'read $repository/platform/values-dev.yaml',
+      ], reason: 'a file the search did not return is never asked what it is');
     });
 
     test('a second run finds nothing to do, and writes nothing', () async {

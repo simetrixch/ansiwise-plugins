@@ -131,20 +131,16 @@ void main() {
 
       final bool captured = await step.capture(it.context);
       expect(captured, isTrue);
-      expect(
-        shell.commands.single.argv,
-        <String>[
-          'kubectl',
-          'get',
-          'secret',
-          'app-credentials',
-          '--namespace',
-          'apps',
-          '-o',
-          'name',
-        ],
-        reason: 'it asks whether the object is there, and reads nothing out of it',
-      );
+      expect(shell.commands.single.argv, <String>[
+        'kubectl',
+        'get',
+        'secret',
+        'app-credentials',
+        '--namespace',
+        'apps',
+        '-o',
+        'name',
+      ], reason: 'it asks whether the object is there, and reads nothing out of it');
     });
 
     test('a refusal names the field that is missing and never what it should have held', () async {
@@ -184,11 +180,12 @@ void main() {
 
       expect(files.written, <String>[manifest]);
       expect(files.deleted, <String>[manifest]);
-      expect(
-        shell.commands.single.argv,
-        <String>['kubectl', 'apply', '--filename', manifest],
-        reason: 'the command names the file and carries no value of its own',
-      );
+      expect(shell.commands.single.argv, <String>[
+        'kubectl',
+        'apply',
+        '--filename',
+        manifest,
+      ], reason: 'the command names the file and carries no value of its own');
       for (final Command ran in shell.commands) {
         expect(ran.argv.join(' '), isNot(contains(secretValue)));
       }
