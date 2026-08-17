@@ -271,7 +271,11 @@ final class SetProcessFlag extends ReversibleStep<String?> {
     final DateTime giveUp = context.clock.now().add(timeout);
     while (true) {
       final CommandResult answered = await context.shell.run(
-        Command.observing(ready.first, arguments: ready.skip(1).toList()),
+        // As root, like the restart above it. A wrapped client refuses the question to an ordinary
+        // account, says so on its OUTPUT and exits ZERO — so this loop would see an answer that is
+        // not the one it waits for and give up after the whole window, reporting that the process
+        // never came back while it had been up for most of it.
+        Command.observing(ready.first, arguments: ready.skip(1).toList(), elevated: true),
       );
       if (answered.ok) {
         context.log.debug('${ready.join(' ')} answers again');
