@@ -178,4 +178,130 @@ void main() {
       expect((plan as NothingPlan).because, contains(templatePath));
     });
   });
+
+  group('a slot is filled from the answer the ROW binds to it', () {
+    // The reason a binding exists at all: a slot is spelled with hyphens and an answer with
+    // underscores, so looking an answer up by the slot's own name reaches only names of one word.
+    // Every answer of more than one — build_plane, unit_apex, books_cluster — was unreachable, and
+    // unreachable in SILENCE: the template named the slot, nothing filled it, and the literal
+    // characters went into the file for whatever read it next to take as a value.
+    const String withSlots =
+        'plane: <build-plane>\n'
+        'domain: <fqdn>\n';
+    const String templateWithSlots = 'ansiwise/templates/slotted.tpl';
+
+    HostMachine machineForSlots() {
+      final HostMachine machine = HostMachine();
+      machine.files.contents[templateWithSlots] = withSlots;
+      return machine;
+    }
+
+    StepContext runWith(HostMachine machine, Map<String, Object> answers) =>
+        machine.contextFor(const StepName('under_test'), Arguments.none, Arguments(answers));
+
+    const CreateFileFromTemplate bound = CreateFileFromTemplate(
+      templatePath: templateWithSlots,
+      path: '/etc/slotted.conf',
+      fileMode: 0x1a4,
+      values: <String, KeyBinding>{
+        'build-plane': KeyBinding(answer: 'build_plane'),
+        'fqdn': KeyBinding(answer: 'fqdn'),
+      },
+    );
+
+    test('THE INNOCENT CASE: an answer of two words reaches its slot', () async {
+      final HostMachine machine = machineForSlots();
+      final StepContext context = runWith(machine, <String, Object>{
+        'build_plane': 'b1.example.com',
+        'fqdn': 'm1.example.com',
+      });
+
+      await bound.apply(context);
+
+      expect(
+        machine.files.contents['/etc/slotted.conf'],
+        'plane: b1.example.com\ndomain: m1.example.com\n',
+      );
+    });
+
+    test('the literal slot NEVER reaches the file, whatever else happens', () async {
+      final HostMachine machine = machineForSlots();
+      final StepContext context = runWith(machine, <String, Object>{
+        'build_plane': 'b1.example.com',
+        'fqdn': 'm1.example.com',
+      });
+
+      await bound.apply(context);
+
+      expect(machine.files.contents['/etc/slotted.conf'], isNot(contains('<')));
+    });
+
+    test('a slot no binding covers is REFUSED, not written out as text', () async {
+      // Without the refusal the seven characters <build-plane> would be read by whatever opens the
+      // file as the build plane's address.
+      final HostMachine machine = machineForSlots();
+      const CreateFileFromTemplate half = CreateFileFromTemplate(
+        templatePath: templateWithSlots,
+        path: '/etc/slotted.conf',
+        fileMode: 0x1a4,
+        values: <String, KeyBinding>{'fqdn': KeyBinding(answer: 'fqdn')},
+      );
+
+      expect(
+        await half.check(runWith(machine, <String, Object>{'fqdn': 'm1.example.com'})),
+        isA<Blocked>(),
+      );
+    });
+
+    test('a binding for a slot the template does not name is REFUSED', () async {
+      // The other direction, and it is the one that loses a value in silence: the row says an
+      // answer fills something, and the file it lands in has no such place.
+      final HostMachine machine = machineForSlots();
+      const CreateFileFromTemplate extra = CreateFileFromTemplate(
+        templatePath: templateWithSlots,
+        path: '/etc/slotted.conf',
+        fileMode: 0x1a4,
+        values: <String, KeyBinding>{
+          'build-plane': KeyBinding(answer: 'build_plane'),
+          'fqdn': KeyBinding(answer: 'fqdn'),
+          'nowhere': KeyBinding(answer: 'stage'),
+        },
+      );
+
+      expect(
+        await extra.check(
+          runWith(machine, <String, Object>{
+            'build_plane': 'b1.example.com',
+            'fqdn': 'm1.example.com',
+            'stage': 'dev',
+          }),
+        ),
+        isA<Blocked>(),
+      );
+    });
+
+    test('several values are joined by what the row says stands between them', () async {
+      // Not by whatever shape a list happens to print as, which is what stood here before.
+      const String listTemplate = 'ansiwise/templates/listed.tpl';
+      final HostMachine machine = HostMachine();
+      machine.files.contents[listTemplate] = 'to: <alert-recipients>\n';
+
+      const CreateFileFromTemplate joined = CreateFileFromTemplate(
+        templatePath: listTemplate,
+        path: '/etc/listed.conf',
+        fileMode: 0x1a4,
+        values: <String, KeyBinding>{
+          'alert-recipients': KeyBinding(answer: 'alert_recipients', join: ','),
+        },
+      );
+
+      await joined.apply(
+        runWith(machine, <String, Object>{
+          'alert_recipients': <String>['a@example.com', 'b@example.com'],
+        }),
+      );
+
+      expect(machine.files.contents['/etc/listed.conf'], 'to: a@example.com,b@example.com\n');
+    });
+  });
 }

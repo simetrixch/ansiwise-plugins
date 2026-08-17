@@ -1,4 +1,5 @@
 import 'package:ansiwise_api/ansiwise_api.dart';
+import 'fill_key_value_file.dart';
 
 /// Puts a file on the machine from a template beside the programs, and never overrules one that is
 /// already there.
@@ -27,6 +28,7 @@ final class CreateFileFromTemplate extends ReversibleStep<bool> with FileStep, T
     required this.path,
     required this.fileMode,
     this.runAnswer,
+    this.values = const <String, KeyBinding>{},
   });
 
   /// Builds the step from what the program gave it.
@@ -35,6 +37,9 @@ final class CreateFileFromTemplate extends ReversibleStep<bool> with FileStep, T
     path: arguments.text('path'),
     fileMode: arguments.integer('file_mode'),
     runAnswer: arguments.optionalText('run_answer'),
+    values: arguments.has('values')
+        ? KeyBinding.readFrom(arguments.raw('values'))
+        : const <String, KeyBinding>{},
   );
 
   /// What this step accepts.
@@ -80,6 +85,21 @@ final class CreateFileFromTemplate extends ReversibleStep<bool> with FileStep, T
           'stage. Leave it off where there is no such axis',
       required: false,
     ),
+    // WHY A SLOT IS BOUND AND NEVER MATCHED BY NAME. A slot is spelled with hyphens
+    // (`<build-plane>`) and an answer with underscores (`build_plane`), and the grammar forbids the
+    // underscore on purpose so that no name has two spellings. Looking an answer up by the slot's
+    // own name therefore reaches only answers of a single word, and the failure is silent: the
+    // template names a slot, nothing fills it, and the seven literal characters go into the file
+    // for whatever reads it next to take as a value. Saying which answer fills which slot is one
+    // named slot standing for exactly one value, which is a mechanism and not an expression.
+    ArgumentSpec(
+      name: 'values',
+      kind: ArgumentKind.mapping,
+      describes:
+          'which answer fills each slot of the template, as `slot-name: {answer: name}` and '
+          'optionally `join` where the answer holds several values',
+      required: false,
+    ),
   ];
 
   /// Where the template stands, as the row names it.
@@ -94,7 +114,13 @@ final class CreateFileFromTemplate extends ReversibleStep<bool> with FileStep, T
 
   /// The name of the answer whose value fills the slot of the same name, or null where there is
   /// none.
+  ///
+  /// The PATH and not the content, and matched by name rather than bound, because a path carries at
+  /// most this one axis and the row names the answer outright.
   final String? runAnswer;
+
+  /// Which answer fills each slot of the template.
+  final Map<String, KeyBinding> values;
 
   @override
   String pathFor(StepContext context) {
@@ -133,22 +159,16 @@ final class CreateFileFromTemplate extends ReversibleStep<bool> with FileStep, T
         'file without one',
       );
     }
-    final String text = await context.files.read(templatePath);
-    final List<Slot> slots = slotsIn(text);
+    // An answer holding nothing is left out rather than filled in empty, so an OPTIONAL slot's line
+    // is dropped by the framework instead of being written with nothing after it. A REQUIRED slot
+    // nobody answered is refused there by name, which is the whole reason the two kinds differ.
+    final Map<String, String> filled = <String, String>{
+      for (final MapEntry<String, KeyBinding> each in values.entries)
+        if (each.value.valueFrom(context.answers) case final String value when value.isNotEmpty)
+          each.key: value,
+    };
 
-    final Map<String, String> values = <String, String>{};
-    for (final Slot slot in slots) {
-      if (context.answers.has(slot.name)) {
-        final dynamic raw = context.answers.raw(slot.name);
-        if (raw is String && raw.isNotEmpty) {
-          values[slot.name] = raw;
-        } else if (raw is List && raw.isNotEmpty) {
-          values[slot.name] = raw.join(', ');
-        }
-      }
-    }
-
-    return FileContent.text(await renderedWith(context, values));
+    return FileContent.text(await renderedWith(context, filled));
   }
 
   @override
