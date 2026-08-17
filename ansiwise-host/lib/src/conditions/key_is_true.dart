@@ -37,11 +37,14 @@ import '../steps/host/key_value_file.dart';
 /// because the answer was taken before that step existed.
 final class KeyIsTrue implements Predicate {
   /// Asks whether [key] holds true in the file at [path].
-  const KeyIsTrue({required this.path, required this.key});
+  const KeyIsTrue({required this.path, required this.key, this.runAnswer});
 
   /// Builds the condition from what one installation told it.
-  factory KeyIsTrue.fromValues(Arguments values) =>
-      KeyIsTrue(path: values.text('file'), key: values.text('key'));
+  factory KeyIsTrue.fromValues(Arguments values) => KeyIsTrue(
+    path: values.text('file'),
+    key: values.text('key'),
+    runAnswer: values.has('run_answer') ? values.text('run_answer') : null,
+  );
 
   /// What this condition has to be told before a program row may name it.
   static const List<ArgumentSpec> arguments = <ArgumentSpec>[
@@ -55,6 +58,16 @@ final class KeyIsTrue implements Predicate {
       kind: ArgumentKind.text,
       describes: 'the key in that file whose value decides this condition',
     ),
+    ArgumentSpec(
+      name: 'run_answer',
+      kind: ArgumentKind.answerName,
+      required: false,
+      describes:
+          'the name of an answer whose value fills the slot spelled with that same name in the '
+          'path above — write "stage" here and a "<stage>" in the path is filled with the stage '
+          'this run holds. Without it the path is taken as it stands, which is right for a file '
+          'whose name is the same on every installation',
+    ),
   ];
 
   /// The file this condition reads.
@@ -62,6 +75,24 @@ final class KeyIsTrue implements Predicate {
 
   /// The key in it that decides.
   final String key;
+
+  /// WHICH answer fills the slot in the path, or null where the path carries none.
+  ///
+  /// **The file an installation states itself in is named for its stage, and the stage is a suffix
+  /// and never a folder.** A condition pointed at `configs/config.dev` is a condition that is right
+  /// on exactly one installation and silently wrong on the next — it reads a file that is not
+  /// there, and a condition that cannot be answered stops the run before it starts. Pointed at
+  /// `configs/config.<stage>` with this naming `stage`, it is right on all of them.
+  final String? runAnswer;
+
+  /// [path] with the slot filled from [answers], or [path] itself where this row names no answer.
+  String pathIn(Arguments answers) {
+    final String? named = runAnswer;
+    if (named == null) {
+      return path;
+    }
+    return path.replaceAll('<$named>', answers.text(named));
+  }
 
   /// The one value this reads as true.
   static const String yes = 'true';
@@ -71,6 +102,7 @@ final class KeyIsTrue implements Predicate {
 
   @override
   Future<PredicateResult> evaluate(PredicateContext context) async {
+    final String path = pathIn(context.answers);
     if (!await context.files.exists(path)) {
       throw ConditionUnanswerable(
         '$path is not on this machine, so nothing says whether $key is $yes or $no\n'
