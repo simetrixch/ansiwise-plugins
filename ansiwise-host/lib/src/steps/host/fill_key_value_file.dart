@@ -40,6 +40,7 @@ final class FillKeyValueFile extends ReversibleStep<String?> {
   const FillKeyValueFile({
     required this.templatePath,
     required this.path,
+    this.runAnswer,
     required this.fileMode,
     required this.subject,
     required this.values,
@@ -51,6 +52,7 @@ final class FillKeyValueFile extends ReversibleStep<String?> {
   factory FillKeyValueFile.fromArguments(Arguments arguments) => FillKeyValueFile(
     templatePath: arguments.text('template_path'),
     path: arguments.text('path'),
+    runAnswer: arguments.optionalText('run_answer'),
     fileMode: arguments.integer('file_mode'),
     subject: arguments.text('subject'),
     values: KeyBinding.readFrom(arguments.raw('values')),
@@ -60,6 +62,16 @@ final class FillKeyValueFile extends ReversibleStep<String?> {
 
   /// What this step accepts.
   static const List<ArgumentSpec> arguments = <ArgumentSpec>[
+    ArgumentSpec(
+      name: 'run_answer',
+      kind: ArgumentKind.answerName,
+      required: false,
+      describes:
+          'the name of the answer whose value fills the slot spelled with that same name in '
+          'the path — write "stage" here and a "<stage>" in the path is filled with the '
+          'stage this run holds. Leave it off where the file is named the same on every '
+          'installation',
+    ),
     ArgumentSpec(
       name: 'template_path',
       kind: ArgumentKind.text,
@@ -108,6 +120,25 @@ final class FillKeyValueFile extends ReversibleStep<String?> {
   /// The file that is written.
   final String path;
 
+  /// WHICH answer fills the slot spelled the same way in [path], or null where it carries none.
+  ///
+  /// **The file an installation states itself in is named for its stage, and the stage is a suffix
+  /// and never a folder.** A row pointed at `configs/config.dev` writes the right file on exactly
+  /// one installation; pointed at `configs/config.<stage>` with this naming `stage`, it writes the
+  /// right one on all of them. The mechanism is the one the template writers in this package
+  /// already carry, under the same argument name.
+  final String? runAnswer;
+
+  /// [path] with the slot filled from this run, or [path] itself where this row names no answer.
+  String pathFor(StepContext context) {
+    if (runAnswer case final String name) {
+      if (context.answers.optionalText(name) case final String value) {
+        return filledSlots(path, <String, String>{name: value});
+      }
+    }
+    return path;
+  }
+
   /// The permissions it is written with.
   final int fileMode;
 
@@ -125,6 +156,7 @@ final class FillKeyValueFile extends ReversibleStep<String?> {
   final bool elevated;
   @override
   Future<CheckResult> check(StepContext context) async {
+    final String path = pathFor(context);
     if (!await context.files.exists(templatePath, elevated: elevated)) {
       return CheckResult.blocked(
         '$templatePath is not there, and it is what this $subject file is made from — every key '
@@ -188,6 +220,7 @@ final class FillKeyValueFile extends ReversibleStep<String?> {
 
   @override
   Future<StepPlan> plan(StepContext context) async {
+    final String path = pathFor(context);
     if (!await context.files.exists(templatePath, elevated: elevated)) {
       // The same state check refuses, said as a plan rather than thrown. A plan that throws leaves
       // a dry run with nothing to say about this row, and a dry run that cannot say what a row
@@ -211,6 +244,7 @@ final class FillKeyValueFile extends ReversibleStep<String?> {
 
   @override
   Future<void> apply(StepContext context) async {
+    final String path = pathFor(context);
     final KeyValueFile read = await _read(context);
 
     // GROWN FIRST, THEN FILLED, and both against the same reading. A key the template gained is
@@ -238,12 +272,13 @@ final class FillKeyValueFile extends ReversibleStep<String?> {
   /// The file as it stood, or null where there was none.
   @override
   Future<String?> capture(StepContext context) async =>
-      await context.files.exists(path, elevated: elevated)
-      ? context.files.read(path, elevated: elevated)
+      await context.files.exists(pathFor(context), elevated: elevated)
+      ? context.files.read(pathFor(context), elevated: elevated)
       : null;
 
   @override
   Future<void> undo(StepContext context, String? captured) async {
+    final String path = pathFor(context);
     if (captured == null) {
       // There was no such file, so taking this back means the path is gone again. Writing the
       // template back instead would leave a file of empty values that reads as an installation
@@ -258,8 +293,8 @@ final class FillKeyValueFile extends ReversibleStep<String?> {
   /// The template and the file as they stand, read as one.
   Future<KeyValueFile> _read(StepContext context) async => KeyValueFile(
     template: await context.files.read(templatePath, elevated: elevated),
-    current: await context.files.exists(path, elevated: elevated)
-        ? await context.files.read(path, elevated: elevated)
+    current: await context.files.exists(pathFor(context), elevated: elevated)
+        ? await context.files.read(pathFor(context), elevated: elevated)
         : await context.files.read(templatePath, elevated: elevated),
   );
 

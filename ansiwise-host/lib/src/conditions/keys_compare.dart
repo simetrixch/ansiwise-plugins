@@ -48,6 +48,7 @@ final class KeysAgree implements Predicate {
     required this.first,
     required this.second,
     required this.holdsWhenEqual,
+    this.runAnswer,
   });
 
   /// The shape that holds where the two values are the same.
@@ -56,6 +57,7 @@ final class KeysAgree implements Predicate {
     first: values.text('key'),
     second: values.text('other_key'),
     holdsWhenEqual: true,
+    runAnswer: values.has('run_answer') ? values.text('run_answer') : null,
   );
 
   /// The shape that holds where the two values are not the same.
@@ -64,10 +66,20 @@ final class KeysAgree implements Predicate {
     first: values.text('key'),
     second: values.text('other_key'),
     holdsWhenEqual: false,
+    runAnswer: values.has('run_answer') ? values.text('run_answer') : null,
   );
 
   /// What either shape has to be told before a program row may name it.
   static const List<ArgumentSpec> arguments = <ArgumentSpec>[
+    ArgumentSpec(
+      name: 'run_answer',
+      kind: ArgumentKind.answerName,
+      required: false,
+      describes:
+          'the name of an answer whose value fills the slot spelled with that same name in '
+          'the path above. Leave it off where the file is named the same on every '
+          'installation',
+    ),
     ArgumentSpec(
       name: 'file',
       kind: ArgumentKind.text,
@@ -88,6 +100,23 @@ final class KeysAgree implements Predicate {
   /// The file this condition reads.
   final String path;
 
+  /// WHICH answer fills the slot spelled the same way in [path], or null where it carries none.
+  ///
+  /// The file an installation states itself in is named for its stage, and the stage is a suffix and
+  /// never a folder. Written out, this condition is right on one installation and reads a file that
+  /// is not there on the next — and a condition that cannot be answered stops the run before it
+  /// starts.
+  final String? runAnswer;
+
+  /// [path] with the slot filled from [answers], or [path] itself where this row names no answer.
+  String pathIn(Arguments answers) {
+    final String? named = runAnswer;
+    if (named == null) {
+      return path;
+    }
+    return path.replaceAll('<$named>', answers.text(named));
+  }
+
   /// One of the two keys compared.
   final String first;
 
@@ -99,6 +128,7 @@ final class KeysAgree implements Predicate {
 
   @override
   Future<PredicateResult> evaluate(PredicateContext context) async {
+    final String path = pathIn(context.answers);
     if (!await context.files.exists(path)) {
       throw ConditionUnanswerable(
         '$path is not on this machine, so nothing says whether $first and $second carry the same '
