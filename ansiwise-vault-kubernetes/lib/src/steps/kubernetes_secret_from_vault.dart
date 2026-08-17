@@ -145,6 +145,9 @@ final class KubernetesSecretFromVault extends ReversibleStep<bool> {
   /// `0600` — the file holds every value of the Secret in the clear for as long as the apply takes.
   static const int mode = 0x180;
 
+  /// The mode the staging directory is made with, which is 0700.
+  static const int stagingMode = 448;
+
   /// Where the manifest stands while the cluster client reads it.
   String pathFor() => '$staging/$namespace-$name.yaml';
 
@@ -175,6 +178,15 @@ final class KubernetesSecretFromVault extends ReversibleStep<bool> {
       throw StateError(refusal);
     }
     final String file = pathFor();
+    // THE DIRECTORY IS MADE HERE, EVERY RUN, RATHER THAN ASSUMED. A row points this at a place the
+    // installation chose, and the obvious choice is one the machine wipes: a directory under /run
+    // is a tmpfs that is empty again after every restart. Assumed, the step fails on writing the
+    // file and what an operator reads is a path that "cannot be created", which says nothing about
+    // whose job it was to create it.
+    //
+    // 448 is 0700, written as the number the machine stores. The file below is already 0600, and a
+    // world-listable directory around it would still say which namespace holds which secret.
+    await context.files.createDirectory(staging, mode: stagingMode, elevated: elevated);
     await context.files.write(file, manifestOf(entry.values), mode: mode, elevated: elevated);
     try {
       final Command apply = kubectl.command(<String>['apply', '--filename', file]);
