@@ -158,7 +158,7 @@ final class WaitForAnswer extends ObservingStep with WaitStep {
   bool get answersOnTrust => true;
 
   @override
-  Future<bool> holds(StepContext context) async {
+  Future<({bool held, String? saw})> holds(StepContext context) async {
     final CommandResult answered = await context.shell.run(
       // Observing on the row's word — the obligation stands at the command argument — and never
       // without a deadline: a poll that blocks is killed at the row's timeout plus the grace,
@@ -171,6 +171,25 @@ final class WaitForAnswer extends ObservingStep with WaitStep {
         timeout: deadline + _grace,
       ),
     );
-    return answered.ok && answered.stdout.split('\n').any((String line) => line.trim() == answer);
+    if (answered.ok && answered.stdout.split('\n').any((String line) => line.trim() == answer)) {
+      return (held: true, saw: null);
+    }
+    // WHAT THE MACHINE SAID INSTEAD, which is the whole reason this is not a bare false. A command
+    // that ran and printed something other than the answer knows more than the clock does: the
+    // reading this was written for was a certificate authority refusing a mailbox by name,
+    // available one second in and thrown away for sixty. Standard error first, because a command
+    // that failed puts its reason there; the output otherwise, because a command that succeeded and
+    // said the wrong thing puts it there.
+    final String reading = (answered.stderr.trim().isNotEmpty ? answered.stderr : answered.stdout)
+        .split('\n')
+        .map((String line) => line.trim())
+        .where((String line) => line.isNotEmpty)
+        .join(' ');
+    return (
+      held: false,
+      saw: reading.isEmpty
+          ? 'the command answered nothing at all'
+          : 'it said "$reading" and not "$answer"',
+    );
   }
 }

@@ -103,12 +103,27 @@ final class WaitForAddonsEnabled extends ObservingStep with WaitStep {
   Duration get interval => Duration(seconds: intervalSeconds);
 
   @override
-  Future<bool> holds(StepContext context) async {
+  Future<({bool held, String? saw})> holds(StepContext context) async {
     // The OUTPUT and not the exit code, and the enabled section of it and not the whole. A node that
     // is not running exits zero and prints no such section, so it names nothing here and the wait
     // goes on rather than ending on a cluster that is down.
     final Set<String> on =
         await enabledAddons(context, statusCommand, elevated: elevated) ?? const <String>{};
-    return names.every(on.contains);
+    final List<String> missing = <String>[
+      for (final String name in names)
+        if (!on.contains(name)) name,
+    ];
+    if (missing.isEmpty) {
+      return (held: true, saw: null);
+    }
+    // The addons still off, by name. A wait that reports only its own duration sends an operator to
+    // read a whole status page for the one line this already has.
+    return (
+      held: false,
+      saw: on.isEmpty
+          ? 'the node named no addon as on at all, which is what a node that is not running says'
+          : '${missing.join(', ')} ${missing.length == 1 ? 'is' : 'are'} still off, and '
+                '${on.join(', ')} ${on.length == 1 ? 'is' : 'are'} on',
+    );
   }
 }
