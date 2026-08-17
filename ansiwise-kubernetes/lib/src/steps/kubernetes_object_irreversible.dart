@@ -99,6 +99,7 @@ final class KubernetesObjectIrreversible extends IrreversibleStep {
     ),
     Kubectl.argument,
     Kubectl.elevationArgument,
+    elevationArgument,
   ];
 
   /// How long the client is given to talk to the API server before it gives up.

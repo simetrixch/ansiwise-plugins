@@ -45,6 +45,7 @@ final class ApplyClusterIssuer extends ReversibleStep<bool> {
     ),
     Kubectl.argument,
     Kubectl.elevationArgument,
+    elevationArgument,
   ];
 
   /// The issuer certificates are issued by.

@@ -97,6 +97,7 @@ final class RestartCertManagerAndReapplyClusterIssuer extends IrreversibleStep {
     ),
     Kubectl.argument,
     Kubectl.elevationArgument,
+    elevationArgument,
   ];
 
   /// The issuer certificates are issued by.

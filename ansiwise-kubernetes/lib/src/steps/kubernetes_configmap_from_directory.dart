@@ -71,6 +71,7 @@ final class KubernetesConfigmapFromDirectory extends ReversibleStep<bool> {
     ),
     Kubectl.argument,
     Kubectl.elevationArgument,
+    elevationArgument,
   ];
 
   /// The checkout.

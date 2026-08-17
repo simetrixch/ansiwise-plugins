@@ -22,7 +22,7 @@ final class InstallAuthorizedKey extends ReversibleStep<bool> {
   /// Both the account and the key belong to one installation — the account is what the machine's
   /// provider made, the key is the operator's own — so they are answered by whoever runs this and
   /// never written into a program file that ships to everybody.
-  static const List<ArgumentSpec> arguments = <ArgumentSpec>[];
+  static const List<ArgumentSpec> arguments = <ArgumentSpec>[elevationArgument];
 
   /// The answers this step reads, which is what its registry entry declares.
   ///

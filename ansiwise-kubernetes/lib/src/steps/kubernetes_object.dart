@@ -55,6 +55,7 @@ final class KubernetesObject extends ReversibleStep<bool> {
     ),
     Kubectl.argument,
     Kubectl.elevationArgument,
+    elevationArgument,
   ];
 
   /// The checkout.

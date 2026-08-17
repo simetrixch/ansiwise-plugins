@@ -44,6 +44,7 @@ final class ReapplyCalicoManifest extends ReversibleStep<String?> {
     ),
     Kubectl.argument,
     Kubectl.elevationArgument,
+    elevationArgument,
   ];
 
   /// The namespace the network agent runs in.

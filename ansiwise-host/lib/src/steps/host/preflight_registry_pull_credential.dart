@@ -41,7 +41,10 @@ final class PreflightRegistryPullCredential extends ObservingStep {
   /// The layout and nothing besides: this gate reads exactly what the writer reads, so a row that
   /// pointed one of them at another file would be refused for the argument it left out rather than
   /// measuring one thing and configuring another.
-  static const List<ArgumentSpec> arguments = RegistryMirror.arguments;
+  static const List<ArgumentSpec> arguments = <ArgumentSpec>[
+    ...RegistryMirror.arguments,
+    elevationArgument,
+  ];
 
   /// Where the mirror is written down and what it is reached with.
   final RegistryMirror layout;
