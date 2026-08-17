@@ -81,7 +81,16 @@ final class DetectHostUpstreamResolvers extends ObservingStep {
         'nowhere to go',
       );
     }
-    context.measurements.publish(const MeasurementName('upstream_servers'), found.join(', '));
+    // SPACES AND NOT COMMAS, because a machine reads this and a person reads the sentence below it.
+    // A later row writes this measurement into a resolver's own configuration, and a list of name
+    // servers is separated by spaces wherever one is written down — the file this step reads is
+    // itself one address per line, with no comma anywhere. Published as a sentence, the whole value
+    // arrives at that resolver as ONE token ending in a comma, it refuses to start, and it goes on
+    // refusing: measured on a fresh machine as
+    // `forward: not an IP address or file: "185.12.64.1,"`.
+    //
+    // The comma-separated form is right in exactly one place, and that place is the next line.
+    context.measurements.publish(const MeasurementName('upstream_servers'), found.join(' '));
     return CheckResult.satisfied('this machine reaches the internet through ${found.join(', ')}');
   }
 
