@@ -34,6 +34,7 @@ final class VaultKvEntry extends IrreversibleStep {
     required this.fields,
     required this.mint,
     required this.fieldsOwnedElsewhere,
+    required this.optionalFields,
     required this.layout,
     required this.secrets,
     this.elevated = false,
@@ -47,6 +48,7 @@ final class VaultKvEntry extends IrreversibleStep {
     fields: arguments.textList('fields'),
     mint: arguments.textList('mint'),
     fieldsOwnedElsewhere: arguments.textList('fields_owned_elsewhere'),
+    optionalFields: arguments.textList('optional_fields'),
     layout: VaultLayout.fromArguments(arguments),
     secrets: arguments.text('secrets_path'),
     elevated: arguments.has('elevated') && arguments.flag('elevated'),
@@ -89,6 +91,17 @@ final class VaultKvEntry extends IrreversibleStep {
       describes:
           'the fields this run generates when the hand-filled input leaves them empty, so a value '
           'nobody can be asked for comes into being here and nowhere else',
+    ),
+    ArgumentSpec(
+      name: 'optional_fields',
+      kind: ArgumentKind.textList,
+      required: false,
+      defaultValue: <String>[],
+      describes:
+          'the fields this installation may simply not have — left out rather than refused when '
+          'their variable is unfilled, because an installation without them is complete and not '
+          'half-answered. Told apart from fields_owned_elsewhere by the reason: nobody is coming '
+          'to fill these',
     ),
     ArgumentSpec(
       name: 'fields_owned_elsewhere',
@@ -146,6 +159,19 @@ final class VaultKvEntry extends IrreversibleStep {
 
   /// The fields another writer owns.
   final List<String> fieldsOwnedElsewhere;
+
+  /// The fields an installation may simply not have, which is a complete answer and not a gap.
+  ///
+  /// **Told apart from [fieldsOwnedElsewhere] by the REASON, though they behave the same.** A field
+  /// owned elsewhere is one somebody else will fill and a reader should expect to appear; a field
+  /// named here is one that may never be filled by anyone, because this installation does not use
+  /// what it belongs to. Reading a row, those are different facts, and a reader who cannot tell them
+  /// apart does not know whether to wait or to stop looking.
+  ///
+  /// What it is for: a credential that buys something optional. An installation without it works —
+  /// it simply works the way it works without it — and refusing the whole run for a value nobody
+  /// promised is refusing to install a thing that is complete.
+  final List<String> optionalFields;
 
   /// Whether the file this row points at belongs to root, so every read and write of it is
   /// elevated.
@@ -332,21 +358,26 @@ final class VaultKvEntry extends IrreversibleStep {
       final String field = declared.substring(0, equals).trim();
       final String variable = declared.substring(equals + 1).trim();
       final String value = assignments[variable] ?? '';
+      // Both leave the field out rather than refuse. They are two names because they are two
+      // reasons, and a row says which one it means.
       final bool ownedElsewhere = fieldsOwnedElsewhere.contains(field);
+      final bool optional = optionalFields.contains(field);
+      final bool leftOutWhenUnfilled = ownedElsewhere || optional;
 
       if (value.isEmpty) {
         if (mint.contains(field)) {
           toMint.add(field);
-        } else if (!ownedElsewhere) {
+        } else if (!leftOutWhenUnfilled) {
           wrong.add('$variable is empty in $secretsPath, and $field of $dataPath is read from it');
         }
         continue;
       }
       if (isUnfilled(value)) {
-        if (ownedElsewhere) {
+        if (leftOutWhenUnfilled) {
           context.log.debug(
             '$field is left out of $dataPath: $variable still holds the text that marks it '
-            'unfilled, and another writer owns that field',
+            'unfilled, and ${ownedElsewhere ? 'another writer owns that field' : 'this '
+                      'installation does not have to have it'}',
           );
           continue;
         }

@@ -94,6 +94,7 @@ void main() {
       fields: <String>['pat=CATALOG_REPO_PAT'],
       mint: <String>['pat'],
       fieldsOwnedElsewhere: <String>[],
+      optionalFields: <String>[],
       layout: layout,
       secrets: secretsPath,
     );
@@ -226,6 +227,7 @@ void main() {
         fields: <String>['pat=CATALOG_REPO_PAT'],
         mint: <String>[],
         fieldsOwnedElsewhere: <String>[],
+        optionalFields: <String>[],
         layout: layout,
         secrets: secretsPath,
       );
@@ -255,6 +257,7 @@ void main() {
         fields: <String>['pat=CATALOG_REPO_PAT'],
         mint: <String>[],
         fieldsOwnedElsewhere: <String>[],
+        optionalFields: <String>[],
         layout: layout,
         secrets: secretsPath,
       );
@@ -294,6 +297,7 @@ void main() {
         fields: <String>['dkim-private-key=POSTFIX_DKIM_PRIVATE_KEY'],
         mint: <String>[],
         fieldsOwnedElsewhere: <String>['dkim-private-key'],
+        optionalFields: <String>[],
         layout: layout,
         secrets: secretsPath,
       );
@@ -317,6 +321,7 @@ void main() {
         fields: <String>['pat=CATALOG_REPO_PAT', 'other=GITOPS_REPO_PAT'],
         mint: <String>[],
         fieldsOwnedElsewhere: <String>[],
+        optionalFields: <String>[],
         layout: layout,
         secrets: secretsPath,
       ).check(it.context);
@@ -344,6 +349,7 @@ void main() {
         fields: <String>['pat=CATALOG_REPO_PAT'],
         mint: <String>[],
         fieldsOwnedElsewhere: <String>[],
+        optionalFields: <String>[],
         layout: layout,
         secrets: secretsPath,
       ).check(it.context);
@@ -606,6 +612,7 @@ void main() {
         fields: <String>['dkim-private-key=POSTFIX_DKIM_PRIVATE_KEY'],
         mint: <String>[],
         fieldsOwnedElsewhere: <String>[],
+        optionalFields: <String>[],
         layout: layout,
         secrets: secretsPath,
       ).plan(prod.context);
