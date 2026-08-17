@@ -18,6 +18,7 @@ void main() {
   // this caller's arrangement: cert-manager mandates neither, so this package carries neither.
   const String templatePath = 'test/templates/cluster-issuer-manifest.tpl';
   const String manifestPath = '/var/lib/deploy/state/clusterissuer.yaml';
+  const String mailboxAnswer = 'certificate_mailbox';
 
   const WriteClusterIssuerManifest step = WriteClusterIssuerManifest(
     templatePath: templatePath,
@@ -25,7 +26,14 @@ void main() {
     acmeServer: 'https://acme.example.com/directory',
     ingressClass: 'public',
     path: manifestPath,
+    emailAnswer: mailboxAnswer,
   );
+
+  /// The name the ROW gives the answer holding the mailbox.
+  ///
+  /// Deliberately not the word one certificate authority uses. The step is told which answer to read
+  /// by its row, so a test naming that authority's own word would pass even if the step ignored the
+  /// row and reached for it directly.
 
   /// A machine carrying the template a program row names, the way a real one carries it.
   ClusterMachine withTemplate() {
@@ -35,9 +43,7 @@ void main() {
   }
 
   /// What an operator answered about this installation.
-  const Arguments answered = Arguments(<String, Object>{
-    WriteClusterIssuerManifest.emailAnswer: 'ops@example.com',
-  });
+  const Arguments answered = Arguments(<String, Object>{mailboxAnswer: 'ops@example.com'});
 
   test('the four values the row and the run hold reach the file', () async {
     final ClusterMachine machine = withTemplate();
@@ -63,9 +69,7 @@ void main() {
       machine.contextFor(
         under,
         Arguments.none,
-        const Arguments(<String, Object>{
-          WriteClusterIssuerManifest.emailAnswer: 'certificates@example.org',
-        }),
+        const Arguments(<String, Object>{mailboxAnswer: 'certificates@example.org'}),
       ),
     );
     expect(machine.files.contents[manifestPath], contains('email: certificates@example.org'));

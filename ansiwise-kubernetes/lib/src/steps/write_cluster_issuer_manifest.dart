@@ -26,6 +26,7 @@ final class WriteClusterIssuerManifest extends ReversibleStep<String?> with File
     required this.acmeServer,
     required this.ingressClass,
     required this.path,
+    required this.emailAnswer,
     this.elevated = false,
   });
 
@@ -37,6 +38,7 @@ final class WriteClusterIssuerManifest extends ReversibleStep<String?> with File
         acmeServer: arguments.text('acme_server'),
         ingressClass: arguments.text('ingress_class'),
         path: arguments.text('issuer_manifest_path'),
+        emailAnswer: arguments.text('email_answer'),
         elevated: arguments.has('elevated') && arguments.flag('elevated'),
       );
 
@@ -69,6 +71,14 @@ final class WriteClusterIssuerManifest extends ReversibleStep<String?> with File
     // the program and the three cannot come to mean three different files. The directory it stands
     // in is created from the same value, so there is no second answer about where it goes.
     ArgumentSpec(
+      name: 'email_answer',
+      kind: ArgumentKind.answerName,
+      describes:
+          'the name of the answer holding the mailbox the certificate authority writes to before a '
+          'certificate expires — the question belongs to whoever operates the installation, and the '
+          'authority is named separately by acme_server',
+    ),
+    ArgumentSpec(
       name: 'issuer_manifest_path',
       kind: ArgumentKind.text,
       describes:
@@ -89,13 +99,17 @@ final class WriteClusterIssuerManifest extends ReversibleStep<String?> with File
 
   /// The answers this step reads, which is what its registry entry declares.
   ///
-  /// The mailbox the certificate authority writes to before a certificate expires. It belongs to
-  /// whoever operates the installation, so it is asked for rather than shipped, and it is an ANSWER
-  /// rather than an argument because a program file ships to every installation.
-  static const List<String> answers = <String>[emailAnswer];
+  /// Empty: WHICH answer holds the mailbox is what the row says under `email_answer`, so a name here
+  /// would be one product's question living in a package that must serve any. It was `letsencrypt_email`
+  /// — the name of one certificate authority, in a step whose authority already arrives as an
+  /// argument, so the step was neutral everywhere except in the one word it could not help writing.
+  ///
+  /// The row that declares the answer statically is the gate at the head of the program, which is
+  /// what keeps the resolver refusing a program that stopped declaring it.
+  static const List<String> answers = <String>[];
 
-  /// The name the mailbox is answered under.
-  static const String emailAnswer = 'letsencrypt_email';
+  /// The name of the answer holding the mailbox, as the row states it.
+  final String emailAnswer;
 
   /// `0644` — a rendered manifest that carries nothing secret.
   static const int manifestMode = 0x1a4;
