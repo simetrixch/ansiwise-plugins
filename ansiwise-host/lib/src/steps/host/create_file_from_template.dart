@@ -27,25 +27,15 @@ final class CreateFileFromTemplate extends ReversibleStep<bool> with FileStep, T
     required this.path,
     required this.fileMode,
     this.runAnswer,
-    this.skippableAnswers = const <String>[],
   });
 
   /// Builds the step from what the program gave it.
-  factory CreateFileFromTemplate.fromArguments(Arguments arguments) {
-    final String? rawSkippable = arguments.optionalText('skippable_answer');
-    final List<String> skippable = <String>[];
-    if (rawSkippable != null && rawSkippable.isNotEmpty) {
-      skippable.add(rawSkippable);
-    }
-
-    return CreateFileFromTemplate(
-      templatePath: arguments.text('template'),
-      path: arguments.text('path'),
-      fileMode: arguments.integer('file_mode'),
-      runAnswer: arguments.optionalText('run_answer'),
-      skippableAnswers: skippable,
-    );
-  }
+  factory CreateFileFromTemplate.fromArguments(Arguments arguments) => CreateFileFromTemplate(
+    templatePath: arguments.text('template'),
+    path: arguments.text('path'),
+    fileMode: arguments.integer('file_mode'),
+    runAnswer: arguments.optionalText('run_answer'),
+  );
 
   /// What this step accepts.
   static const List<ArgumentSpec> arguments = <ArgumentSpec>[
@@ -90,12 +80,6 @@ final class CreateFileFromTemplate extends ReversibleStep<bool> with FileStep, T
           'stage. Leave it off where there is no such axis',
       required: false,
     ),
-    ArgumentSpec(
-      name: 'skippable_answers',
-      kind: ArgumentKind.textList,
-      describes: 'a list of answer names whose template lines will be removed if left blank',
-      required: false,
-    ),
   ];
 
   /// Where the template stands, as the row names it.
@@ -111,9 +95,6 @@ final class CreateFileFromTemplate extends ReversibleStep<bool> with FileStep, T
   /// The name of the answer whose value fills the slot of the same name, or null where there is
   /// none.
   final String? runAnswer;
-
-  /// The list of answers that if missing or blank, the template lines carrying their marker will be skipped/removed.
-  final List<String> skippableAnswers;
 
   @override
   String pathFor(StepContext context) {
@@ -167,17 +148,7 @@ final class CreateFileFromTemplate extends ReversibleStep<bool> with FileStep, T
       }
     }
 
-    String rendered = await renderedWith(context, values);
-
-    // Remove lines with placeholders for any answer that is in skippableAnswers and has no value
-    for (final String skippable in skippableAnswers) {
-      if (!values.containsKey(skippable)) {
-        final RegExp marker = RegExp('^.*__${skippable.toUpperCase()}__.*\$\\n?', multiLine: true);
-        rendered = rendered.replaceAll(marker, '');
-      }
-    }
-
-    return FileContent.text(rendered);
+    return FileContent.text(await renderedWith(context, values));
   }
 
   @override
