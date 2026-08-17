@@ -163,7 +163,7 @@ final class WriteClusterIssuerManifest extends ReversibleStep<String?> with File
     // The directory first. A run that reached here on a machine that has never had one would
     // otherwise fail on the write rather than on anything that says what is missing.
     if (directory case final String under) {
-      await context.files.createDirectory(under, mode: directoryMode);
+      await context.files.createDirectory(under, mode: directoryMode, elevated: elevated);
     }
     await super.apply(context);
   }

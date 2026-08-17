@@ -166,7 +166,10 @@ final class VaultUnsealed extends ReversibleStep<bool?> {
       return;
     }
     final String? token = rootTokenIn(
-      await context.files.read(vaultCredentialsPath(context, repository, layout: layout)),
+      await context.files.read(
+        vaultCredentialsPath(context, repository, layout: layout),
+        elevated: elevated,
+      ),
     );
     if (token == null) {
       return;

@@ -190,7 +190,7 @@ final class WriteContainerdRegistryMirror extends ReversibleStep<String?> {
       context.log.info(
         '${layout.mirroredRegistry} pulls now go through $host, falling back to $fallback',
       );
-      await context.files.write(path, hostsToml(host, blob), mode: fileMode);
+      await context.files.write(path, hostsToml(host, blob), mode: fileMode, elevated: elevated);
     }
   }
 

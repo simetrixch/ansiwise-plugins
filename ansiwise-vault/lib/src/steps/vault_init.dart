@@ -227,6 +227,7 @@ final class VaultInit extends IrreversibleStep {
         rootToken: token,
       ),
       mode: credentialsMode,
+      elevated: elevated,
     );
 
     context.log.info('Vault is initialized — its quorum is in $credentialsPath, mode 600');
