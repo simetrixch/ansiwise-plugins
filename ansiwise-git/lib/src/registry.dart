@@ -1,6 +1,7 @@
 import 'package:ansiwise_api/ansiwise_api.dart';
 
 import 'steps/git_branch.dart';
+import 'steps/git_identity.dart';
 import 'steps/git_commit.dart';
 import 'steps/git_push.dart';
 import 'steps/require_git_identity.dart';
@@ -30,6 +31,12 @@ const Map<StepName, RegisteredStep> gitSteps = <StepName, RegisteredStep>{
     source: 'lib/src/steps/require_pushable_remote.dart:18',
     create: RequirePushableRemote.fromArguments,
     arguments: RequirePushableRemote.arguments,
+  ),
+  StepName('git_identity'): RegisteredStep(
+    name: StepName('git_identity'),
+    source: 'lib/src/steps/git_identity.dart:24',
+    create: GitIdentity.fromArguments,
+    arguments: GitIdentity.arguments,
   ),
   StepName('git_branch'): RegisteredStep(
     name: StepName('git_branch'),

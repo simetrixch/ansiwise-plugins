@@ -48,6 +48,12 @@ Future<void> main() => auditIdempotence(
 /// their own.
 const Set<String> notCoveredByAFakeMachine = <String>{
   'git_branch',
+  // For exactly the reason above: both values come from answers whose NAMES the row chooses, and a
+  // probe holds none — so it would measure the step against a run that knows nothing, which is not
+  // the act the step performs. test/git_identity_test.dart drives it over a fake checkout: applied
+  // twice the second run has nothing to do, and the undo puts back the identity that stood there
+  // rather than taking away one somebody set for their own reasons.
+  'git_identity',
   // Both for the reason above, one level on: they read a checkout the probe cannot arrange. A probe
   // holds no answers and hands every text argument one identical value, so the paths a commit names
   // and the remote a push sends to are the same one-character string — and a checkout that is not
