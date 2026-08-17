@@ -21,3 +21,8 @@
 analysis: test/checks/analysis_test.dart
 # This file agrees with the suite on disk, and the refusal that enforces it can really go red.
 declared-checks: test/checks/declared_checks_test.dart
+
+# An argument a step accepts is an argument something reads. A row naming one the step declares and
+# never reads is ACCEPTED and then ignored — the row runs, does nothing about it, and reports
+# success. It happened twice in one day before this check existed.
+declared-arguments: test/checks/declared_arguments_test.dart

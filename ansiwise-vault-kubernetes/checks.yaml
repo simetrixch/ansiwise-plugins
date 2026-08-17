@@ -45,3 +45,8 @@ registry-completeness: test/checks/registry_completeness_test.dart
 reversibility: test/checks/reversibility_test.dart
 # This package names its two tools and never an application of them.
 tool-purity: test/checks/tool_purity_test.dart
+
+# An argument a step accepts is an argument something reads. A row naming one the step declares and
+# never reads is ACCEPTED and then ignored — the row runs, does nothing about it, and reports
+# success. It happened twice in one day before this check existed.
+declared-arguments: test/checks/declared_arguments_test.dart
