@@ -48,6 +48,15 @@ Future<void> main() => auditIdempotence(
 /// their own.
 const Set<String> notCoveredByAFakeMachine = <String>{
   'git_branch',
+  // Both for the reason above, one level on: they read a checkout the probe cannot arrange. A probe
+  // holds no answers and hands every text argument one identical value, so the paths a commit names
+  // and the remote a push sends to are the same one-character string — and a checkout that is not
+  // there refuses before either does anything. They are driven directly instead, over a fake
+  // checkout that answers the way a healthy one does, in test/git_deliver_test.dart: a second commit
+  // records nothing and does not fail for it, and a push whose branch the remote already carries at
+  // the same commit is satisfied before it sends.
+  'git_commit',
+  'git_push',
   'replace_regex_in_tracked_file',
   'replace_text_in_tracked_files',
   'stamp_placeholder_in_tracked_files',

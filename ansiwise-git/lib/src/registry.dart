@@ -1,6 +1,8 @@
 import 'package:ansiwise_api/ansiwise_api.dart';
 
 import 'steps/git_branch.dart';
+import 'steps/git_commit.dart';
+import 'steps/git_push.dart';
 import 'steps/require_git_identity.dart';
 import 'steps/require_pushable_remote.dart';
 import 'steps/replace_text_in_tracked_files.dart';
@@ -34,6 +36,18 @@ const Map<StepName, RegisteredStep> gitSteps = <StepName, RegisteredStep>{
     source: 'lib/src/steps/git_branch.dart:20',
     create: GitBranch.fromArguments,
     arguments: GitBranch.arguments,
+  ),
+  StepName('git_commit'): RegisteredStep(
+    name: StepName('git_commit'),
+    source: 'lib/src/steps/git_commit.dart:20',
+    create: GitCommit.fromArguments,
+    arguments: GitCommit.arguments,
+  ),
+  StepName('git_push'): RegisteredStep(
+    name: StepName('git_push'),
+    source: 'lib/src/steps/git_push.dart:19',
+    create: GitPush.fromArguments,
+    arguments: GitPush.arguments,
   ),
   StepName('replace_text_in_tracked_files'): RegisteredStep(
     name: StepName('replace_text_in_tracked_files'),

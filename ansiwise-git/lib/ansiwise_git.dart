@@ -8,6 +8,8 @@ library;
 
 export 'src/registry.dart';
 export 'src/steps/git_branch.dart';
+export 'src/steps/git_commit.dart';
+export 'src/steps/git_push.dart';
 export 'src/steps/require_git_identity.dart';
 export 'src/steps/require_pushable_remote.dart';
 export 'src/steps/branch/stamp_placeholder_in_tracked_files.dart';
