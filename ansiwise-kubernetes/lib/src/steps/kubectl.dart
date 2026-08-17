@@ -19,8 +19,8 @@ import 'package:ansiwise_api/ansiwise_api.dart';
 /// every step. What no step may do is spell the invocation itself — a check turns the tree red when
 /// one does.
 final class Kubectl {
-  /// The client invoked as [invocation], word by word.
-  const Kubectl([this.invocation = _plain]);
+  /// The client invoked as [invocation], word by word, as root where [elevated].
+  const Kubectl([this.invocation = _plain, this.elevated = false]);
 
   /// Builds the composer from what the program gave the step carrying it.
   ///
@@ -36,7 +36,10 @@ final class Kubectl {
         'names no word at all, so there is nothing to invoke the client with',
       );
     }
-    return Kubectl(invocation);
+    return Kubectl(
+      invocation,
+      arguments.has('kubectl_needs_root') && arguments.flag('kubectl_needs_root'),
+    );
   }
 
   /// The client as kubectl itself is invoked: one word, found on the path.
@@ -54,8 +57,34 @@ final class Kubectl {
         'the wrapping invocation instead',
   );
 
+  /// The second argument every step that reaches the cluster declares.
+  ///
+  /// **Whether the client answers an ordinary account is a property of the INVOCATION**, which is
+  /// why it stands beside it rather than on each step. A plain kubectl reads a kubeconfig its own
+  /// account owns and needs nothing; a client wrapped by a distribution usually keeps its
+  /// configuration where only root may read it, and refuses everyone else.
+  ///
+  /// **The refusal is what makes this necessary rather than convenient.** Such a client says
+  /// "insufficient permissions" on its OUTPUT and exits ZERO. So a step reading the answer sees an
+  /// answer, and the failure arrives as whatever that step concluded from it — measured on a
+  /// machine as "the pods on this cluster could not be counted", three steps away from the reason.
+  ///
+  /// Running the client as root does not make a reading command change anything, so an observing
+  /// call stays observing and a dry run still performs it.
+  static const ArgumentSpec elevationArgument = ArgumentSpec(
+    name: 'kubectl_needs_root',
+    kind: ArgumentKind.flag,
+    required: false,
+    describes:
+        'whether the client has to be invoked as root to reach the cluster at all. Leave it off '
+        'for a client whose configuration this account owns',
+  );
+
   /// The words the client is invoked with, in front of every subcommand.
   final List<String> invocation;
+
+  /// Whether the client is invoked as root.
+  final bool elevated;
 
   /// The whole command line for [arguments], for a plan and for a failure that has to name it.
   List<String> argv(List<String> arguments) => <String>[...invocation, ...arguments];
@@ -64,6 +93,7 @@ final class Kubectl {
   Command command(List<String> arguments, {Duration? timeout}) => Command.detailed(
     invocation.first,
     arguments: <String>[...invocation.sublist(1), ...arguments],
+    elevated: elevated,
     timeout: timeout,
   );
 
@@ -71,5 +101,6 @@ final class Kubectl {
   Command observing(List<String> arguments) => Command.observing(
     invocation.first,
     arguments: <String>[...invocation.sublist(1), ...arguments],
+    elevated: elevated,
   );
 }

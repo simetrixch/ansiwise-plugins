@@ -43,6 +43,7 @@ final class DeleteDefaultIpv4Ippool extends IrreversibleStep {
           'before the pool may go — where that file sits is a fact about the installation',
     ),
     Kubectl.argument,
+    Kubectl.elevationArgument,
   ];
 
   /// The pool Calico creates from the shipped manifest, and the only one this program touches.

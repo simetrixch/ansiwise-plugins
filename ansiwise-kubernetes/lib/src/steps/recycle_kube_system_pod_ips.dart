@@ -33,6 +33,7 @@ final class RecycleKubeSystemPodIps extends IrreversibleStep {
       describes: 'the address range every pod on this cluster is given an address out of',
     ),
     Kubectl.argument,
+    Kubectl.elevationArgument,
   ];
 
   /// The range every pod gets an address out of.

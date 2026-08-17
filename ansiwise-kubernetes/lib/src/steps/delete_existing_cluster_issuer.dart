@@ -40,6 +40,7 @@ final class DeleteExistingClusterIssuer extends IrreversibleStep {
       defaultValue: false,
     ),
     Kubectl.argument,
+    Kubectl.elevationArgument,
   ];
 
   /// The issuer certificates are issued by.

@@ -65,6 +65,7 @@ final class OidcAdminsBinding extends ReversibleStep<bool> {
       describes: 'the role that group is given',
     ),
     Kubectl.argument,
+    Kubectl.elevationArgument,
   ];
 
   /// The binding's name.

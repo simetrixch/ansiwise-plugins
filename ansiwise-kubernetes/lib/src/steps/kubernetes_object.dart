@@ -52,6 +52,7 @@ final class KubernetesObject extends ReversibleStep<bool> {
       describes: 'the manifest, as a path under that checkout',
     ),
     Kubectl.argument,
+    Kubectl.elevationArgument,
   ];
 
   /// The checkout.

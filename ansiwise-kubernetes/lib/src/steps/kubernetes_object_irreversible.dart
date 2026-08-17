@@ -96,6 +96,7 @@ final class KubernetesObjectIrreversible extends IrreversibleStep {
           'Leave it off where the product keeps one manifest for every run',
     ),
     Kubectl.argument,
+    Kubectl.elevationArgument,
   ];
 
   /// How long the client is given to talk to the API server before it gives up.

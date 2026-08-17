@@ -63,6 +63,7 @@ final class GuardPopulatedClusterPodCidrMigration extends ObservingStep {
       defaultValue: false,
     ),
     Kubectl.argument,
+    Kubectl.elevationArgument,
     // ASKED, never assumed. Whether the file this row points at belongs to root is a property of
     // that PATH, and this step is pointed at one by its row — an arguments file of a system service
     // usually does, a file under a checkout usually does not. Reading and writing as root does not

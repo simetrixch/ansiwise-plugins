@@ -45,6 +45,7 @@ final class ReplaceCalicoAgentForPodCidr extends IrreversibleStep {
       defaultValue: 120,
     ),
     Kubectl.argument,
+    Kubectl.elevationArgument,
   ];
 
   /// The range every pod gets an address out of.

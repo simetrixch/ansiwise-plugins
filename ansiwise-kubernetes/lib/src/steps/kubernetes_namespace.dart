@@ -29,6 +29,7 @@ final class KubernetesNamespace extends ReversibleStep<bool> {
       describes: 'the namespace the release of this phase is installed into',
     ),
     Kubectl.argument,
+    Kubectl.elevationArgument,
   ];
 
   /// The namespace.

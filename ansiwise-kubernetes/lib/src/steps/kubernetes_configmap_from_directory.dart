@@ -68,6 +68,7 @@ final class KubernetesConfigmapFromDirectory extends ReversibleStep<bool> {
       describes: 'the directory the composed object is written in and removed from again',
     ),
     Kubectl.argument,
+    Kubectl.elevationArgument,
   ];
 
   /// The checkout.

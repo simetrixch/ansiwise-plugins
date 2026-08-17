@@ -51,6 +51,7 @@ final class AlignCalicoBackend extends ReversibleStep<String?> {
       required: false,
     ),
     Kubectl.argument,
+    Kubectl.elevationArgument,
   ];
 
   /// The object holding the agent's own settings.

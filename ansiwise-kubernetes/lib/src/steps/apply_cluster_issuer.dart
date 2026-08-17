@@ -42,6 +42,7 @@ final class ApplyClusterIssuer extends ReversibleStep<bool> {
           'value, so the writer and this cannot come to name different files',
     ),
     Kubectl.argument,
+    Kubectl.elevationArgument,
   ];
 
   /// The issuer certificates are issued by.

@@ -111,6 +111,7 @@ final class PatchContainerArgumentsAndPorts extends ReversibleStep<ContainerAddi
       defaultValue: 90,
     ),
     Kubectl.argument,
+    Kubectl.elevationArgument,
   ];
 
   /// The phase of a pod that is stuck waiting for something it cannot have.

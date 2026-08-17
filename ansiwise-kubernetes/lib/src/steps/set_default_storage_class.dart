@@ -53,6 +53,7 @@ final class SetDefaultStorageClass extends ReversibleStep<String?> {
       defaultValue: 5,
     ),
     Kubectl.argument,
+    Kubectl.elevationArgument,
   ];
 
   /// The mark that says a class is the default.

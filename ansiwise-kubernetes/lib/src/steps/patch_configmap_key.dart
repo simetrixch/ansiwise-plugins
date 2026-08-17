@@ -107,6 +107,7 @@ final class PatchConfigmapKey extends ReversibleStep<String?> {
       required: false,
     ),
     Kubectl.argument,
+    Kubectl.elevationArgument,
   ];
 
   /// The text a program row writes where this machine's own name servers belong.
