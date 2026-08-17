@@ -15,6 +15,14 @@ import 'guard_populated_cluster_pod_cidr_migration.dart';
 ///
 /// **This comes last, after the pool has converged.** Recreating the pods while the pool is still
 /// the old one simply hands them addresses out of the old one again.
+///
+/// **The delete WAITS, and it is the postcondition that requires it.** Asked not to wait, the client
+/// returns as soon as the deletion is accepted, and the pods it named are still listed with the
+/// addresses this step exists to take away. Measured on a real machine: two deletions accepted at
+/// 19:05:45.650 and 19:05:45.843, the state read again at 19:05:46.022 — a hundred and seventy-nine
+/// milliseconds — and the step reported that it had run and changed nothing. Waiting is the tool's
+/// own guarantee that the objects are gone, which is exactly what the check asks about, and it costs
+/// at most each pod's grace period.
 final class RecycleKubeSystemPodIps extends IrreversibleStep {
   /// Recreates every pod of the system namespace whose address is outside [podCidr].
   const RecycleKubeSystemPodIps({required this.podCidr, this.kubectl = const Kubectl()});
@@ -71,7 +79,7 @@ final class RecycleKubeSystemPodIps extends IrreversibleStep {
   Future<StepPlan> plan(StepContext context) async {
     final List<_Pod> stale = _stale(await _pods(context) ?? const <_Pod>[]);
     return StepPlan.argv(
-      kubectl.argv(<String>[..._delete, for (final _Pod pod in stale) pod.name, '--wait=false']),
+      kubectl.argv(<String>[..._delete, for (final _Pod pod in stale) pod.name]),
     );
   }
 
@@ -82,7 +90,7 @@ final class RecycleKubeSystemPodIps extends IrreversibleStep {
       context.log.debug(
         '${pod.name} holds ${pod.address}, which is outside $podCidr — recreating it',
       );
-      final Command delete = kubectl.command(<String>[..._delete, pod.name, '--wait=false']);
+      final Command delete = kubectl.command(<String>[..._delete, pod.name]);
       final CommandResult deleted = await context.shell.run(delete);
       if (!deleted.ok) {
         throw CommandFailed(

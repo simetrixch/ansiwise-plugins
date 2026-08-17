@@ -339,8 +339,12 @@ void main() {
       expect(await step.check(context), isA<Ready>());
       await step.apply(context);
       expect(machine.changing, <String>[
-        'kubectl -n kube-system delete pod calico-kube-controllers-def --wait=false',
-        'kubectl -n kube-system delete pod coredns-ghi --wait=false',
+        // NOT `--wait=false`. The check right after this asks whether the pods still hold their old
+        // addresses, and a client that returns on acceptance leaves them listed with exactly those
+        // — measured at a hundred and seventy-nine milliseconds on a real machine, which reported a
+        // step that ran and changed nothing.
+        'kubectl -n kube-system delete pod calico-kube-controllers-def',
+        'kubectl -n kube-system delete pod coredns-ghi',
       ]);
       expect(
         machine.changing.join('\n'),

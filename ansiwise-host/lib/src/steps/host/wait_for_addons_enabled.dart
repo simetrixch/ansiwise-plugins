@@ -33,6 +33,7 @@ final class WaitForAddonsEnabled extends ObservingStep with WaitStep {
     required this.statusCommand,
     required this.timeoutSeconds,
     required this.intervalSeconds,
+    this.elevated = false,
   });
 
   /// Builds the step from what the program gave it.
@@ -41,6 +42,7 @@ final class WaitForAddonsEnabled extends ObservingStep with WaitStep {
     statusCommand: arguments.textList('status_command'),
     timeoutSeconds: arguments.integer('timeout_seconds'),
     intervalSeconds: arguments.integer('interval_seconds'),
+    elevated: arguments.has('elevated') && arguments.flag('elevated'),
   );
 
   /// What this step accepts.
@@ -63,6 +65,7 @@ final class WaitForAddonsEnabled extends ObservingStep with WaitStep {
       kind: ArgumentKind.integer,
       describes: 'how long to leave between looks at the status',
     ),
+    elevationArgument,
   ];
 
   /// The addons that have to show up.
@@ -85,6 +88,11 @@ final class WaitForAddonsEnabled extends ObservingStep with WaitStep {
 
   /// The addons this is waiting for, all of them, because which ones are still off is read from the
   /// machine and a reached deadline is reported without looking again.
+
+  /// Whether the tool this row drives refuses the account the run started as, so every
+  /// question AND every switch it makes goes through elevation.
+  final bool elevated;
+
   @override
   String get waitingFor => '${names.join(', ')} to show up as on';
 
@@ -99,7 +107,8 @@ final class WaitForAddonsEnabled extends ObservingStep with WaitStep {
     // The OUTPUT and not the exit code, and the enabled section of it and not the whole. A node that
     // is not running exits zero and prints no such section, so it names nothing here and the wait
     // goes on rather than ending on a cluster that is down.
-    final Set<String> on = await enabledAddons(context, statusCommand) ?? const <String>{};
+    final Set<String> on =
+        await enabledAddons(context, statusCommand, elevated: elevated) ?? const <String>{};
     return names.every(on.contains);
   }
 }

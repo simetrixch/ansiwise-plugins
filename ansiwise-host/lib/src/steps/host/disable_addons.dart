@@ -20,6 +20,7 @@ final class DisableAddons extends ReversibleStep<List<String>> {
     required this.statusCommand,
     required this.enableCommand,
     required this.disableCommand,
+    this.elevated = false,
   });
 
   /// Builds the step from what the program gave it.
@@ -28,6 +29,7 @@ final class DisableAddons extends ReversibleStep<List<String>> {
     statusCommand: arguments.textList('status_command'),
     enableCommand: arguments.textList('enable_command'),
     disableCommand: arguments.textList('disable_command'),
+    elevated: arguments.has('elevated') && arguments.flag('elevated'),
   );
 
   /// What this step accepts.
@@ -42,6 +44,7 @@ final class DisableAddons extends ReversibleStep<List<String>> {
     // switched off, and which command does that is as much the row's to write as the disable.
     enableCommandArgument,
     disableCommandArgument,
+    elevationArgument,
   ];
 
   /// The addons that must be off.
@@ -56,12 +59,16 @@ final class DisableAddons extends ReversibleStep<List<String>> {
   /// The command an addon name is appended to in order to switch it off.
   final List<String> disableCommand;
 
+  /// Whether the tool this row drives refuses the account the run started as, so every
+  /// question AND every switch it makes goes through elevation.
+  final bool elevated;
+
   @override
   Future<CheckResult> check(StepContext context) async {
     if (addons.isEmpty) {
       return const CheckResult.satisfied('no addon is declared to be off');
     }
-    final Set<String>? on = await enabledAddons(context, statusCommand);
+    final Set<String>? on = await enabledAddons(context, statusCommand, elevated: elevated);
     if (on == null) {
       return const CheckResult.blocked(
         'the addons could not be read, so nothing says which of them are on',
@@ -75,17 +82,19 @@ final class DisableAddons extends ReversibleStep<List<String>> {
 
   @override
   Future<StepPlan> plan(StepContext context) async {
-    final Set<String> on = await enabledAddons(context, statusCommand) ?? const <String>{};
+    final Set<String> on =
+        await enabledAddons(context, statusCommand, elevated: elevated) ?? const <String>{};
     return StepPlan.argv(<String>[...disableCommand, ..._stillOn(on)]);
   }
 
   @override
   Future<void> apply(StepContext context) async {
-    final Set<String> on = await enabledAddons(context, statusCommand) ?? const <String>{};
+    final Set<String> on =
+        await enabledAddons(context, statusCommand, elevated: elevated) ?? const <String>{};
     for (final String addon in _stillOn(on)) {
       final List<String> argv = <String>[...disableCommand, addon];
       final CommandResult switched = await context.shell.run(
-        Command.detailed(argv.first, arguments: argv.sublist(1), elevated: true),
+        Command.detailed(argv.first, arguments: argv.sublist(1), elevated: elevated),
       );
       if (!switched.ok) {
         throw CommandFailed(
@@ -105,14 +114,14 @@ final class DisableAddons extends ReversibleStep<List<String>> {
   /// an undo, and a program names an addon here in order not to run it.
   @override
   Future<List<String>> capture(StepContext context) async =>
-      _stillOn(await enabledAddons(context, statusCommand) ?? const <String>{});
+      _stillOn(await enabledAddons(context, statusCommand, elevated: elevated) ?? const <String>{});
 
   @override
   Future<void> undo(StepContext context, List<String> captured) async {
     for (final String addon in captured) {
       final List<String> argv = <String>[...enableCommand, addon];
       await context.shell.run(
-        Command.detailed(argv.first, arguments: argv.sublist(1), elevated: true),
+        Command.detailed(argv.first, arguments: argv.sublist(1), elevated: elevated),
       );
     }
   }

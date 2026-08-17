@@ -64,11 +64,20 @@ const String addonsDisabledHeading = 'disabled:';
 /// Observing on the row's word: the command prints the state of the node and changes nothing, so a
 /// dry run may ask it.
 ///
+/// [elevated] is the row's answer and is the same one the switching uses. A step that ASKS as the
+/// operator and SWITCHES as root reads a refusal instead of a state — on the snap this was learned
+/// on, an account outside the tool's group gets that refusal with an exit code of one and nothing on
+/// standard error, so what the caller sees is "the addons could not be read" and not the reason.
+///
 /// Null and an empty set are different answers and a caller has to tell them apart: nothing could be
 /// read, against a node that answered and named no addon as on.
-Future<Set<String>?> enabledAddons(StepContext context, List<String> statusCommand) async {
+Future<Set<String>?> enabledAddons(
+  StepContext context,
+  List<String> statusCommand, {
+  bool elevated = false,
+}) async {
   final CommandResult status = await context.shell.run(
-    Command.observing(statusCommand.first, arguments: statusCommand.sublist(1)),
+    Command.observing(statusCommand.first, arguments: statusCommand.sublist(1), elevated: elevated),
   );
   if (!status.ok) {
     return null;
