@@ -38,6 +38,7 @@ final class WriteNetplanPublicSrcRouting extends ReversibleStep<String?>
         templatePath: arguments.text('template'),
         path: arguments.text('path'),
         table: arguments.integer('table'),
+        elevated: arguments.has('elevated') && arguments.flag('elevated'),
       );
 
   /// What this step accepts.

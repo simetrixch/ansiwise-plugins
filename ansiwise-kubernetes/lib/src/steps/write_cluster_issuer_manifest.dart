@@ -37,6 +37,7 @@ final class WriteClusterIssuerManifest extends ReversibleStep<String?> with File
         acmeServer: arguments.text('acme_server'),
         ingressClass: arguments.text('ingress_class'),
         path: arguments.text('issuer_manifest_path'),
+        elevated: arguments.has('elevated') && arguments.flag('elevated'),
       );
 
   /// What this step accepts.

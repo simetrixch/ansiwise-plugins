@@ -40,6 +40,7 @@ final class StampCalicoPoolCidrInCniManifest extends ReversibleStep<String?> {
         podCidr: arguments.text('pod_cidr'),
         manifestPath: arguments.text('manifest_path'),
         fileMode: arguments.integer('file_mode'),
+        elevated: arguments.has('elevated') && arguments.flag('elevated'),
       );
 
   /// What this step accepts.

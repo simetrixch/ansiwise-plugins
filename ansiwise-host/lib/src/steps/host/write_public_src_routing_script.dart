@@ -34,6 +34,7 @@ final class WritePublicSrcRoutingScript extends ReversibleStep<String?>
         mark: arguments.text('mark'),
         table: arguments.integer('table'),
         priority: arguments.integer('priority'),
+        elevated: arguments.has('elevated') && arguments.flag('elevated'),
       );
 
   /// What this step accepts.

@@ -37,6 +37,7 @@ final class GuardPopulatedClusterPodCidrMigration extends ObservingStep {
         argsPath: arguments.text('args_path'),
         allowPopulatedMigration: arguments.flag('allow_populated_migration'),
         kubectl: Kubectl.fromArguments(arguments),
+        elevated: arguments.has('elevated') && arguments.flag('elevated'),
       );
 
   /// What this step accepts.
