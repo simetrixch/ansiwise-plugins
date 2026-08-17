@@ -33,7 +33,7 @@ final class ReplaceTextInTrackedFiles extends ReversibleStep<List<String>> {
     ),
     ArgumentSpec(
       name: 'value_answer',
-      kind: ArgumentKind.text,
+      kind: ArgumentKind.answerName,
       describes: 'the NAME of the answer this run holds, whose value replaces the placeholder',
     ),
     ArgumentSpec(
@@ -66,7 +66,13 @@ final class ReplaceTextInTrackedFiles extends ReversibleStep<List<String>> {
   @override
   Future<List<String>> capture(StepContext context) async {
     final String where = tree ?? '.';
-    final Command grep = Command('git', <String>['grep', '-l', '-F', placeholder, '--', where]);
+    // OBSERVING: listing the tracked files carrying a placeholder changes nothing, and a read
+    // the planning ports have not been told about is a read they refuse — which takes the step
+    // out of measurement altogether rather than answering that nothing carries it.
+    final Command grep = Command.observing(
+      'git',
+      arguments: <String>['grep', '-l', '-F', placeholder, '--', where],
+    );
     final CommandResult grepResult = await context.shell.run(grep);
     if (!grepResult.ok && grepResult.exitCode != 1) {
       throw CommandFailed(
@@ -85,7 +91,13 @@ final class ReplaceTextInTrackedFiles extends ReversibleStep<List<String>> {
   @override
   Future<CheckResult> check(StepContext context) async {
     final String where = tree ?? '.';
-    final Command grep = Command('git', <String>['grep', '-l', '-F', placeholder, '--', where]);
+    // OBSERVING: listing the tracked files carrying a placeholder changes nothing, and a read
+    // the planning ports have not been told about is a read they refuse — which takes the step
+    // out of measurement altogether rather than answering that nothing carries it.
+    final Command grep = Command.observing(
+      'git',
+      arguments: <String>['grep', '-l', '-F', placeholder, '--', where],
+    );
     final CommandResult grepResult = await context.shell.run(grep);
     if (!grepResult.ok && grepResult.exitCode != 1) {
       throw CommandFailed(

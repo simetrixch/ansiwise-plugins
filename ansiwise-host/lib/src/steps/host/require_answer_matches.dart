@@ -23,7 +23,7 @@ final class RequireAnswerMatches extends ObservingStep {
   static const List<ArgumentSpec> arguments = <ArgumentSpec>[
     ArgumentSpec(
       name: 'answer',
-      kind: ArgumentKind.text,
+      kind: ArgumentKind.answerName,
       describes: 'the name of the answer this run holds',
     ),
     ArgumentSpec(

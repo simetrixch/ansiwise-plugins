@@ -71,7 +71,7 @@ final class WriteFileFromTemplate extends ReversibleStep<String?> with FileStep,
     ),
     ArgumentSpec(
       name: 'run_answer',
-      kind: ArgumentKind.text,
+      kind: ArgumentKind.answerName,
       describes:
           'the name of the answer whose value fills the slot spelled with that same name in the '
           'path — write "fqdn" here and every "<fqdn>" in the path is filled with this run\'s '

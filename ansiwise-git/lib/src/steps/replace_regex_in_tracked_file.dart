@@ -62,8 +62,14 @@ final class ReplaceRegexInTrackedFile extends ReversibleStep<void> {
       return CheckResult.blocked('$path does not exist: the file to modify must exist');
     }
 
-    // Check if there's any match using grep
-    final Command grep = Command('grep', <String>['-q', '-E', pattern, path]);
+    // OBSERVING, because searching a file for a pattern changes nothing — and undeclared, the
+    // planning ports refuse it, which makes the whole step unmeasurable in the two modes whose
+    // purpose is measuring rather than reporting that the pattern is absent.
+    final Command grep = Command.observing(
+      'grep',
+      arguments: <String>['-q', '-E', pattern, path],
+      elevated: elevated,
+    );
 
     final CommandResult grepResult = await context.shell.run(grep);
     if (!grepResult.ok && grepResult.exitCode != 1) {

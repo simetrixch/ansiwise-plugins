@@ -108,14 +108,14 @@ final class RegistryMirror {
     // that ships to every installation carries the name of the question and never its answer.
     ArgumentSpec(
       name: 'this_machine_answer',
-      kind: ArgumentKind.text,
+      kind: ArgumentKind.answerName,
       describes:
           'the name of the answer holding the name THIS machine is known by among the others — '
           'write "fqdn" here and this machine is whatever this run answered for "fqdn"',
     ),
     ArgumentSpec(
       name: 'mirror_machine_answer',
-      kind: ArgumentKind.text,
+      kind: ArgumentKind.answerName,
       describes:
           'the name of the answer holding the machine the mirror itself runs on, left empty by an '
           'installation whose mirror runs on this very machine. A machine that IS the mirror pulls '
@@ -127,7 +127,7 @@ final class RegistryMirror {
     // per region, and a product with neither wants none at all.
     ArgumentSpec(
       name: 'run_answer',
-      kind: ArgumentKind.text,
+      kind: ArgumentKind.answerName,
       describes:
           'the name of the answer whose value fills the slot spelled with that same name — write '
           '"stage" here and every "<stage>" in secrets_path is filled with this run\'s stage. '

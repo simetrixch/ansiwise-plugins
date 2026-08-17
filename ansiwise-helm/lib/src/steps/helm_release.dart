@@ -201,9 +201,23 @@ final class HelmRelease extends IrreversibleStep {
   }
 
   /// The values the release is currently holding, as helm gives them back.
+  ///
+  /// OBSERVING, like the listing above it and for the same reason: asking a release what values it
+  /// holds changes nothing. Undeclared, the planning ports refuse it — and because the refusal
+  /// happens inside `check`, the whole step becomes unmeasurable in the two modes whose entire
+  /// purpose is measuring, while reporting something else entirely. It cost a machine run to find,
+  /// and what made it findable was `keep_output: true` on the row putting the refusal in the record.
   Future<Object?> _currentValues(StepContext context) async {
     final CommandResult got = await context.shell.run(
-      helmCommand(helm, <String>['get', 'values', release, '--namespace', namespace, '-o', 'json']),
+      helmCommand(helm, <String>[
+        'get',
+        'values',
+        release,
+        '--namespace',
+        namespace,
+        '-o',
+        'json',
+      ], observes: true),
     );
     return got.ok ? _decoded(got.trimmed) : null;
   }

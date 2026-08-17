@@ -127,7 +127,7 @@ final class StampPlaceholderInTrackedFiles extends ReversibleStep<List<String>> 
     // and everything stamped into it are named from one place.
     ArgumentSpec(
       name: 'value_answer',
-      kind: ArgumentKind.text,
+      kind: ArgumentKind.answerName,
       describes:
           'the name of the answer this run reads the replacement out of — write "fqdn" here and '
           'every placeholder is replaced by whatever this run answered for "fqdn"',

@@ -100,7 +100,7 @@ final class VaultLayout {
     // filled from an answer, and a text still carrying angle brackets is refused rather than sent.
     ArgumentSpec(
       name: 'run_answer',
-      kind: ArgumentKind.text,
+      kind: ArgumentKind.answerName,
       describes:
           'the name of the answer whose value fills the slot spelled with that same name — write '
           '"stage" here and every "<stage>" in a path, a role or a policy rule of this family is '

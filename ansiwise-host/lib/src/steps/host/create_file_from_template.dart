@@ -80,7 +80,7 @@ final class CreateFileFromTemplate extends ReversibleStep<bool> with FileStep, T
     // filled from an answer, and a path still carrying angle brackets is refused rather than used.
     ArgumentSpec(
       name: 'run_answer',
-      kind: ArgumentKind.text,
+      kind: ArgumentKind.answerName,
       describes:
           'the name of the answer whose value fills the slot spelled with that same name in the '
           'path — write "stage" here and every "<stage>" in the path is filled with this run\'s '

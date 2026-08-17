@@ -90,7 +90,7 @@ final class KubernetesObjectIrreversible extends IrreversibleStep {
     // path still carrying angle brackets is refused rather than looked for.
     ArgumentSpec(
       name: 'run_answer',
-      kind: ArgumentKind.text,
+      kind: ArgumentKind.answerName,
       required: false,
       describes:
           'the name of the answer whose value fills the slot spelled with that same name — write '

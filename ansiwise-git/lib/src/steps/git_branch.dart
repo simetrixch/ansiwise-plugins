@@ -49,7 +49,7 @@ final class GitBranch extends ReversibleStep<String?> {
     // one here would make every vendor using this package carry that product's word.
     ArgumentSpec(
       name: 'name_answer',
-      kind: ArgumentKind.text,
+      kind: ArgumentKind.answerName,
       describes:
           'the name of the answer this run reads the branch name out of — write "fqdn" here and '
           'the branch is called whatever this run answered for "fqdn"',
