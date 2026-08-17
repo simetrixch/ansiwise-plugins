@@ -1,4 +1,5 @@
 import 'package:ansiwise_api/ansiwise_api.dart';
+import 'conditions/key_is_true.dart';
 import 'steps/host/activate_public_src_routing.dart';
 import 'steps/host/add_shell_alias.dart';
 import 'steps/host/add_user_to_group.dart';
@@ -376,11 +377,22 @@ const Map<StepName, RegisteredStep> hostSteps = <StepName, RegisteredStep>{
   ),
 };
 
-/// Everything this plugin teaches the framework.
+/// Every condition this plugin carries.
 ///
-/// It registers no predicate: a condition is about an installation, and an installation is what
-/// this package deliberately knows nothing about.
-const Registry hostRegistry = Registry(
-  steps: hostSteps,
-  predicates: <PredicateName, RegisteredPredicate>{},
-);
+/// ONE entry, and it is GENERIC: it still has to be told which file and which key before a program
+/// row may name it. That is the whole of what this package may know about a condition. What the
+/// answer is CALLED — the word a program writes behind `when:` — and what it is pointed at are
+/// properties of one installation, and they are said on that installation's own configuration under
+/// `conditions:`, where the framework binds them onto this entry under the name it chose.
+const Map<PredicateName, RegisteredPredicate> hostConditions = <PredicateName, RegisteredPredicate>{
+  PredicateName('key_is_true'): RegisteredPredicate.taking(
+    name: PredicateName('key_is_true'),
+    source: 'lib/src/conditions/key_is_true.dart:38',
+    create: KeyIsTrue.fromValues,
+    describes: 'whether a key in a KEY=value file holds true',
+    arguments: KeyIsTrue.arguments,
+  ),
+};
+
+/// Everything this plugin teaches the framework.
+const Registry hostRegistry = Registry(steps: hostSteps, predicates: hostConditions);
