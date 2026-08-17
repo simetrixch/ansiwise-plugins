@@ -74,6 +74,7 @@ final class StampPlaceholderInTrackedFiles extends ReversibleStep<List<String>> 
     required this.rule,
     this.tree = '',
     this.keys = const <String>[],
+    this.elevated = false,
   });
 
   /// Builds the step from what the program gave it.
@@ -96,6 +97,7 @@ final class StampPlaceholderInTrackedFiles extends ReversibleStep<List<String>> 
           excludedNames: arguments.textList('excluded_names'),
           scriptSuffixes: arguments.textList('script_suffixes'),
         ),
+        elevated: arguments.has('elevated') && arguments.flag('elevated'),
       );
 
   /// What this step accepts.
@@ -184,6 +186,7 @@ final class StampPlaceholderInTrackedFiles extends ReversibleStep<List<String>> 
           'the suffixes of the scripts that carry no first line to recognise them by — a script '
           'is never stamped, whatever it is called',
     ),
+    elevationArgument,
   ];
 
   /// The answers this step reads, which is what its registry entry declares.
@@ -229,6 +232,10 @@ final class StampPlaceholderInTrackedFiles extends ReversibleStep<List<String>> 
   /// it reported the stamp as failed under `--mode test`, because in that mode the branch is never
   /// actually cut and the refusal is still true. That answer is honest about the machine and wrong
   /// about the program, so the record marks it DECLARED instead of counting it against the run.
+
+  /// Whether the file this row points at belongs to root, so every read and write of it is
+  /// elevated.
+  final bool elevated;
   @override
   bool get restsOnAnEarlierStep => true;
 
@@ -298,7 +305,12 @@ final class StampPlaceholderInTrackedFiles extends ReversibleStep<List<String>> 
           .split('\n')
           .map((String line) => _stamped(line, replacement))
           .join('\n');
-      await context.files.write('$repository/${file.key}', after, mode: _trackedFile);
+      await context.files.write(
+        '$repository/${file.key}',
+        after,
+        mode: _trackedFile,
+        elevated: elevated,
+      );
     }
   }
 
@@ -352,10 +364,10 @@ final class StampPlaceholderInTrackedFiles extends ReversibleStep<List<String>> 
       // A tracked path the search names is not necessarily a file that is there: reducing the branch
       // to one stage removes whole trees while git goes on tracking them until the commit.
       final String full = '$repository/$path';
-      if (!await context.files.exists(full)) {
+      if (!await context.files.exists(full, elevated: elevated)) {
         continue;
       }
-      final String content = await context.files.read(full);
+      final String content = await context.files.read(full, elevated: elevated);
       // What the name test above already settled is settled again here and costs nothing; what it
       // could not settle — a first line that makes this a script whatever it is called — is settled
       // by the same object the gate asks, so the two cannot answer differently.

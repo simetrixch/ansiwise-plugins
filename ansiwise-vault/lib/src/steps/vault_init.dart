@@ -37,6 +37,7 @@ final class VaultInit extends IrreversibleStep {
     required this.keyShares,
     required this.keyThreshold,
     required this.layout,
+    this.elevated = false,
   });
 
   /// Builds the step from what the program gave it.
@@ -45,6 +46,7 @@ final class VaultInit extends IrreversibleStep {
     keyShares: arguments.integer('key_shares'),
     keyThreshold: arguments.integer('key_threshold'),
     layout: VaultLayout.fromArguments(arguments),
+    elevated: arguments.has('elevated') && arguments.flag('elevated'),
   );
 
   /// What this step accepts.
@@ -69,6 +71,7 @@ final class VaultInit extends IrreversibleStep {
       describes: 'how many of those keys have to be fed back to unseal',
     ),
     ...VaultLayout.arguments,
+    elevationArgument,
   ];
 
   /// The answers this step reads, which is what its registry entry declares.
@@ -95,6 +98,9 @@ final class VaultInit extends IrreversibleStep {
   /// How many of them unseal.
   final int keyThreshold;
 
+  /// Whether the file this row points at belongs to root, so every read and write of it is
+  /// elevated.
+  final bool elevated;
   @override
   String get irreversibleReason =>
       'the root token and the $keyShares unseal keys are minted once and cannot be minted again: '
@@ -114,7 +120,7 @@ final class VaultInit extends IrreversibleStep {
     if (held != null) {
       return CheckResult.blocked(held);
     }
-    final bool haveCredentials = await context.files.exists(credentialsPath);
+    final bool haveCredentials = await context.files.exists(credentialsPath, elevated: elevated);
 
     final HttpAnswer answer = await context.http.send(vaultRead(url, 'sys/init'));
     final Object? initialized = decodedObject(answer.body)?['initialized'];
@@ -196,7 +202,12 @@ final class VaultInit extends IrreversibleStep {
       // body. It goes to disk verbatim rather than being dropped: a malformed credential file is a
       // problem an operator can solve, and a lost one is not. The check afterwards refuses it, so
       // the step still fails.
-      await context.files.write(credentialsPath, answer.body, mode: credentialsMode);
+      await context.files.write(
+        credentialsPath,
+        answer.body,
+        mode: credentialsMode,
+        elevated: elevated,
+      );
       context.log.error(
         'Vault answered the initialization in a shape this could not read. The answer was written '
         'verbatim to $credentialsPath (mode 600) so nothing is lost — it holds the quorum and has '
@@ -227,10 +238,10 @@ final class VaultInit extends IrreversibleStep {
 
   /// Why the credential file already at [credentialsPath] cannot be trusted, or null when it can.
   Future<String?> _credentialsRefusal(StepContext context, String credentialsPath) async {
-    if (!await context.files.exists(credentialsPath)) {
+    if (!await context.files.exists(credentialsPath, elevated: elevated)) {
       return null;
     }
-    final String content = await context.files.read(credentialsPath);
+    final String content = await context.files.read(credentialsPath, elevated: elevated);
     final String? crlf = carriageReturnRefusal(credentialsPath, content);
     if (crlf != null) {
       return crlf;

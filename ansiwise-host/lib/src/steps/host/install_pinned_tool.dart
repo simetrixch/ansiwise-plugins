@@ -47,6 +47,7 @@ final class InstallPinnedTool extends IrreversibleStep {
     required this.archive,
     required this.versionCommand,
     required this.pinPrefixes,
+    this.elevated = false,
   });
 
   /// Builds the step from what the program gave it.
@@ -58,6 +59,7 @@ final class InstallPinnedTool extends IrreversibleStep {
     archive: arguments.optionalText('archive'),
     versionCommand: arguments.textList('version_command'),
     pinPrefixes: arguments.textList('pin_prefixes'),
+    elevated: arguments.has('elevated') && arguments.flag('elevated'),
   );
 
   /// What this step accepts.
@@ -118,6 +120,7 @@ final class InstallPinnedTool extends IrreversibleStep {
           'the shapes a release tag is written with, taken off the pin where the url asks for it '
           "without one and before the tool's own answer is compared — such as v for v4.53.3",
     ),
+    elevationArgument,
   ];
 
   /// Where the tool goes.
@@ -176,6 +179,10 @@ final class InstallPinnedTool extends IrreversibleStep {
   /// that carries no such tool as readily as on one carrying another version, and on the first it
   /// creates a file and replaces nothing. A reason claiming a binary of theirs is going away would
   /// be false there, on the one surface an operator reads before deciding — the point of no return.
+
+  /// Whether the file this row points at belongs to root, so every read and write of it is
+  /// elevated.
+  final bool elevated;
   @override
   String get irreversibleReason =>
       'the release is written straight to $path, and where something already stood there it is '
@@ -242,7 +249,7 @@ final class InstallPinnedTool extends IrreversibleStep {
     } finally {
       // On both paths. A half-finished download left here is what a later run would unpack, and the
       // tool that came out of it would be a tool nobody could name a version for.
-      await context.files.delete(packed);
+      await context.files.delete(packed, elevated: elevated);
     }
   }
 

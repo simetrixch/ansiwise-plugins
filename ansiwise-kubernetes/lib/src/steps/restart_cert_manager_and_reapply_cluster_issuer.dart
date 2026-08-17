@@ -24,6 +24,7 @@ final class RestartCertManagerAndReapplyClusterIssuer extends IrreversibleStep {
     required this.waitSeconds,
     required this.intervalSeconds,
     this.kubectl = const Kubectl(),
+    this.elevated = false,
   });
 
   /// Builds the step from what the program gave it.
@@ -37,6 +38,7 @@ final class RestartCertManagerAndReapplyClusterIssuer extends IrreversibleStep {
         waitSeconds: arguments.integer('wait_seconds'),
         intervalSeconds: arguments.integer('interval_seconds'),
         kubectl: Kubectl.fromArguments(arguments),
+        elevated: arguments.has('elevated') && arguments.flag('elevated'),
       );
 
   /// What this step accepts.
@@ -121,6 +123,9 @@ final class RestartCertManagerAndReapplyClusterIssuer extends IrreversibleStep {
   /// How the cluster is reached.
   final Kubectl kubectl;
 
+  /// Whether the file this row points at belongs to root, so every read and write of it is
+  /// elevated.
+  final bool elevated;
   @override
   String get irreversibleReason =>
       'the issuer was deleted and applied again, and the parts of the certificate service that were '
@@ -133,7 +138,7 @@ final class RestartCertManagerAndReapplyClusterIssuer extends IrreversibleStep {
     if (await isReady(context, kubectl, name)) {
       return CheckResult.satisfied('$name reports that its account is registered');
     }
-    if (!await context.files.exists(manifestPath)) {
+    if (!await context.files.exists(manifestPath, elevated: elevated)) {
       return CheckResult.blocked('$manifestPath is not there, so there is nothing to apply again');
     }
     return const CheckResult.ready();

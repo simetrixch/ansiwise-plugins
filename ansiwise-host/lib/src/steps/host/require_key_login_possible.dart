@@ -19,20 +19,24 @@ import 'install_authorized_key.dart';
 /// is a way that silence can arise.
 final class RequireKeyLoginPossible extends ObservingStep {
   /// Refuses unless the account this run names could be reached by key.
-  const RequireKeyLoginPossible();
+  const RequireKeyLoginPossible({this.elevated = false});
 
   /// Builds the step from what the program gave it.
   factory RequireKeyLoginPossible.fromArguments(Arguments arguments) =>
-      const RequireKeyLoginPossible();
+      RequireKeyLoginPossible(elevated: arguments.has('elevated') && arguments.flag('elevated'));
 
   /// What this step accepts, which is nothing.
-  static const List<ArgumentSpec> arguments = <ArgumentSpec>[];
+  static const List<ArgumentSpec> arguments = <ArgumentSpec>[elevationArgument];
 
   /// The answers this step reads, which is what its registry entry declares.
   ///
   /// The same two the key was installed under, by the same names — this step proves what that one
   /// did, so a second pair of values here would let it pass on a key nobody installed.
   static const List<String> answers = InstallAuthorizedKey.answers;
+
+  /// Whether the file this row points at belongs to root, so every read and write of it is
+  /// elevated.
+  final bool elevated;
 
   @override
   bool get restsOnAnEarlierStep => true;
@@ -76,11 +80,12 @@ final class RequireKeyLoginPossible extends ObservingStep {
     }
     final String path = '$home/.ssh/authorized_keys';
 
-    if (!await context.files.exists(path)) {
+    if (!await context.files.exists(path, elevated: elevated)) {
       wrong.add('$path is not there');
     } else {
       final List<String> lines = (await context.files.read(
         path,
+        elevated: elevated,
       )).split('\n').map((String l) => l.trim()).toList();
       if (!lines.contains(InstallAuthorizedKey.keyIn(context))) {
         wrong.add('$path does not carry this key');

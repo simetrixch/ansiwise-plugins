@@ -12,6 +12,7 @@ final class ApplyClusterIssuer extends ReversibleStep<bool> {
     required this.name,
     required this.manifestPath,
     this.kubectl = const Kubectl(),
+    this.elevated = false,
   });
 
   /// Builds the step from what the program gave it.
@@ -19,6 +20,7 @@ final class ApplyClusterIssuer extends ReversibleStep<bool> {
     name: arguments.text('name'),
     manifestPath: arguments.text('issuer_manifest_path'),
     kubectl: Kubectl.fromArguments(arguments),
+    elevated: arguments.has('elevated') && arguments.flag('elevated'),
   );
 
   /// What this step accepts.
@@ -54,9 +56,12 @@ final class ApplyClusterIssuer extends ReversibleStep<bool> {
   /// How the cluster is reached.
   final Kubectl kubectl;
 
+  /// Whether the file this row points at belongs to root, so every read and write of it is
+  /// elevated.
+  final bool elevated;
   @override
   Future<CheckResult> check(StepContext context) async {
-    if (!await context.files.exists(manifestPath)) {
+    if (!await context.files.exists(manifestPath, elevated: elevated)) {
       return CheckResult.blocked(
         '$manifestPath is not there, so the step that renders the issuer has not run',
       );

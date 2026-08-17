@@ -47,6 +47,7 @@ final class KubernetesSecretFromVault extends ReversibleStep<bool> {
     required this.staging,
     this.kubectl = const Kubectl(),
     required this.layout,
+    this.elevated = false,
   });
 
   /// Builds the step from what the program gave it.
@@ -60,6 +61,7 @@ final class KubernetesSecretFromVault extends ReversibleStep<bool> {
     staging: arguments.text('staging'),
     kubectl: Kubectl.fromArguments(arguments),
     layout: VaultLayout.fromArguments(arguments),
+    elevated: arguments.has('elevated') && arguments.flag('elevated'),
   );
 
   /// What this step accepts.
@@ -105,6 +107,7 @@ final class KubernetesSecretFromVault extends ReversibleStep<bool> {
     ),
     Kubectl.argument,
     ...VaultLayout.arguments,
+    elevationArgument,
   ];
 
   /// The checkout.
@@ -145,6 +148,9 @@ final class KubernetesSecretFromVault extends ReversibleStep<bool> {
   /// Where the manifest stands while the cluster client reads it.
   String pathFor() => '$staging/$namespace-$name.yaml';
 
+  /// Whether the file this row points at belongs to root, so every read and write of it is
+  /// elevated.
+  final bool elevated;
   @override
   Future<CheckResult> check(StepContext context) async {
     // Whether the Secret is there, and never what it holds. Comparing would mean reading a
@@ -169,7 +175,7 @@ final class KubernetesSecretFromVault extends ReversibleStep<bool> {
       throw StateError(refusal);
     }
     final String file = pathFor();
-    await context.files.write(file, manifestOf(entry.values), mode: mode);
+    await context.files.write(file, manifestOf(entry.values), mode: mode, elevated: elevated);
     try {
       final Command apply = kubectl.command(<String>['apply', '--filename', file]);
       final CommandResult applied = await context.shell.run(apply);
@@ -184,7 +190,7 @@ final class KubernetesSecretFromVault extends ReversibleStep<bool> {
     } finally {
       // In a finally: a failed apply would otherwise leave every value of the Secret standing in
       // the clear on the machine.
-      await context.files.delete(file);
+      await context.files.delete(file, elevated: elevated);
     }
   }
 

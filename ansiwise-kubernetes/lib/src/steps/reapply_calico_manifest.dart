@@ -17,6 +17,7 @@ final class ReapplyCalicoManifest extends ReversibleStep<String?> {
     required this.podCidr,
     required this.manifestPath,
     this.kubectl = const Kubectl(),
+    this.elevated = false,
   });
 
   /// Builds the step from what the program gave it.
@@ -24,6 +25,7 @@ final class ReapplyCalicoManifest extends ReversibleStep<String?> {
     podCidr: arguments.text('pod_cidr'),
     manifestPath: arguments.text('manifest_path'),
     kubectl: Kubectl.fromArguments(arguments),
+    elevated: arguments.has('elevated') && arguments.flag('elevated'),
   );
 
   /// What this step accepts.
@@ -62,12 +64,15 @@ final class ReapplyCalicoManifest extends ReversibleStep<String?> {
   /// How the cluster is reached.
   final Kubectl kubectl;
 
+  /// Whether the file this row points at belongs to root, so every read and write of it is
+  /// elevated.
+  final bool elevated;
   @override
   Future<CheckResult> check(StepContext context) async {
-    if (!await context.files.exists(manifestPath)) {
+    if (!await context.files.exists(manifestPath, elevated: elevated)) {
       return CheckResult.blocked('$manifestPath is not there, so there is nothing to apply');
     }
-    final String manifest = await context.files.read(manifestPath);
+    final String manifest = await context.files.read(manifestPath, elevated: elevated);
     if (!manifest.contains(podCidr)) {
       return CheckResult.blocked(
         '$manifestPath does not carry $podCidr — applying it would put the old range back into the '
@@ -95,7 +100,8 @@ final class ReapplyCalicoManifest extends ReversibleStep<String?> {
   /// change, so the newest one read at undo time can be a copy a later run made — and applying that
   /// would put a range into the cluster that nothing in this run ever had.
   @override
-  Future<String?> capture(StepContext context) => _newestBackup(context, manifestPath);
+  Future<String?> capture(StepContext context) =>
+      _newestBackup(context, manifestPath, elevated: elevated);
 
   @override
   Future<void> undo(StepContext context, String? captured) async {
@@ -125,15 +131,19 @@ final class ReapplyCalicoManifest extends ReversibleStep<String?> {
   ///
   /// The `<name>.bak.<moment>` shape is the one the stamping step writes, and the moments sort as
   /// text — so the last name in order is the newest copy.
-  static Future<String?> _newestBackup(StepContext context, String path) async {
+  static Future<String?> _newestBackup(
+    StepContext context,
+    String path, {
+    required bool elevated,
+  }) async {
     final int cut = path.lastIndexOf('/');
     final String directory = cut <= 0 ? '/' : path.substring(0, cut);
     final String name = path.substring(cut + 1);
-    if (!await context.files.exists(directory)) {
+    if (!await context.files.exists(directory, elevated: elevated)) {
       return null;
     }
     final List<String> backups = <String>[
-      for (final String entry in await context.files.list(directory))
+      for (final String entry in await context.files.list(directory, elevated: elevated))
         if (entry.startsWith('$name.bak.')) entry,
     ]..sort();
     return backups.isEmpty ? null : '$directory/${backups.last}';

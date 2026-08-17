@@ -20,11 +20,14 @@ import 'package:ansiwise_api/ansiwise_api.dart';
 /// the machine's own is the robust choice, and an explicitly configured list beats both.
 final class DetectHostUpstreamResolvers extends ObservingStep {
   /// Measures the machine's real name servers, reading [resolvConf] only as the second source.
-  const DetectHostUpstreamResolvers({required this.resolvConf});
+  const DetectHostUpstreamResolvers({required this.resolvConf, this.elevated = false});
 
   /// Builds the step from what the program gave it.
   factory DetectHostUpstreamResolvers.fromArguments(Arguments arguments) =>
-      DetectHostUpstreamResolvers(resolvConf: arguments.text('resolv_conf'));
+      DetectHostUpstreamResolvers(
+        resolvConf: arguments.text('resolv_conf'),
+        elevated: arguments.has('elevated') && arguments.flag('elevated'),
+      );
 
   /// What this step accepts.
   static const List<ArgumentSpec> arguments = <ArgumentSpec>[
@@ -35,6 +38,7 @@ final class DetectHostUpstreamResolvers extends ObservingStep {
       required: false,
       defaultValue: defaultResolvConf,
     ),
+    elevationArgument,
   ];
 
   /// The file the second source reads.
@@ -51,20 +55,25 @@ final class DetectHostUpstreamResolvers extends ObservingStep {
   static Future<List<String>> detect(
     StepContext context, {
     String resolvConf = defaultResolvConf,
+    bool elevated = false,
   }) async {
     final List<String> fromResolver = _usable(await _fromSystemResolver(context));
     if (fromResolver.isNotEmpty) {
       return fromResolver;
     }
-    return _usable(await _fromResolvConf(context, resolvConf));
+    return _usable(await _fromResolvConf(context, resolvConf, elevated: elevated));
   }
 
   /// The file the second source reads.
   final String resolvConf;
 
+  /// Whether the file this row points at belongs to root, so every read and write of it is
+  /// elevated.
+  final bool elevated;
+
   @override
   Future<CheckResult> check(StepContext context) async {
-    final List<String> found = await detect(context, resolvConf: resolvConf);
+    final List<String> found = await detect(context, resolvConf: resolvConf, elevated: elevated);
     if (found.isEmpty) {
       return CheckResult.blocked(
         'this machine names no name server a pod could reach — the system resolver reported none and '
@@ -104,12 +113,16 @@ final class DetectHostUpstreamResolvers extends ObservingStep {
   }
 
   /// What the resolver file names.
-  static Future<List<String>> _fromResolvConf(StepContext context, String path) async {
-    if (!await context.files.exists(path)) {
+  static Future<List<String>> _fromResolvConf(
+    StepContext context,
+    String path, {
+    required bool elevated,
+  }) async {
+    if (!await context.files.exists(path, elevated: elevated)) {
       return const <String>[];
     }
     final List<String> found = <String>[];
-    for (final String line in (await context.files.read(path)).split('\n')) {
+    for (final String line in (await context.files.read(path, elevated: elevated)).split('\n')) {
       final String trimmed = line.trim();
       if (!trimmed.startsWith('nameserver')) {
         continue;

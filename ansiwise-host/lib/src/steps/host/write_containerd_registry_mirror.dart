@@ -29,6 +29,7 @@ final class WriteContainerdRegistryMirror extends ReversibleStep<String?> {
     required this.certsDirectory,
     required this.fallback,
     required this.fileMode,
+    this.elevated = false,
   });
 
   /// Builds the step from what the program gave it.
@@ -38,6 +39,7 @@ final class WriteContainerdRegistryMirror extends ReversibleStep<String?> {
         certsDirectory: arguments.text('certs_directory'),
         fallback: arguments.text('fallback'),
         fileMode: arguments.integer('file_mode'),
+        elevated: arguments.has('elevated') && arguments.flag('elevated'),
       );
 
   /// What this step accepts.
@@ -64,6 +66,7 @@ final class WriteContainerdRegistryMirror extends ReversibleStep<String?> {
           'the permissions the file is written with, as the number the machine stores — the file '
           'carries a live credential, so 384 is the owner-only mode it wants',
     ),
+    elevationArgument,
   ];
 
   /// Where the mirror is written down and what it is reached with.
@@ -84,6 +87,9 @@ final class WriteContainerdRegistryMirror extends ReversibleStep<String?> {
   /// directory per registry, named for the registry, holding a file of that name.
   String get path => '$certsDirectory/${layout.mirroredRegistry}/hosts.toml';
 
+  /// Whether the file this row points at belongs to root, so every read and write of it is
+  /// elevated.
+  final bool elevated;
   @override
   Future<CheckResult> check(StepContext context) async {
     if (layout.answerRefusalIn(context) case final String why) {
@@ -95,14 +101,14 @@ final class WriteContainerdRegistryMirror extends ReversibleStep<String?> {
       );
     }
 
-    final String? host = await layout.mirrorHostIn(context);
+    final String? host = await layout.mirrorHostIn(context, elevated: elevated);
     if (host == null) {
       return CheckResult.satisfied(
         "the mirror's address is not readable from ${layout.profile}, so there is no mirror to "
         'write',
       );
     }
-    if (!await context.files.exists(certsDirectory)) {
+    if (!await context.files.exists(certsDirectory, elevated: elevated)) {
       context.log.warn(
         '$certsDirectory is not there, so the container runtime has nowhere to read a mirror from '
         'and every pull goes to the rate-limited public path',
@@ -112,7 +118,7 @@ final class WriteContainerdRegistryMirror extends ReversibleStep<String?> {
       );
     }
     final String secrets = layout.secretsIn(context);
-    if (!await context.files.exists(secrets)) {
+    if (!await context.files.exists(secrets, elevated: elevated)) {
       context.log.warn(
         '$secrets is not on this machine, so no mirror is written and every pull goes to the '
         'rate-limited public path. Fill the file in and run this program again — nothing else comes '
@@ -123,15 +129,20 @@ final class WriteContainerdRegistryMirror extends ReversibleStep<String?> {
 
     // The same guard the gate before the install keeps, asked again here so that running this
     // program on its own keeps it.
-    final PullCredential credential = await layout.readCredential(context, secrets, host);
+    final PullCredential credential = await layout.readCredential(
+      context,
+      secrets,
+      host,
+      elevated: elevated,
+    );
     if (credential.refusal case final String refusal) {
       return CheckResult.blocked('$secrets: $refusal');
     }
     if (credential.blob case final String blob) {
-      if (!await context.files.exists(path)) {
+      if (!await context.files.exists(path, elevated: elevated)) {
         return const CheckResult.ready();
       }
-      return await context.files.read(path) == hostsToml(host, blob)
+      return await context.files.read(path, elevated: elevated) == hostsToml(host, blob)
           ? CheckResult.satisfied('$path sends ${layout.mirroredRegistry} pulls through $host')
           : const CheckResult.ready();
     }
@@ -140,11 +151,13 @@ final class WriteContainerdRegistryMirror extends ReversibleStep<String?> {
 
   @override
   Future<StepPlan> plan(StepContext context) async {
-    final String before = await context.files.exists(path) ? await context.files.read(path) : '';
+    final String before = await context.files.exists(path, elevated: elevated)
+        ? await context.files.read(path, elevated: elevated)
+        : '';
     if (layout.answerRefusalIn(context) case final String why) {
       return StepPlan.nothing(why);
     }
-    final String? host = await layout.mirrorHostIn(context);
+    final String? host = await layout.mirrorHostIn(context, elevated: elevated);
     // BOTH SIDES ARE REDACTED. A plan is read by a person and it reaches the record, so what it may
     // say is which registry the pulls go through — never what they go with.
     //
@@ -164,7 +177,7 @@ final class WriteContainerdRegistryMirror extends ReversibleStep<String?> {
     if (layout.answerRefusalIn(context) != null) {
       return;
     }
-    final String? host = await layout.mirrorHostIn(context);
+    final String? host = await layout.mirrorHostIn(context, elevated: elevated);
     if (host == null) {
       return;
     }
@@ -188,16 +201,18 @@ final class WriteContainerdRegistryMirror extends ReversibleStep<String?> {
   /// public path instead of where it was.
   @override
   Future<String?> capture(StepContext context) async =>
-      await context.files.exists(path) ? context.files.read(path) : null;
+      await context.files.exists(path, elevated: elevated)
+      ? context.files.read(path, elevated: elevated)
+      : null;
 
   @override
   Future<void> undo(StepContext context, String? captured) async {
     if (captured == null) {
       // Deleting it puts the pulls back on the public path, which is where they were before.
-      await context.files.delete(path);
+      await context.files.delete(path, elevated: elevated);
       return;
     }
-    await context.files.write(path, captured, mode: fileMode);
+    await context.files.write(path, captured, mode: fileMode, elevated: elevated);
   }
 
   /// What stands in the plan where the credential stands in the file.

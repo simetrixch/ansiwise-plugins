@@ -45,6 +45,7 @@ final class PatchConfigmapKey extends ReversibleStep<String?> {
     required this.rolloutTimeoutSeconds,
     this.upstreamServers,
     this.kubectl = const Kubectl(),
+    this.elevated = false,
   });
 
   /// Builds the step from what the program gave it.
@@ -58,6 +59,7 @@ final class PatchConfigmapKey extends ReversibleStep<String?> {
     rolloutTimeoutSeconds: arguments.integer('rollout_timeout_seconds'),
     upstreamServers: arguments.optionalText('upstream_servers'),
     kubectl: Kubectl.fromArguments(arguments),
+    elevated: arguments.has('elevated') && arguments.flag('elevated'),
   );
 
   /// What this step accepts.
@@ -153,6 +155,9 @@ final class PatchConfigmapKey extends ReversibleStep<String?> {
   /// How the cluster is reached.
   final Kubectl kubectl;
 
+  /// Whether the file this row points at belongs to root, so every read and write of it is
+  /// elevated.
+  final bool elevated;
   @override
   Future<CheckResult> check(StepContext context) async {
     final String? live = await _live(context);
@@ -162,7 +167,7 @@ final class PatchConfigmapKey extends ReversibleStep<String?> {
         'before one of its keys can be set',
       );
     }
-    final String? wanted = await _filled(context, content, upstreamServers);
+    final String? wanted = await _filled(context, content, upstreamServers, elevated: elevated);
     if (wanted == null) {
       return CheckResult.blocked(
         'the content of $key carries $placeholder and this machine names no name server a pod '
@@ -179,14 +184,14 @@ final class PatchConfigmapKey extends ReversibleStep<String?> {
   Future<StepPlan> plan(StepContext context) async => StepPlan.diff(
     '$namespace/$configMap.$key',
     before: await _live(context) ?? '',
-    after: await _filled(context, content, upstreamServers) ?? '',
+    after: await _filled(context, content, upstreamServers, elevated: elevated) ?? '',
   );
 
   @override
   Future<void> apply(StepContext context) async {
     // What is written is worked out before anything is touched, so a machine that cannot fill the
     // slot leaves no half-finished copy of the value it was about to replace.
-    final String? wanted = await _filled(context, content, upstreamServers);
+    final String? wanted = await _filled(context, content, upstreamServers, elevated: elevated);
     if (wanted == null) {
       throw StateError(
         'the content of $key carries $placeholder and this machine names no name server a pod '
@@ -195,7 +200,7 @@ final class PatchConfigmapKey extends ReversibleStep<String?> {
     }
     final String? live = await _live(context);
     if (live != null) {
-      await context.files.write(backupPath, live, mode: backupMode);
+      await context.files.write(backupPath, live, mode: backupMode, elevated: elevated);
       context.log.info('the value as it was is at $backupPath');
     }
     await _write(context, wanted);
@@ -298,7 +303,12 @@ final class PatchConfigmapKey extends ReversibleStep<String?> {
   ///
   /// The addresses stand where the slot was, one after another separated by a space. Text carrying
   /// no slot comes back as it is, without the machine being measured at all.
-  static Future<String?> _filled(StepContext context, String text, String? providedServers) async {
+  static Future<String?> _filled(
+    StepContext context,
+    String text,
+    String? providedServers, {
+    required bool elevated,
+  }) async {
     if (!text.contains(placeholder)) {
       return text;
     }
@@ -308,7 +318,7 @@ final class PatchConfigmapKey extends ReversibleStep<String?> {
     final List<String> found = _usable(await _fromSystemResolver(context));
     final List<String> servers = found.isNotEmpty
         ? found
-        : _usable(await _fromResolvConf(context, _resolvConf));
+        : _usable(await _fromResolvConf(context, _resolvConf, elevated: elevated));
     if (servers.isEmpty) {
       return null;
     }
@@ -346,12 +356,16 @@ final class PatchConfigmapKey extends ReversibleStep<String?> {
   }
 
   /// What the resolver file names.
-  static Future<List<String>> _fromResolvConf(StepContext context, String path) async {
-    if (!await context.files.exists(path)) {
+  static Future<List<String>> _fromResolvConf(
+    StepContext context,
+    String path, {
+    required bool elevated,
+  }) async {
+    if (!await context.files.exists(path, elevated: elevated)) {
       return const <String>[];
     }
     final List<String> found = <String>[];
-    for (final String line in (await context.files.read(path)).split('\n')) {
+    for (final String line in (await context.files.read(path, elevated: elevated)).split('\n')) {
       final String trimmed = line.trim();
       if (!trimmed.startsWith('nameserver')) {
         continue;

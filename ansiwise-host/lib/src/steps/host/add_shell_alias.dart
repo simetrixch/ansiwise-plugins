@@ -10,13 +10,19 @@ import 'install_authorized_key.dart';
 /// whatever shell arrangement it had.
 final class AddShellAlias extends ReversibleStep<List<String>> {
   /// Makes [alias] run [command] for the operator's account.
-  const AddShellAlias({required this.alias, required this.command, required this.rcFiles});
+  const AddShellAlias({
+    required this.alias,
+    required this.command,
+    required this.rcFiles,
+    this.elevated = false,
+  });
 
   /// Builds the step from what the program gave it.
   factory AddShellAlias.fromArguments(Arguments arguments) => AddShellAlias(
     alias: arguments.text('alias'),
     command: arguments.text('command'),
     rcFiles: arguments.textList('rc_files'),
+    elevated: arguments.has('elevated') && arguments.flag('elevated'),
   );
 
   /// What this step accepts.
@@ -31,6 +37,7 @@ final class AddShellAlias extends ReversibleStep<List<String>> {
       required: false,
       defaultValue: <String>['.bashrc', '.zshrc'],
     ),
+    elevationArgument,
   ];
 
   /// The answers this step reads, which is what its registry entry declares.
@@ -50,6 +57,10 @@ final class AddShellAlias extends ReversibleStep<List<String>> {
 
   /// The line this step writes.
   String get line => "alias $alias='$command'";
+
+  /// Whether the file this row points at belongs to root, so every read and write of it is
+  /// elevated.
+  final bool elevated;
 
   @override
   Future<CheckResult> check(StepContext context) async {
@@ -80,8 +91,10 @@ final class AddShellAlias extends ReversibleStep<List<String>> {
         : await _missing(context, await _present(context, home));
     return StepPlan.diff(
       missing.isEmpty ? '${home ?? ''}/${rcFiles.first}' : missing.first,
-      before: missing.isEmpty ? line : await context.files.read(missing.first),
-      after: missing.isEmpty ? line : '${await context.files.read(missing.first)}$line\n',
+      before: missing.isEmpty ? line : await context.files.read(missing.first, elevated: elevated),
+      after: missing.isEmpty
+          ? line
+          : '${await context.files.read(missing.first, elevated: elevated)}$line\n',
     );
   }
 
@@ -92,9 +105,9 @@ final class AddShellAlias extends ReversibleStep<List<String>> {
       return;
     }
     for (final String path in await _missing(context, await _present(context, home))) {
-      final String current = await context.files.read(path);
+      final String current = await context.files.read(path, elevated: elevated);
       final String body = current.isEmpty || current.endsWith('\n') ? current : '$current\n';
-      await context.files.write(path, '$body$line\n', mode: _rcFileMode);
+      await context.files.write(path, '$body$line\n', mode: _rcFileMode, elevated: elevated);
     }
   }
 
@@ -114,10 +127,10 @@ final class AddShellAlias extends ReversibleStep<List<String>> {
   @override
   Future<void> undo(StepContext context, List<String> captured) async {
     for (final String path in captured) {
-      if (!await context.files.exists(path)) {
+      if (!await context.files.exists(path, elevated: elevated)) {
         continue;
       }
-      final String current = await context.files.read(path);
+      final String current = await context.files.read(path, elevated: elevated);
       if (!current.contains(line)) {
         continue;
       }
@@ -125,6 +138,7 @@ final class AddShellAlias extends ReversibleStep<List<String>> {
         path,
         current.split('\n').where((String each) => each.trim() != line).join('\n'),
         mode: _rcFileMode,
+        elevated: elevated,
       );
     }
   }
@@ -150,12 +164,15 @@ final class AddShellAlias extends ReversibleStep<List<String>> {
 
   Future<List<String>> _present(StepContext context, String home) async => <String>[
     for (final String name in rcFiles)
-      if (await context.files.exists('$home/$name')) '$home/$name',
+      if (await context.files.exists('$home/$name', elevated: elevated)) '$home/$name',
   ];
 
   Future<List<String>> _missing(StepContext context, List<String> present) async => <String>[
     for (final String path in present)
-      if (!(await context.files.read(path)).split('\n').any((String each) => each.trim() == line))
+      if (!(await context.files.read(
+        path,
+        elevated: elevated,
+      )).split('\n').any((String each) => each.trim() == line))
         path,
   ];
 

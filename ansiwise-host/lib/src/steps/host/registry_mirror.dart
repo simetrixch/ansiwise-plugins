@@ -207,13 +207,13 @@ final class RegistryMirror {
   /// Read out of the profile and never composed from any name. The profile is where the value is
   /// written when the checkout is generated, and composing it here would produce a second answer
   /// that only agrees with the first by accident.
-  Future<String?> mirrorHostIn(StepContext context) async {
-    if (!await context.files.exists(profile)) {
+  Future<String?> mirrorHostIn(StepContext context, {bool elevated = false}) async {
+    if (!await context.files.exists(profile, elevated: elevated)) {
       return null;
     }
     final YamlNode document;
     try {
-      document = loadYamlNode(await context.files.read(profile));
+      document = loadYamlNode(await context.files.read(profile, elevated: elevated));
     } on YamlException {
       return null;
     }
@@ -238,8 +238,13 @@ final class RegistryMirror {
   /// afterwards.
   ///
   /// The credential itself is returned and never written anywhere a record can reach.
-  Future<PullCredential> readCredential(StepContext context, String path, String host) async {
-    final String text = await context.files.read(path);
+  Future<PullCredential> readCredential(
+    StepContext context,
+    String path,
+    String host, {
+    bool elevated = false,
+  }) async {
+    final String text = await context.files.read(path, elevated: elevated);
     if (text.contains('\r\n')) {
       return const PullCredential.refused(
         'it is written with the line endings of another operating system, which leaves an invisible '

@@ -27,11 +27,14 @@ import 'registry_mirror.dart';
 /// nothing later comes back to write the mirror on its own.
 final class PreflightRegistryPullCredential extends ObservingStep {
   /// Decides whether the machine can pull through the mirror [layout] describes.
-  const PreflightRegistryPullCredential({required this.layout});
+  const PreflightRegistryPullCredential({required this.layout, this.elevated = false});
 
   /// Builds the step from what the program gave it.
   factory PreflightRegistryPullCredential.fromArguments(Arguments arguments) =>
-      PreflightRegistryPullCredential(layout: RegistryMirror.fromArguments(arguments));
+      PreflightRegistryPullCredential(
+        layout: RegistryMirror.fromArguments(arguments),
+        elevated: arguments.has('elevated') && arguments.flag('elevated'),
+      );
 
   /// What this step accepts.
   ///
@@ -42,6 +45,10 @@ final class PreflightRegistryPullCredential extends ObservingStep {
 
   /// Where the mirror is written down and what it is reached with.
   final RegistryMirror layout;
+
+  /// Whether the file this row points at belongs to root, so every read and write of it is
+  /// elevated.
+  final bool elevated;
 
   @override
   Future<CheckResult> check(StepContext context) async {
@@ -56,14 +63,14 @@ final class PreflightRegistryPullCredential extends ObservingStep {
     }
 
     final String secrets = layout.secretsIn(context);
-    final String? host = await layout.mirrorHostIn(context);
+    final String? host = await layout.mirrorHostIn(context, elevated: elevated);
     if (host == null) {
       return CheckResult.satisfied(
         "the mirror's address is not readable from ${layout.profile}, so no mirror is written and "
         'pulls stay on the public path',
       );
     }
-    if (!await context.files.exists(secrets)) {
+    if (!await context.files.exists(secrets, elevated: elevated)) {
       context.log.warn(
         '$secrets is not on this machine, so no mirror is written and every pull goes to the '
         'rate-limited public path. That is the unattended base install of a machine whose '
@@ -72,7 +79,12 @@ final class PreflightRegistryPullCredential extends ObservingStep {
       return const CheckResult.satisfied('there is no credential file on this machine yet');
     }
 
-    final PullCredential credential = await layout.readCredential(context, secrets, host);
+    final PullCredential credential = await layout.readCredential(
+      context,
+      secrets,
+      host,
+      elevated: elevated,
+    );
     if (credential.refusal case final String refusal) {
       return CheckResult.blocked('$secrets: $refusal');
     }

@@ -36,6 +36,7 @@ final class KubernetesObjectIrreversible extends IrreversibleStep {
     required this.repair,
     this.runAnswer,
     this.kubectl = const Kubectl(),
+    this.elevated = false,
   });
 
   /// Builds the step from what the program gave it.
@@ -47,6 +48,7 @@ final class KubernetesObjectIrreversible extends IrreversibleStep {
         repair: arguments.text('repair'),
         runAnswer: arguments.optionalText('run_answer'),
         kubectl: Kubectl.fromArguments(arguments),
+        elevated: arguments.has('elevated') && arguments.flag('elevated'),
       );
 
   /// What this step accepts.
@@ -131,6 +133,9 @@ final class KubernetesObjectIrreversible extends IrreversibleStep {
   /// How the cluster is reached.
   final Kubectl kubectl;
 
+  /// Whether the file this row points at belongs to root, so every read and write of it is
+  /// elevated.
+  final bool elevated;
   @override
   String get irreversibleReason => reason;
 
@@ -154,7 +159,7 @@ final class KubernetesObjectIrreversible extends IrreversibleStep {
         'looked for under the name as it stands',
       );
     }
-    if (!await context.files.exists(path)) {
+    if (!await context.files.exists(path, elevated: elevated)) {
       // Blocked and not failed: the tree is what it is, and no run can write this file. What the
       // operator needs beyond the path is the act that puts it back, and only the row knows it.
       return CheckResult.blocked('$path is not in this checkout. $repair');

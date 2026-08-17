@@ -44,6 +44,7 @@ final class FillKeyValueFile extends ReversibleStep<String?> {
     required this.subject,
     required this.values,
     required this.holdsCredentials,
+    this.elevated = false,
   });
 
   /// Builds the step from what the program gave it.
@@ -54,6 +55,7 @@ final class FillKeyValueFile extends ReversibleStep<String?> {
     subject: arguments.text('subject'),
     values: KeyBinding.readFrom(arguments.raw('values')),
     holdsCredentials: arguments.flag('holds_credentials'),
+    elevated: arguments.has('elevated') && arguments.flag('elevated'),
   );
 
   /// What this step accepts.
@@ -97,6 +99,7 @@ final class FillKeyValueFile extends ReversibleStep<String?> {
           'which answer fills which key, as KEY: {answer: name} — and where the answer holds '
           'several values and the file carries them on one line, KEY: {answer: name, join: ","}',
     ),
+    elevationArgument,
   ];
 
   /// The file this one is made from.
@@ -117,9 +120,12 @@ final class FillKeyValueFile extends ReversibleStep<String?> {
   /// Which answer fills which key.
   final Map<String, KeyBinding> values;
 
+  /// Whether the file this row points at belongs to root, so every read and write of it is
+  /// elevated.
+  final bool elevated;
   @override
   Future<CheckResult> check(StepContext context) async {
-    if (!await context.files.exists(templatePath)) {
+    if (!await context.files.exists(templatePath, elevated: elevated)) {
       return CheckResult.blocked(
         '$templatePath is not there, and it is what this $subject file is made from — every key '
         'stands under the paragraph explaining it, and nothing here writes one the template does '
@@ -173,7 +179,7 @@ final class FillKeyValueFile extends ReversibleStep<String?> {
 
   @override
   Future<StepPlan> plan(StepContext context) async {
-    if (!await context.files.exists(templatePath)) {
+    if (!await context.files.exists(templatePath, elevated: elevated)) {
       // The same state check refuses, said as a plan rather than thrown. A plan that throws leaves
       // a dry run with nothing to say about this row, and a dry run that cannot say what a row
       // would do is the one outcome the mode exists to prevent.
@@ -201,13 +207,15 @@ final class FillKeyValueFile extends ReversibleStep<String?> {
     if (filling.isEmpty) {
       return;
     }
-    await context.files.write(path, file.filled(filling), mode: fileMode);
+    await context.files.write(path, file.filled(filling), mode: fileMode, elevated: elevated);
   }
 
   /// The file as it stood, or null where there was none.
   @override
   Future<String?> capture(StepContext context) async =>
-      await context.files.exists(path) ? context.files.read(path) : null;
+      await context.files.exists(path, elevated: elevated)
+      ? context.files.read(path, elevated: elevated)
+      : null;
 
   @override
   Future<void> undo(StepContext context, String? captured) async {
@@ -216,18 +224,18 @@ final class FillKeyValueFile extends ReversibleStep<String?> {
       // template back instead would leave a file of empty values that reads as an installation
       // nobody answered for, and returning without touching anything would leave THIS
       // installation's answers standing while the record says the step was taken back.
-      await context.files.delete(path);
+      await context.files.delete(path, elevated: elevated);
       return;
     }
-    await context.files.write(path, captured, mode: fileMode);
+    await context.files.write(path, captured, mode: fileMode, elevated: elevated);
   }
 
   /// The template and the file as they stand, read as one.
   Future<KeyValueFile> _read(StepContext context) async => KeyValueFile(
-    template: await context.files.read(templatePath),
-    current: await context.files.exists(path)
-        ? await context.files.read(path)
-        : await context.files.read(templatePath),
+    template: await context.files.read(templatePath, elevated: elevated),
+    current: await context.files.exists(path, elevated: elevated)
+        ? await context.files.read(path, elevated: elevated)
+        : await context.files.read(templatePath, elevated: elevated),
   );
 
   /// What this run holds, by the key each value belongs under.

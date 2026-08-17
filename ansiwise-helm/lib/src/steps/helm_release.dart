@@ -26,6 +26,7 @@ final class HelmRelease extends IrreversibleStep {
     required this.namespace,
     this.values,
     this.helm = const <String>['helm'],
+    this.elevated = false,
   });
 
   /// Builds the step from what the program gave it.
@@ -36,6 +37,7 @@ final class HelmRelease extends IrreversibleStep {
     namespace: arguments.text('namespace'),
     values: arguments.optionalText('values'),
     helm: arguments.textList('helm_command'),
+    elevated: arguments.has('elevated') && arguments.flag('elevated'),
   );
 
   /// What this step accepts.
@@ -69,6 +71,7 @@ final class HelmRelease extends IrreversibleStep {
       required: false,
       describes: 'the values file this release is configured by, when it has one',
     ),
+    elevationArgument,
   ];
 
   /// The release name.
@@ -95,6 +98,9 @@ final class HelmRelease extends IrreversibleStep {
   /// can be compared.
   String get chartName => chart.contains('/') ? chart.split('/').last : chart;
 
+  /// Whether the file this row points at belongs to root, so every read and write of it is
+  /// elevated.
+  final bool elevated;
   @override
   String get irreversibleReason =>
       'helm removes what it installed and nothing else: the volume claims this chart\'s stateful '
@@ -124,11 +130,13 @@ final class HelmRelease extends IrreversibleStep {
     if (path == null) {
       return CheckResult.satisfied('$release is deployed at $wanted');
     }
-    if (!await context.files.exists(path)) {
+    if (!await context.files.exists(path, elevated: elevated)) {
       return CheckResult.blocked('$path is not on this machine, and $release is configured by it');
     }
 
-    final Object? wantedValues = _plain(loadYaml(await context.files.read(path)));
+    final Object? wantedValues = _plain(
+      loadYaml(await context.files.read(path, elevated: elevated)),
+    );
     final Object? currentValues = await _currentValues(context);
     if (_canonical(wantedValues) != _canonical(currentValues)) {
       context.log.debug('$release is at $wanted and the values it holds differ from $path');

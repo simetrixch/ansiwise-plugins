@@ -31,6 +31,7 @@ final class KubernetesConfigmapFromDirectory extends ReversibleStep<bool> {
     required this.namespace,
     required this.staging,
     this.kubectl = const Kubectl(),
+    this.elevated = false,
   });
 
   /// Builds the step from what the program gave it.
@@ -42,6 +43,7 @@ final class KubernetesConfigmapFromDirectory extends ReversibleStep<bool> {
         namespace: arguments.text('namespace'),
         staging: arguments.text('staging'),
         kubectl: Kubectl.fromArguments(arguments),
+        elevated: arguments.has('elevated') && arguments.flag('elevated'),
       );
 
   /// What this step accepts.
@@ -99,12 +101,15 @@ final class KubernetesConfigmapFromDirectory extends ReversibleStep<bool> {
   /// Where the composed object stands.
   String pathFor() => '$staging/$namespace-$name.yaml';
 
+  /// Whether the file this row points at belongs to root, so every read and write of it is
+  /// elevated.
+  final bool elevated;
   @override
   Future<CheckResult> check(StepContext context) async {
-    if (!await context.files.exists(path)) {
+    if (!await context.files.exists(path, elevated: elevated)) {
       return CheckResult.blocked('$directory is not in this checkout, so there is nothing to make');
     }
-    if ((await context.files.list(path)).isEmpty) {
+    if ((await context.files.list(path, elevated: elevated)).isEmpty) {
       // An empty directory would compose a ConfigMap with no keys, and the pod would mount it and
       // discover nothing — which looks exactly like a release that came up correctly.
       return CheckResult.blocked('$directory holds no file, so the ConfigMap would carry no key');
@@ -139,7 +144,7 @@ final class KubernetesConfigmapFromDirectory extends ReversibleStep<bool> {
       );
     }
     final String file = pathFor();
-    await context.files.write(file, composed.stdout, mode: mode);
+    await context.files.write(file, composed.stdout, mode: mode, elevated: elevated);
     try {
       final Command apply = kubectl.command(<String>['apply', '--filename', file]);
       final CommandResult applied = await context.shell.run(apply);
@@ -152,7 +157,7 @@ final class KubernetesConfigmapFromDirectory extends ReversibleStep<bool> {
         );
       }
     } finally {
-      await context.files.delete(file);
+      await context.files.delete(file, elevated: elevated);
     }
   }
 

@@ -36,6 +36,7 @@ final class VaultKvEntry extends IrreversibleStep {
     required this.fieldsOwnedElsewhere,
     required this.layout,
     required this.secrets,
+    this.elevated = false,
   });
 
   /// Builds the step from what the program gave it.
@@ -48,6 +49,7 @@ final class VaultKvEntry extends IrreversibleStep {
     fieldsOwnedElsewhere: arguments.textList('fields_owned_elsewhere'),
     layout: VaultLayout.fromArguments(arguments),
     secrets: arguments.text('secrets_path'),
+    elevated: arguments.has('elevated') && arguments.flag('elevated'),
   );
 
   /// What this step accepts.
@@ -106,6 +108,7 @@ final class VaultKvEntry extends IrreversibleStep {
           'place',
     ),
     ...VaultLayout.arguments,
+    elevationArgument,
   ];
 
   /// The answers this step reads, which is what its registry entry declares.
@@ -144,6 +147,9 @@ final class VaultKvEntry extends IrreversibleStep {
   /// The fields another writer owns.
   final List<String> fieldsOwnedElsewhere;
 
+  /// Whether the file this row points at belongs to root, so every read and write of it is
+  /// elevated.
+  final bool elevated;
   @override
   String get irreversibleReason =>
       'a write here becomes the current value and pushes the previous one into a history ten deep; '
@@ -300,13 +306,13 @@ final class VaultKvEntry extends IrreversibleStep {
       secrets: secrets,
       layout: layout,
     );
-    if (!await context.files.exists(secretsPath)) {
+    if (!await context.files.exists(secretsPath, elevated: elevated)) {
       return _Body.unwritable(
         '$secretsPath is not on this host, and it is the one file an operator fills in — every '
         'value of the seed is read out of it',
       );
     }
-    final String content = await context.files.read(secretsPath);
+    final String content = await context.files.read(secretsPath, elevated: elevated);
     final String? crlf = carriageReturnRefusal(secretsPath, content);
     if (crlf != null) {
       return _Body.unwritable(crlf);

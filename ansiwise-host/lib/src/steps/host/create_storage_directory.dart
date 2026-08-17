@@ -8,11 +8,13 @@ import 'package:ansiwise_api/ansiwise_api.dart';
 /// with data behind it.
 final class CreateStorageDirectory extends IrreversibleStep {
   /// Makes the answered storage directory with the permissions [mode].
-  const CreateStorageDirectory({required this.mode});
+  const CreateStorageDirectory({required this.mode, this.elevated = false});
 
   /// Builds the step from what the program gave it.
-  factory CreateStorageDirectory.fromArguments(Arguments arguments) =>
-      CreateStorageDirectory(mode: arguments.integer('mode'));
+  factory CreateStorageDirectory.fromArguments(Arguments arguments) => CreateStorageDirectory(
+    mode: arguments.integer('mode'),
+    elevated: arguments.has('elevated') && arguments.flag('elevated'),
+  );
 
   /// What this step accepts.
   static const List<ArgumentSpec> arguments = <ArgumentSpec>[
@@ -24,6 +26,7 @@ final class CreateStorageDirectory extends IrreversibleStep {
       // 0755 as a number, because a program file writes a value and not a notation.
       defaultValue: 493,
     ),
+    elevationArgument,
   ];
 
   /// The answers this step reads, which is what its registry entry declares.
@@ -34,6 +37,10 @@ final class CreateStorageDirectory extends IrreversibleStep {
 
   /// The permission bits it is made with.
   final int mode;
+
+  /// Whether the file this row points at belongs to root, so every read and write of it is
+  /// elevated.
+  final bool elevated;
 
   @override
   String get irreversibleReason =>
@@ -48,7 +55,7 @@ final class CreateStorageDirectory extends IrreversibleStep {
         'this machine has no separate data filesystem, so there is no directory to make',
       );
     }
-    if (await context.files.exists(context.answers.text('storage_directory'))) {
+    if (await context.files.exists(context.answers.text('storage_directory'), elevated: elevated)) {
       return CheckResult.satisfied('${context.answers.text('storage_directory')} is there');
     }
     return const CheckResult.ready();
@@ -60,6 +67,10 @@ final class CreateStorageDirectory extends IrreversibleStep {
 
   @override
   Future<void> apply(StepContext context) async {
-    await context.files.createDirectory(context.answers.text('storage_directory'), mode: mode);
+    await context.files.createDirectory(
+      context.answers.text('storage_directory'),
+      mode: mode,
+      elevated: elevated,
+    );
   }
 }

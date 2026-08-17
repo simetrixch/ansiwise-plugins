@@ -10,6 +10,7 @@ final class ReplaceRegexInTrackedFile extends ReversibleStep<void> {
     required this.path,
     required this.pattern,
     required this.replacement,
+    this.elevated = false,
   });
 
   /// Builds the step from what the program gave it.
@@ -17,6 +18,7 @@ final class ReplaceRegexInTrackedFile extends ReversibleStep<void> {
     path: arguments.text('path'),
     pattern: arguments.text('pattern'),
     replacement: arguments.text('replacement'),
+    elevated: arguments.has('elevated') && arguments.flag('elevated'),
   );
 
   /// What this step accepts.
@@ -36,6 +38,7 @@ final class ReplaceRegexInTrackedFile extends ReversibleStep<void> {
       kind: ArgumentKind.text,
       describes: 'the text to replace the matches with',
     ),
+    elevationArgument,
   ];
 
   /// The path to the file.
@@ -47,12 +50,15 @@ final class ReplaceRegexInTrackedFile extends ReversibleStep<void> {
   /// The replacement text.
   final String replacement;
 
+  /// Whether the file this row points at belongs to root, so every read and write of it is
+  /// elevated.
+  final bool elevated;
   @override
   Future<void> capture(StepContext context) async {}
 
   @override
   Future<CheckResult> check(StepContext context) async {
-    if (!await context.files.exists(path)) {
+    if (!await context.files.exists(path, elevated: elevated)) {
       return CheckResult.blocked('$path does not exist: the file to modify must exist');
     }
 

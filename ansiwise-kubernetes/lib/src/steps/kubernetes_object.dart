@@ -30,6 +30,7 @@ final class KubernetesObject extends ReversibleStep<bool> {
     required this.repository,
     required this.manifest,
     this.kubectl = const Kubectl(),
+    this.elevated = false,
   });
 
   /// Builds the step from what the program gave it.
@@ -37,6 +38,7 @@ final class KubernetesObject extends ReversibleStep<bool> {
     repository: arguments.text('repository'),
     manifest: arguments.text('manifest'),
     kubectl: Kubectl.fromArguments(arguments),
+    elevated: arguments.has('elevated') && arguments.flag('elevated'),
   );
 
   /// What this step accepts.
@@ -67,9 +69,12 @@ final class KubernetesObject extends ReversibleStep<bool> {
   /// The manifest as the machine holds it.
   String get path => '$repository/$manifest';
 
+  /// Whether the file this row points at belongs to root, so every read and write of it is
+  /// elevated.
+  final bool elevated;
   @override
   Future<CheckResult> check(StepContext context) async {
-    if (!await context.files.exists(path)) {
+    if (!await context.files.exists(path, elevated: elevated)) {
       // Blocked and not failed: the tree is what it is, and no run can write this file. Saying which
       // path is missing is the whole of what an operator needs.
       return CheckResult.blocked('$manifest is not in this checkout, so there is nothing to apply');

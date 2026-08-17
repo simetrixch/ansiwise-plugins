@@ -19,6 +19,7 @@ final class DeleteDefaultIpv4Ippool extends IrreversibleStep {
     required this.podCidr,
     required this.manifestPath,
     this.kubectl = const Kubectl(),
+    this.elevated = false,
   });
 
   /// Builds the step from what the program gave it.
@@ -26,6 +27,7 @@ final class DeleteDefaultIpv4Ippool extends IrreversibleStep {
     podCidr: arguments.text('pod_cidr'),
     manifestPath: arguments.text('manifest_path'),
     kubectl: Kubectl.fromArguments(arguments),
+    elevated: arguments.has('elevated') && arguments.flag('elevated'),
   );
 
   /// What this step accepts.
@@ -73,6 +75,9 @@ final class DeleteDefaultIpv4Ippool extends IrreversibleStep {
   /// How the cluster is reached.
   final Kubectl kubectl;
 
+  /// Whether the file this row points at belongs to root, so every read and write of it is
+  /// elevated.
+  final bool elevated;
   @override
   String get irreversibleReason =>
       'the address pool a running cluster is using is gone, and every pod holding an address out of '
@@ -92,13 +97,13 @@ final class DeleteDefaultIpv4Ippool extends IrreversibleStep {
     // The order of this phase, enforced where getting it wrong is invisible. Deleting first means
     // Calico builds the pool again from a manifest that still names the old range, the cluster
     // converges on the value the conversion exists to leave behind, and every step reports success.
-    if (!await context.files.exists(manifestPath)) {
+    if (!await context.files.exists(manifestPath, elevated: elevated)) {
       return CheckResult.blocked(
         '$manifestPath is not there, and it is what Calico builds the pool again from — deleting '
         'now would leave the cluster with no pool at all',
       );
     }
-    final String manifest = await context.files.read(manifestPath);
+    final String manifest = await context.files.read(manifestPath, elevated: elevated);
     if (!manifest.contains(podCidr)) {
       return CheckResult.blocked(
         '$manifestPath does not carry $podCidr yet, and Calico builds the pool again from that '

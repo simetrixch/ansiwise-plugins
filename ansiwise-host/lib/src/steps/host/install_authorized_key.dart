@@ -11,10 +11,11 @@ import 'package:ansiwise_api/ansiwise_api.dart';
 /// That also makes the undo narrow: it removes the one line it added and leaves the rest.
 final class InstallAuthorizedKey extends ReversibleStep<bool> {
   /// Installs the operator's key for the account the run names.
-  const InstallAuthorizedKey();
+  const InstallAuthorizedKey({this.elevated = false});
 
   /// Builds the step from what the program gave it.
-  factory InstallAuthorizedKey.fromArguments(Arguments arguments) => const InstallAuthorizedKey();
+  factory InstallAuthorizedKey.fromArguments(Arguments arguments) =>
+      InstallAuthorizedKey(elevated: arguments.has('elevated') && arguments.flag('elevated'));
 
   /// What this step accepts, which is nothing.
   ///
@@ -42,6 +43,10 @@ final class InstallAuthorizedKey extends ReversibleStep<bool> {
   /// The key this installs, as one line.
   static String keyIn(StepContext context) => context.answers.text(keyAnswer).trim();
 
+  /// Whether the file this row points at belongs to root, so every read and write of it is
+  /// elevated.
+  final bool elevated;
+
   @override
   Future<CheckResult> check(StepContext context) async {
     final String? home = await _home(context);
@@ -50,11 +55,11 @@ final class InstallAuthorizedKey extends ReversibleStep<bool> {
     }
 
     final String path = '$home/.ssh/authorized_keys';
-    if (!await context.files.exists(path)) {
+    if (!await context.files.exists(path, elevated: elevated)) {
       return const CheckResult.ready();
     }
 
-    final String present = await context.files.read(path);
+    final String present = await context.files.read(path, elevated: elevated);
     return _lines(present).contains(keyIn(context))
         ? CheckResult.satisfied('the key is already in $path')
         : const CheckResult.ready();
@@ -67,7 +72,9 @@ final class InstallAuthorizedKey extends ReversibleStep<bool> {
       return StepPlan.nothing('there is no account called "${userIn(context)}"');
     }
     final String path = '$home/.ssh/authorized_keys';
-    final String before = await context.files.exists(path) ? await context.files.read(path) : '';
+    final String before = await context.files.exists(path, elevated: elevated)
+        ? await context.files.read(path, elevated: elevated)
+        : '';
     return StepPlan.diff(path, before: before, after: _appendedTo(before, keyIn(context)));
   }
 
@@ -86,11 +93,18 @@ final class InstallAuthorizedKey extends ReversibleStep<bool> {
     // The directory before the file, and both before the content — sshd refuses to read a key file
     // it considers too open, and it says nothing about why. That silence is the failure this whole
     // ordering exists to avoid, so the modes are set as part of writing rather than afterwards.
-    await context.files.createDirectory('$home/.ssh', mode: _sshDirectory);
+    await context.files.createDirectory('$home/.ssh', mode: _sshDirectory, elevated: elevated);
 
     final String path = '$home/.ssh/authorized_keys';
-    final String before = await context.files.exists(path) ? await context.files.read(path) : '';
-    await context.files.write(path, _appendedTo(before, keyIn(context)), mode: _keyFile);
+    final String before = await context.files.exists(path, elevated: elevated)
+        ? await context.files.read(path, elevated: elevated)
+        : '';
+    await context.files.write(
+      path,
+      _appendedTo(before, keyIn(context)),
+      mode: _keyFile,
+      elevated: elevated,
+    );
 
     await _own(context, '$home/.ssh');
     await _own(context, path);
@@ -109,10 +123,10 @@ final class InstallAuthorizedKey extends ReversibleStep<bool> {
       return false;
     }
     final String path = '$home/.ssh/authorized_keys';
-    if (!await context.files.exists(path)) {
+    if (!await context.files.exists(path, elevated: elevated)) {
       return false;
     }
-    return _lines(await context.files.read(path)).contains(keyIn(context));
+    return _lines(await context.files.read(path, elevated: elevated)).contains(keyIn(context));
   }
 
   @override
@@ -125,7 +139,7 @@ final class InstallAuthorizedKey extends ReversibleStep<bool> {
       return;
     }
     final String path = '$home/.ssh/authorized_keys';
-    if (!await context.files.exists(path)) {
+    if (!await context.files.exists(path, elevated: elevated)) {
       return;
     }
 
@@ -133,9 +147,14 @@ final class InstallAuthorizedKey extends ReversibleStep<bool> {
     // undo runs while cleaning up after a failure — the worst moment to take away an access nobody
     // asked to lose.
     final List<String> kept = _lines(
-      await context.files.read(path),
+      await context.files.read(path, elevated: elevated),
     ).where((String line) => line != keyIn(context)).toList();
-    await context.files.write(path, kept.isEmpty ? '' : '${kept.join('\n')}\n', mode: _keyFile);
+    await context.files.write(
+      path,
+      kept.isEmpty ? '' : '${kept.join('\n')}\n',
+      mode: _keyFile,
+      elevated: elevated,
+    );
   }
 
   static List<String> _lines(String content) =>

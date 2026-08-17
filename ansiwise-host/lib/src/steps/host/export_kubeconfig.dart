@@ -20,7 +20,7 @@ import 'install_authorized_key.dart';
 /// lines, and only the program that installed the cluster knows which of them this machine has.
 final class ExportKubeconfig extends IrreversibleStep {
   /// Writes the credentials [credentialsCommand] prints into the operator's home.
-  const ExportKubeconfig({required this.credentialsCommand});
+  const ExportKubeconfig({required this.credentialsCommand, this.elevated = false});
 
   /// Builds the step from what the program gave it.
   ///
@@ -48,6 +48,7 @@ final class ExportKubeconfig extends IrreversibleStep {
           'the command that prints this cluster\'s credentials, word by word — it is run and its '
           'whole output is what the file holds, so it must print the credentials and nothing else',
     ),
+    elevationArgument,
   ];
 
   /// The answers this step reads, which is what its registry entry declares.
@@ -72,6 +73,10 @@ final class ExportKubeconfig extends IrreversibleStep {
   /// The command that prints this cluster's credentials, word by word.
   final List<String> credentialsCommand;
 
+  /// Whether the file this row points at belongs to root, so every read and write of it is
+  /// elevated.
+  final bool elevated;
+
   @override
   String get irreversibleReason =>
       'the file is replaced whole. Every context the operator added for another cluster and every '
@@ -92,10 +97,10 @@ final class ExportKubeconfig extends IrreversibleStep {
         'the cluster would not hand out its credentials, so there is nothing to write',
       );
     }
-    if (!await context.files.exists(path)) {
+    if (!await context.files.exists(path, elevated: elevated)) {
       return const CheckResult.ready();
     }
-    return await context.files.read(path) == wanted
+    return await context.files.read(path, elevated: elevated) == wanted
         ? CheckResult.satisfied('$path already holds this cluster\'s credentials')
         : const CheckResult.ready();
   }
@@ -104,7 +109,9 @@ final class ExportKubeconfig extends IrreversibleStep {
   Future<StepPlan> plan(StepContext context) async {
     final String? home = await AddShellAlias.homeOf(context, InstallAuthorizedKey.userIn(context));
     final String path = '${home ?? ''}/$directoryName/config';
-    final String before = await context.files.exists(path) ? await context.files.read(path) : '';
+    final String before = await context.files.exists(path, elevated: elevated)
+        ? await context.files.read(path, elevated: elevated)
+        : '';
     // What the file would hold is left out of the plan. It is a credential to the whole cluster, and
     // a plan is read by a person and reaches the record.
     return StepPlan.diff(
@@ -133,8 +140,8 @@ final class ExportKubeconfig extends IrreversibleStep {
     context.log.warn(
       '$directory/config is replaced whole — any context added for another cluster is gone with it',
     );
-    await context.files.createDirectory(directory, mode: directoryMode);
-    await context.files.write('$directory/config', credentials, mode: fileMode);
+    await context.files.createDirectory(directory, mode: directoryMode, elevated: elevated);
+    await context.files.write('$directory/config', credentials, mode: fileMode, elevated: elevated);
     await context.shell.run(
       Command.detailed(
         'chown',

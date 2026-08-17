@@ -11,19 +11,24 @@ import 'package:ansiwise_api/ansiwise_api.dart';
 /// failure and not a warning.
 final class CheckStorageMount extends ObservingStep {
   /// Refuses a machine where the answered storage path is not a mount.
-  const CheckStorageMount();
+  const CheckStorageMount({this.elevated = false});
 
   /// Builds the step from what the program gave it.
-  factory CheckStorageMount.fromArguments(Arguments arguments) => const CheckStorageMount();
+  factory CheckStorageMount.fromArguments(Arguments arguments) =>
+      CheckStorageMount(elevated: arguments.has('elevated') && arguments.flag('elevated'));
 
   /// What this step accepts.
-  static const List<ArgumentSpec> arguments = <ArgumentSpec>[];
+  static const List<ArgumentSpec> arguments = <ArgumentSpec>[elevationArgument];
 
   /// The answers this step reads, which is what its registry entry declares.
   ///
   /// Where this machine's storage is mounted, or empty when nothing is. That is a fact about one
   /// machine's disks, so it is answered rather than written into a program file.
   static const List<String> answers = <String>['storage_path'];
+
+  /// Whether the file this row points at belongs to root, so every read and write of it is
+  /// elevated.
+  final bool elevated;
 
   @override
   Future<CheckResult> check(StepContext context) async {
@@ -32,7 +37,7 @@ final class CheckStorageMount extends ObservingStep {
         'this machine has no separate data filesystem, so the cluster keeps its own default',
       );
     }
-    if (!await context.files.exists(context.answers.text('storage_path'))) {
+    if (!await context.files.exists(context.answers.text('storage_path'), elevated: elevated)) {
       return CheckResult.blocked(
         '${context.answers.text('storage_path')} is not there, so nothing is mounted at it',
       );
