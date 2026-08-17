@@ -189,7 +189,7 @@ final class KubernetesSecretFromVault extends ReversibleStep<bool> {
     await context.files.createDirectory(staging, mode: stagingMode, elevated: elevated);
     await context.files.write(file, manifestOf(entry.values), mode: mode, elevated: elevated);
     try {
-      final Command apply = kubectl.command(<String>['apply', '--filename', file]);
+      final Command apply = _readingWhatWasWritten.command(<String>['apply', '--filename', file]);
       final CommandResult applied = await context.shell.run(apply);
       if (!applied.ok) {
         throw CommandFailed(
@@ -205,6 +205,21 @@ final class KubernetesSecretFromVault extends ReversibleStep<bool> {
       await context.files.delete(file, elevated: elevated);
     }
   }
+
+  /// The client that READS the staged manifest, which is the same identity that wrote it.
+  ///
+  /// **Whoever wrote a file is who can read it back.** The manifest is written as root when the row
+  /// says the staging directory belongs to root, into a directory made 0700 for the same reason —
+  /// and a client invoked as the account the run started as is then handed a path it cannot stat.
+  /// What that produces is a failure about a path rather than about an identity: "cannot be
+  /// accessed: permission denied", from a step that had just written the file successfully.
+  ///
+  /// This is not the row's second decision. `kubectl_needs_root` says whether the CLIENT needs root
+  /// to reach the cluster at all, which is a different question with a different answer; this is the
+  /// step keeping one act consistent with itself, and a row that already answered root for the file
+  /// should not have to answer it twice for the reading of that same file.
+  Kubectl get _readingWhatWasWritten =>
+      elevated && !kubectl.elevated ? Kubectl(kubectl.invocation, true) : kubectl;
 
   /// Whether [namespace] already holds a Secret called [name].
   ///

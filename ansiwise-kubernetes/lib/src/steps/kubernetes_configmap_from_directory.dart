@@ -96,6 +96,22 @@ final class KubernetesConfigmapFromDirectory extends ReversibleStep<bool> {
   /// it was composed from.
   static const int mode = 0x1a4;
 
+  /// The mode the staging directory is made with, which is 0700.
+  static const int stagingMode = 448;
+
+  /// The client that READS the staged file, which is the same identity that wrote it.
+  ///
+  /// **Whoever wrote a file is who can read it back.** The file is written as root when the row says
+  /// the staging directory belongs to root, and a client invoked as the account the run started as
+  /// is then handed a path it cannot stat. What that produces is a failure about a path rather than
+  /// about an identity, from a step that had just written the file successfully.
+  ///
+  /// `kubectl_needs_root` is a different question — whether the CLIENT needs root to reach the
+  /// cluster at all — and a row that already answered root for the file should not answer it twice
+  /// for the reading of that same file.
+  Kubectl get _readingWhatWasWritten =>
+      elevated && !kubectl.elevated ? Kubectl(kubectl.invocation, true) : kubectl;
+
   /// The directory as the machine holds it.
   String get path => '$repository/$directory';
 
@@ -116,7 +132,7 @@ final class KubernetesConfigmapFromDirectory extends ReversibleStep<bool> {
       return CheckResult.blocked('$directory holds no file, so the ConfigMap would carry no key');
     }
     final CommandResult found = await context.shell.run(
-      kubectl.observing(<String>['diff', '--filename', pathFor()]),
+      _readingWhatWasWritten.observing(<String>['diff', '--filename', pathFor()]),
     );
     // Asked of the file this step composes, so the answer covers the keys as well as the object:
     // a file deleted from the directory is a key the cluster still has and the composed object no
@@ -145,9 +161,13 @@ final class KubernetesConfigmapFromDirectory extends ReversibleStep<bool> {
       );
     }
     final String file = pathFor();
+    // Made here, every run: the obvious place to stage in is one the machine wipes, and a directory
+    // under a memory filesystem is empty again after every restart. Assumed, the step fails on the
+    // write with a message about a path that says nothing about whose job the path was.
+    await context.files.createDirectory(staging, mode: stagingMode, elevated: elevated);
     await context.files.write(file, composed.stdout, mode: mode, elevated: elevated);
     try {
-      final Command apply = kubectl.command(<String>['apply', '--filename', file]);
+      final Command apply = _readingWhatWasWritten.command(<String>['apply', '--filename', file]);
       final CommandResult applied = await context.shell.run(apply);
       if (!applied.ok) {
         throw CommandFailed(
