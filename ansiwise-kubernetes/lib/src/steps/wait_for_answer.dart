@@ -39,6 +39,7 @@ final class WaitForAnswer extends ObservingStep with WaitStep {
     required this.answer,
     required this.timeoutSeconds,
     required this.intervalSeconds,
+    this.elevated = false,
   });
 
   /// Builds the step from what the program gave it.
@@ -49,6 +50,7 @@ final class WaitForAnswer extends ObservingStep with WaitStep {
     answer: arguments.text('answer'),
     timeoutSeconds: arguments.integer('timeout_seconds'),
     intervalSeconds: arguments.integer('interval_seconds'),
+    elevated: arguments.has('elevated') && arguments.flag('elevated'),
   );
 
   /// What this step accepts.
@@ -89,7 +91,27 @@ final class WaitForAnswer extends ObservingStep with WaitStep {
       kind: ArgumentKind.integer,
       describes: 'how long to leave between looks',
     ),
+    // ASKED, never guessed. Whether the thing being polled answers an ordinary account is a
+    // property of that thing, and this step has no way to know it — a command that refuses for
+    // want of permission usually says so on its output and exits ZERO, so what this step sees is
+    // simply an answer that is not the one it waits for. It then waits out the whole window and
+    // reports that the thing never happened, which is a true sentence about the wrong subject.
+    //
+    // Measured exactly that way: a cluster was up and answering within minutes, the poll ran as an
+    // account not in the group that may ask it, and the run gave up after fifteen minutes saying
+    // the node never reported itself running.
+    ArgumentSpec(
+      name: 'elevated',
+      kind: ArgumentKind.flag,
+      describes:
+          'whether the command has to run as root to READ what it reports. Running as root changes '
+          'nothing, so a poll that needs it is still something a dry run may perform',
+      required: false,
+    ),
   ];
+
+  /// Whether the poll runs as root, because what it asks refuses an ordinary account.
+  final bool elevated;
 
   /// What is being waited for, in the words the failure reports.
   @override
@@ -145,6 +167,7 @@ final class WaitForAnswer extends ObservingStep with WaitStep {
         command,
         arguments: commandArguments,
         observes: true,
+        elevated: elevated,
         timeout: deadline + _grace,
       ),
     );

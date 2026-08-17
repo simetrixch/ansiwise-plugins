@@ -40,7 +40,7 @@ final class RequireFreeDisk extends ObservingStep {
     // POSIX output and kilobyte blocks, so the columns are the same everywhere and the number needs
     // no unit parsing. Without -P a long device name wraps onto its own line and the columns move.
     final CommandResult measured = await context.shell.run(
-      Command.observing('df', <String>['-Pk', path]),
+      Command.observing('df', arguments: <String>['-Pk', path]),
     );
     if (!measured.ok) {
       return CheckResult.blocked('df could not measure $path: ${measured.stderr.trim()}');

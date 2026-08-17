@@ -101,7 +101,7 @@ final class DetectPublicNic extends ObservingStep {
   /// The machine's default routes, in the order it lists them.
   static Future<List<_DefaultRoute>> _defaultRoutes(StepContext context) async {
     final CommandResult routes = await context.shell.run(
-      const Command.observing('ip', <String>['-4', 'route', 'show', 'default']),
+      const Command.observing('ip', arguments: <String>['-4', 'route', 'show', 'default']),
     );
     if (!routes.ok) {
       return const <_DefaultRoute>[];
@@ -115,7 +115,7 @@ final class DetectPublicNic extends ObservingStep {
   /// The first public address on [device], or null when it carries none.
   static Future<String?> _publicAddressOf(StepContext context, String device) async {
     final CommandResult addresses = await context.shell.run(
-      Command.observing('ip', <String>['-4', '-o', 'addr', 'show', 'dev', device]),
+      Command.observing('ip', arguments: <String>['-4', '-o', 'addr', 'show', 'dev', device]),
     );
     if (!addresses.ok) {
       return null;

@@ -383,7 +383,7 @@ final class StampPlaceholderInTrackedFiles extends ReversibleStep<List<String>> 
       placeholder,
       if (tree.isNotEmpty) ...<String>['--', tree],
     ];
-    final CommandResult found = await context.shell.run(Command.observing('git', argv));
+    final CommandResult found = await context.shell.run(Command.observing('git', arguments: argv));
     // A content search answers one when it found nothing, which is an answer and not a failure.
     // Anything above that is a search that could not be carried out, and treating it as "no files"
     // would report a tree as stamped because nobody could look at it.
@@ -449,7 +449,10 @@ final class StampPlaceholderInTrackedFiles extends ReversibleStep<List<String>> 
 
   Future<String?> _head(StepContext context) async {
     final CommandResult answer = await context.shell.run(
-      Command.observing('git', <String>['-C', repository, 'rev-parse', '--abbrev-ref', 'HEAD']),
+      Command.observing(
+        'git',
+        arguments: <String>['-C', repository, 'rev-parse', '--abbrev-ref', 'HEAD'],
+      ),
     );
     return answer.ok && answer.trimmed.isNotEmpty ? answer.trimmed : null;
   }

@@ -320,7 +320,7 @@ final class PatchConfigmapKey extends ReversibleStep<String?> {
   /// What the system resolver says it forwards to.
   static Future<List<String>> _fromSystemResolver(StepContext context) async {
     final CommandResult status = await context.shell.run(
-      const Command.observing('resolvectl', <String>['status']),
+      const Command.observing('resolvectl', arguments: <String>['status']),
     );
     if (!status.ok) {
       return const <String>[];

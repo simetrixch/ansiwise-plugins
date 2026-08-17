@@ -40,7 +40,10 @@ final class AddUserToGroup extends ReversibleStep<bool> {
   @override
   Future<CheckResult> check(StepContext context) async {
     final CommandResult account = await context.shell.run(
-      Command.observing('getent', <String>['passwd', InstallAuthorizedKey.userIn(context)]),
+      Command.observing(
+        'getent',
+        arguments: <String>['passwd', InstallAuthorizedKey.userIn(context)],
+      ),
     );
     if (!account.ok || account.trimmed.isEmpty) {
       return CheckResult.blocked(
@@ -49,7 +52,7 @@ final class AddUserToGroup extends ReversibleStep<bool> {
     }
 
     final CommandResult groups = await context.shell.run(
-      Command.observing('groups', <String>[InstallAuthorizedKey.userIn(context)]),
+      Command.observing('groups', arguments: <String>[InstallAuthorizedKey.userIn(context)]),
     );
     if (!groups.ok) {
       return CheckResult.blocked(
@@ -92,7 +95,7 @@ final class AddUserToGroup extends ReversibleStep<bool> {
   @override
   Future<bool> capture(StepContext context) async {
     final CommandResult groups = await context.shell.run(
-      Command.observing('groups', <String>[InstallAuthorizedKey.userIn(context)]),
+      Command.observing('groups', arguments: <String>[InstallAuthorizedKey.userIn(context)]),
     );
     return groups.ok && groups.stdout.split(RegExp(r'[\s:]+')).contains(group);
   }

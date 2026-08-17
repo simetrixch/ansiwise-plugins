@@ -38,7 +38,10 @@ final class CheckStorageMount extends ObservingStep {
       );
     }
     final CommandResult mounted = await context.shell.run(
-      Command.observing('mountpoint', <String>['-q', context.answers.text('storage_path')]),
+      Command.observing(
+        'mountpoint',
+        arguments: <String>['-q', context.answers.text('storage_path')],
+      ),
     );
     if (!mounted.ok) {
       return CheckResult.blocked(

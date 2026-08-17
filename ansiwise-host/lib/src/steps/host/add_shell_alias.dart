@@ -136,7 +136,10 @@ final class AddShellAlias extends ReversibleStep<List<String>> {
   /// writing into somebody else's.
   static Future<String?> homeOf(StepContext context, String user) async {
     final CommandResult account = await context.shell.run(
-      Command.observing('getent', <String>['passwd', InstallAuthorizedKey.userIn(context)]),
+      Command.observing(
+        'getent',
+        arguments: <String>['passwd', InstallAuthorizedKey.userIn(context)],
+      ),
     );
     if (!account.ok) {
       return null;

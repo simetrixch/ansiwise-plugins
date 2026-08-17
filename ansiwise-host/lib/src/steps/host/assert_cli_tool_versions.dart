@@ -157,7 +157,9 @@ final class AssertCliToolVersions extends ObservingStep {
     if (!await EnsureToolPrerequisites.onPath(context, tool)) {
       return null;
     }
-    final CommandResult answer = await context.shell.run(Command.observing(tool, versionCommand));
+    final CommandResult answer = await context.shell.run(
+      Command.observing(tool, arguments: versionCommand),
+    );
     if (!answer.ok) {
       return null;
     }

@@ -68,7 +68,7 @@ const String addonsDisabledHeading = 'disabled:';
 /// read, against a node that answered and named no addon as on.
 Future<Set<String>?> enabledAddons(StepContext context, List<String> statusCommand) async {
   final CommandResult status = await context.shell.run(
-    Command.observing(statusCommand.first, statusCommand.sublist(1)),
+    Command.observing(statusCommand.first, arguments: statusCommand.sublist(1)),
   );
   if (!status.ok) {
     return null;

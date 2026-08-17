@@ -113,7 +113,7 @@ final class GitCommit extends IrreversibleStep {
   /// knows which.
   Future<bool> _isCheckout(StepContext context) async {
     final CommandResult answer = await context.shell.run(
-      Command.observing('git', <String>['-C', repository, 'rev-parse', '--git-dir']),
+      Command.observing('git', arguments: <String>['-C', repository, 'rev-parse', '--git-dir']),
     );
     return answer.ok;
   }
@@ -121,7 +121,10 @@ final class GitCommit extends IrreversibleStep {
   /// The paths this row names that differ from what the repository has recorded.
   Future<List<String>> _pending(StepContext context) async {
     final CommandResult answer = await context.shell.run(
-      Command.observing('git', <String>['-C', repository, 'status', '--porcelain', '--', ...paths]),
+      Command.observing(
+        'git',
+        arguments: <String>['-C', repository, 'status', '--porcelain', '--', ...paths],
+      ),
     );
     if (!answer.ok) {
       return const <String>[];

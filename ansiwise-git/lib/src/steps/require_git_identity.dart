@@ -35,7 +35,7 @@ final class RequireGitIdentity extends ObservingStep {
     // missing identity. `git -C` on a directory that does not exist fails every read after it, and
     // the refusal would otherwise name two settings the operator has already set.
     final CommandResult checkout = await context.shell.run(
-      Command.observing('git', <String>['-C', repository, 'rev-parse', '--git-dir']),
+      Command.observing('git', arguments: <String>['-C', repository, 'rev-parse', '--git-dir']),
     );
     if (!checkout.ok) {
       return CheckResult.blocked(
@@ -65,7 +65,7 @@ final class RequireGitIdentity extends ObservingStep {
   /// answer counts as no answer.
   Future<String?> _configured(StepContext context, String key) async {
     final CommandResult answer = await context.shell.run(
-      Command.observing('git', <String>['-C', repository, 'config', '--get', key]),
+      Command.observing('git', arguments: <String>['-C', repository, 'config', '--get', key]),
     );
     return answer.ok && answer.trimmed.isNotEmpty ? answer.trimmed : null;
   }

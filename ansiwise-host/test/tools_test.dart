@@ -14,14 +14,20 @@ const List<String> pinPrefixes = <String>['v', 'jq-'];
 /// tests are here to hold. A release that IS the binary is fetched straight to where it goes; one
 /// that arrives packed is unpacked out of an archive, and its project spells the version without
 /// the shape its tag carries, which is what the second slot in a url is for.
-const InstallPinnedTool vaultCli = InstallPinnedTool(
-  tool: 'vault',
+/// A tool whose release arrives PACKED, and whose project spells the version without the shape its
+/// tag carries — which is what the second slot in a url is for.
+///
+/// Invented rather than borrowed. A fixture naming a real vendor's release layout is a
+/// specification of one product's dependency living in a package that must serve any product, and
+/// it goes stale the day that vendor moves a path.
+const InstallPinnedTool packedCli = InstallPinnedTool(
+  tool: 'packed-cli',
   version: 'v2.0.3',
   url:
-      'https://releases.hashicorp.com/vault/${InstallPinnedTool.bareVersionPlaceholder}/'
-      'vault_${InstallPinnedTool.bareVersionPlaceholder}_linux_amd64.zip',
+      'https://releases.example.invalid/packed-cli/${InstallPinnedTool.bareVersionPlaceholder}/'
+      'packed-cli_${InstallPinnedTool.bareVersionPlaceholder}_linux_amd64.zip',
   directory: InstallPinnedTool.defaultDirectory,
-  archive: '/tmp/vault.zip',
+  archive: '/tmp/packed-cli.zip',
   versionCommand: <String>['version'],
   pinPrefixes: pinPrefixes,
 );
@@ -197,7 +203,7 @@ void main() {
     test('the fetch names the pinned release and never a latest one', () {
       // The one download path that spells the version without the shape its tag carries, which is
       // what the second slot exists for — the pin is still written once, as v2.0.3.
-      expect(vaultCli.fetchedFrom, contains('/vault/2.0.3/vault_2.0.3_linux_amd64.zip'));
+      expect(packedCli.fetchedFrom, contains('/packed-cli/2.0.3/packed-cli_2.0.3_linux_amd64.zip'));
 
       expect(yqCli.fetchedFrom, contains('/download/v4.53.3/'));
       expect(yqCli.fetchedFrom, isNot(contains('latest')));
@@ -239,27 +245,27 @@ void main() {
         (ArgumentSpec spec) => spec.name == 'archive',
       );
       expect(archive.describes, contains('exactly one file'));
-      expect(vaultCli.irreversibleReason, contains('everything the archive holds is unpacked'));
+      expect(packedCli.irreversibleReason, contains('everything the archive holds is unpacked'));
     });
 
     test('the packed copy is removed whether the unpacking worked or not', () async {
       // A half-finished download left behind is what the next run would unpack.
       final HostMachine machine = HostMachine();
       machine.shell
-        ..fails(onThePathKey('vault'))
-        ..fails('unzip -o -d ${vaultCli.directory} ${vaultCli.archive}');
+        ..fails(onThePathKey('packed-cli'))
+        ..fails('unzip -o -d ${packedCli.directory} ${packedCli.archive}');
 
-      await expectLater(vaultCli.apply(machine.contextFor(under)), throwsA(isA<CommandFailed>()));
-      expect(machine.files.deleted, contains(vaultCli.archive));
+      await expectLater(packedCli.apply(machine.contextFor(under)), throwsA(isA<CommandFailed>()));
+      expect(machine.files.deleted, contains(packedCli.archive));
     });
   });
 
   group('the pins held against the machine', () {
     const AssertCliToolVersions step = AssertCliToolVersions(
-      tools: <String>['vault=v2.0.3', 'yq=v4.53.3', 'jq=jq-1.8.2', 'tailscale=v1.98.10'],
+      tools: <String>['packed-cli=v2.0.3', 'yq=v4.53.3', 'jq=jq-1.8.2', 'tailscale=v1.98.10'],
       unpinnable: <String>['jq', 'tailscale'],
       versionCommands: <String>[
-        'vault=version',
+        'packed-cli=version',
         'yq=--version',
         'jq=--version',
         'tailscale=version',
@@ -269,11 +275,11 @@ void main() {
 
     HostMachine withTools({Map<String, String> answers = const <String, String>{}}) {
       final HostMachine machine = HostMachine();
-      for (final String tool in <String>['vault', 'yq', 'jq', 'tailscale']) {
+      for (final String tool in <String>['packed-cli', 'yq', 'jq', 'tailscale']) {
         machine.shell.answers(onThePathKey(tool), '/usr/local/bin/$tool\n');
       }
       machine.shell
-        ..answers('vault version', 'Vault v2.0.3 (abcdef1), built 2026-01-01\n')
+        ..answers('packed-cli version', 'Packed CLI v2.0.3 (abcdef1), built 2026-01-01\n')
         ..answers('yq --version', 'yq (https://github.com/mikefarah/yq/) version v4.53.3\n')
         ..answers('jq --version', 'jq-1.8.2\n')
         ..answers('tailscale version', '1.98.10\n  tailscale commit: abcdef1\n');
@@ -315,9 +321,11 @@ void main() {
         '1.98.10',
       );
       expect(
-        await AssertCliToolVersions.installedVersion(machine.contextFor(under), 'vault', <String>[
-          'version',
-        ]),
+        await AssertCliToolVersions.installedVersion(
+          machine.contextFor(under),
+          'packed-cli',
+          <String>['version'],
+        ),
         '2.0.3',
       );
     });
@@ -390,11 +398,11 @@ void main() {
       final HostMachine machine = withTools();
       machine.shell
         ..fails(onThePathKey('yq'))
-        ..fails(onThePathKey('vault'));
+        ..fails(onThePathKey('packed-cli'));
       final CheckResult answer = await step.check(machine.contextFor(under));
       final String reason = (answer as Blocked).reason;
       expect(reason, contains('yq'));
-      expect(reason, contains('vault'));
+      expect(reason, contains('packed-cli'));
     });
   });
 

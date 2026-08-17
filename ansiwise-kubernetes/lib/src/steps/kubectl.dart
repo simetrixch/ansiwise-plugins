@@ -68,6 +68,8 @@ final class Kubectl {
   );
 
   /// The command that runs [arguments] against the cluster and only reads.
-  Command observing(List<String> arguments) =>
-      Command.observing(invocation.first, <String>[...invocation.sublist(1), ...arguments]);
+  Command observing(List<String> arguments) => Command.observing(
+    invocation.first,
+    arguments: <String>[...invocation.sublist(1), ...arguments],
+  );
 }

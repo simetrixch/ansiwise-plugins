@@ -119,7 +119,10 @@ final class RequireKeyLoginPossible extends ObservingStep {
 
   Future<String?> _home(StepContext context) async {
     final CommandResult entry = await context.shell.run(
-      Command.observing('getent', <String>['passwd', InstallAuthorizedKey.userIn(context)]),
+      Command.observing(
+        'getent',
+        arguments: <String>['passwd', InstallAuthorizedKey.userIn(context)],
+      ),
     );
     if (!entry.ok) {
       return null;
@@ -150,7 +153,7 @@ final class RequireKeyLoginPossible extends ObservingStep {
 
   Future<int?> _mode(StepContext context, String path) async {
     final CommandResult stat = await context.shell.run(
-      Command.observing('stat', <String>['-c', '%a', path]),
+      Command.observing('stat', arguments: <String>['-c', '%a', path]),
     );
     return stat.ok ? int.tryParse(stat.trimmed, radix: 8) : null;
   }

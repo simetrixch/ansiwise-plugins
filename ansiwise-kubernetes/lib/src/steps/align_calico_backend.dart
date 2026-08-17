@@ -175,7 +175,7 @@ final class AlignCalicoBackend extends ReversibleStep<String?> {
       <String>['readlink', '-f', '/usr/sbin/iptables'],
     ]) {
       final CommandResult resolved = await context.shell.run(
-        Command.observing(argv.first, argv.sublist(1)),
+        Command.observing(argv.first, arguments: argv.sublist(1)),
       );
       if (!resolved.ok) {
         continue;

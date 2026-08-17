@@ -151,7 +151,7 @@ final class ExportKubeconfig extends IrreversibleStep {
   /// The credentials the cluster hands out, or null when it will not.
   Future<String?> _credentials(StepContext context) async {
     final CommandResult config = await context.shell.run(
-      Command.observing(credentialsCommand.first, credentialsCommand.sublist(1)),
+      Command.observing(credentialsCommand.first, arguments: credentialsCommand.sublist(1)),
     );
     return config.ok && config.stdout.trim().isNotEmpty ? config.stdout : null;
   }

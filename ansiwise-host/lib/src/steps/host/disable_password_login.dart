@@ -121,7 +121,7 @@ final class DisablePasswordLogin extends ReversibleStep<String?> {
   /// The lines of `sshd -T`, which are `keyword value` in lower case.
   Future<Map<String, String>?> _effective(StepContext context) async {
     final CommandResult reported = await context.shell.run(
-      const Command.observing('sshd', <String>['-T']),
+      const Command.observing('sshd', arguments: <String>['-T']),
     );
     if (!reported.ok) {
       return null;

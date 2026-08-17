@@ -191,7 +191,7 @@ void main() {
       final HostMachine machine = HostMachine()..shell.answers(statusKey, stopped);
 
       final CommandResult answered = await machine.shell.run(
-        Command.observing(statusCommand.first, statusCommand.sublist(1)),
+        Command.observing(statusCommand.first, arguments: statusCommand.sublist(1)),
       );
       expect(
         answered.ok,

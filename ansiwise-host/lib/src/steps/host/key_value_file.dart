@@ -20,17 +20,15 @@
 ///    zero whether or not it had matched, and a key the template does not declare was reported as
 ///    filled while the file kept nothing at all. [KeyValueFile.missingKeys] answers that question
 ///    BEFORE anything is written.
-/// 2. **A value still equal to the template's is not an answer.** `LETSENCRYPT_EMAIL` reads
-///    `user@example.com` in the template, which is a mailbox nobody reads, and a blanket "does it
-///    look like an example" test threw away a `UNIT_APEX` of `example.com` that was a legitimate
-///    answer for the installation whose zone that is. So the comparison is per key and against the
-///    template itself. See [KeyValueFile.isUnset].
-/// 3. **A value that is set is left exactly as it is.** These files gain values after the install —
-///    the root token and unseal keys of a running Vault, the generated registry passwords, a
-///    rotation somebody performed by hand. A re-run that rewrote them would take the keys to a live
-///    Vault away, so a key that carries anything other than the template's own value is never
-///    touched again — the same [KeyValueFile.isUnset] decides this and the point above, so the two
-///    cannot come apart.
+/// 2. **A value still equal to the template's is not an answer.** A template usually carries an
+///    illustration where a mailbox belongs, and a blanket "does it look like an example" test threw
+///    away a domain of `example.com` that was a legitimate answer for whoever owns that zone. So the
+///    comparison is per key and against the template itself. See [KeyValueFile.isUnset].
+/// 3. **A value that is set is left exactly as it is.** A file of this kind gains values after it is
+///    first written — a credential something generated once and holds nowhere else, a rotation
+///    somebody performed by hand. A re-run that rewrote them would take away the only copy, so a key
+///    carrying anything other than the template's own value is never touched again — the same
+///    [KeyValueFile.isUnset] decides this and the point above, so the two cannot come apart.
 library;
 
 /// One `KEY=value` file, beside the template it was made from.
@@ -44,7 +42,7 @@ final class KeyValueFile {
   /// creating and re-filling the same operation.
   const KeyValueFile({required this.template, required this.current});
 
-  /// What the trunk ships: every key at its placeholder.
+  /// The file as it was shipped: every key at its placeholder.
   final String template;
 
   /// What the machine holds now.

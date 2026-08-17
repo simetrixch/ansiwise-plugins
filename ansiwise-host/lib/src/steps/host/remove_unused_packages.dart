@@ -67,7 +67,7 @@ final class RemoveUnusedPackages extends IrreversibleStep {
   /// predicted. The line to read is the one that begins `Remv `.
   Future<int> _wouldRemove(StepContext context) async {
     final CommandResult asked = await context.shell.run(
-      const Command.observing('apt-get', <String>['--dry-run', 'autoremove']),
+      const Command.observing('apt-get', arguments: <String>['--dry-run', 'autoremove']),
     );
     if (!asked.ok) {
       return 0;

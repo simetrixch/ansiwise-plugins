@@ -116,7 +116,10 @@ final class GitPush extends IrreversibleStep {
   /// The branch this checkout stands on, or null where it stands on none.
   Future<String?> _head(StepContext context) async {
     final CommandResult answer = await context.shell.run(
-      Command.observing('git', <String>['-C', repository, 'rev-parse', '--abbrev-ref', 'HEAD']),
+      Command.observing(
+        'git',
+        arguments: <String>['-C', repository, 'rev-parse', '--abbrev-ref', 'HEAD'],
+      ),
     );
     if (!answer.ok || answer.trimmed.isEmpty || answer.trimmed == 'HEAD') {
       return null;
@@ -127,7 +130,7 @@ final class GitPush extends IrreversibleStep {
   /// The commit [branch] points at here, or null where it points at none.
   Future<String?> _localTip(StepContext context, String branch) async {
     final CommandResult answer = await context.shell.run(
-      Command.observing('git', <String>['-C', repository, 'rev-parse', branch]),
+      Command.observing('git', arguments: <String>['-C', repository, 'rev-parse', branch]),
     );
     return answer.ok && answer.trimmed.isNotEmpty ? answer.trimmed : null;
   }
@@ -135,7 +138,10 @@ final class GitPush extends IrreversibleStep {
   /// The commit [remote] carries [branch] at, or null where it carries no such branch.
   Future<String?> _remoteTip(StepContext context, String branch) async {
     final CommandResult answer = await context.shell.run(
-      Command.observing('git', <String>['-C', repository, 'ls-remote', '--heads', remote, branch]),
+      Command.observing(
+        'git',
+        arguments: <String>['-C', repository, 'ls-remote', '--heads', remote, branch],
+      ),
     );
     if (!answer.ok || answer.trimmed.isEmpty) {
       return null;

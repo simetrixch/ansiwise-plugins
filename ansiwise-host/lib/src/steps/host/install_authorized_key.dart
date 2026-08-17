@@ -156,7 +156,7 @@ final class InstallAuthorizedKey extends ReversibleStep<bool> {
   /// where it lives when it is not under `/home`.
   static Future<String?> _home(StepContext context) async {
     final CommandResult entry = await context.shell.run(
-      Command.observing('getent', <String>['passwd', userIn(context)]),
+      Command.observing('getent', arguments: <String>['passwd', userIn(context)]),
     );
     if (!entry.ok) {
       return null;

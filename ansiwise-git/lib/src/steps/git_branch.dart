@@ -80,7 +80,7 @@ final class GitBranch extends ReversibleStep<String?> {
     // from then on, and the disagreement shows up as a step that refuses a name git would have taken
     // or applies one it would not.
     final CommandResult legal = await context.shell.run(
-      Command.observing('git', <String>['check-ref-format', '--branch', branch]),
+      Command.observing('git', arguments: <String>['check-ref-format', '--branch', branch]),
     );
     if (!legal.ok) {
       return CheckResult.blocked(
@@ -201,7 +201,10 @@ final class GitBranch extends ReversibleStep<String?> {
   /// cut a branch from without saying so.
   Future<String?> _head(StepContext context) async {
     final CommandResult answer = await context.shell.run(
-      Command.observing('git', <String>['-C', repository, 'rev-parse', '--abbrev-ref', 'HEAD']),
+      Command.observing(
+        'git',
+        arguments: <String>['-C', repository, 'rev-parse', '--abbrev-ref', 'HEAD'],
+      ),
     );
     if (!answer.ok || answer.trimmed.isEmpty || answer.trimmed == 'HEAD') {
       return null;
@@ -211,19 +214,22 @@ final class GitBranch extends ReversibleStep<String?> {
 
   Future<bool> _branchExists(StepContext context, String branch) async {
     final CommandResult answer = await context.shell.run(
-      Command.observing('git', <String>[
-        '-C',
-        repository,
-        'rev-parse',
-        '--verify',
-        '--quiet',
-        'refs/heads/$branch',
-      ]),
+      Command.observing(
+        'git',
+        arguments: <String>[
+          '-C',
+          repository,
+          'rev-parse',
+          '--verify',
+          '--quiet',
+          'refs/heads/$branch',
+        ],
+      ),
     );
     return answer.ok;
   }
 
   Future<CommandResult> _status(StepContext context) => context.shell.run(
-    Command.observing('git', <String>['-C', repository, 'status', '--porcelain']),
+    Command.observing('git', arguments: <String>['-C', repository, 'status', '--porcelain']),
   );
 }

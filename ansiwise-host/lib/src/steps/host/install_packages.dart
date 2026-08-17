@@ -133,7 +133,7 @@ final class InstallPackages extends ReversibleStep<List<String>> {
   /// still exits zero, which is why the status is read rather than the exit code.
   Future<bool> _isInstalled(StepContext context, String package) async {
     final CommandResult status = await context.shell.run(
-      Command.observing('dpkg-query', <String>[r'-W', r'-f=${Status}', package]),
+      Command.observing('dpkg-query', arguments: <String>[r'-W', r'-f=${Status}', package]),
     );
     return status.ok && status.trimmed == 'install ok installed';
   }

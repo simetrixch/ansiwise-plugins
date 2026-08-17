@@ -65,7 +65,7 @@ final class AssertNetplanMerged extends ObservingStep {
     }
 
     final CommandResult merged = await context.shell.run(
-      Command.observing('netplan', <String>['get', 'ethernets.${nic.device}']),
+      Command.observing('netplan', arguments: <String>['get', 'ethernets.${nic.device}']),
     );
     if (!merged.ok) {
       return CheckResult.blocked(

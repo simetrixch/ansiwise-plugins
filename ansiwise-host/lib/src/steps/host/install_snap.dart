@@ -85,7 +85,7 @@ final class InstallSnap extends IrreversibleStep {
   /// disabled. A non-empty answer with nothing on the path is exactly the disabled snap.
   static Future<String?> trackedChannel(StepContext context, String snap) async {
     final CommandResult listed = await context.shell.run(
-      Command.observing('snap', <String>['list', snap]),
+      Command.observing('snap', arguments: <String>['list', snap]),
     );
     if (!listed.ok) {
       return null;

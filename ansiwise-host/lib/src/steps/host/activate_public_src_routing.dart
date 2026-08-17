@@ -110,14 +110,14 @@ final class ActivatePublicSrcRouting extends ReversibleStep<bool> {
 
   Future<bool> _answers(StepContext context, String question, String wanted) async {
     final CommandResult answer = await context.shell.run(
-      Command.observing('systemctl', <String>[question, unitName]),
+      Command.observing('systemctl', arguments: <String>[question, unitName]),
     );
     return answer.trimmed == wanted;
   }
 
   Future<bool> _ruleInstalled(StepContext context) async {
     final CommandResult rules = await context.shell.run(
-      const Command.observing('ip', <String>['-4', 'rule', 'show']),
+      const Command.observing('ip', arguments: <String>['-4', 'rule', 'show']),
     );
     if (!rules.ok) {
       return false;

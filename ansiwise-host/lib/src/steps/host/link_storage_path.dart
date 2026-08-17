@@ -115,20 +115,20 @@ final class LinkStoragePath extends IrreversibleStep {
   /// Where the link points, or null when there is no link there.
   Future<String?> _linkTarget(StepContext context) async {
     final CommandResult isLink = await context.shell.run(
-      Command.observing('test', <String>['-L', linkPath]),
+      Command.observing('test', arguments: <String>['-L', linkPath]),
     );
     if (!isLink.ok) {
       return null;
     }
     final CommandResult target = await context.shell.run(
-      Command.observing('readlink', <String>['-f', linkPath]),
+      Command.observing('readlink', arguments: <String>['-f', linkPath]),
     );
     return target.ok && target.trimmed.isNotEmpty ? target.trimmed : null;
   }
 
   Future<bool> _isRealDirectory(StepContext context) async {
     final CommandResult directory = await context.shell.run(
-      Command.observing('test', <String>['-d', linkPath]),
+      Command.observing('test', arguments: <String>['-d', linkPath]),
     );
     return directory.ok;
   }

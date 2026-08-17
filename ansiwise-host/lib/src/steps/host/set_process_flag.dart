@@ -246,7 +246,7 @@ final class SetProcessFlag extends ReversibleStep<String?> {
     final DateTime giveUp = context.clock.now().add(timeout);
     while (true) {
       final CommandResult answered = await context.shell.run(
-        Command.observing(ready.first, ready.skip(1).toList()),
+        Command.observing(ready.first, arguments: ready.skip(1).toList()),
       );
       if (answered.ok) {
         context.log.debug('${ready.join(' ')} answers again');

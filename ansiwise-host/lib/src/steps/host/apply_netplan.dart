@@ -83,7 +83,7 @@ final class ApplyNetplan extends IrreversibleStep {
 
   Future<bool> _hasRule(StepContext context, PublicNic nic) async {
     final CommandResult rules = await context.shell.run(
-      const Command.observing('ip', <String>['-4', 'rule', 'show']),
+      const Command.observing('ip', arguments: <String>['-4', 'rule', 'show']),
     );
     if (!rules.ok) {
       return false;
@@ -95,7 +95,7 @@ final class ApplyNetplan extends IrreversibleStep {
 
   Future<bool> _hasRoute(StepContext context, PublicNic nic) async {
     final CommandResult routes = await context.shell.run(
-      Command.observing('ip', <String>['-4', 'route', 'show', 'table', '$table']),
+      Command.observing('ip', arguments: <String>['-4', 'route', 'show', 'table', '$table']),
     );
     return routes.ok && routes.stdout.contains(nic.gateway);
   }
