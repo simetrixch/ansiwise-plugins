@@ -27,9 +27,15 @@ void main() {
     // What the issuer is called, which authority it asks, which ingress answers the challenge, and
     // where the rendered file goes. cert-manager mandates none of the four: each is one product's
     // choice, and a value here made this package make that choice for every caller.
+    //
+    // The authority went one step further and is now the NAME of an answer rather than a value the
+    // row writes out, because it differs between two installations running the same program: one
+    // that exists to be proven registers with a staging service, one that serves registers with the
+    // production one. What this suite holds is unchanged — declared, required, no default — and the
+    // name it holds it under moved with the demotion.
     'write_cluster_issuer_manifest': <String>[
       'name',
-      'acme_server',
+      'acme_server_answer',
       'ingress_class',
       'issuer_manifest_path',
     ],

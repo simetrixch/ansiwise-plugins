@@ -19,11 +19,12 @@ void main() {
   const String templatePath = 'test/templates/cluster-issuer-manifest.tpl';
   const String manifestPath = '/var/lib/deploy/state/clusterissuer.yaml';
   const String mailboxAnswer = 'certificate_mailbox';
+  const String authorityAnswer = 'certificate_authority';
 
   const WriteClusterIssuerManifest step = WriteClusterIssuerManifest(
     templatePath: templatePath,
     name: 'my-issuer',
-    acmeServer: 'https://acme.example.com/directory',
+    acmeServerAnswer: authorityAnswer,
     ingressClass: 'public',
     path: manifestPath,
     emailAnswer: mailboxAnswer,
@@ -43,7 +44,10 @@ void main() {
   }
 
   /// What an operator answered about this installation.
-  const Arguments answered = Arguments(<String, Object>{mailboxAnswer: 'ops@example.com'});
+  const Arguments answered = Arguments(<String, Object>{
+    mailboxAnswer: 'ops@example.com',
+    authorityAnswer: 'https://acme.example.com/directory',
+  });
 
   test('the four values the row and the run hold reach the file', () async {
     final ClusterMachine machine = withTemplate();
@@ -69,7 +73,10 @@ void main() {
       machine.contextFor(
         under,
         Arguments.none,
-        const Arguments(<String, Object>{mailboxAnswer: 'certificates@example.org'}),
+        const Arguments(<String, Object>{
+          mailboxAnswer: 'certificates@example.org',
+          authorityAnswer: 'https://acme.example.com/directory',
+        }),
       ),
     );
     expect(machine.files.contents[manifestPath], contains('email: certificates@example.org'));
@@ -119,5 +126,27 @@ void main() {
     await step.apply(context);
     await step.undo(context, captured);
     expect(machine.files.contents.containsKey(manifestPath), isFalse);
+  });
+
+  // THE REASON THE AUTHORITY IS AN ANSWER AT ALL. A machine that exists to prove a run registers
+  // with the staging service, whose issuing is not rationed; a machine that serves registers with
+  // the production one, which counts every repeated proof against a weekly allowance. Both read the
+  // same program row, so a step reaching for one of them itself would spend the other's budget.
+  test('another installation answers another authority, and the file follows it', () async {
+    final ClusterMachine machine = withTemplate();
+    await step.apply(
+      machine.contextFor(
+        under,
+        Arguments.none,
+        const Arguments(<String, Object>{
+          mailboxAnswer: 'ops@example.com',
+          authorityAnswer: 'https://acme-staging-v02.api.letsencrypt.org/directory',
+        }),
+      ),
+    );
+    expect(
+      machine.files.contents[manifestPath],
+      contains('server: https://acme-staging-v02.api.letsencrypt.org/directory'),
+    );
   });
 }

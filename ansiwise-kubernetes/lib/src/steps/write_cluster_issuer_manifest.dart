@@ -23,7 +23,7 @@ final class WriteClusterIssuerManifest extends ReversibleStep<String?> with File
   const WriteClusterIssuerManifest({
     required this.templatePath,
     required this.name,
-    required this.acmeServer,
+    required this.acmeServerAnswer,
     required this.ingressClass,
     required this.path,
     required this.emailAnswer,
@@ -35,7 +35,7 @@ final class WriteClusterIssuerManifest extends ReversibleStep<String?> with File
       WriteClusterIssuerManifest(
         templatePath: arguments.text('template'),
         name: arguments.text('name'),
-        acmeServer: arguments.text('acme_server'),
+        acmeServerAnswer: arguments.text('acme_server_answer'),
         ingressClass: arguments.text('ingress_class'),
         path: arguments.text('issuer_manifest_path'),
         emailAnswer: arguments.text('email_answer'),
@@ -56,10 +56,20 @@ final class WriteClusterIssuerManifest extends ReversibleStep<String?> with File
       kind: ArgumentKind.text,
       describes: 'what the issuer is called, which is also the secret its account key lives in',
     ),
+    // AN ANSWER AND NOT A LITERAL, for the same reason the mailbox beside it is one: which
+    // authority an installation registers with is a property of THAT installation. A machine that
+    // exists to prove a run registers with the authority's staging service, whose certificates no
+    // browser trusts and whose issuing is not rationed; a machine serving real traffic registers
+    // with the production one, which allows fifty certificates per registered domain per week and
+    // counts every repeated proof against them. Written into the program as one address, the two
+    // could not both be true, and the proving machine would spend the serving machine's budget.
     ArgumentSpec(
-      name: 'acme_server',
-      kind: ArgumentKind.text,
-      describes: 'the certificate authority every certificate on this cluster is issued by',
+      name: 'acme_server_answer',
+      kind: ArgumentKind.answerName,
+      describes:
+          'the name of the answer holding the certificate authority every certificate on this '
+          'cluster is issued by — a staging service for an installation that exists to be proven, '
+          'the production one for an installation that serves',
     ),
     ArgumentSpec(
       name: 'ingress_class',
@@ -76,7 +86,7 @@ final class WriteClusterIssuerManifest extends ReversibleStep<String?> with File
       describes:
           'the name of the answer holding the mailbox the certificate authority writes to before a '
           'certificate expires — the question belongs to whoever operates the installation, and the '
-          'authority is named separately by acme_server',
+          'authority is named separately by acme_server_answer',
     ),
     ArgumentSpec(
       name: 'issuer_manifest_path',
@@ -128,8 +138,11 @@ final class WriteClusterIssuerManifest extends ReversibleStep<String?> with File
   /// What the issuer is called.
   final String name;
 
-  /// The authority certificates are issued by.
-  final String acmeServer;
+  /// WHICH answer holds the authority certificates are issued by.
+  ///
+  /// Empty by design: a default here would be one installation's choice made by a package that must
+  /// not know which installation it is compiled into.
+  final String acmeServerAnswer;
 
   /// The ingress a request is answered over.
   final String ingressClass;
@@ -191,7 +204,7 @@ final class WriteClusterIssuerManifest extends ReversibleStep<String?> with File
   /// steps that apply the issuer and that prove it settled compare against exactly this.
   Future<String> manifestFor(StepContext context) => renderedWith(context, <String, String>{
     'name': name,
-    'acme-server': acmeServer,
+    'acme-server': context.answers.text(acmeServerAnswer),
     'email': context.answers.text(emailAnswer),
     'ingress-class': ingressClass,
   });
