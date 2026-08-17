@@ -261,6 +261,18 @@ final class HelmRelease extends IrreversibleStep {
   ///
   /// `loadYaml` returns its own node types, and two of them holding the same content are not equal
   /// to each other or to anything a JSON decoder produced.
+  ///
+  /// **TWO READERS READ THE VALUES FILE, AND THEY DO NOT AGREE ON EVERY SPELLING.** helm follows
+  /// YAML 1.1; this reader follows YAML 1.2. Where a value is spelled differently under the two,
+  /// the release holds one number and this comparison expects another, and the step reports a
+  /// release that installed perfectly as "still not in the state it produces" — on every run, with
+  /// no way to make it stop. Measured: `0400` is 256 to helm and 400 here, and `yes` is true to helm
+  /// and the text "yes" here.
+  ///
+  /// Neither reader is wrong and neither can be made to imitate the other, so the rule is about the
+  /// FILE: a values file handed to this step is written in the subset both agree on — a plain
+  /// decimal rather than a leading zero, `true` and `false` rather than `yes` and `no`. Nothing
+  /// enforces that yet, and until something does this paragraph is what the next person has.
   static Object? _plain(Object? node) {
     if (node is YamlMap) {
       return <String, Object?>{
