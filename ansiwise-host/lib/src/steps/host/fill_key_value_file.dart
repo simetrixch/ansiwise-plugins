@@ -212,8 +212,11 @@ final class FillKeyValueFile extends ReversibleStep<String?> {
   @override
   Future<void> undo(StepContext context, String? captured) async {
     if (captured == null) {
-      // There was no such file. Writing the template back would leave a file of empty values that
-      // reads as an installation nobody answered for.
+      // There was no such file, so taking this back means the path is gone again. Writing the
+      // template back instead would leave a file of empty values that reads as an installation
+      // nobody answered for, and returning without touching anything would leave THIS
+      // installation's answers standing while the record says the step was taken back.
+      await context.files.delete(path);
       return;
     }
     await context.files.write(path, captured, mode: fileMode);

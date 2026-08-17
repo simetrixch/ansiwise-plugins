@@ -294,7 +294,10 @@ void main() {
       expect(machine.files.contents[path], before);
     });
 
-    test('a file that was not there is not written back as a template of empty values', () async {
+    test('a file that was not there is GONE again, not left standing', () async {
+      // The record says "taken back" the moment undo returns without throwing. An undo that
+      // returned here left this installation's own answers — its domain, its addresses — on a
+      // machine the record describes as untouched, which is the one thing a record may not do.
       final HostMachine machine = machineWith();
       final StepContext context = contextOn(machine);
 
@@ -302,15 +305,25 @@ void main() {
       expect(captured, isNull);
 
       await stepWith().apply(context);
+      expect(machine.files.contents[path], isNotNull, reason: 'apply created it');
+
       await stepWith().undo(context, captured);
 
-      expect(
-        machine.files.contents[path],
-        isNotNull,
-        reason:
-            'undo writes nothing here; putting the template back would leave a file of empty '
-            'values that reads as an installation nobody answered for',
-      );
+      expect(machine.files.contents[path], isNull);
+    });
+
+    test('THE INNOCENT NEIGHBOUR: a file that already stood is restored, never deleted', () async {
+      // Without this, an undo that simply deleted whatever it found would pass the two tests above
+      // while taking away a file this step only edited.
+      const String before = 'DEPLOY_ENV="someone else wrote this"\n';
+      final HostMachine machine = machineWith(existing: before);
+      final StepContext context = contextOn(machine);
+
+      final String? captured = await stepWith().capture(context);
+      await stepWith().apply(context);
+      await stepWith().undo(context, captured);
+
+      expect(machine.files.contents[path], before);
     });
   });
 }
