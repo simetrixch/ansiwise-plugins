@@ -21,7 +21,11 @@ final class WaitForHttp extends ObservingStep with WaitStep {
 
   /// Builds the step from what the program gave it.
   factory WaitForHttp.fromArguments(Arguments arguments) => WaitForHttp(
-    url: arguments.text('url'),
+    // OPTIONAL, AND NOT BECAUSE A ROW MAY LEAVE IT OUT. A row usually has this address from an
+    // earlier measurement, and everything that examines a program before it runs has to build
+    // every step — at that moment the measurement has not happened and the value does not exist.
+    // Read as required, the whole program is refused before anything looks at anything.
+    url: arguments.optionalText('url') ?? '',
     timeoutSeconds: arguments.integer('timeout_seconds'),
     intervalSeconds: arguments.integer('interval_seconds'),
   );
@@ -31,9 +35,11 @@ final class WaitForHttp extends ObservingStep with WaitStep {
     ArgumentSpec(
       name: 'url',
       kind: ArgumentKind.text,
+      required: false,
       describes:
-          'the address to wait for. A row that has it from an earlier measurement writes that '
-          'rather than the address itself, and the framework fills it in before this step is built',
+          'the address to wait for. A row that has it from an earlier measurement names that '
+          'measurement instead, which is why this is not required: the program is examined before '
+          'anything is measured, and a step that could not be built then would refuse the program',
     ),
     ArgumentSpec(
       name: 'timeout_seconds',
