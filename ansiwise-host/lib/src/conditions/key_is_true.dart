@@ -110,25 +110,3 @@ final class KeyIsTrue implements Predicate {
     );
   }
 }
-
-/// A condition was asked and the machine said nothing it could read.
-///
-/// NOT a failed run and not an answer: it is the third outcome, and the contract a predicate answers
-/// under has no room for it. [PredicateResult] carries `holds` and `doesNotHold` and both of them
-/// assert something about the machine, so a condition that could not read its input has to leave the
-/// run rather than pick one — the whole reason this type exists.
-///
-/// It is thrown, and it leaves the binary as an unhandled exception carrying this message. That is
-/// ugly and it is honest: [EngineFailure] is sealed in the framework, so no package outside it can
-/// raise a first-class engine failure, and the alternative — answering "does not hold" — is the
-/// silent one this condition was written to avoid.
-final class ConditionUnanswerable implements Exception {
-  /// Records that a condition could not be answered, because [because].
-  const ConditionUnanswerable(this.because);
-
-  /// What was found, and what the operator has to write instead.
-  final String because;
-
-  @override
-  String toString() => because;
-}
