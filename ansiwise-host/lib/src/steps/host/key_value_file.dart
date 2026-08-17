@@ -86,6 +86,50 @@ final class KeyValueFile {
       if (_valueIn(template, key) == null) key,
   ];
 
+  /// Which keys the TEMPLATE declares and the FILE does not carry.
+  ///
+  /// **A template that grew is the ordinary case, not an odd one.** Keys are added as the product is
+  /// built, and an installation made before one was added has a file without it. Filling happens in
+  /// place, so such a key has no line to rewrite: whatever needed it reads nothing, and every step
+  /// on the way reports success. On a first installation this never shows — the file is copied from
+  /// the template — so it is exactly the fault that waits until there is something to lose.
+  List<String> get keysTheTemplateGained => <String>[
+    for (final String line in template.split('\n'))
+      if (_assignedKey(line) case final String key)
+        if (!_assignedKeyIn(current, key)) key,
+  ];
+
+  /// [current] with the template's own block for each of [keys] added at the end.
+  ///
+  /// The BLOCK and not the bare line: the whole value of these files is that each key stands under
+  /// the paragraph explaining it, and a key appended without its paragraph is one an operator has to
+  /// go and look up. The comment lines directly above the assignment in the template are its
+  /// paragraph, and they come with it.
+  ///
+  /// Added at the end rather than at the template's own position, because the file has been edited
+  /// by hand and its order is the operator's. What is gained is gained visibly, in one place.
+  String grownWith(Iterable<String> keys) {
+    final List<String> lines = template.split('\n');
+    final StringBuffer grown = StringBuffer(current.trimRight())..write('\n');
+    for (final String key in keys) {
+      final int at = lines.indexWhere((String line) => _assignedKey(line) == key);
+      if (at < 0) {
+        continue;
+      }
+      int from = at;
+      while (from > 0 && lines[from - 1].trimLeft().startsWith('#')) {
+        from--;
+      }
+      grown.write('\n');
+      for (int i = from; i <= at; i++) {
+        grown
+          ..write(lines[i])
+          ..write('\n');
+      }
+    }
+    return grown.toString();
+  }
+
   /// [current] with each entry of [values] written at the position the template declares it.
   ///
   /// The value is double-quoted, because these files are read by a shell, and the caller has already

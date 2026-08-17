@@ -326,4 +326,79 @@ void main() {
       expect(machine.files.contents[path], before);
     });
   });
+
+  group('a template that gained a key after this file was made', () {
+    // Keys are added as the product is built. An installation made before one was added has a file
+    // without it, filling happens in place, and so there is nothing to rewrite: whatever needed the
+    // key reads nothing and every step on the way reports success. On a FIRST installation it never
+    // shows, because the file is copied from the template — which is what makes it the fault that
+    // waits until there is something to lose.
+    const String gainedParagraph = '# The name the monitoring administrator logs in under.\n';
+    const String grownTemplate = '$template\n${gainedParagraph}OBSERVABILITY_ADMIN_USER="admin"\n';
+
+    /// The file as an installation made before that key holds it, with answers typed into it.
+    const String older =
+        '# What this installation answers on.\n'
+        'DOMAIN_SUFFIX="m1.example.com"\n'
+        '\n'
+        '# Which stage it runs.\n'
+        'DEPLOY_ENV="dev"\n'
+        '\n'
+        '# The mailboxes an alert with no recipients of its own is delivered to.\n'
+        'ALERT_RECIPIENTS="a@example.com,b@example.com"\n';
+
+    HostMachine grown({String? file}) {
+      final HostMachine machine = HostMachine();
+      machine.files.contents[templatePath] = grownTemplate;
+      machine.files.contents[path] = file ?? older;
+      return machine;
+    }
+
+    test('the file is not finished, because a key it needs is not in it', () async {
+      expect(await stepWith().check(contextOn(grown())), isA<Ready>());
+    });
+
+    test('the key is added, UNDER ITS OWN PARAGRAPH', () async {
+      final HostMachine machine = grown();
+      await stepWith().apply(contextOn(machine));
+
+      final String written = machine.files.contents[path]!;
+      expect(
+        written,
+        contains('${gainedParagraph}OBSERVABILITY_ADMIN_USER'),
+        reason: 'the paragraph is the only documentation an operator opening this file ever gets',
+      );
+    });
+
+    test('AND NOTHING SOMEBODY TYPED IS TAKEN BACK, which is the whole shape', () async {
+      final HostMachine machine = grown();
+      await stepWith().apply(contextOn(machine));
+
+      final String written = machine.files.contents[path]!;
+      expect(written, contains('DOMAIN_SUFFIX="m1.example.com"'));
+      expect(written, contains('ALERT_RECIPIENTS="a@example.com,b@example.com"'));
+    });
+
+    test('and it is finished afterwards, so the row does not report work for ever', () async {
+      final HostMachine machine = grown();
+      await stepWith().apply(contextOn(machine));
+      expect(await stepWith().check(contextOn(machine)), isA<Satisfied>());
+    });
+
+    test('COUNTER-PROBE: a file that already carries every key gains nothing', () async {
+      // Without this the growing could run on every pass, and a file that gained the same key twice
+      // is a file whose second, blank copy is the one a shell ends up reading.
+      final HostMachine machine = grown(
+        file: '$older\n${gainedParagraph}OBSERVABILITY_ADMIN_USER="admin"\n',
+      );
+
+      await stepWith().apply(contextOn(machine));
+
+      expect(
+        'OBSERVABILITY_ADMIN_USER'.allMatches(machine.files.contents[path]!).length,
+        1,
+        reason: 'appending on every run is how a file ends up carrying the same key twice',
+      );
+    });
+  });
 }

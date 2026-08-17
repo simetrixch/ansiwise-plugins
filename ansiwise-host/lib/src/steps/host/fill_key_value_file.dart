@@ -172,6 +172,15 @@ final class FillKeyValueFile extends ReversibleStep<String?> {
       );
     }
 
+    // A KEY THE TEMPLATE GAINED AFTER THIS FILE WAS MADE. Keys are added as the product is built,
+    // and the file of an installation made before one was added simply has no line for it. Nothing
+    // reported that: the refusal above only ever looked at keys THIS RUN fills, and the keys an
+    // operator fills by hand — most of this file — went unexamined. Whatever needed one read
+    // nothing, and every step on the way said it was finished.
+    if (file.keysTheTemplateGained.isNotEmpty) {
+      return const CheckResult.ready();
+    }
+
     return _toFill(file, wanted).isEmpty
         ? CheckResult.satisfied('$path states this $subject, and every value in it was answered')
         : const CheckResult.ready();
@@ -202,9 +211,25 @@ final class FillKeyValueFile extends ReversibleStep<String?> {
 
   @override
   Future<void> apply(StepContext context) async {
-    final KeyValueFile file = await _read(context);
+    final KeyValueFile read = await _read(context);
+
+    // GROWN FIRST, THEN FILLED, and both against the same reading. A key the template gained is
+    // added with the paragraph that explains it, because that paragraph is the only documentation an
+    // operator opening this file ever gets. It is added rather than the file being remade: the file
+    // holds values somebody typed and values something minted once and keeps nowhere else, so the
+    // repair for a missing key must never be "take the file away".
+    final List<String> gained = read.keysTheTemplateGained;
+    final KeyValueFile file = gained.isEmpty
+        ? read
+        : KeyValueFile(template: read.template, current: read.grownWith(gained));
+    if (gained.isNotEmpty) {
+      context.log.info(
+        '$path gained ${gained.join(', ')} from $templatePath, each under its own paragraph',
+      );
+    }
+
     final Map<String, String> filling = _toFill(file, _wanted(context));
-    if (filling.isEmpty) {
+    if (filling.isEmpty && gained.isEmpty) {
       return;
     }
     await context.files.write(path, file.filled(filling), mode: fileMode, elevated: elevated);
