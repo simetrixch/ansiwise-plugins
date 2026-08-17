@@ -164,8 +164,7 @@ final class CreateFileFromTemplate extends ReversibleStep<bool> with FileStep, T
     // nobody answered is refused there by name, which is the whole reason the two kinds differ.
     final Map<String, String> filled = <String, String>{
       for (final MapEntry<String, KeyBinding> each in values.entries)
-        if (each.value.valueFrom(context.answers) case final String value when value.isNotEmpty)
-          each.key: value,
+        if (each.value.valueIn(context.answers) case final String value) each.key: value,
     };
 
     return FileContent.text(await renderedWith(context, filled));

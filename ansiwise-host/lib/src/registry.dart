@@ -43,6 +43,7 @@ import 'steps/host/wait_for_addons_enabled.dart';
 import 'steps/host/wait_for_http.dart';
 import 'steps/host/write_connmark_nft_table.dart';
 import 'steps/host/write_containerd_registry_mirror.dart';
+import 'steps/host/write_file_from_template.dart';
 import 'steps/host/write_netplan_public_src_routing.dart';
 import 'steps/host/write_public_src_routing_script.dart';
 import 'steps/host/write_public_src_routing_unit.dart';
@@ -375,6 +376,12 @@ const Map<StepName, RegisteredStep> hostSteps = <StepName, RegisteredStep>{
     source: 'lib/src/steps/host/create_file_from_template.dart:24',
     create: CreateFileFromTemplate.fromArguments,
     arguments: CreateFileFromTemplate.arguments,
+  ),
+  StepName('write_file_from_template'): RegisteredStep(
+    name: StepName('write_file_from_template'),
+    source: 'lib/src/steps/host/write_file_from_template.dart:26',
+    create: WriteFileFromTemplate.fromArguments,
+    arguments: WriteFileFromTemplate.arguments,
   ),
 };
 

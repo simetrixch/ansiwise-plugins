@@ -40,6 +40,12 @@ const Set<String> notCoveredByAFakeMachine = <String>{
   // the probe being able to hand two text arguments two different values. It is driven twice
   // directly instead, over a machine where the two paths differ, in create_file_from_template_test.
   'create_file_from_template',
+  // The same reason as the two above, and the same answer. The probe hands every text argument with
+  // no default one identical one-character value, so the template this step reads and the file it
+  // rewrites are the same path — and a file rewritten from itself is not the act it performs. It is
+  // driven twice directly instead, over a machine where the two paths differ, in
+  // write_file_from_template_test.
+  'write_file_from_template',
   // Nothing about the fake machine keeps it from being exercised: the answer does. Every program
   // that runs it declares `storage_directory` with an empty default, so a run that says nothing
   // about it takes the early return — the machine has no separate data filesystem and there is no

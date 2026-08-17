@@ -242,8 +242,7 @@ final class FillKeyValueFile extends ReversibleStep<String?> {
   /// does not have, and a key it does not have belongs in the file as the template left it.
   Map<String, String> _wanted(StepContext context) => <String, String>{
     for (final MapEntry<String, KeyBinding> each in values.entries)
-      if (each.value.valueFrom(context.answers) case final String value when value.isNotEmpty)
-        each.key: value,
+      if (each.value.valueIn(context.answers) case final String value) each.key: value,
   };
 
   /// The keys that still need a value, which is every declared key nobody has answered.
@@ -270,9 +269,19 @@ final class KeyBinding {
   /// What stands between the values where the answer holds several, or null where it holds one.
   final String? join;
 
-  /// The value this binding puts in the file.
-  String valueFrom(Arguments answers) =>
-      join == null ? answers.text(answer) : answers.textList(answer).join(join!);
+  /// The value this binding puts in the file, or null where this run has nothing to put.
+  ///
+  /// Null covers BOTH an answer nobody gave and one given empty, because the two mean the same thing
+  /// to a file: this installation has no such value. Reading an absent one as a value would throw
+  /// where the answer is optional, and writing an empty one would put a key in the file that says
+  /// "answered with nothing" — which reads to every later check as answered.
+  String? valueIn(Arguments answers) {
+    if (!answers.has(answer)) {
+      return null;
+    }
+    final String value = join == null ? answers.text(answer) : answers.textList(answer).join(join!);
+    return value.isEmpty ? null : value;
+  }
 
   /// The bindings a row declares, refusing anything that is not one.
   static Map<String, KeyBinding> readFrom(Object? declared) {
