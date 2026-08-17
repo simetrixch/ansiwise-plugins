@@ -21,6 +21,7 @@ final class StampCalicoPoolCidrInCniManifest extends ReversibleStep<String?> {
     required this.podCidr,
     required this.manifestPath,
     required this.fileMode,
+    this.elevated = false,
   });
 
   /// The manifest is written by whatever installs the cluster, which is an earlier row of the same
@@ -62,6 +63,17 @@ final class StampCalicoPoolCidrInCniManifest extends ReversibleStep<String?> {
           'the permissions the manifest and its backup are written with, as the number the machine '
           'stores — 384 is the owner-only mode a file read by a privileged service wants',
     ),
+    // ASKED, never assumed. Whether the file this row points at belongs to root is a property of
+    // that PATH, and this step is pointed at one by its row. A step deciding it for every caller
+    // would be a tool package knowing something about the product that pointed it.
+    ArgumentSpec(
+      name: 'elevated',
+      kind: ArgumentKind.flag,
+      describes:
+          'whether the file belongs to root, so reading and writing it need elevation. Leave it '
+          'off for a path this account owns',
+      required: false,
+    ),
   ];
 
   /// The environment variable whose value is the pool's range.
@@ -78,15 +90,17 @@ final class StampCalicoPoolCidrInCniManifest extends ReversibleStep<String?> {
   /// The permissions the manifest is written with.
   final int fileMode;
 
+  /// Whether the manifest belongs to root, so every read and write of it is elevated.
+  final bool elevated;
   @override
   Future<CheckResult> check(StepContext context) async {
-    if (!await context.files.exists(manifestPath)) {
+    if (!await context.files.exists(manifestPath, elevated: elevated)) {
       return CheckResult.blocked(
         '$manifestPath is not there — whatever installed the cluster writes it, so this ran before '
         'that install or against a machine it was removed from',
       );
     }
-    final String current = await context.files.read(manifestPath);
+    final String current = await context.files.read(manifestPath, elevated: elevated);
     final String? stamped = stamp(current, podCidr);
     if (stamped == null) {
       return CheckResult.blocked(
@@ -116,12 +130,12 @@ final class StampCalicoPoolCidrInCniManifest extends ReversibleStep<String?> {
     final String backup = '$manifestPath.bak.${_stampOfNow(context)}';
     await context.files.write(backup, current, mode: fileMode);
     context.log.info('the manifest as it was is at $backup');
-    await context.files.write(manifestPath, stamped, mode: fileMode);
+    await context.files.write(manifestPath, stamped, mode: fileMode, elevated: elevated);
 
     // The write is reported the same way whether the rewrite matched anything or not, so what the
     // file holds now is read rather than assumed. This is the failure the same-line expression
     // produced: a stamp that took nothing, and a phase that carried on.
-    final String written = await context.files.read(manifestPath);
+    final String written = await context.files.read(manifestPath, elevated: elevated);
     if (stamp(written, podCidr) != written) {
       throw CommandFailed(
         argv: <String>['write', manifestPath],
@@ -139,7 +153,9 @@ final class StampCalicoPoolCidrInCniManifest extends ReversibleStep<String?> {
   /// run never had.
   @override
   Future<String?> capture(StepContext context) async =>
-      await context.files.exists(manifestPath) ? context.files.read(manifestPath) : null;
+      await context.files.exists(manifestPath, elevated: elevated)
+      ? context.files.read(manifestPath, elevated: elevated)
+      : null;
 
   @override
   Future<void> undo(StepContext context, String? captured) async {
@@ -148,7 +164,7 @@ final class StampCalicoPoolCidrInCniManifest extends ReversibleStep<String?> {
       // back.
       return;
     }
-    await context.files.write(manifestPath, captured, mode: fileMode);
+    await context.files.write(manifestPath, captured, mode: fileMode, elevated: elevated);
   }
 
   /// [manifest] with the value under [variable] replaced by [podCidr], or null when it declares none.
@@ -173,7 +189,9 @@ final class StampCalicoPoolCidrInCniManifest extends ReversibleStep<String?> {
   }
 
   Future<String> _current(StepContext context) async =>
-      await context.files.exists(manifestPath) ? context.files.read(manifestPath) : '';
+      await context.files.exists(manifestPath, elevated: elevated)
+      ? context.files.read(manifestPath, elevated: elevated)
+      : '';
 
   /// The moment this run is at, in a shape that sorts and carries no separator a path dislikes.
   static String _stampOfNow(StepContext context) => context.clock

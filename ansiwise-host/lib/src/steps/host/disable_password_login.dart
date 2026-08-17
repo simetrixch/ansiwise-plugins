@@ -14,11 +14,14 @@ import 'package:ansiwise_api/ansiwise_api.dart';
 /// failure.
 final class DisablePasswordLogin extends ReversibleStep<String?> {
   /// Writes the setting into [dropIn].
-  const DisablePasswordLogin({required this.dropIn, required this.reload});
+  const DisablePasswordLogin({required this.dropIn, required this.reload, this.elevated = false});
 
   /// Builds the step from what the program gave it.
-  factory DisablePasswordLogin.fromArguments(Arguments arguments) =>
-      DisablePasswordLogin(dropIn: arguments.text('drop_in'), reload: arguments.textList('reload'));
+  factory DisablePasswordLogin.fromArguments(Arguments arguments) => DisablePasswordLogin(
+    dropIn: arguments.text('drop_in'),
+    reload: arguments.textList('reload'),
+    elevated: arguments.has('elevated') && arguments.flag('elevated'),
+  );
 
   /// What this step accepts.
   static const List<ArgumentSpec> arguments = <ArgumentSpec>[
@@ -33,6 +36,17 @@ final class DisablePasswordLogin extends ReversibleStep<String?> {
       kind: ArgumentKind.textList,
       describes: 'how this machine is told to re-read the configuration',
       defaultValue: <String>['systemctl', 'reload', 'ssh'],
+    ),
+    // ASKED, never assumed. Whether the file this row points at belongs to root is a property of
+    // that PATH, and this step is pointed at one by its row. A step deciding it for every caller
+    // would be a tool package knowing something about the product that pointed it.
+    ArgumentSpec(
+      name: 'elevated',
+      kind: ArgumentKind.flag,
+      describes:
+          'whether the file belongs to root, so reading and writing it need elevation. Leave it '
+          'off for a path this account owns',
+      required: false,
     ),
   ];
 
@@ -52,6 +66,8 @@ final class DisablePasswordLogin extends ReversibleStep<String?> {
       'PasswordAuthentication no\n'
       'KbdInteractiveAuthentication no\n';
 
+  /// Whether the drop-in belongs to root, so every read and write of it is elevated.
+  final bool elevated;
   @override
   Future<CheckResult> check(StepContext context) async {
     final Map<String, String>? settings = await _effective(context);
@@ -71,15 +87,15 @@ final class DisablePasswordLogin extends ReversibleStep<String?> {
 
   @override
   Future<StepPlan> plan(StepContext context) async {
-    final String before = await context.files.exists(dropIn)
-        ? await context.files.read(dropIn)
+    final String before = await context.files.exists(dropIn, elevated: elevated)
+        ? await context.files.read(dropIn, elevated: elevated)
         : '';
     return StepPlan.diff(dropIn, before: before, after: content);
   }
 
   @override
   Future<void> apply(StepContext context) async {
-    await context.files.write(dropIn, content, mode: _configFile);
+    await context.files.write(dropIn, content, mode: _configFile, elevated: elevated);
 
     final CommandResult reloaded = await context.shell.run(
       Command.detailed(reload.first, arguments: reload.sublist(1), elevated: true),
@@ -102,14 +118,16 @@ final class DisablePasswordLogin extends ReversibleStep<String?> {
   /// taking it back means removing it rather than putting something back.
   @override
   Future<String?> capture(StepContext context) async =>
-      await context.files.exists(dropIn) ? context.files.read(dropIn) : null;
+      await context.files.exists(dropIn, elevated: elevated)
+      ? context.files.read(dropIn, elevated: elevated)
+      : null;
 
   @override
   Future<void> undo(StepContext context, String? captured) async {
     if (captured == null) {
-      await context.files.delete(dropIn);
+      await context.files.delete(dropIn, elevated: elevated);
     } else {
-      await context.files.write(dropIn, captured, mode: _configFile);
+      await context.files.write(dropIn, captured, mode: _configFile, elevated: elevated);
     }
     // Reloading is part of taking it back. A file removed while sshd still holds the old setting
     // leaves a machine that refuses a password for a reason nothing on disk explains any more.

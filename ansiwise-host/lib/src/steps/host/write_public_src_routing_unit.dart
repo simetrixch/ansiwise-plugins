@@ -21,6 +21,7 @@ final class WritePublicSrcRoutingUnit extends ReversibleStep<String?> with FileS
     required this.mark,
     required this.table,
     required this.priority,
+    this.elevated = false,
   });
 
   /// Builds the step from what the program gave it.
@@ -32,6 +33,7 @@ final class WritePublicSrcRoutingUnit extends ReversibleStep<String?> with FileS
     mark: arguments.text('mark'),
     table: arguments.integer('table'),
     priority: arguments.integer('priority'),
+    elevated: arguments.has('elevated') && arguments.flag('elevated'),
   );
 
   /// What this step accepts.
@@ -79,12 +81,27 @@ final class WritePublicSrcRoutingUnit extends ReversibleStep<String?> with FileS
       kind: ArgumentKind.integer,
       describes: 'the number the rule keyed on the mark is installed at, as the script installs it',
     ),
+    // ASKED, never assumed. Whether the file this row points at belongs to root is a property of
+    // that PATH, and this step is pointed at one by its row. A step deciding it for every caller
+    // would be a tool package knowing something about the product that pointed it.
+    ArgumentSpec(
+      name: 'elevated',
+      kind: ArgumentKind.flag,
+      describes:
+          'whether the file belongs to root, so reading and writing it need elevation. Leave it '
+          'off for a path this account owns',
+      required: false,
+    ),
   ];
 
   /// `0644` — a service file the service manager reads.
   static const int fileMode = 0x1a4;
 
   /// The service file as text, with a marked slot where each value belongs.
+
+  /// Whether the file belongs to root, so every read and write of it is elevated.
+  @override
+  final bool elevated;
   @override
   final String templatePath;
 
