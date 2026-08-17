@@ -43,8 +43,18 @@ final class RequireKeyLoginPossible extends ObservingStep {
 
     // sshd's own effective configuration, not the file — an Include, a Match block or a package
     // default can say something the file does not, and what decides a login is what sshd resolved.
+    //
+    // ELEVATED, and observing at the same time. Resolving the configuration means READING every file
+    // it includes, and an installer that drops one in with root-only permissions makes `sshd -T`
+    // refuse the whole answer rather than skip that file. Measured on a machine: it reported
+    // "50-cloud-init.conf: Permission denied" and this check could say nothing about a login it had
+    // every other means to judge.
+    //
+    // The two flags are independent by design and this is the case they were made independent for:
+    // running as root does not make a command change anything, so this stays something a dry run may
+    // perform.
     final CommandResult effective = await context.shell.run(
-      const Command.observing('sshd', <String>['-T']),
+      const Command.detailed('sshd', arguments: <String>['-T'], observes: true, elevated: true),
     );
     if (!effective.ok) {
       return CheckResult.blocked(
