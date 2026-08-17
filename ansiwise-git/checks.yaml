@@ -48,3 +48,8 @@ tool-purity: test/checks/tool_purity_test.dart
 # never reads is ACCEPTED and then ignored — the row runs, does nothing about it, and reports
 # success. It happened twice in one day before this check existed.
 declared-arguments: test/checks/declared_arguments_test.dart
+
+# What a row grants a step is carried all the way to the act: no step reads an argument it does not
+# declare, and a file carrying the elevation field passes it to every files-port call. Ten
+# undeclared reads and four dropped calls each cost a real machine run to find on one day.
+carried-arguments: test/checks/carried_arguments_test.dart
