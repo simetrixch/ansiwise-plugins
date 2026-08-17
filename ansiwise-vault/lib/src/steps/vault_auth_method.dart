@@ -15,6 +15,16 @@ import 'vault_profile.dart';
 /// layout's auth-path key, because whatever logs in through the mount reads that same key: a mount
 /// created anywhere else is a mount nothing on the cluster reaches.
 ///
+/// **ENABLING A MOUNT IS NOT THE SAME AS CONFIGURING IT, and one without the other is a mount that
+/// refuses every login.** Vault answers `500 — could not load backend configuration` to anything
+/// that tries, which says nothing about what is missing. A kubernetes mount needs to be told where
+/// its cluster's API is before any workload can log in through it; an identity mount needs its
+/// issuer and its client. WHAT those values are is one installation's business and arrives on the
+/// row, so this step writes whatever it is given and knows none of it.
+///
+/// Measured: a run that enabled the mount and stopped there left every secret reader on the cluster
+/// refused, which showed up as every workload holding a credential coming up Degraded at once.
+///
 /// **Disabling a mount is not the reverse of enabling one.** The mount's accessor is minted when it
 /// is enabled and a new one is minted when it is enabled again, so every policy that interpolates
 /// the old accessor resolves to nothing afterwards, silently. That is why the undo here is the last
@@ -26,6 +36,7 @@ final class VaultAuthMethod extends ReversibleStep<bool> {
     required this.type,
     required this.path,
     required this.layout,
+    this.configuration,
   });
 
   /// Builds the step from what the program gave it.
@@ -34,7 +45,15 @@ final class VaultAuthMethod extends ReversibleStep<bool> {
     type: arguments.text('type'),
     path: arguments.text('path'),
     layout: VaultLayout.fromArguments(arguments),
+    configuration: arguments.optionalText('configuration'),
   );
+
+  /// What the mount is told about itself, or null where it needs nothing.
+  ///
+  /// Written as it stands, with the placeholders every other row of this family uses filled from
+  /// this run. Nothing here reads a key of it: which keys a mount takes is Vault's business and
+  /// which values are right is the installation's.
+  final String? configuration;
 
   /// What this step accepts.
   static const List<ArgumentSpec> arguments = <ArgumentSpec>[
@@ -57,6 +76,16 @@ final class VaultAuthMethod extends ReversibleStep<bool> {
           'the mount path, which is what every role and every templated policy is written '
           'against — "$kubernetesMountPlaceholder" for the mount this cluster\'s own workloads log '
           'in through, which the profile names',
+    ),
+    ArgumentSpec(
+      name: 'configuration',
+      kind: ArgumentKind.text,
+      required: false,
+      describes:
+          'what the mount is told about itself, as one JSON object, written to its own config path '
+          'after it is enabled. A mount that needs none is left without one; a mount that needs one '
+          'and is not given it refuses every login with a message about a backend configuration '
+          'rather than about what is missing',
     ),
     ...VaultLayout.arguments,
   ];
@@ -103,13 +132,26 @@ final class VaultAuthMethod extends ReversibleStep<bool> {
       if (mounted == null) {
         return const CheckResult.ready();
       }
-      return mounted == type
-          ? CheckResult.satisfied('$at/ is a $type auth mount on this Vault')
-          : CheckResult.blocked(
-              '$at/ is already a $mounted auth mount and this run wants a $type one. Changing it '
-              'means disabling the mount, which mints a new accessor and leaves every policy '
-              'templated on the old one resolving to nothing',
-            );
+      if (mounted == type) {
+        // THE MOUNT BEING THERE IS NOT THE POSTCONDITION. A mount that is enabled and not told
+        // where its cluster is refuses every login, so a check that stopped at the type would
+        // report finished about a mount nothing can use.
+        final ArgumentText wanted = vault.forThisInstallation(context, configuration ?? '');
+        if (wanted.refusal case final String refusal) {
+          return CheckResult.blocked(refusal);
+        }
+        if (configuration == null) {
+          return CheckResult.satisfied('$at/ is a $type auth mount on this Vault');
+        }
+        return await _configured(context, url, held, at, wanted.value ?? '')
+            ? CheckResult.satisfied('$at/ is a $type auth mount and holds what this run tells it')
+            : const CheckResult.ready();
+      }
+      return CheckResult.blocked(
+        '$at/ is already a $mounted auth mount and this run wants a $type one. Changing it '
+        'means disabling the mount, which mints a new accessor and leaves every policy '
+        'templated on the old one resolving to nothing',
+      );
     }
     return const CheckResult.ready();
   }
@@ -124,7 +166,9 @@ final class VaultAuthMethod extends ReversibleStep<bool> {
     return StepPlan.request(
       'POST',
       '${vault.url}/v1/sys/auth/${mount.value}',
-      body: 'a $type auth mount',
+      body: configuration == null
+          ? 'a $type auth mount'
+          : 'a $type auth mount, and what it is told about itself',
     );
   }
 
@@ -141,7 +185,10 @@ final class VaultAuthMethod extends ReversibleStep<bool> {
     final HttpAnswer answer = await context.http.send(
       vaultWrite(url, 'sys/auth/$at', token: held, body: <String, Object?>{'type': type}),
     );
-    if (!answer.ok) {
+    // A mount that is already there answers that it exists rather than being made again, and the
+    // configuration below still has to be written: the two are separate acts and only one of them
+    // is what a repeat run has left to do.
+    if (!answer.ok && await _mountedType(context, url, held, at) != type) {
       throw RequestRefused(
         method: 'POST',
         url: '$url/v1/sys/auth/$at',
@@ -149,6 +196,64 @@ final class VaultAuthMethod extends ReversibleStep<bool> {
         body: answer.body,
       );
     }
+
+    if (configuration case final String written) {
+      final ArgumentText filled = vault.forThisInstallation(context, written);
+      if (filled.refusal case final String refusal) {
+        throw StateError(refusal);
+      }
+      final Map<String, Object?>? body = decodedObject(filled.value ?? '');
+      if (body == null) {
+        throw StateError(
+          'the configuration this row gives $at/ is not a JSON object, and Vault takes one — a '
+          'mount whose fields arrive as text is refused with a message about types rather than '
+          'about this row',
+        );
+      }
+      final HttpAnswer told = await context.http.send(
+        vaultWrite(url, 'auth/$at/config', token: held, body: body),
+      );
+      if (!told.ok) {
+        throw RequestRefused(
+          method: 'POST',
+          url: '$url/v1/auth/$at/config',
+          status: told.status,
+          body: told.body,
+        );
+      }
+    }
+  }
+
+  /// Whether the mount already holds every value this run tells it.
+  ///
+  /// Only the keys this run writes are compared. Vault answers a config with defaults filled in and
+  /// with fields it derives itself, so demanding the whole object match would report a difference on
+  /// every run — and a mount that is rewritten on every run is one nothing can ever call finished.
+  Future<bool> _configured(
+    StepContext context,
+    String url,
+    String token,
+    String at,
+    String written,
+  ) async {
+    final Map<String, Object?>? wanted = decodedObject(written);
+    if (wanted == null) {
+      return false;
+    }
+    final HttpAnswer answer = await context.http.send(
+      vaultRead(url, 'auth/$at/config', token: token),
+    );
+    final Map<String, Object?>? held = decodedData(answer.body);
+    if (held == null) {
+      return false;
+    }
+    for (final MapEntry<String, Object?> field in wanted.entries) {
+      if (!sameJsonValue(held[field.key], field.value)) {
+        context.log.debug('$at/ differs from this run in ${field.key}');
+        return false;
+      }
+    }
+    return true;
   }
 
   /// Whether Vault already holds an auth mount at this path.
