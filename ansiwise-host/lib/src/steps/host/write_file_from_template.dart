@@ -155,9 +155,9 @@ final class WriteFileFromTemplate extends ReversibleStep<String?> with FileStep,
     if (captured == null) {
       // There was no file, so taking this back means the path is gone again. Returning here would
       // leave this run's values standing while the record says the step was taken back.
-      await context.files.delete(pathFor(context));
+      await context.files.delete(pathFor(context), elevated: elevated);
       return;
     }
-    await context.files.write(pathFor(context), captured, mode: mode);
+    await context.files.write(pathFor(context), captured, mode: mode, elevated: elevated);
   }
 }

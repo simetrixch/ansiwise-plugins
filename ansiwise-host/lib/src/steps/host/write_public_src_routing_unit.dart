@@ -175,9 +175,9 @@ final class WritePublicSrcRoutingUnit extends ReversibleStep<String?> with FileS
       ),
     );
     if (captured == null) {
-      await context.files.delete(path);
+      await context.files.delete(path, elevated: elevated);
     } else {
-      await context.files.write(path, captured, mode: mode);
+      await context.files.write(path, captured, mode: mode, elevated: elevated);
     }
     await context.shell.run(
       const Command.detailed('systemctl', arguments: <String>['daemon-reload'], elevated: true),

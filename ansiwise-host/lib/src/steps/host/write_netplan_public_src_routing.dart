@@ -133,10 +133,10 @@ final class WriteNetplanPublicSrcRouting extends ReversibleStep<String?>
     // Neither writing nor deleting takes the rules out of the kernel. Only applying the
     // configuration again or a restart does, and the step that applies it says what that costs.
     if (captured == null) {
-      await context.files.delete(path);
+      await context.files.delete(path, elevated: elevated);
       return;
     }
-    await context.files.write(path, captured, mode: mode);
+    await context.files.write(path, captured, mode: mode, elevated: elevated);
   }
 
   /// What goes in each slot of the drop-in, for the interface [nic] describes.

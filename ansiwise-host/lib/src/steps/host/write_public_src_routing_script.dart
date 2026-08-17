@@ -146,10 +146,10 @@ final class WritePublicSrcRoutingScript extends ReversibleStep<String?>
       Command.detailed('ip', arguments: ruleArguments('del'), elevated: true),
     );
     if (captured == null) {
-      await context.files.delete(path);
+      await context.files.delete(path, elevated: elevated);
       return;
     }
-    await context.files.write(path, captured, mode: mode);
+    await context.files.write(path, captured, mode: mode, elevated: elevated);
   }
 
   /// The arguments that [verb] the rule keyed on the mark.

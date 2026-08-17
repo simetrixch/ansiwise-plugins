@@ -134,10 +134,10 @@ final class WriteConnmarkNftTable extends ReversibleStep<String?> with FileStep,
       ),
     );
     if (captured == null) {
-      await context.files.delete(path);
+      await context.files.delete(path, elevated: elevated);
       return;
     }
-    await context.files.write(path, captured, mode: mode);
+    await context.files.write(path, captured, mode: mode, elevated: elevated);
   }
 
   /// What goes in each slot of the rule set, for the interface [nic] describes.

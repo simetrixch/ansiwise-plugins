@@ -165,10 +165,10 @@ final class WriteClusterIssuerManifest extends ReversibleStep<String?> with File
   @override
   Future<void> undo(StepContext context, String? captured) async {
     if (captured == null) {
-      await context.files.delete(path);
+      await context.files.delete(path, elevated: elevated);
       return;
     }
-    await context.files.write(path, captured, mode: mode);
+    await context.files.write(path, captured, mode: mode, elevated: elevated);
   }
 
   /// The manifest itself, rendered from the template this run names.

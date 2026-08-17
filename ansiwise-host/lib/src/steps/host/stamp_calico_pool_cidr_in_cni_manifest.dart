@@ -129,7 +129,7 @@ final class StampCalicoPoolCidrInCniManifest extends ReversibleStep<String?> {
       return;
     }
     final String backup = '$manifestPath.bak.${_stampOfNow(context)}';
-    await context.files.write(backup, current, mode: fileMode);
+    await context.files.write(backup, current, mode: fileMode, elevated: elevated);
     context.log.info('the manifest as it was is at $backup');
     await context.files.write(manifestPath, stamped, mode: fileMode, elevated: elevated);
 

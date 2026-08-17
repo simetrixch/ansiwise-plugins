@@ -163,13 +163,13 @@ final class CreateFileFromTemplate extends ReversibleStep<bool> with FileStep, T
   @override
   Future<FileContent> contentFor(StepContext context) async {
     final String where = pathFor(context);
-    if (await context.files.exists(where)) {
+    if (await context.files.exists(where, elevated: elevated)) {
       return FileContent.nothing(
         '$where is on this machine, and what stands in it is not this '
         'step\'s to decide',
       );
     }
-    if (!await context.files.exists(templatePath)) {
+    if (!await context.files.exists(templatePath, elevated: elevated)) {
       throw TemplateRefused(
         '$templatePath is not where this run was started, and it is the text this step writes — a '
         'template travels with the programs of its installation, and nothing here composes the '
@@ -213,14 +213,15 @@ final class CreateFileFromTemplate extends ReversibleStep<bool> with FileStep, T
   /// cannot answer that — a file an earlier run created holds exactly what this step renders, and
   /// taking a run back is not a licence to delete a file it did not create.
   @override
-  Future<bool> capture(StepContext context) => context.files.exists(pathFor(context));
+  Future<bool> capture(StepContext context) =>
+      context.files.exists(pathFor(context), elevated: elevated);
 
   @override
   Future<void> undo(StepContext context, bool captured) async {
     if (captured) {
       return;
     }
-    await context.files.delete(pathFor(context));
+    await context.files.delete(pathFor(context), elevated: elevated);
   }
 
   /// What is said about a path that still names something nothing filled.
