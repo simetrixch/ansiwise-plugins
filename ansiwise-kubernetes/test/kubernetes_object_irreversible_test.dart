@@ -14,8 +14,9 @@ import 'support/machine.dart';
 void main() {
   const StepName under = StepName('kubernetes_object_irreversible');
   const String repair =
-      'the trunk carries one for every stage and the reduction to one stage keeps the one it '
-      'prunes to, so this branch has lost it — merge the trunk back in and re-run';
+      'the branch this was cut from carries one for every stage and the reduction to one stage '
+      'keeps the one it prunes to, so this branch has lost it — merge that branch back in and '
+      're-run';
   const String reason =
       'this is where the authority over the cluster moves: from here a controller owns every '
       'object it created from this one, and taking this object away again takes all of them with it';

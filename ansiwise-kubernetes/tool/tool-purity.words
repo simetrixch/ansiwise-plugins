@@ -9,28 +9,58 @@
 # case-insensitively and word-anchored, so a longer name that merely contains a word is no
 # occurrence of it.
 #
+# WORD-ANCHORED CUTS BOTH WAYS, and the blocks below are written knowing it. Anything that is not a
+# letter or a digit ends a word, so a bare name reports every longer one built on it with a
+# separator, and a longer name built WITHOUT a separator is a different word that has to stand in
+# its own right — `digita` does not report `digitacloud`.
+#
 # THE LIST LIVES HERE, UNDER tool/, AND NOT BESIDE THE CHECK THAT READS IT. The scan reads test/ to
 # the byte, so a list written into test/checks/tool_purity_test.dart would itself be an occurrence
 # of every word on it and the check could never pass. That tool/ stays out of the scan is asserted
 # by a counter-probe of its own.
 
-# The product this package was cut out of, and the organisation behind it.
+# The product this package was cut out of, the platform it stands on, and the organisation behind
+# both. This block stands on every list in this tree, word for word.
 hostyour
 digita
+digitacloud
+digitaplatform
 simetrix
+simetrixch
 
-# That product's choices: the distribution it runs on, the components it deploys, the vendors it
-# rents from, and the name it gave its certificate issuer. Each is a fact of one product, not of
-# kubectl the tool or the cluster it drives.
+# That product's choices: the distribution it runs on, the components it deploys, the tools it
+# drives those components with, the vendors it rents from, and the name it gave its certificate
+# issuer. Each is a fact of one product, not of kubectl the tool or the cluster it drives. This
+# block stands on every list in this tree, except that a package never carries its OWN tool —
+# kubectl is this package's, which is why that word is the one of this kind missing here.
+#
+# THE ONE WORD THIS LIST IS NARROWER ON THAN EVERY OTHER, AND WHY. Every other list in this tree
+# carries the bare word `letsencrypt`, which reports the longer name below and every SCREAMING_SNAKE
+# name built on it as well. Here it would also report
+# lib/src/steps/write_cluster_issuer_manifest.dart:98, where the name a program answers the operator's
+# mailbox under still carries one authority's name. That name is not this package's to change alone:
+# it is read out of the answer file and out of the program rows that declare it, both of which live
+# outside this repository, so renaming it here alone would leave every run refused for a missing
+# answer. Until that name is changed on both sides, this list stays on the longer word and the gap
+# is written down rather than hidden.
 microk8s
 argocd
 tekton
 zot
 authentik
+external-secrets
+vault
+helm
+snap
+netplan
 cloudflare
 hetzner
 letsencrypt-prod
 
-# That product's own domain words.
+# That product's own domain words, and its own word for the branch every other branch is cut from.
+# Git has no "trunk" — it has a branch, and a start point a new branch is cut from — so a comment or
+# a fixture that said trunk would be carrying one product's name for a branch into every cluster
+# this package ever met.
 tenant
 consumer
+trunk

@@ -188,9 +188,11 @@ void main() {
         // The skip is decided on the version, so a tool the row gave no way of asking would be
         // fetched again on every run and nothing would notice.
         final CheckResult answer = await const InstallPinnedTool(
-          tool: 'helm',
+          tool: 'silent-cli',
           version: 'v4.2.3',
-          url: 'https://example.com/helm/${InstallPinnedTool.versionPlaceholder}/helm',
+          url:
+              'https://releases.example.invalid/silent-cli/'
+              '${InstallPinnedTool.versionPlaceholder}/silent-cli',
           directory: InstallPinnedTool.defaultDirectory,
           archive: null,
           versionCommand: <String>[],
@@ -372,13 +374,13 @@ void main() {
       // The assertion is the only thing binding the list to the steps that install them: a tool
       // added to one and not the other would otherwise never be installed and nothing would say so.
       const AssertCliToolVersions unknown = AssertCliToolVersions(
-        tools: <String>['helm=v4.2.3'],
+        tools: <String>['silent-cli=v4.2.3'],
         unpinnable: <String>[],
         versionCommands: <String>[],
         pinPrefixes: pinPrefixes,
       );
       final CheckResult answer = await unknown.check(withTools().contextFor(under));
-      expect((answer as Blocked).reason, contains('helm'));
+      expect((answer as Blocked).reason, contains('silent-cli'));
     });
 
     test('an entry that does not read as a tool and its arguments is no reader at all', () async {
@@ -407,9 +409,11 @@ void main() {
   });
 
   group('the shell aliases', () {
+    // The shape this covers is a short name standing in for a longer command a package installed
+    // under a name of its own. Which tool that is belongs to the row, so the fixture invents one.
     const AddShellAlias step = AddShellAlias(
-      alias: 'kubectl',
-      command: 'cluster.kubectl',
+      alias: 'cluster-cli',
+      command: 'bundle.cluster-cli',
       rcFiles: <String>['.bashrc', '.zshrc'],
     );
 
@@ -447,7 +451,7 @@ void main() {
 
     test('a second run adds no second line', () async {
       final HostMachine machine = account(
-        rcFiles: <String, String>{'.bashrc': "alias kubectl='cluster.kubectl'\n"},
+        rcFiles: <String, String>{'.bashrc': "alias cluster-cli='bundle.cluster-cli'\n"},
       );
       final StepContext context = machine.contextFor(under);
       expect(await step.check(context), isA<Satisfied>());

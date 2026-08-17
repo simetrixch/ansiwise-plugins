@@ -17,11 +17,17 @@ import 'package:test/test.dart';
 void main() {
   const String path = '/srv/values.yaml';
 
+  /// The release under test, INVENTED rather than borrowed.
+  ///
+  /// A fixture naming a real vendor's chart is a specification of one product's dependency living in
+  /// a package that must serve any product, and it goes stale the day that vendor renames a chart.
+  /// What these tests are about is the comparison, and the comparison does not care what is
+  /// installed.
   const HelmRelease release = HelmRelease(
-    release: 'vault',
-    chart: 'hashicorp/vault',
+    release: 'ledger',
+    chart: 'example-charts/ledger',
     chartVersion: '0.34.0',
-    namespace: 'vault',
+    namespace: 'ledger',
     values: path,
     helm: <String>['helm'],
   );
@@ -30,10 +36,10 @@ void main() {
   StepContext machine({required String file, required String held}) => _contextOn(
     FakeShell()
       ..answers(
-        'helm list --namespace vault -o json',
-        '[{"name":"vault","status":"deployed","chart":"vault-0.34.0"}]',
+        'helm list --namespace ledger -o json',
+        '[{"name":"ledger","status":"deployed","chart":"ledger-0.34.0"}]',
       )
-      ..answers('helm get values vault --namespace vault -o json', held),
+      ..answers('helm get values ledger --namespace ledger -o json', held),
     FakeFiles(<String, String>{path: file}),
   );
 
@@ -89,8 +95,8 @@ void main() {
     final CheckResult answer = await release.check(
       _contextOn(
         FakeShell()..answers(
-          'helm list --namespace vault -o json',
-          '[{"name":"vault","status":"deployed","chart":"vault-0.33.0"}]',
+          'helm list --namespace ledger -o json',
+          '[{"name":"ledger","status":"deployed","chart":"ledger-0.33.0"}]',
         ),
         FakeFiles(<String, String>{path: 'ui:\n  enabled: true\n'}),
       ),

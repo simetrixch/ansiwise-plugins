@@ -18,10 +18,10 @@ import 'stamp_selection.dart';
 /// recognises a domain or a branch, and adding one would be the defect. A value used as an
 /// illustration — `example.com` in a comment, a help string, a user interface placeholder or a test
 /// fixture — is a different literal, so it is never matched and never has to be told apart from a
-/// value. The same holds for a label key of the form `digitacloud.app/<x>`: that is a namespace in
-/// the Kubernetes convention, a product identifier nothing resolves and nothing addresses, and it
-/// survives for exactly the same reason. A stamp that matched "anything domain-shaped" would rewrite
-/// both, and renaming a label key reaches every selector and every role binding at once.
+/// value. The same holds for a label key written as `<domain>/<name>`: the part before the slash is
+/// an identifier that nothing resolves and nothing addresses, and it survives for exactly the same
+/// reason. A stamp that matched "anything domain-shaped" would rewrite both, and renaming a label
+/// key reaches every selector and every binding that selects on it at once.
 ///
 /// **[keys] is what narrows a common word to the value of a setting.** A branch name is an ordinary
 /// English word that stands all over a tree, so replacing it wherever it occurs would rewrite it

@@ -807,7 +807,7 @@ void main() {
       const VaultAuthRole step = VaultAuthRole(
         repository: repository,
         mount: kubernetesMountPlaceholder,
-        role: 'external-secrets',
+        role: 'secret-reader',
         body: '{"bound_service_account_namespaces":["controller","dbgate"],"ttl":"24h"}',
         preserveList: 'bound_service_account_namespaces',
         layout: layout,

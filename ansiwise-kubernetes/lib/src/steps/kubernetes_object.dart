@@ -14,9 +14,9 @@ import 'kubectl.dart';
 /// what makes this step repeatable without reading the cluster first and comparing — a comparison
 /// this step could get wrong in a way the server cannot.
 ///
-/// **The check asks whether the objects are there, and never what they hold.** A manifest of the
-/// trunk holds no credential, so the reason is not secrecy: it is that the file is the truth and the
-/// cluster is where it is put. A step that compared them would be answering "has somebody edited
+/// **The check asks whether the objects are there, and never what they hold.** A manifest in the
+/// checkout holds no credential, so the reason is not secrecy: it is that the file is the truth and
+/// the cluster is where it is put. A step that compared them would be answering "has somebody edited
 /// this object by hand", which is a question for a drift report and not for a deployment.
 ///
 /// **The undo removes the objects this manifest names and nothing else.** `kubectl delete

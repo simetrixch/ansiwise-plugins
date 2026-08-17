@@ -9,34 +9,49 @@
 # case-insensitively and word-anchored, so a longer name that merely contains a word is no
 # occurrence of it.
 #
+# WORD-ANCHORED CUTS BOTH WAYS, and the blocks below are written knowing it. Anything that is not a
+# letter or a digit ends a word, so a bare name reports every longer one built on it with a
+# separator: `letsencrypt` reports `letsencrypt-prod` and `LETSENCRYPT_EMAIL` alike, which is why
+# only the bare word stands here. A longer name built WITHOUT a separator is a different word and
+# has to stand in its own right — `digita` does not report `digitacloud`.
+#
 # THE LIST LIVES HERE, UNDER tool/, AND NOT BESIDE THE CHECK THAT READS IT. The scan reads test/ to
 # the byte, so a list written into test/checks/tool_purity_test.dart would itself be an occurrence
 # of every word on it and the check could never pass. That tool/ stays out of the scan is asserted
 # by a counter-probe of its own.
 
-# The product this package was cut out of, and the organisation behind it.
+# The product this package was cut out of, the platform it stands on, and the organisation behind
+# both. This block stands on every list in this tree, word for word.
 hostyour
 digita
+digitacloud
+digitaplatform
 simetrix
+simetrixch
 
-# That product's choices: the distribution it installs, the components it deploys, the vendors it
-# rents from, and the name it gave its certificate issuer. Each is a fact of one product, not of
-# git the tool.
+# That product's choices: the distribution it installs, the components it deploys, the tools it
+# drives those components with, the vendors it rents from, and the authority it gets its
+# certificates from. Each is a fact of one product, not of git the tool. This block stands on every
+# list in this tree too, except that a package never carries its OWN tool — git is this package's,
+# which is why the word git is the one of this kind missing here.
 microk8s
 argocd
 tekton
 zot
 authentik
+external-secrets
+vault
+helm
+kubectl
+snap
+netplan
 cloudflare
 hetzner
-letsencrypt-prod
+letsencrypt
 
-# That product's own domain words.
+# That product's own domain words, and its own word for a branch. Git has no "trunk" — it has a
+# branch, and a start point a new branch is cut from — so a step that said trunk would be carrying
+# one product's name for a branch into every checkout that ever met this package.
 tenant
 consumer
-
-# Not on the other four lists, and here because this package is the one that could use it: "trunk"
-# is what one product calls the branch every other branch is cut from. Git has no such word — it has
-# a branch, and a start point a new branch is cut from — so a step that said trunk would be carrying
-# one product's name for a branch into every checkout that ever met this package.
 trunk

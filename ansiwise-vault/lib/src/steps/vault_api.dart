@@ -1,13 +1,13 @@
 /// Reaching Vault over its HTTP API, and reading the files one installation's secrets stand in.
 ///
-/// **Why the API and not a command inside the pod.** The shell this replaces talked to Vault by
-/// running the `vault` binary inside its server container through `kubectl exec`, and most of what
-/// its comments are about follows from that one choice: `kubectl exec` arguments are visible in a
-/// process listing to every process on the host, so the root token, the unseal keys and every other
-/// credential all had to be fed on standard input instead, and a role body had to be sent as one
-/// JSON object because the container's own shell collapsed backslash-escaped JSON into a string.
-/// None of that exists here. A value travels in a request body or a request header, there is no
-/// shell for it to become syntax in, and a map stays a map.
+/// **Why the API and not a command inside the container.** The shell this replaces talked to Vault
+/// by running the `vault` binary inside its server container, executed there from outside, and most
+/// of what its comments are about follows from that one choice: the arguments of such a command are
+/// visible in a process listing to every process on the machine, so the root token, the unseal keys
+/// and every other credential all had to be fed on standard input instead, and a role body had to be
+/// sent as one JSON object because the container's own shell collapsed backslash-escaped JSON into a
+/// string. None of that exists here. A value travels in a request body or a request header, there is
+/// no shell for it to become syntax in, and a map stays a map.
 ///
 /// **The token rides `Authorization: Bearer` and not `X-Vault-Token`, and that is a decision about
 /// the record.** Vault accepts either header. Only the first is a name the redactor removes on
