@@ -1,20 +1,29 @@
 import 'package:ansiwise_api/ansiwise_api.dart';
 
-/// Waits for an HTTP endpoint to return a success status code.
+/// Waits until an address answers at all.
 ///
-/// **The address is polled until it answers.** Services take time to start, and a
-/// deployment tool should not fail just because a service is still initializing.
+/// **What it is for.** A service the run has just brought up is reachable some time after the thing
+/// that started it returned. The row that needs it says so here rather than the next row guessing:
+/// a step that asks a service a question before it is listening gets a refusal that says nothing
+/// about the service and everything about the timing.
 ///
-/// **The URL can contain placeholders.** If the URL contains `<answer_name>`, it will
-/// be replaced with the value of the answer with that name from the current run.
-final class WaitForHttp extends ObservingStep {
-  /// Polls [url] until it returns a 2xx status code.
-  const WaitForHttp({required this.url, required this.timeoutSeconds});
+/// **ANY ANSWER COUNTS, and that is the question being asked.** A redirect is an answer — a login
+/// endpoint that sends a browser somewhere else is working exactly as intended, and the measured
+/// case is precisely that: an identity provider answering 302 to every request, which is what it is
+/// meant to do and what a wait for "2xx only" would call a failure forever. What this waits for is
+/// something at the other end, not a particular thing to be said.
+///
+/// **It only measures.** The address is asked with a read, so a dry run may ask it too, and nothing
+/// here changes anything at either end.
+final class WaitForHttp extends ObservingStep with WaitStep {
+  /// Polls [url] until it answers, giving up after [timeoutSeconds].
+  const WaitForHttp({required this.url, required this.timeoutSeconds, this.intervalSeconds = 5});
 
   /// Builds the step from what the program gave it.
   factory WaitForHttp.fromArguments(Arguments arguments) => WaitForHttp(
-    url: arguments.optionalText('url') ?? '',
+    url: arguments.text('url'),
     timeoutSeconds: arguments.integer('timeout_seconds'),
+    intervalSeconds: arguments.integer('interval_seconds'),
   );
 
   /// What this step accepts.
@@ -23,77 +32,55 @@ final class WaitForHttp extends ObservingStep {
       name: 'url',
       kind: ArgumentKind.text,
       describes:
-          'the URL to poll. Placeholders like <answer_name> are replaced with answer values.',
+          'the address to wait for. A row that has it from an earlier measurement writes that '
+          'rather than the address itself, and the framework fills it in before this step is built',
     ),
     ArgumentSpec(
       name: 'timeout_seconds',
       kind: ArgumentKind.integer,
-      describes: 'how long to wait before giving up',
+      describes: 'how long to keep asking before giving up',
       required: false,
       defaultValue: 300,
     ),
+    ArgumentSpec(
+      name: 'interval_seconds',
+      kind: ArgumentKind.integer,
+      describes: 'how long to leave between asks',
+      required: false,
+      defaultValue: 5,
+    ),
   ];
 
-  /// The URL to poll.
+  /// The address that is asked.
   final String url;
 
-  /// The timeout in seconds.
+  /// How long the asking is given.
   final int timeoutSeconds;
 
-  /// Replaces `<answer_name>` with the value of `answer_name` from [context].
-  String _interpolateUrl(StepContext context) {
-    String filled = url;
-    final RegExp slotExp = RegExp(r'<([^>]+)>');
-    for (final Match match in slotExp.allMatches(url)) {
-      final String slot = match.group(0)!;
-      final String answerName = match.group(1)!;
-      final String value = context.answers.text(answerName);
-      filled = filled.replaceAll(slot, value);
-    }
-    return filled;
-  }
+  /// How long to leave between asks.
+  final int intervalSeconds;
 
   @override
-  Future<CheckResult> check(StepContext context) async {
-    return const CheckResult.ready();
-  }
+  String get waitingFor => '$url to answer';
 
   @override
-  Future<void> apply(StepContext context) async {
-    final String resolvedUrl = _interpolateUrl(context);
+  Duration get deadline => Duration(seconds: timeoutSeconds);
 
-    final int end = DateTime.now().millisecondsSinceEpoch + (timeoutSeconds * 1000);
-    int delayMs = 1000;
+  @override
+  Duration get interval => Duration(seconds: intervalSeconds);
 
-    while (DateTime.now().millisecondsSinceEpoch < end) {
-      final Command cmd = Command('curl', <String>[
-        '-s',
-        '-o',
-        '/dev/null',
-        '-w',
-        '%{http_code}',
-        resolvedUrl,
-      ]);
-
-      final CommandResult result = await context.shell.run(cmd);
-
-      if (result.ok) {
-        final String stdout = result.stdout.trim();
-        if (stdout.startsWith('2') || stdout.startsWith('3')) {
-          return;
-        }
-      }
-
-      await Future<void>.delayed(Duration(milliseconds: delayMs));
-      // Backoff up to 10 seconds
-      if (delayMs < 10000) delayMs *= 2;
-    }
-
-    throw CommandFailed(
-      argv: <String>['curl', resolvedUrl],
-      exitCode: 1,
-      stdout: '',
-      stderr: 'Timed out waiting for $resolvedUrl after $timeoutSeconds seconds',
-    );
+  @override
+  Future<({bool held, String? saw})> holds(StepContext context) async {
+    // A GET is a read by its own definition, so the planning ports let it through and a dry run
+    // asks the address too — which is the whole of what this step does.
+    //
+    // ONE ASK IS GIVEN THE GAP BETWEEN TWO ASKS, and no more. A poll that outlives the interval has
+    // stopped being a poll: the next one is already due, and an address that cannot answer inside
+    // that gap is not yet the thing being waited for.
+    //
+    // Any answer at all is the answer. An address that could not be reached does not come back with
+    // a status, it throws — and the wait carries that reason to the deadline rather than losing it.
+    await context.http.send(HttpRequest('GET', url, timeout: interval));
+    return (held: true, saw: null);
   }
 }

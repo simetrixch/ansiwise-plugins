@@ -207,7 +207,7 @@ const Map<StepName, RegisteredStep> hostSteps = <StepName, RegisteredStep>{
   ),
   StepName('wait_for_http'): RegisteredStep(
     name: StepName('wait_for_http'),
-    source: 'lib/src/steps/host/wait_for_http.dart:10',
+    source: 'lib/src/steps/host/wait_for_http.dart:18',
     create: WaitForHttp.fromArguments,
     arguments: WaitForHttp.arguments,
   ),
