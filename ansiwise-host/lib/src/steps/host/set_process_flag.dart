@@ -38,6 +38,7 @@ final class SetProcessFlag extends ReversibleStep<String?> {
     required this.restart,
     this.ready = const <String>[],
     this.readyTimeout = const Duration(seconds: 120),
+    this.elevated = false,
   });
 
   /// The argument file belongs to whatever runs the process, and that is installed by an earlier row
@@ -47,6 +48,9 @@ final class SetProcessFlag extends ReversibleStep<String?> {
   /// writes it when it is installed". In a real run that is a true and useful answer, and it means
   /// the install did not happen. In the two modes that change nothing it means only that nothing has
   /// been done yet, which is the state those modes exist to be run in.
+
+  /// Whether the file belongs to root, so every read and write of it is elevated.
+  final bool elevated;
   @override
   bool get restsOnAnEarlierStep => true;
 
@@ -59,6 +63,7 @@ final class SetProcessFlag extends ReversibleStep<String?> {
     restart: arguments.textList('restart_command'),
     ready: arguments.textList('ready_command'),
     readyTimeout: Duration(seconds: arguments.integer('ready_timeout_seconds')),
+    elevated: arguments.has('elevated') && arguments.flag('elevated'),
   );
 
   /// What this step accepts.
@@ -114,6 +119,19 @@ final class SetProcessFlag extends ReversibleStep<String?> {
           'loudly rather than leaving the rows behind it to fail one by one on a process nobody '
           'said was down',
     ),
+    // ASKED, never assumed. Whether the file this row points at belongs to root is a property of
+    // that PATH, and this step is pointed at one by its row — an arguments file of a system service
+    // usually does, a file under a checkout usually does not. Reading and writing as root does not
+    // make either act anything other than a read and a write, so a dry run still refuses the write
+    // and still performs the read.
+    ArgumentSpec(
+      name: 'elevated',
+      kind: ArgumentKind.flag,
+      describes:
+          'whether the file belongs to root, so that reading and writing it need elevation. Leave '
+          'it off for a path this account owns',
+      required: false,
+    ),
   ];
 
   /// The file holding the arguments.
@@ -142,13 +160,13 @@ final class SetProcessFlag extends ReversibleStep<String?> {
 
   @override
   Future<CheckResult> check(StepContext context) async {
-    if (!await context.files.exists(argsPath)) {
+    if (!await context.files.exists(argsPath, elevated: elevated)) {
       return CheckResult.blocked(
         '$argsPath is not there — whatever owns this process writes it when it is installed, so '
         'this ran before that install or against a machine it was removed from',
       );
     }
-    final String current = await context.files.read(argsPath);
+    final String current = await context.files.read(argsPath, elevated: elevated);
     return current == withFlag(current, line)
         ? CheckResult.satisfied('$argsPath carries $line, and only once')
         : const CheckResult.ready();
@@ -163,14 +181,21 @@ final class SetProcessFlag extends ReversibleStep<String?> {
   @override
   Future<void> apply(StepContext context) async {
     final String current = await _current(context);
-    await context.files.write(argsPath, withFlag(current, line), mode: fileMode);
+    await context.files.write(
+      argsPath,
+      withFlag(current, line),
+      mode: fileMode,
+      elevated: elevated,
+    );
     await restartWith(context, restart, ready: ready, timeout: readyTimeout);
   }
 
   /// The argument file as it was, or null when it was not there.
   @override
   Future<String?> capture(StepContext context) async =>
-      await context.files.exists(argsPath) ? context.files.read(argsPath) : null;
+      await context.files.exists(argsPath, elevated: elevated)
+      ? context.files.read(argsPath, elevated: elevated)
+      : null;
 
   @override
   Future<void> undo(StepContext context, String? captured) async {
@@ -180,7 +205,7 @@ final class SetProcessFlag extends ReversibleStep<String?> {
       // there.
       return;
     }
-    await context.files.write(argsPath, captured, mode: fileMode);
+    await context.files.write(argsPath, captured, mode: fileMode, elevated: elevated);
     await restartWith(context, restart, ready: ready, timeout: readyTimeout);
   }
 
@@ -264,5 +289,7 @@ final class SetProcessFlag extends ReversibleStep<String?> {
   }
 
   Future<String> _current(StepContext context) async =>
-      await context.files.exists(argsPath) ? context.files.read(argsPath) : '';
+      await context.files.exists(argsPath, elevated: elevated)
+      ? context.files.read(argsPath, elevated: elevated)
+      : '';
 }

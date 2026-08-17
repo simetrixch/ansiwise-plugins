@@ -145,22 +145,27 @@ final class _SwallowingFiles implements Files {
   final Files inner;
 
   @override
-  Future<bool> exists(String path) => inner.exists(path);
+  Future<bool> exists(String path, {bool elevated = false}) => inner.exists(path);
 
   @override
-  Future<String> read(String path) => inner.read(path);
+  Future<String> read(String path, {bool elevated = false}) => inner.read(path);
 
   @override
-  Future<List<String>> list(String path) => inner.list(path);
+  Future<List<String>> list(String path, {bool elevated = false}) => inner.list(path);
 
   @override
-  Future<void> write(String path, String content, {required int mode}) async {}
+  Future<void> write(
+    String path,
+    String content, {
+    required int mode,
+    bool elevated = false,
+  }) async {}
 
   @override
-  Future<void> delete(String path) async {}
+  Future<void> delete(String path, {bool elevated = false}) async {}
 
   @override
-  Future<void> createDirectory(String path, {required int mode}) async {}
+  Future<void> createDirectory(String path, {required int mode, bool elevated = false}) async {}
 }
 
 final class _SilentLog implements Logger {

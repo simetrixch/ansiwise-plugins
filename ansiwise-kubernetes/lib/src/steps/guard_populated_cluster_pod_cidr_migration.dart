@@ -27,6 +27,7 @@ final class GuardPopulatedClusterPodCidrMigration extends ObservingStep {
     required this.argsPath,
     required this.allowPopulatedMigration,
     this.kubectl = const Kubectl(),
+    this.elevated = false,
   });
 
   /// Builds the step from what the program gave it.
@@ -62,6 +63,19 @@ final class GuardPopulatedClusterPodCidrMigration extends ObservingStep {
       defaultValue: false,
     ),
     Kubectl.argument,
+    // ASKED, never assumed. Whether the file this row points at belongs to root is a property of
+    // that PATH, and this step is pointed at one by its row — an arguments file of a system service
+    // usually does, a file under a checkout usually does not. Reading and writing as root does not
+    // make either act anything other than a read and a write, so a dry run still refuses the write
+    // and still performs the read.
+    ArgumentSpec(
+      name: 'elevated',
+      kind: ArgumentKind.flag,
+      describes:
+          'whether the file belongs to root, so that reading and writing it need elevation. Leave '
+          'it off for a path this account owns',
+      required: false,
+    ),
   ];
 
   /// The namespace whose pods the conversion gives back by itself.
@@ -86,6 +100,8 @@ final class GuardPopulatedClusterPodCidrMigration extends ObservingStep {
   /// How the cluster is reached.
   final Kubectl kubectl;
 
+  /// Whether the file belongs to root, so every read and write of it is elevated.
+  final bool elevated;
   @override
   bool get restsOnAnEarlierStep => true;
 
@@ -135,10 +151,10 @@ final class GuardPopulatedClusterPodCidrMigration extends ObservingStep {
     if (await DeleteDefaultIpv4Ippool.liveCidr(context, kubectl) != podCidr) {
       return false;
     }
-    if (!await context.files.exists(argsPath)) {
+    if (!await context.files.exists(argsPath, elevated: elevated)) {
       return false;
     }
-    final String args = await context.files.read(argsPath);
+    final String args = await context.files.read(argsPath, elevated: elevated);
     return _carries(args, '$clusterCidrFlag=$podCidr');
   }
 

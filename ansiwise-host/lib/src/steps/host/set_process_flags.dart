@@ -16,6 +16,7 @@ final class SetProcessFlags extends ReversibleStep<String?> {
     required this.ready,
     required this.readyTimeout,
     this.values = const <String, KeyBinding>{},
+    this.elevated = false,
   });
 
   /// Builds the step from what the program gave it.
@@ -29,6 +30,7 @@ final class SetProcessFlags extends ReversibleStep<String?> {
     values: arguments.has('values')
         ? KeyBinding.readFrom(arguments.raw('values'))
         : const <String, KeyBinding>{},
+    elevated: arguments.has('elevated') && arguments.flag('elevated'),
   );
 
   /// What this step accepts.
@@ -77,6 +79,19 @@ final class SetProcessFlags extends ReversibleStep<String?> {
       defaultValue: 120,
       describes: 'how long to keep asking before giving up on the restarted process',
     ),
+    // ASKED, never assumed. Whether the file this row points at belongs to root is a property of
+    // that PATH, and this step is pointed at one by its row — an arguments file of a system service
+    // usually does, a file under a checkout usually does not. Reading and writing as root does not
+    // make either act anything other than a read and a write, so a dry run still refuses the write
+    // and still performs the read.
+    ArgumentSpec(
+      name: 'elevated',
+      kind: ArgumentKind.flag,
+      describes:
+          'whether the file belongs to root, so that reading and writing it need elevation. Leave '
+          'it off for a path this account owns',
+      required: false,
+    ),
   ];
 
   /// The file holding the arguments.
@@ -123,12 +138,14 @@ final class SetProcessFlags extends ReversibleStep<String?> {
     return written;
   }
 
+  /// Whether the file belongs to root, so every read and write of it is elevated.
+  final bool elevated;
   @override
   Future<CheckResult> check(StepContext context) async {
-    if (!await context.files.exists(argsPath)) {
+    if (!await context.files.exists(argsPath, elevated: elevated)) {
       return CheckResult.blocked('$argsPath is not there');
     }
-    final String current = await context.files.read(argsPath);
+    final String current = await context.files.read(argsPath, elevated: elevated);
     String mutated = current;
     for (final String rawFlag in flags) {
       mutated = SetProcessFlag.withFlag(mutated, _filled(rawFlag, context));
@@ -141,8 +158,8 @@ final class SetProcessFlags extends ReversibleStep<String?> {
 
   @override
   Future<StepPlan> plan(StepContext context) async {
-    final String current = await context.files.exists(argsPath)
-        ? await context.files.read(argsPath)
+    final String current = await context.files.exists(argsPath, elevated: elevated)
+        ? await context.files.read(argsPath, elevated: elevated)
         : '';
     String mutated = current;
     for (final String rawFlag in flags) {
@@ -153,26 +170,28 @@ final class SetProcessFlags extends ReversibleStep<String?> {
 
   @override
   Future<void> apply(StepContext context) async {
-    final String current = await context.files.exists(argsPath)
-        ? await context.files.read(argsPath)
+    final String current = await context.files.exists(argsPath, elevated: elevated)
+        ? await context.files.read(argsPath, elevated: elevated)
         : '';
     String mutated = current;
     for (final String rawFlag in flags) {
       mutated = SetProcessFlag.withFlag(mutated, _filled(rawFlag, context));
     }
-    await context.files.write(argsPath, mutated, mode: fileMode);
+    await context.files.write(argsPath, mutated, mode: fileMode, elevated: elevated);
     await SetProcessFlag.restartWith(context, restart, ready: ready, timeout: readyTimeout);
   }
 
   /// The argument file as it was, or null when it was not there.
   @override
   Future<String?> capture(StepContext context) async =>
-      await context.files.exists(argsPath) ? context.files.read(argsPath) : null;
+      await context.files.exists(argsPath, elevated: elevated)
+      ? context.files.read(argsPath, elevated: elevated)
+      : null;
 
   @override
   Future<void> undo(StepContext context, String? captured) async {
     if (captured == null) return;
-    await context.files.write(argsPath, captured, mode: fileMode);
+    await context.files.write(argsPath, captured, mode: fileMode, elevated: elevated);
     await SetProcessFlag.restartWith(context, restart, ready: ready, timeout: readyTimeout);
   }
 }

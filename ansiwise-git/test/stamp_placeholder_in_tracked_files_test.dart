@@ -520,22 +520,27 @@ final class _SwallowingFiles implements Files {
   final Files inner;
 
   @override
-  Future<bool> exists(String path) => inner.exists(path);
+  Future<bool> exists(String path, {bool elevated = false}) => inner.exists(path);
 
   @override
-  Future<String> read(String path) => inner.read(path);
+  Future<String> read(String path, {bool elevated = false}) => inner.read(path);
 
   @override
-  Future<List<String>> list(String path) => inner.list(path);
+  Future<List<String>> list(String path, {bool elevated = false}) => inner.list(path);
 
   @override
-  Future<void> write(String path, String content, {required int mode}) async {}
+  Future<void> write(
+    String path,
+    String content, {
+    required int mode,
+    bool elevated = false,
+  }) async {}
 
   @override
-  Future<void> delete(String path) async {}
+  Future<void> delete(String path, {bool elevated = false}) async {}
 
   @override
-  Future<void> createDirectory(String path, {required int mode}) async {}
+  Future<void> createDirectory(String path, {required int mode, bool elevated = false}) async {}
 }
 
 /// A file system that writes down which files were opened, in order.
@@ -546,26 +551,26 @@ final class _TracingFiles implements Files {
   final List<String> trace;
 
   @override
-  Future<bool> exists(String path) => inner.exists(path);
+  Future<bool> exists(String path, {bool elevated = false}) => inner.exists(path);
 
   @override
-  Future<String> read(String path) {
+  Future<String> read(String path, {bool elevated = false}) {
     trace.add('read $path');
     return inner.read(path);
   }
 
   @override
-  Future<List<String>> list(String path) => inner.list(path);
+  Future<List<String>> list(String path, {bool elevated = false}) => inner.list(path);
 
   @override
-  Future<void> write(String path, String content, {required int mode}) =>
+  Future<void> write(String path, String content, {required int mode, bool elevated = false}) =>
       inner.write(path, content, mode: mode);
 
   @override
-  Future<void> delete(String path) => inner.delete(path);
+  Future<void> delete(String path, {bool elevated = false}) => inner.delete(path);
 
   @override
-  Future<void> createDirectory(String path, {required int mode}) =>
+  Future<void> createDirectory(String path, {required int mode, bool elevated = false}) =>
       inner.createDirectory(path, mode: mode);
 }
 
