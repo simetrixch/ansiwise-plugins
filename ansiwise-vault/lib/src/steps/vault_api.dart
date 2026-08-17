@@ -233,10 +233,50 @@ bool sameJsonValue(Object? a, Object? b) {
     final List<String> right = b.map(jsonEncode).toList()..sort();
     return left.join(',') == right.join(',');
   }
-  // Vault answers a number that was written as text as text, and the other way round, depending on
-  // the field. Comparing the rendered form treats `"24h"` and `24` as themselves and everything
-  // else structurally.
+  // A DURATION IS ONE VALUE WITH TWO SPELLINGS, AND VAULT ANSWERS IN THE OTHER ONE. A role written
+  // with `"ttl":"24h"` comes back holding `86400`, so comparing the rendered form reports a
+  // difference on every run — and because the step writes the role and then asks again, it never
+  // converges: the same role is rewritten forever and reported as never right. Measured on a real
+  // machine, where the role step stopped a run with Vault holding exactly the value the row had
+  // just written.
+  //
+  // Only the mixed case is read this way, and deliberately so. Two texts stay two texts and two
+  // numbers stay two numbers; it is a number against a text that can be one value written twice,
+  // and only where the text is a duration Vault itself would have accepted.
+  final int? left = _seconds(a);
+  final int? right = _seconds(b);
+  if (left != null && right != null && (a is num) != (b is num)) {
+    return left == right;
+  }
   return jsonEncode(a) == jsonEncode(b);
+}
+
+/// [value] as a whole number of seconds, or null where it is not a duration Vault would take.
+///
+/// Vault's own grammar: a bare number is seconds, and a text is a run of `<number><unit>` pieces
+/// with `s`, `m`, `h` or `d` — `24h`, `1h30m`, `7d`. Anything else is not a duration and comes back
+/// null, so a field whose value merely looks numeric is left to the ordinary comparison.
+int? _seconds(Object? value) {
+  if (value is int) {
+    return value;
+  }
+  if (value is! String || value.isEmpty) {
+    return null;
+  }
+  const Map<String, int> units = <String, int>{'s': 1, 'm': 60, 'h': 3600, 'd': 86400};
+  final Iterable<RegExpMatch> pieces = RegExp(r'(\d+)([smhd])').allMatches(value);
+  if (pieces.isEmpty) {
+    return null;
+  }
+  // Every character has to belong to a piece, or `24h and a bit` would read as twenty-four hours.
+  if (pieces.map((RegExpMatch m) => m.group(0)!).join() != value) {
+    return null;
+  }
+  int total = 0;
+  for (final RegExpMatch piece in pieces) {
+    total += int.parse(piece.group(1)!) * units[piece.group(2)!]!;
+  }
+  return total;
 }
 
 /// The values of [content] read as a file of `KEY=value` lines.
