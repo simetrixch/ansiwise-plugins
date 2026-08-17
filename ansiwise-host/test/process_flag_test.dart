@@ -125,4 +125,69 @@ void main() {
       expect(machine.said.any((String line) => line.contains('nothing here waits')), isTrue);
     });
   });
+
+  group('a flag whose value only a run holds', () {
+    // ONE NOTATION, and the reason it matters. What stood here was a private pattern inside this
+    // step: any characters between angle brackets, the name looked up verbatim, and nothing said
+    // where an answer was missing. So `<build_plane>` worked in a flag and meant nothing in a
+    // template — the same text, two meanings, which is what one grammar exists to prevent.
+    const SetProcessFlags bound = SetProcessFlags(
+      argsPath: argsPath,
+      flags: <String>['--issuer-url=https://idp.<books-cluster>/o/x/', '--client-id=headlamp'],
+      fileMode: 384,
+      restart: <String>['snap', 'restart', 'proxy-daemon'],
+      ready: <String>['proxy', 'status'],
+      readyTimeout: Duration(seconds: 30),
+      values: <String, KeyBinding>{'books-cluster': KeyBinding(answer: 'books_cluster')},
+    );
+
+    StepContext runWith(HostMachine machine, Map<String, Object> answers) =>
+        machine.contextFor(under, Arguments.none, Arguments(answers));
+
+    test('THE INNOCENT CASE: the slot holds the answer the row bound to it', () async {
+      final HostMachine machine = HostMachine();
+      machine.files.contents[argsPath] = '--proxy-mode=nftables\n';
+
+      await bound.apply(runWith(machine, <String, Object>{'books_cluster': 'm1.example.com'}));
+
+      final String written = machine.files.contents[argsPath]!;
+      expect(written, contains('--issuer-url=https://idp.m1.example.com/o/x/'));
+      expect(written, contains('--client-id=headlamp'));
+    });
+
+    test('a slot NOTHING fills is refused, never written out as text', () async {
+      // The dangerous case. Written out, the process reads --issuer-url=<books-cluster> as that
+      // literal address, and every token check fails for a reason nothing on the machine explains.
+      final HostMachine machine = HostMachine();
+      machine.files.contents[argsPath] = '--proxy-mode=nftables\n';
+      const SetProcessFlags unbound = SetProcessFlags(
+        argsPath: argsPath,
+        flags: <String>['--issuer-url=https://idp.<books-cluster>/o/x/'],
+        fileMode: 384,
+        restart: <String>['snap', 'restart', 'proxy-daemon'],
+        ready: <String>['proxy', 'status'],
+        readyTimeout: Duration(seconds: 30),
+      );
+
+      expect(
+        () => unbound.apply(runWith(machine, <String, Object>{'books_cluster': 'm1.example.com'})),
+        throwsA(isA<TemplateRefused>()),
+      );
+    });
+
+    test('one restart for all the flags, not one each', () async {
+      // The reason the plural step exists at all. A restart between two flags leaves the process
+      // running on half of them, which is what an `echo` standing in for a restart command hid.
+      final HostMachine machine = HostMachine();
+      machine.files.contents[argsPath] = '--proxy-mode=nftables\n';
+
+      await bound.apply(runWith(machine, <String, Object>{'books_cluster': 'm1.example.com'}));
+
+      expect(
+        machine.shell.ran.where((String c) => c.contains('restart')).length,
+        1,
+        reason: 'both flags are written, then the process is restarted once',
+      );
+    });
+  });
 }

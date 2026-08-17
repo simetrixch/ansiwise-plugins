@@ -1,5 +1,6 @@
 import 'package:ansiwise_api/ansiwise_api.dart';
 
+import 'fill_key_value_file.dart';
 import 'set_process_flag.dart';
 
 /// Replaces or appends multiple process flags in an arguments file.
@@ -14,6 +15,7 @@ final class SetProcessFlags extends ReversibleStep<String?> {
     required this.restart,
     required this.ready,
     required this.readyTimeout,
+    this.values = const <String, KeyBinding>{},
   });
 
   /// Builds the step from what the program gave it.
@@ -24,6 +26,9 @@ final class SetProcessFlags extends ReversibleStep<String?> {
     restart: arguments.textList('restart_command'),
     ready: arguments.textList('ready_command'),
     readyTimeout: Duration(seconds: arguments.integer('ready_timeout_seconds')),
+    values: arguments.has('values')
+        ? KeyBinding.readFrom(arguments.raw('values'))
+        : const <String, KeyBinding>{},
   );
 
   /// What this step accepts.
@@ -36,7 +41,17 @@ final class SetProcessFlags extends ReversibleStep<String?> {
     ArgumentSpec(
       name: 'flags',
       kind: ArgumentKind.textList,
-      describes: 'a list of flag=value strings to set',
+      describes:
+          'a list of flag=value strings to set. A flag may carry a marked slot wherever a value '
+          'belongs that only a run holds, and `values` says which answer fills it',
+    ),
+    ArgumentSpec(
+      name: 'values',
+      kind: ArgumentKind.mapping,
+      describes:
+          'which answer fills each slot of the flags, as `slot-name: {answer: name}` and optionally '
+          '`join` where the answer holds several values',
+      required: false,
     ),
     ArgumentSpec(
       name: 'file_mode',
@@ -70,6 +85,9 @@ final class SetProcessFlags extends ReversibleStep<String?> {
   /// The flags to write.
   final List<String> flags;
 
+  /// Which answer fills each slot of those flags.
+  final Map<String, KeyBinding> values;
+
   /// The permissions the argument file is written with.
   final int fileMode;
 
@@ -82,16 +100,27 @@ final class SetProcessFlags extends ReversibleStep<String?> {
   /// How long to keep asking before giving up on the restarted process.
   final Duration readyTimeout;
 
-  String _interpolate(String text, StepContext context) {
-    String filled = text;
-    final RegExp slotExp = RegExp(r'<([^>]+)>');
-    for (final Match match in slotExp.allMatches(text)) {
-      final String slot = match.group(0)!;
-      final String answerName = match.group(1)!;
-      final String value = context.answers.text(answerName);
-      filled = filled.replaceAll(slot, value);
+  /// [text] with the slot named by each binding holding that binding's value.
+  ///
+  /// The FRAMEWORK's grammar and no second one. What stood here was a private pattern with its own
+  /// rules — it took any characters between angle brackets, looked the name up verbatim, and filled
+  /// nothing where the answer was absent without saying so. That made the same text mean one thing
+  /// in a template and another in a flag, which is exactly what one notation exists to prevent.
+  ///
+  /// A slot nothing filled is REFUSED rather than written out: `--oidc-issuer-url=<books-cluster>`
+  /// reaching an argument file is a flag the process reads as that literal text.
+  String _filled(String text, StepContext context) {
+    final String written = filledSlots(text, <String, String>{
+      for (final MapEntry<String, KeyBinding> each in values.entries)
+        if (each.value.valueIn(context.answers) case final String value) each.key: value,
+    });
+    if (leftoverSlotIn(written) case final String left) {
+      throw TemplateRefused(
+        '$left in "$text" is filled by nothing: `values` says which answer fills each slot, and a '
+        'flag still carrying one would be read by the process as that literal text',
+      );
     }
-    return filled;
+    return written;
   }
 
   @override
@@ -102,7 +131,7 @@ final class SetProcessFlags extends ReversibleStep<String?> {
     final String current = await context.files.read(argsPath);
     String mutated = current;
     for (final String rawFlag in flags) {
-      mutated = SetProcessFlag.withFlag(mutated, _interpolate(rawFlag, context));
+      mutated = SetProcessFlag.withFlag(mutated, _filled(rawFlag, context));
     }
 
     return current == mutated
@@ -117,7 +146,7 @@ final class SetProcessFlags extends ReversibleStep<String?> {
         : '';
     String mutated = current;
     for (final String rawFlag in flags) {
-      mutated = SetProcessFlag.withFlag(mutated, _interpolate(rawFlag, context));
+      mutated = SetProcessFlag.withFlag(mutated, _filled(rawFlag, context));
     }
     return StepPlan.diff(argsPath, before: current, after: mutated);
   }
@@ -129,7 +158,7 @@ final class SetProcessFlags extends ReversibleStep<String?> {
         : '';
     String mutated = current;
     for (final String rawFlag in flags) {
-      mutated = SetProcessFlag.withFlag(mutated, _interpolate(rawFlag, context));
+      mutated = SetProcessFlag.withFlag(mutated, _filled(rawFlag, context));
     }
     await context.files.write(argsPath, mutated, mode: fileMode);
     await SetProcessFlag.restartWith(context, restart, ready: ready, timeout: readyTimeout);

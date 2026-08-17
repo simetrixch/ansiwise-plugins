@@ -161,7 +161,7 @@ const Map<StepName, RegisteredStep> hostSteps = <StepName, RegisteredStep>{
   ),
   StepName('set_process_flags'): RegisteredStep(
     name: StepName('set_process_flags'),
-    source: 'lib/src/steps/host/set_process_flags.dart:8',
+    source: 'lib/src/steps/host/set_process_flags.dart:9',
     create: SetProcessFlags.fromArguments,
     arguments: SetProcessFlags.arguments,
   ),
