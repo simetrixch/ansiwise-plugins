@@ -21,35 +21,54 @@ void main() {
   const String fragments = '/srv/checkout/config/fragments';
   const String composed = '/run/staging/apps-app-fragments.yaml';
 
-  /// A machine whose `kubectl diff` exits with [exitCode] and whose compose succeeds.
-  ClusterMachine diffing(
-    int exitCode, {
+  const String composeArgv =
+      'kubectl create configmap app-fragments --namespace apps --from-file $fragments '
+      '--dry-run=client';
+  const String getArgv =
+      'kubectl get configmap app-fragments --namespace apps -o json --ignore-not-found';
+
+  /// One ConfigMap as JSON, carrying [data] and the metadata a real cluster adds of its own.
+  ///
+  /// The metadata is here on purpose: a resource version and a creation time change without anybody
+  /// touching the object, so a check comparing the whole thing would report a difference on every
+  /// run. Only the data is compared, and this is what proves it.
+  String objectOf(String data, {bool live = false}) =>
+      '{"apiVersion":"v1","kind":"ConfigMap",'
+      '"metadata":{"name":"app-fragments","namespace":"apps"'
+      '${live ? ',"resourceVersion":"84213","creationTimestamp":"2026-08-17T21:00:00Z"' : ''}},'
+      '"data":$data}';
+
+  /// A machine where the directory composes [wanted] and the cluster holds [held].
+  ///
+  /// [held] null stands for a cluster that has no such object at all, which `--ignore-not-found`
+  /// answers as empty output rather than as a failure.
+  ClusterMachine cluster({
+    String wanted = '{"99-client.yaml":"version: 1"}',
+    String? held = '{"99-client.yaml":"version: 1"}',
+    bool askFails = false,
     Map<String, String> tree = const <String, String>{'$fragments/99-client.yaml': 'version: 1\n'},
   }) {
     final ClusterMachine machine = ClusterMachine();
     machine.files.contents.addAll(tree);
     machine.shell
+      ..answers('$composeArgv -o json', objectOf(wanted))
       ..answer(
-        'kubectl diff --filename $composed',
+        getArgv,
         CommandResult(
-          exitCode: exitCode,
-          stdout: '',
-          stderr: exitCode > 1 ? 'the server could not be reached' : '',
+          exitCode: askFails ? 1 : 0,
+          stdout: askFails ? '' : (held == null ? '' : objectOf(held, live: true)),
+          stderr: askFails ? 'the server could not be reached' : '',
           elapsed: Duration.zero,
         ),
       )
-      ..answers(
-        'kubectl create configmap app-fragments --namespace apps --from-file $fragments '
-            '--dry-run=client -o yaml',
-        'apiVersion: v1\nkind: ConfigMap\n',
-      );
+      ..answers('$composeArgv -o yaml', 'apiVersion: v1\nkind: ConfigMap\n');
     return machine;
   }
 
   group('the check', () {
     test('a directory that is not in the checkout is blocked and named', () async {
       final CheckResult result = await step.check(
-        diffing(1, tree: const <String, String>{}).contextFor(under),
+        cluster(tree: const <String, String>{}).contextFor(under),
       );
       expect(result, isA<Blocked>());
       expect((result as Blocked).reason, contains('config/fragments'));
@@ -58,21 +77,41 @@ void main() {
     test('a directory holding no file is blocked rather than composed', () async {
       // A ConfigMap with no keys mounts cleanly and the pod discovers nothing, which looks exactly
       // like a release that came up correctly.
-      final ClusterMachine machine = diffing(1, tree: const <String, String>{});
+      final ClusterMachine machine = cluster(tree: const <String, String>{});
       machine.files.directories.add(fragments);
       expect(await step.check(machine.contextFor(under)), isA<Blocked>());
     });
 
-    test('no difference is what it is finished against', () async {
-      expect(await step.check(diffing(0).contextFor(under)), isA<Satisfied>());
+    test('the same data, whatever metadata the cluster added of its own, is finished', () async {
+      expect(await step.check(cluster().contextFor(under)), isA<Satisfied>());
     });
 
-    test('a difference is work', () async {
-      expect(await step.check(diffing(1).contextFor(under)), isA<Ready>());
+    test('a key whose file changed is work', () async {
+      expect(
+        await step.check(cluster(held: '{"99-client.yaml":"version: 2"}').contextFor(under)),
+        isA<Ready>(),
+      );
+    });
+
+    test('A KEY THAT OUTLIVED ITS FILE is work, which is the property this exists for', () async {
+      // The cluster carries a declaration nobody meant to keep. Comparing key by key, or asking
+      // only whether every wanted key is present, would call this finished.
+      expect(
+        await step.check(
+          cluster(
+            held: '{"99-client.yaml":"version: 1","98-gone.yaml":"version: 1"}',
+          ).contextFor(under),
+        ),
+        isA<Ready>(),
+      );
+    });
+
+    test('an object the cluster does not have at all is work', () async {
+      expect(await step.check(cluster(held: null).contextFor(under)), isA<Ready>());
     });
 
     test('a failure to ASK is not the same as work to do', () async {
-      expect(await step.check(diffing(2).contextFor(under)), isA<Blocked>());
+      expect(await step.check(cluster(askFails: true).contextFor(under)), isA<Blocked>());
     });
   });
 
@@ -80,7 +119,7 @@ void main() {
     test(
       'composes from the directory without sending anything, then applies what it composed',
       () async {
-        final ClusterMachine machine = diffing(1);
+        final ClusterMachine machine = cluster();
 
         await step.apply(machine.contextFor(under));
 
@@ -96,7 +135,7 @@ void main() {
     );
 
     test('the composed object does not stay on the machine', () async {
-      final ClusterMachine machine = diffing(1);
+      final ClusterMachine machine = cluster();
 
       await step.apply(machine.contextFor(under));
 
@@ -130,7 +169,7 @@ void main() {
     // False is what the capture answers for a namespace that did not already carry the ConfigMap,
     // which is the only case where taking the run back means deleting it. Passed rather than
     // captured so the single command below is the delete and not a `kubectl get` in front of it.
-    final ClusterMachine machine = diffing(0);
+    final ClusterMachine machine = cluster();
     await step.undo(machine.contextFor(under), false);
     expect(machine.shell.commands.single.argv, <String>[
       'kubectl',

@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:ansiwise_api/ansiwise_api.dart';
 
 import 'kubectl.dart';
@@ -131,17 +133,72 @@ final class KubernetesConfigmapFromDirectory extends ReversibleStep<bool> {
       // discover nothing — which looks exactly like a release that came up correctly.
       return CheckResult.blocked('$directory holds no file, so the ConfigMap would carry no key');
     }
-    final CommandResult found = await context.shell.run(
-      _readingWhatWasWritten.observing(<String>['diff', '--filename', pathFor()]),
+    // NO FILE IS INVOLVED, AND THAT IS THE CORRECTION. This used to ask `diff --filename` about the
+    // staged file — which is composed inside apply and removed again in its own finally, so at check
+    // time it never exists. The step could not answer its own postcondition on any machine: every
+    // run reported "the cluster could not be asked", naming a path that was never meant to outlive
+    // the apply that made it.
+    //
+    // Both sides are read instead, as JSON, and only the DATA is compared. The object the cluster
+    // holds carries a resource version, a creation time and a managed-fields record that change on
+    // their own, so comparing the whole object would report a difference on every run.
+    final CommandResult wanted = await context.shell.run(
+      _readingWhatWasWritten.observing(<String>[..._compose, '-o', 'json']),
     );
-    // Asked of the file this step composes, so the answer covers the keys as well as the object:
-    // a file deleted from the directory is a key the cluster still has and the composed object no
-    // longer names, which is a difference.
-    return switch (found.exitCode) {
-      0 => CheckResult.satisfied('$name in $namespace carries what $directory holds'),
-      1 => const CheckResult.ready(),
-      _ => CheckResult.blocked('the cluster could not be asked about $name: ${found.stderr}'),
-    };
+    if (!wanted.ok) {
+      return CheckResult.blocked(
+        'the object could not be composed from $directory: ${wanted.stderr.trim()}',
+      );
+    }
+    final CommandResult held = await context.shell.run(
+      _readingWhatWasWritten.observing(<String>[
+        'get',
+        'configmap',
+        name,
+        '--namespace',
+        namespace,
+        '-o',
+        'json',
+        '--ignore-not-found',
+      ]),
+    );
+    if (!held.ok) {
+      return CheckResult.blocked('the cluster could not be asked about $name: ${held.stderr}');
+    }
+    if (held.trimmed.isEmpty) {
+      return const CheckResult.ready();
+    }
+    // A key that stays behind after its file was deleted is a declaration this cluster still carries
+    // and nobody meant to keep, so the two maps are compared whole rather than key by key.
+    if (_dataOf(wanted.trimmed) != _dataOf(held.trimmed)) {
+      return const CheckResult.ready();
+    }
+    return CheckResult.satisfied('$name in $namespace carries what $directory holds');
+  }
+
+  /// The `data` of a ConfigMap written as JSON, rendered so two of them compare as text.
+  ///
+  /// Null where the text is not an object at all, which is a different answer from an object with no
+  /// data: the first says the reading failed and the second says the map is empty.
+  static String? _dataOf(String json) {
+    final Object? decoded = _decoded(json);
+    if (decoded is! Map<String, Object?>) {
+      return null;
+    }
+    final Object? data = decoded['data'];
+    if (data is! Map<String, Object?>) {
+      return '{}';
+    }
+    final List<String> keys = data.keys.toList()..sort();
+    return jsonEncode(<String, Object?>{for (final String key in keys) key: data[key]});
+  }
+
+  static Object? _decoded(String text) {
+    try {
+      return jsonDecode(text);
+    } on FormatException {
+      return null;
+    }
   }
 
   @override
@@ -150,7 +207,7 @@ final class KubernetesConfigmapFromDirectory extends ReversibleStep<bool> {
 
   @override
   Future<void> apply(StepContext context) async {
-    final Command compose = kubectl.command(_compose);
+    final Command compose = kubectl.command(<String>[..._compose, '-o', 'yaml']);
     final CommandResult composed = await context.shell.run(compose);
     if (!composed.ok) {
       throw CommandFailed(
@@ -222,6 +279,10 @@ final class KubernetesConfigmapFromDirectory extends ReversibleStep<bool> {
   /// `--dry-run=client` is what makes this a composition rather than a create: `kubectl create` on
   /// its own refuses a ConfigMap that already exists, so a second run would fail on the very thing
   /// a second run is supposed to find already done.
+  /// How the object is composed from the directory as it stands, without an output format.
+  ///
+  /// The format is added by the caller: the apply wants yaml to write, and the check wants json to
+  /// compare. One list with a format baked in would have meant two lists that can drift apart.
   List<String> get _compose => <String>[
     'create',
     'configmap',
@@ -231,7 +292,5 @@ final class KubernetesConfigmapFromDirectory extends ReversibleStep<bool> {
     '--from-file',
     path,
     '--dry-run=client',
-    '-o',
-    'yaml',
   ];
 }

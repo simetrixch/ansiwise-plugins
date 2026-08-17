@@ -137,7 +137,7 @@ const Map<StepName, RegisteredStep> kubernetesSteps = <StepName, RegisteredStep>
   ),
   StepName('kubernetes_configmap_from_directory'): RegisteredStep(
     name: StepName('kubernetes_configmap_from_directory'),
-    source: 'lib/src/steps/kubernetes_configmap_from_directory.dart:25',
+    source: 'lib/src/steps/kubernetes_configmap_from_directory.dart:27',
     create: KubernetesConfigmapFromDirectory.fromArguments,
     arguments: KubernetesConfigmapFromDirectory.arguments,
   ),
