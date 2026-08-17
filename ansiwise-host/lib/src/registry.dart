@@ -1,5 +1,6 @@
 import 'package:ansiwise_api/ansiwise_api.dart';
 import 'conditions/key_is_true.dart';
+import 'conditions/keys_compare.dart';
 import 'steps/host/activate_public_src_routing.dart';
 import 'steps/host/add_shell_alias.dart';
 import 'steps/host/add_user_to_group.dart';
@@ -391,6 +392,22 @@ const Map<PredicateName, RegisteredPredicate> hostConditions = <PredicateName, R
     create: KeyIsTrue.fromValues,
     describes: 'whether a key in a KEY=value file holds true',
     arguments: KeyIsTrue.arguments,
+  ),
+  // Two names for one comparison, because a `not:` behind `when:` would be an operator and an
+  // operator is where a program file starts being a language.
+  PredicateName('key_values_agree'): RegisteredPredicate.taking(
+    name: PredicateName('key_values_agree'),
+    source: 'lib/src/conditions/keys_compare.dart:41',
+    create: KeysAgree.agreeing,
+    describes: 'whether two keys of a KEY=value file carry the same value',
+    arguments: KeysAgree.arguments,
+  ),
+  PredicateName('key_values_differ'): RegisteredPredicate.taking(
+    name: PredicateName('key_values_differ'),
+    source: 'lib/src/conditions/keys_compare.dart:41',
+    create: KeysAgree.differing,
+    describes: 'whether two keys of a KEY=value file carry different values',
+    arguments: KeysAgree.arguments,
   ),
 };
 

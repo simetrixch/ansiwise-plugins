@@ -7,6 +7,7 @@
 library;
 
 export 'src/conditions/key_is_true.dart';
+export 'src/conditions/keys_compare.dart';
 export 'src/registry.dart';
 export 'src/steps/host/activate_public_src_routing.dart';
 export 'src/steps/host/add_shell_alias.dart';
