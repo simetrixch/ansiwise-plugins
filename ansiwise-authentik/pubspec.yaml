@@ -1,0 +1,41 @@
+# The identity provider plugin: steps that know how authentik names and serves the things it stands
+# in front of.
+#
+# This package knows the TOOL and never an application of it. Which applications exist, what they
+# are called, which subdomain the provider is served under and which cluster's domain that sits on
+# are all a program row's to say — this knows only the shapes authentik itself defines.
+#
+# The test of every step in this package: somebody running the same identity provider, in front of a
+# completely different set of applications, could use it unchanged.
+name: ansiwise_authentik
+description: Tool-generic steps for an authentik identity provider.
+publish_to: none
+
+# WHERE THE BINARY THIS PACKAGE ENDS UP IN IS COMPOSED. Nothing here produces one: a plugin declares
+# steps, and which plugins a binary carries is decided by a composition root that depends on them.
+# That root is github.com/simetrixch/ansiwise-cli, and `dart run tool/build.dart` there is what
+# compiles the executable a machine is given. Named because a clone of this repository alone cannot
+# build anything, and nothing else said where to look.
+repository: https://github.com/simetrixch/ansiwise-plugins
+version: 0.1.0
+
+environment:
+  sdk: ^3.12.0
+
+dependencies:
+  ansiwise_api:
+    git:
+      url: https://github.com/simetrixch/ansiwise-api.git
+      ref: master
+
+dev_dependencies:
+  test: ^1.31.2
+  # The analysis rule set this package includes ends at package:lints/recommended.yaml, and a
+  # nested include resolves through THIS package's dependency graph.
+  lints: ^6.1.0
+  # The scan that keeps this package to its tool and off any application of it.
+  ansiwise_checks:
+    git:
+      url: https://github.com/simetrixch/ansiwise-checks.git
+      ref: master
+      path: registry

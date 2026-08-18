@@ -25,7 +25,6 @@ import 'steps/host/install_pinned_tool.dart';
 import 'steps/host/install_snap.dart';
 import 'steps/host/install_tailscale_client.dart';
 import 'steps/host/link_storage_path.dart';
-import 'steps/host/measure_coalesced.dart';
 import 'steps/host/preflight_registry_pull_credential.dart';
 import 'steps/host/remove_snap.dart';
 import 'steps/host/remove_unused_packages.dart';
@@ -360,13 +359,6 @@ const Map<StepName, RegisteredStep> hostSteps = <StepName, RegisteredStep>{
         describes: 'the packet-filtering backend this machine is on',
       ),
     ],
-  ),
-  StepName('measure_coalesced'): RegisteredStep(
-    name: StepName('measure_coalesced'),
-    source: 'lib/src/steps/host/measure_coalesced.dart:12',
-    create: MeasureCoalesced.fromArguments,
-    arguments: MeasureCoalesced.arguments,
-    publishes: MeasureCoalesced.publishes,
   ),
   // The file system as a tool. It declares no answer of its own: which file, where it goes and
   // which axis a caller wants one of them per are read out of the row, so this package carries no
