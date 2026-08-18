@@ -26,7 +26,6 @@ dependencies:
   ansiwise_core:
     git:
       url: https://github.com/simetrixch/ansiwise-core.git
-      path: core
       ref: master
   # One step reads the address of an image mirror out of a profile the caller wrote. The framework
   # uses YAML for program files; a package that reads its own files declares it itself rather than
