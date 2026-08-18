@@ -263,6 +263,22 @@ final class FillKeyValueFile extends ReversibleStep<String?> {
     }
 
     final Map<String, String> filling = _toFill(file, _wanted(context));
+
+    // SAID OUT LOUD WHERE A VALUE IS REPLACED RATHER THAN SUPPLIED, and the keys are named because
+    // the values cannot be: a row holding credentials must reach no record. Filling an empty key is
+    // the ordinary act and says nothing; taking back a value that disagreed with what this run was
+    // told is the act somebody has to be able to see afterwards.
+    final List<String> replaced = <String>[
+      for (final String key in filling.keys)
+        if (!file.isUnset(key)) key,
+    ];
+    if (replaced.isNotEmpty) {
+      context.log.info(
+        '$path held a different value for ${replaced.join(', ')}, and this run was told another — '
+        'the answer is what an installation is described by, so it is what stands there now',
+      );
+    }
+
     if (filling.isEmpty && gained.isEmpty) {
       return;
     }
@@ -313,10 +329,23 @@ final class FillKeyValueFile extends ReversibleStep<String?> {
       if (each.value.valueIn(context.answers) case final String value) each.key: value,
   };
 
-  /// The keys that still need a value, which is every declared key nobody has answered.
+  /// The keys this run writes: every one nobody has answered, and every one answered DIFFERENTLY.
+  ///
+  /// THE SECOND HALF IS WHAT MAKES A CREDENTIAL REPLACEABLE. Without it a key holding any value at
+  /// all counted as done, whatever the run had been told — so an operator who rotated a token, put
+  /// the new one in the answers and ran the programs again got every step green and an installation
+  /// still using the old one. Measured on a machine carrying five GitHub tokens that answered 401,
+  /// where correcting the answers would have changed nothing and the row would have reported
+  /// "nothing to do: every value in it was answered".
+  ///
+  /// The answer wins, and it can only ever win over a key it HAS an answer for: [_wanted] leaves out
+  /// what this run was not told, so a value an operator filled by hand under a key no answer names
+  /// is never touched. What is given up is editing a key IN THE FILE that an answer also names —
+  /// which was never a place to edit it, because the next run was always going to be told the
+  /// answer and not the file.
   Map<String, String> _toFill(KeyValueFile file, Map<String, String> wanted) => <String, String>{
     for (final MapEntry<String, String> each in wanted.entries)
-      if (file.isUnset(each.key)) each.key: each.value,
+      if (file.isUnset(each.key) || file.valueOf(each.key) != each.value) each.key: each.value,
   };
 }
 

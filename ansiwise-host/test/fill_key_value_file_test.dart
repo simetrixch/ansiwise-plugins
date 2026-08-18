@@ -14,8 +14,21 @@ import 'host_fixture.dart';
 ///
 /// What is asserted is what tells this step apart from every other writer in this package. Those are
 /// finished when a file holds what they render. This one is finished when every key the template
-/// declares carries an answer — and it must never take back a value somebody typed, which is the
-/// property the whole shape exists for.
+/// declares carries an answer, and it fills IN PLACE so that every key keeps the paragraph
+/// explaining it.
+///
+/// **Which of two values wins, and why that was turned around.** This step used to leave any key
+/// alone that held a value at all, so that a value somebody typed could not be taken back by an
+/// answer. That protected a way of working which has since been abolished: a credential reaches an
+/// installation through the answers a run is given and through nothing else, never through a file
+/// somebody edits on the machine. Under the old rule an operator who rotated a token, put the new
+/// one in the answers and ran the programs again got every step green and an installation still
+/// using the old one — measured on a machine carrying five GitHub tokens that all answered 401.
+///
+/// So the answer wins now, and only ever over a key it HAS an answer for: a value under a key no
+/// answer names is still untouched, because this run was told nothing about it. Where a value is
+/// replaced rather than supplied, the row says which key — never which value, since these files hold
+/// credentials.
 void main() {
   const String templatePath = '/srv/checkout/configs/config.example';
   const String path = '/srv/checkout/configs/config.dev';
@@ -116,22 +129,47 @@ void main() {
     });
   });
 
-  group('what it must never take back', () {
-    test('a key somebody typed is left exactly as they typed it', () async {
-      // The reason this shape exists. A writer that rendered the whole file would replace an
-      // operator's own value with the answer, and the value that loses is the one somebody chose.
+  group('which of two values wins', () {
+    test('a value that disagrees with the answer is replaced by it', () async {
+      // THE DEFECT THIS CLOSES. The file held one value and the run was told another, and the row
+      // used to call that finished — so a rotated credential never reached the installation and
+      // every step reported green. Measured on a machine carrying five tokens that answered 401.
       final HostMachine machine = machineWith(
         existing: template.replaceFirst('DEPLOY_ENV=""', 'DEPLOY_ENV="staging-by-hand"'),
       );
       await stepWith().apply(contextOn(machine));
 
       final String written = machine.files.contents[path]!;
-      expect(written, contains('DEPLOY_ENV="staging-by-hand"'));
+      expect(written, contains('DEPLOY_ENV="dev"'));
       expect(
         written,
-        contains('DOMAIN_SUFFIX="m1.example.com"'),
-        reason: 'the keys nobody answered are still filled',
+        isNot(contains('staging-by-hand')),
+        reason: 'the old value is gone, not left standing beside the new one',
       );
+    });
+
+    test('the row says WHICH key it took back, and never what stood there', () async {
+      // A row holding credentials must reach no record, so the key is named and the value is not —
+      // and something has to be said, or a replacement is a silent one.
+      final HostMachine machine = machineWith(
+        existing: template.replaceFirst('DEPLOY_ENV=""', 'DEPLOY_ENV="staging-by-hand"'),
+      );
+      await stepWith(holdsCredentials: true).apply(contextOn(machine));
+
+      final String said = machine.said.join('\n');
+      expect(said, contains('DEPLOY_ENV'));
+      expect(said, isNot(contains('staging-by-hand')));
+    });
+
+    test('THE INNOCENT NEIGHBOUR: a key no answer names is left exactly as it was typed', () async {
+      // The half of the old rule that stands. This run was told nothing about such a key, so it has
+      // nothing to say about it — and a writer that rendered the whole file would take it back.
+      final HostMachine machine = machineWith(
+        existing: '$template\n# Something only this installation knows.\nHAND_WRITTEN="kept"\n',
+      );
+      await stepWith().apply(contextOn(machine));
+
+      expect(machine.files.contents[path], contains('HAND_WRITTEN="kept"'));
     });
 
     test('a value still equal to the template counts as unanswered', () async {
