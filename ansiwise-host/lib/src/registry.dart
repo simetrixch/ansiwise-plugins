@@ -1,5 +1,6 @@
 import 'package:ansiwise_core/ansiwise_core.dart';
 import 'conditions/key_is_true.dart';
+import 'conditions/answers_compare.dart';
 import 'conditions/keys_compare.dart';
 import 'steps/host/activate_public_src_routing.dart';
 import 'steps/host/add_shell_alias.dart';
@@ -407,6 +408,23 @@ const Map<PredicateName, RegisteredPredicate> hostConditions = <PredicateName, R
     create: KeysAgree.differing,
     describes: 'whether two keys of a KEY=value file carry different values',
     arguments: KeysAgree.arguments,
+  ),
+  // The same relation over the RUN rather than over a file, for the one case a file cannot serve: a
+  // condition that has to hold before the first step, because it decides whether an answer had to be
+  // given at all. A file is written by a step, and a step runs after the answers are validated.
+  PredicateName('answer_values_agree'): RegisteredPredicate.taking(
+    name: PredicateName('answer_values_agree'),
+    source: 'lib/src/conditions/answers_compare.dart:31',
+    create: AnswersAgree.agreeing,
+    describes: 'whether two answers of the run carry the same value',
+    arguments: AnswersAgree.arguments,
+  ),
+  PredicateName('answer_values_differ'): RegisteredPredicate.taking(
+    name: PredicateName('answer_values_differ'),
+    source: 'lib/src/conditions/answers_compare.dart:31',
+    create: AnswersAgree.differing,
+    describes: 'whether two answers of the run carry different values',
+    arguments: AnswersAgree.arguments,
   ),
 };
 
