@@ -10,6 +10,13 @@
 name: ansiwise_host
 description: Tool-generic steps that prepare and drive a Linux host.
 publish_to: none
+
+# WHERE THE BINARY THIS PACKAGE ENDS UP IN IS COMPOSED. Nothing here produces one: a plugin declares
+# steps, and which plugins a binary carries is decided by a composition root that depends on them.
+# That root is github.com/simetrixch/ansiwise-cli, and `dart run tool/build.dart` there is what
+# compiles the executable a machine is given. Named because a clone of this repository alone cannot
+# build anything, and nothing else said where to look.
+repository: https://github.com/simetrixch/ansiwise-plugins
 version: 0.1.0
 
 environment:
