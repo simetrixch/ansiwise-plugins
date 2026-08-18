@@ -13,6 +13,8 @@ import 'host_fixture.dart';
 /// goes green on one that does. Without the innocent case a condition that refused everything would
 /// pass all four, and a check nothing can satisfy measures nothing.
 void main() {
+  _slots();
+
   const String settings = '/etc/subject/settings';
   const String subjectKey = 'SUBJECT_ON';
 
@@ -168,6 +170,49 @@ void main() {
         (await bound.predicate!.evaluate(contextOf(machine))).held,
         isTrue,
         reason: 'this is the whole path from a plugin entry to the word a program row writes',
+      );
+    });
+  });
+}
+
+/// Which file the condition reads, when the path carries a slot the run fills.
+///
+/// **The defect this measures.** An installation's configuration is read ONCE, before a program is
+/// resolved, and it holds no answers — the axis is an answer, supplied per run. So a binding naming
+/// one value of that axis literally is right on exactly one kind of installation and refuses every
+/// other before its first step. Measured on a real installation: three conditions bound to the file
+/// of one stage, on a machine carrying the file of another, which left two of the three stages that
+/// product ships unable to run its last program at all.
+void _slots() {
+  group('a path carrying a slot', () {
+    // INVENTED, like every other fixture here. A path naming one product's checkout would be that
+    // product's fact living in a package that has to serve any of them — and the check that says so
+    // reports it, which is how this fixture came to be written twice.
+    const KeyIsTrue bound = KeyIsTrue(
+      path: '/etc/subject/settings.<stage>',
+      key: 'SUBJECT_ON',
+      runAnswer: 'stage',
+    );
+
+    test('is filled from the answer the row names', () {
+      expect(
+        bound.pathIn(const Arguments(<String, Object>{'stage': 'second'})),
+        '/etc/subject/settings.second',
+      );
+      expect(
+        bound.pathIn(const Arguments(<String, Object>{'stage': 'first'})),
+        '/etc/subject/settings.first',
+        reason: 'the same binding serves every stage, which is the whole point of the slot',
+      );
+    });
+
+    test('THE INNOCENT NEIGHBOUR: a path with no slot is left exactly as written', () {
+      const KeyIsTrue plain = KeyIsTrue(path: '/etc/subject/settings', key: 'SUBJECT_ON');
+
+      expect(
+        plain.pathIn(const Arguments(<String, Object>{'stage': 'prod'})),
+        '/etc/subject/settings',
+        reason: 'a row naming no answer must not have its path rewritten behind it',
       );
     });
   });
