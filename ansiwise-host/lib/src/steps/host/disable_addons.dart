@@ -97,6 +97,25 @@ final class DisableAddons extends ReversibleStep<List<String>> {
         Command.detailed(argv.first, arguments: argv.sublist(1), elevated: elevated),
       );
       if (!switched.ok) {
+        // AN EXIT CODE IS NOT THE ANSWER, THE MACHINE IS. The snap reports an addon as on and then
+        // refuses to switch it off because what it would remove is already gone — it contradicts
+        // itself, and taking either half on trust is wrong. Measured on a real machine:
+        //
+        //   Error from server (NotFound): error when deleting "…": namespaces
+        //   "container-registry" not found
+        //
+        // for an addon its own status had just listed as enabled. So the question is asked again:
+        // an addon that is off afterwards is an addon this row has nothing left to do about,
+        // whatever the command thought of itself.
+        final Set<String> after =
+            await enabledAddons(context, statusCommand, elevated: elevated) ?? const <String>{};
+        if (!after.contains(addonNameIn(addon))) {
+          context.log.info(
+            '$addon refused to be switched off and is off — what it would have removed was already '
+            'gone, which is the state this row wants',
+          );
+          continue;
+        }
         throw CommandFailed(
           argv: argv,
           exitCode: switched.exitCode,
