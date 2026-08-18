@@ -246,10 +246,16 @@ final class VaultKvEntry extends IrreversibleStep {
     final HttpAnswer answer = await context.http.send(
       vaultRead(url, dataPath, token: token.value ?? ''),
     );
-    if (isAbsent(answer)) {
+    // TOLD APART, because "I could not read it" is not an answer about what the entry holds. Read as
+    // work to do, it sends the run into an apply that mints over whatever is actually there.
+    final VaultReading reading = readingOf(answer, path: dataPath);
+    if (reading case final VaultUnreadable refused) {
+      return CheckResult.blocked(refused.because);
+    }
+    if (reading is! VaultHeld) {
       return const CheckResult.ready();
     }
-    final Object? current = decodedData(answer.body)?['data'];
+    final Object? current = reading.data['data'];
     if (current is! Map<String, Object?>) {
       return const CheckResult.ready();
     }
@@ -321,7 +327,16 @@ final class VaultKvEntry extends IrreversibleStep {
       final HttpAnswer held = await context.http.send(
         vaultRead(url, dataPath, token: token.value ?? ''),
       );
-      final Object? current = isAbsent(held) ? null : decodedData(held.body)?['data'];
+      // THE LINE THIS STEP'S WHOLE INTENT RESTED ON. An entry already holding a value is left as it
+      // is — minting one to compare with "would BE the rotation this must not perform" — and that
+      // intent was defeated one line earlier, where a read that FAILED and an entry that holds
+      // NOTHING became the same answer. What followed was a fresh secret over a live one, and a run
+      // that reported success because from the step's own view it wrote what was missing.
+      final VaultReading reading = readingOf(held, path: dataPath);
+      if (reading case final VaultUnreadable refused) {
+        throw StateError(refused.because);
+      }
+      final Object? current = reading is VaultHeld ? reading.data['data'] : null;
       final Map<String, Object?> standing = current is Map<String, Object?>
           ? current
           : const <String, Object?>{};

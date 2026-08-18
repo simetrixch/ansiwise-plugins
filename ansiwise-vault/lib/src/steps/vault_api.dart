@@ -218,7 +218,77 @@ HttpRequest vaultDelete(String url, String path, {required String token}) =>
 ///
 /// Vault answers 404 both for a path that holds nothing and for one that was never written, and a
 /// step reads both the same way: there is work to do.
+///
+/// **Not enough on its own to decide what a step may write**, and that is what [readingOf] is for.
+/// This says only that 404 means absent; it says nothing about the answers that are neither 404 nor
+/// understandable, and a step that takes "not 404" for "here is what stands there" reads a failure
+/// as an empty entry.
 bool isAbsent(HttpAnswer answer) => answer.status == 404;
+
+/// What one read of the store actually told us, which is one of THREE things and not two.
+///
+/// **The defect this exists to make unwritable.** A step asked whether something was there, got a
+/// yes-or-no answer built on `status == 404`, and every other failure — a 403 while a policy is
+/// being written, a 500, a gateway's own error page, a body of a shape nobody expected — fell to the
+/// same side as "there is nothing there". What followed was a step doing the thing it does when
+/// nothing is there: minting a credential over a live one, or rewriting a role as though it carried
+/// nothing.
+///
+/// The third case is the one that was missing. "I could not read it" is not an answer about the
+/// store's contents at all, and a step that treats it as one reports success for a run that
+/// destroyed something.
+sealed class VaultReading {
+  const VaultReading();
+}
+
+/// Nothing is written at that path yet, and a step may create it.
+final class VaultAbsent extends VaultReading {
+  /// Says the path holds nothing.
+  const VaultAbsent();
+}
+
+/// The store answered, and this is what it holds.
+final class VaultHeld extends VaultReading {
+  /// Holds [data], the decoded body of the answer.
+  const VaultHeld(this.data);
+
+  /// What stands at the path, as the store gave it.
+  final Map<String, Object?> data;
+}
+
+/// The store answered something no step may act on.
+final class VaultUnreadable extends VaultReading {
+  /// Could not be understood, [because].
+  const VaultUnreadable(this.because);
+
+  /// What was wrong with the answer, in the words a refusal uses.
+  final String because;
+}
+
+/// What [answer] says about [path], told apart into the three cases.
+///
+/// The body is decoded here rather than by each caller, because deciding that an answer is
+/// UNDERSTANDABLE and deciding what it says are the same act: an answer whose body will not decode
+/// is exactly the case that used to pass for empty.
+VaultReading readingOf(HttpAnswer answer, {required String path}) {
+  if (isAbsent(answer)) {
+    return const VaultAbsent();
+  }
+  if (answer.status < 200 || answer.status >= 300) {
+    return VaultUnreadable(
+      'reading $path answered ${answer.status}, which says neither what it holds nor that it holds '
+      'nothing — and a step that read it as nothing would write over whatever is there',
+    );
+  }
+  final Map<String, Object?>? decoded = decodedData(answer.body);
+  if (decoded == null) {
+    return VaultUnreadable(
+      'reading $path answered ${answer.status} with a body this cannot make sense of, so what stands '
+      'there is unknown — and a step that read it as nothing would write over whatever is there',
+    );
+  }
+  return VaultHeld(decoded);
+}
 
 /// Whether [a] and [b] are the same value once a list's order is set aside.
 ///

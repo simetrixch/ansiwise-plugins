@@ -115,6 +115,65 @@ void main() {
       expect(await minting.check(it.context), isA<Ready>());
     });
 
+    test('a read that FAILED is not an entry that holds nothing', () async {
+      // THE PLANTED DEFECT, and it is the one that destroys something. A 403 while a policy is being
+      // written is not 404, so it used to fall to the same side as "there is nothing there" — and
+      // what followed was a fresh secret over a live one, with the run reporting success because
+      // from the step's own view it wrote what was missing.
+      for (final int status in <int>[403, 500]) {
+        final ScriptedHttp http = ScriptedHttp(
+          (HttpRequest request, int nth) => request.method == 'GET'
+              ? answer('{"errors":["permission denied"]}', status: status)
+              : answer(''),
+        );
+        final ({StepContext context, MemoryRecorder recorder}) it = contextOf(
+          files: machineWith('CATALOG_REPO_PAT=\n'),
+          http: http,
+        );
+
+        expect(
+          await minting.check(it.context),
+          isA<Blocked>(),
+          reason: '$status says neither what the entry holds nor that it holds nothing',
+        );
+        await expectLater(
+          minting.apply(it.context),
+          throwsA(isA<StateError>()),
+          reason: 'and apply must not mint over what it could not read',
+        );
+      }
+    });
+
+    test('an answer whose body will not decode is refused too', () async {
+      // The other half of unreadable: the status says yes and the body is a gateway's error page.
+      final ScriptedHttp http = ScriptedHttp(
+        (HttpRequest request, int nth) =>
+            request.method == 'GET' ? answer('<html>502 Bad Gateway</html>') : answer(''),
+      );
+      final ({StepContext context, MemoryRecorder recorder}) it = contextOf(
+        files: machineWith('CATALOG_REPO_PAT=\n'),
+        http: http,
+      );
+
+      expect(await minting.check(it.context), isA<Blocked>());
+    });
+
+    test('THE INNOCENT NEIGHBOUR: a genuine 404 still mints', () async {
+      // Without this the refusal above would mean nothing: a step that refused every read would pass
+      // it and never create an entry at all.
+      final ScriptedHttp http = ScriptedHttp(
+        (HttpRequest request, int nth) =>
+            request.method == 'GET' ? answer('', status: 404) : answer(''),
+      );
+      final ({StepContext context, MemoryRecorder recorder}) it = contextOf(
+        files: machineWith('CATALOG_REPO_PAT=\n'),
+        http: http,
+      );
+
+      expect(await minting.check(it.context), isA<Ready>());
+      await minting.apply(it.context);
+    });
+
     test('an entry that already carries it is finished, and nothing is generated', () async {
       // The whole of create-only. Generating again writes a value into the store that whatever is
       // already using the old one cannot know, and there is no way back to it.
@@ -839,6 +898,73 @@ void main() {
           containsAll(<String>['controller', 'dbgate', 's1-slave']),
         );
       }
+    });
+
+    test('a read that FAILED does not drop what the role preserves', () async {
+      // THE PLANTED DEFECT, and here it takes away an authorisation rather than a credential. A 403
+      // or a 500 is not 404, so it used to fall to the same side as "this role does not exist yet" —
+      // and the write that followed carried only what THIS run knew about, silently narrowing a role
+      // that other runs and other programs had widened. preserve_list exists exactly to stop that.
+      for (final int status in <int>[403, 500]) {
+        final ScriptedHttp http = ScriptedHttp(
+          (HttpRequest request, int nth) => request.method == 'GET'
+              ? answer('{"errors":["permission denied"]}', status: status)
+              : answer(''),
+        );
+        final ({StepContext context, MemoryRecorder recorder}) it = contextOf(
+          files: FakeFiles(<String, String>{profilePath: profile, credentials: credentialFile}),
+          http: http,
+          step: 'vault_auth_role',
+        );
+
+        const VaultAuthRole step = VaultAuthRole(
+          repository: repository,
+          mount: kubernetesMountPlaceholder,
+          role: 'secret-reader',
+          body: '{"bound_service_account_namespaces":["controller"],"ttl":"24h"}',
+          preserveList: 'bound_service_account_namespaces',
+          layout: layout,
+        );
+
+        expect(await step.check(it.context), isA<Blocked>());
+        await expectLater(step.apply(it.context), throwsA(isA<StateError>()));
+        expect(
+          http.sent.where((HttpRequest request) => request.method == 'POST'),
+          isEmpty,
+          reason: 'nothing was written, so nothing the role carried was taken away',
+        );
+      }
+    });
+
+    test('THE INNOCENT NEIGHBOUR: a genuine 404 still creates the role from nothing', () async {
+      // Without this the refusal above would mean nothing: a step that refused every read could
+      // never create a role at all, and every installation would stop at its first one.
+      final ScriptedHttp http = ScriptedHttp(
+        (HttpRequest request, int nth) =>
+            request.method == 'GET' ? answer('', status: 404) : answer(''),
+      );
+      final ({StepContext context, MemoryRecorder recorder}) it = contextOf(
+        files: FakeFiles(<String, String>{profilePath: profile, credentials: credentialFile}),
+        http: http,
+        step: 'vault_auth_role',
+      );
+
+      const VaultAuthRole step = VaultAuthRole(
+        repository: repository,
+        mount: kubernetesMountPlaceholder,
+        role: 'secret-reader',
+        body: '{"bound_service_account_namespaces":["controller"],"ttl":"24h"}',
+        preserveList: 'bound_service_account_namespaces',
+        layout: layout,
+      );
+
+      expect(await step.check(it.context), isA<Ready>());
+      await step.apply(it.context);
+      expect(
+        http.sent.where((HttpRequest request) => request.method == 'POST'),
+        isNotEmpty,
+        reason: 'a role that is genuinely absent is still written',
+      );
     });
 
     test('a role that already says the same thing is nothing to do', () async {

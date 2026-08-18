@@ -137,10 +137,17 @@ final class VaultAuthRole extends ReversibleStep<Map<String, Object?>?> {
     }
 
     final String held = token.value ?? '';
-    final Map<String, Object?>? current = await _current(context, url, held, written.path);
-    if (current == null) {
+    final VaultReading reading = await _reading(context, url, held, written.path);
+    // TOLD APART FROM "there is work to do". An answer nobody can read says nothing about whether
+    // this row has anything to do, and reporting it as work would send the run into an apply that
+    // rewrites the role from a reading that failed.
+    if (reading case final VaultUnreadable refused) {
+      return CheckResult.blocked(refused.because);
+    }
+    if (reading is! VaultHeld) {
       return const CheckResult.ready();
     }
+    final Map<String, Object?> current = reading.data;
 
     final Map<String, Object?> wanted = _merged(declared, current);
     for (final MapEntry<String, Object?> field in wanted.entries) {
@@ -178,9 +185,16 @@ final class VaultAuthRole extends ReversibleStep<Map<String, Object?>?> {
     );
     final String held = token.value ?? '';
     final Map<String, Object?> declared = decodedObject(written.body) ?? const <String, Object?>{};
+    // WHAT THE ROLE CARRIES NOW, and a refusal where that cannot be known. Merging over an empty map
+    // because the read failed is the shape that drops every preserved member — so the run stops here
+    // instead, having written nothing.
+    final VaultReading reading = await _reading(context, url, held, written.path);
+    if (reading case final VaultUnreadable refused) {
+      throw StateError(refused.because);
+    }
     final Map<String, Object?> wanted = _merged(
       declared,
-      await _current(context, url, held, written.path) ?? const <String, Object?>{},
+      reading is VaultHeld ? reading.data : const <String, Object?>{},
     );
 
     final HttpAnswer answer = await context.http.send(
@@ -217,7 +231,14 @@ final class VaultAuthRole extends ReversibleStep<Map<String, Object?>?> {
       vaultCredentialsPath(context, repository, layout: layout),
     );
     if (token.value case final String held) {
-      return _current(context, vault.url ?? '', held, written.path);
+      // WHAT UNDO WOULD PUT BACK, and a read that failed must not become "there was nothing here".
+      // Captured as nothing, an unwind would DELETE a role this run did not create.
+      final VaultReading reading = await _reading(context, vault.url ?? '', held, written.path);
+      return switch (reading) {
+        VaultHeld(:final Map<String, Object?> data) => data,
+        VaultAbsent() => null,
+        VaultUnreadable(:final String because) => throw StateError(because),
+      };
     }
     return null;
   }
@@ -263,15 +284,21 @@ final class VaultAuthRole extends ReversibleStep<Map<String, Object?>?> {
     return _Role.written(mount: at.value ?? '', role: named.value ?? '', body: object.value ?? '');
   }
 
-  /// The role Vault currently holds at [rolePath], or null when it holds none.
-  Future<Map<String, Object?>?> _current(
+  /// What Vault holds at [rolePath], told apart into absent, held, and unreadable.
+  ///
+  /// THE THIRD CASE IS WHY THIS RETURNS A READING AND NOT A MAP. An answer that is neither 404 nor
+  /// understandable used to fall to the same side as "this role does not exist yet", and what
+  /// followed was a write of everything this run knew about — over a role that already carried rows
+  /// other runs and other programs had put there. `preserve_list` exists exactly to keep those, and
+  /// a blind read defeated it while the step reported success.
+  Future<VaultReading> _reading(
     StepContext context,
     String url,
     String token,
     String rolePath,
   ) async {
     final HttpAnswer answer = await context.http.send(vaultRead(url, rolePath, token: token));
-    return isAbsent(answer) ? null : decodedData(answer.body);
+    return readingOf(answer, path: rolePath);
   }
 
   /// [declared] with [preserveList] widened by whatever the live role already holds there.
