@@ -1,4 +1,4 @@
-import 'package:ansiwise_api/ansiwise_api.dart';
+import 'package:ansiwise_core/ansiwise_core.dart';
 
 import 'on_the_path.dart';
 

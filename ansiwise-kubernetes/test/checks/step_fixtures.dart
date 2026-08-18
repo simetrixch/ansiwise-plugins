@@ -17,7 +17,7 @@
 /// here may make a step look covered that was not.
 library;
 
-import 'package:ansiwise_api/testing.dart';
+import 'package:ansiwise_core/testing.dart';
 import 'package:ansiwise_checks/ansiwise_checks.dart';
 import 'package:ansiwise_kubernetes/ansiwise_kubernetes.dart';
 

@@ -1,4 +1,4 @@
-import 'package:ansiwise_api/ansiwise_api.dart';
+import 'package:ansiwise_core/ansiwise_core.dart';
 
 /// Refuses a run whose result could not be pushed, before any of that result exists.
 ///

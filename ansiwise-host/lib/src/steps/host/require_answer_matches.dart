@@ -1,4 +1,4 @@
-import 'package:ansiwise_api/ansiwise_api.dart';
+import 'package:ansiwise_core/ansiwise_core.dart';
 
 /// Refuses a run where an answer does not match a regular expression.
 ///

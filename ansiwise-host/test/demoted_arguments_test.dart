@@ -1,4 +1,4 @@
-import 'package:ansiwise_api/ansiwise_api.dart';
+import 'package:ansiwise_core/ansiwise_core.dart';
 import 'package:ansiwise_checks/ansiwise_checks.dart';
 import 'package:ansiwise_host/ansiwise_host.dart';
 import 'package:test/test.dart';

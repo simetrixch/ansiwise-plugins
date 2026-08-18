@@ -1,4 +1,4 @@
-import 'package:ansiwise_api/ansiwise_api.dart';
+import 'package:ansiwise_core/ansiwise_core.dart';
 
 /// A simple example step that logs a greeting.
 final class SayHello extends ReversibleStep<void> {

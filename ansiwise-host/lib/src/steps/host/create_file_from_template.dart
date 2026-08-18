@@ -1,4 +1,4 @@
-import 'package:ansiwise_api/ansiwise_api.dart';
+import 'package:ansiwise_core/ansiwise_core.dart';
 import 'fill_key_value_file.dart';
 
 /// Puts a file on the machine from a template beside the programs, and never overrules one that is

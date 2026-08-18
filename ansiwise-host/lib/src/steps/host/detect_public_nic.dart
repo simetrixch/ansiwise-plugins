@@ -1,4 +1,4 @@
-import 'package:ansiwise_api/ansiwise_api.dart';
+import 'package:ansiwise_core/ansiwise_core.dart';
 
 /// Finds the interface a machine's public address arrives on, when that is not the one it answers by.
 ///

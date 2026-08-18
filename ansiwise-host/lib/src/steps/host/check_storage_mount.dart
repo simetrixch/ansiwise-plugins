@@ -1,4 +1,4 @@
-import 'package:ansiwise_api/ansiwise_api.dart';
+import 'package:ansiwise_core/ansiwise_core.dart';
 
 /// Refuses to put the cluster's volumes on a path that is not the filesystem it is meant to be on.
 ///

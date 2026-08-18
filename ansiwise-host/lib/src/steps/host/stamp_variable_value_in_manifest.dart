@@ -1,4 +1,4 @@
-import 'package:ansiwise_api/ansiwise_api.dart';
+import 'package:ansiwise_core/ansiwise_core.dart';
 
 /// Puts a value into a manifest that writes a variable's NAME on one line and its VALUE on the next.
 ///

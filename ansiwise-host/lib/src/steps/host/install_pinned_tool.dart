@@ -1,4 +1,4 @@
-import 'package:ansiwise_api/ansiwise_api.dart';
+import 'package:ansiwise_core/ansiwise_core.dart';
 import 'assert_cli_tool_versions.dart';
 
 /// Fetches one tool's released binary at exactly the version the program pins, and puts it where

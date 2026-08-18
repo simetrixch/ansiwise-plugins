@@ -1,4 +1,4 @@
-import 'package:ansiwise_api/ansiwise_api.dart';
+import 'package:ansiwise_core/ansiwise_core.dart';
 import 'detect_public_nic.dart';
 
 /// Writes the rules that mark a connection arriving on the public address, so its replies can be

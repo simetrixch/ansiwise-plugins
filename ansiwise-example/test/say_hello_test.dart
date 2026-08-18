@@ -1,7 +1,7 @@
-import 'package:ansiwise_api/ansiwise_api.dart';
+import 'package:ansiwise_core/ansiwise_core.dart';
 import 'package:ansiwise_example/ansiwise_example.dart';
 import 'package:test/test.dart';
-import 'package:ansiwise_api/testing.dart';
+import 'package:ansiwise_core/testing.dart';
 
 void main() {
   test('SayHello parses its subject', () {

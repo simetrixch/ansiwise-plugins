@@ -5,8 +5,8 @@
 /// answering the other's, and a step would then be measured against a machine nobody meant.
 library;
 
-import 'package:ansiwise_api/ansiwise_api.dart';
-import 'package:ansiwise_api/testing.dart';
+import 'package:ansiwise_core/ansiwise_core.dart';
+import 'package:ansiwise_core/testing.dart';
 
 /// The checkout every case is run against.
 const String repository = '/srv/checkout';

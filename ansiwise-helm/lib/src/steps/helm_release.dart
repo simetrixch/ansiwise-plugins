@@ -2,7 +2,7 @@ import 'dart:convert';
 
 import 'package:yaml/yaml.dart';
 
-import 'package:ansiwise_api/ansiwise_api.dart';
+import 'package:ansiwise_core/ansiwise_core.dart';
 
 import 'ambiguous_scalar.dart';
 import 'helm_command.dart';

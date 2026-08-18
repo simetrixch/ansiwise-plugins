@@ -1,4 +1,4 @@
-import 'package:ansiwise_api/ansiwise_api.dart';
+import 'package:ansiwise_core/ansiwise_core.dart';
 import 'install_snap.dart';
 
 /// Takes a snap off the machine so that what installs it next starts from nothing.

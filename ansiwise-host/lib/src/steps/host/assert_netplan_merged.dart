@@ -1,4 +1,4 @@
-import 'package:ansiwise_api/ansiwise_api.dart';
+import 'package:ansiwise_core/ansiwise_core.dart';
 import 'detect_public_nic.dart';
 
 /// Proves the drop-in folded into the installer's declaration before anything is applied.

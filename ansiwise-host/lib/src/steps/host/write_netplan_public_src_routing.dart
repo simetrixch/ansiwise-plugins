@@ -1,4 +1,4 @@
-import 'package:ansiwise_api/ansiwise_api.dart';
+import 'package:ansiwise_core/ansiwise_core.dart';
 import 'detect_public_nic.dart';
 
 /// Writes the network drop-in that sends replies from the public address out the public gateway.

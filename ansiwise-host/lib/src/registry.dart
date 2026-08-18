@@ -1,4 +1,4 @@
-import 'package:ansiwise_api/ansiwise_api.dart';
+import 'package:ansiwise_core/ansiwise_core.dart';
 import 'conditions/key_is_true.dart';
 import 'conditions/keys_compare.dart';
 import 'steps/host/activate_public_src_routing.dart';

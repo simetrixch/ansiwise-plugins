@@ -21,7 +21,7 @@ library;
 
 import 'package:yaml/yaml.dart';
 
-import 'package:ansiwise_api/ansiwise_api.dart';
+import 'package:ansiwise_core/ansiwise_core.dart';
 
 /// Where one installation's profile and credential file stand, and under which keys the profile
 /// carries its three values.

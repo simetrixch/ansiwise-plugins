@@ -2,7 +2,7 @@ import 'dart:convert';
 
 import 'package:yaml/yaml.dart';
 
-import 'package:ansiwise_api/ansiwise_api.dart';
+import 'package:ansiwise_core/ansiwise_core.dart';
 
 /// Where the mirror a machine pulls its images through is written down, and what it is reached with.
 ///

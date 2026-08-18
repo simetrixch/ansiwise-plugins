@@ -24,7 +24,7 @@
 /// caller bound to it refused with a message about its own token.
 library;
 
-import 'package:ansiwise_api/ansiwise_api.dart';
+import 'package:ansiwise_core/ansiwise_core.dart';
 
 import 'vault_profile.dart';
 

@@ -1,7 +1,7 @@
 import 'dart:async';
 
-import 'package:ansiwise_api/ansiwise_api.dart';
-import 'package:ansiwise_api/testing.dart';
+import 'package:ansiwise_core/ansiwise_core.dart';
+import 'package:ansiwise_core/testing.dart';
 import 'package:ansiwise_kubernetes/ansiwise_kubernetes.dart';
 import 'package:test/test.dart';
 

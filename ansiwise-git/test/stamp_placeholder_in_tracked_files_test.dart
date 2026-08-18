@@ -1,6 +1,6 @@
-import 'package:ansiwise_api/ansiwise_api.dart';
+import 'package:ansiwise_core/ansiwise_core.dart';
 import 'package:ansiwise_git/ansiwise_git.dart';
-import 'package:ansiwise_api/testing.dart';
+import 'package:ansiwise_core/testing.dart';
 import 'package:test/test.dart';
 
 /// The two rows of one stamp that turn a copy of a shared source tree into one installation.

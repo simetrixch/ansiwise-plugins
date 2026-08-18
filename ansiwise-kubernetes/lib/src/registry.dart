@@ -1,4 +1,4 @@
-import 'package:ansiwise_api/ansiwise_api.dart';
+import 'package:ansiwise_core/ansiwise_core.dart';
 import 'steps/align_calico_backend.dart';
 import 'steps/apply_cluster_issuer.dart';
 import 'steps/delete_default_ipv4_ippool.dart';

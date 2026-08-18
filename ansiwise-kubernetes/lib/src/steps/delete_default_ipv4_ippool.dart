@@ -1,4 +1,4 @@
-import 'package:ansiwise_api/ansiwise_api.dart';
+import 'package:ansiwise_core/ansiwise_core.dart';
 import 'kubectl.dart';
 
 /// Deletes the address pool the cluster is running on, so Calico builds it again on the new range.

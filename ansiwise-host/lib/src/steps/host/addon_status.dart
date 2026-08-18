@@ -20,7 +20,7 @@
 /// starts looking.
 library;
 
-import 'package:ansiwise_api/ansiwise_api.dart';
+import 'package:ansiwise_core/ansiwise_core.dart';
 
 /// The argument every step that reads the addon status declares.
 ///

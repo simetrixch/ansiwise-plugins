@@ -1,4 +1,4 @@
-import 'package:ansiwise_api/ansiwise_api.dart';
+import 'package:ansiwise_core/ansiwise_core.dart';
 import 'detect_public_nic.dart';
 
 /// Switches the steering service on, and puts the kernel state back whenever it is not there.
