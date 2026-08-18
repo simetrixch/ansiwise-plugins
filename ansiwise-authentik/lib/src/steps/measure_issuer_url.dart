@@ -83,6 +83,14 @@ final class MeasureIssuerUrl extends ObservingStep {
   /// the `iss` claim the provider writes, and the two are the same string or the token is refused.
   String issuerFor(String domain) => 'https://$subdomain.$domain/application/o/$application/';
 
+  /// **Published HERE, in the check, and that is the shape a measuring step has.** The check runs in
+  /// every mode, so a dry run holds the value the rows after this one read — and a step that only
+  /// published while applying would leave a dry run planning against a measurement nobody made.
+  ///
+  /// It also answers the question the engine asks after a real run: is the machine now in the state
+  /// this step produces? Nothing on the machine changes here, so the honest answer is yes as soon as
+  /// the value is known, and returning "there is work to do" instead is a row that reports itself
+  /// unfinished on every run for ever.
   @override
   Future<CheckResult> check(StepContext context) async {
     if (!context.answers.has(domainAnswer)) {
@@ -98,17 +106,8 @@ final class MeasureIssuerUrl extends ObservingStep {
         'subdomain and a slash',
       );
     }
-    return const CheckResult.ready();
-  }
-
-  @override
-  Future<StepPlan> plan(StepContext context) async =>
-      StepPlan.argv(<String>['measure', issuerFor(context.answers.text(domainAnswer))]);
-
-  @override
-  Future<void> apply(StepContext context) async {
-    final String url = issuerFor(context.answers.text(domainAnswer));
+    final String url = issuerFor(domain);
     context.measurements.publish(const MeasurementName('issuer_url'), url);
-    context.log.info('tokens for $application are issued at $url');
+    return CheckResult.satisfied('tokens for $application are issued at $url');
   }
 }

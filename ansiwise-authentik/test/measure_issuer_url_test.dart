@@ -52,8 +52,7 @@ void main() {
         <String, Object>{'domain': 'one.example.com'},
       );
 
-      expect(await step.check(it.context), isA<Ready>());
-      await step.apply(it.context);
+      expect(await step.check(it.context), isA<Satisfied>());
 
       expect(
         it.published[const MeasurementName('issuer_url')],
@@ -67,7 +66,7 @@ void main() {
         final ({StepContext context, Map<MeasurementName, String> published}) it = runHolding(
           <String, Object>{'domain': 'one.example.com'},
         );
-        await step.apply(it.context);
+        await step.check(it.context);
 
         expect(it.published[const MeasurementName('issuer_url')], endsWith('/'));
       },
@@ -84,7 +83,7 @@ void main() {
       final ({StepContext context, Map<MeasurementName, String> published}) it = runHolding(
         <String, Object>{'elsewhere': 'two.example.org'},
       );
-      await other.apply(it.context);
+      await other.check(it.context);
 
       expect(
         it.published[const MeasurementName('issuer_url')],
@@ -96,11 +95,11 @@ void main() {
       final ({StepContext context, Map<MeasurementName, String> published}) first = runHolding(
         <String, Object>{'domain': 'one.example.com'},
       );
-      await step.apply(first.context);
+      await step.check(first.context);
       final ({StepContext context, Map<MeasurementName, String> published}) second = runHolding(
         <String, Object>{'domain': 'one.example.com'},
       );
-      await step.apply(second.context);
+      await step.check(second.context);
 
       expect(
         second.published[const MeasurementName('issuer_url')],
