@@ -78,14 +78,30 @@ final class HelmRepository extends ReversibleStep<String?> {
   ///
   /// Read before the add, and the add is a `--force-update`: it overwrites the address a name was
   /// already registered at, and afterwards nothing on the machine says what that address was. The
-  /// undo puts it back from here, and removes the name only where helm held none.
+  /// undo puts it back from here; where helm held none, the registration this run made stands.
   @override
   Future<String?> capture(StepContext context) => _registeredUrl(context);
 
+  /// Puts back the address the add overwrote, and leaves a fresh registration standing.
+  ///
+  /// The overwrite is the only damage the add can do: an address that was registered before the run
+  /// belongs to whatever registered it, and after `--force-update` nothing but [captured] still
+  /// says what it was. A name helm held nothing under is the other case, and removing it was
+  /// measured doing harm on an unwind: any genuine failure at a row below took the repository away,
+  /// so the NEXT attempt failed earlier, at the release with `repo <name> not found` — pointing at
+  /// this row, where nothing was wrong. A registration is a name resolving to a chart index; it
+  /// installs nothing and nothing consults it unless a row names it, so leaving it costs the
+  /// machine nothing and removing it costs the next run its diagnosis.
+  ///
+  /// The line below is for the record: the unwind writes "taken back" around every undo, and this
+  /// one deliberately leaves something standing.
   @override
   Future<void> undo(StepContext context, String? captured) async {
     if (captured == null) {
-      await context.shell.run(helmCommand(helm, <String>['repo', 'remove', name]));
+      context.log.info(
+        'the registration of "$name" stands: helm held no such name before this run, and removing '
+        'it would only make the next attempt fail at the release that installs from it',
+      );
       return;
     }
     await context.shell.run(

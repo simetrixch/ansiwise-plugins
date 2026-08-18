@@ -20,15 +20,15 @@ void main() {
       'to: <alert-recipients>\n'
       'note: <note?>\n';
 
-  /// With one. A CARRIED SLOT CANNOT BE RENDERED ONTO A MACHINE THAT HAS NO SUCH FILE YET: it takes
-  /// its value from what stands there, and on a first write nothing does. The framework refuses,
-  /// naming the line, so a template of this shape belongs only where the file is known to stand.
+  /// With one. A CARRIED SLOT TAKES ITS VALUE FROM WHAT STANDS IN THE FILE ALREADY, and on a machine
+  /// that has no such file yet nothing stands there — so the mark says both halves and the line is
+  /// left out of the first write rather than written empty or refused.
   const String carrying =
       'fqdn: <fqdn>\n'
       'plane: <build-plane>\n'
       'to: <alert-recipients>\n'
       'note: <note?>\n'
-      'release: <release!>\n';
+      'release: <release!?>\n';
 
   HostMachine machineWith({String? existing, String text = template}) {
     final HostMachine machine = HostMachine();
@@ -161,14 +161,37 @@ void main() {
     });
   });
 
-  group('what a carried slot cannot do', () {
-    test('it is REFUSED on the first write, naming the line', () async {
-      // Stated as a case rather than left to be met on a machine. A carried slot takes its value
-      // from the file as it stands, so there is nothing to take on a machine that has no such file
-      // — and a template of this shape belongs only where the file is known to stand.
+  group('the first write, where there is nothing to carry', () {
+    test('the carried line is LEFT OUT, and the rest of the file is written', () async {
+      // The state every installation passes through. A carried slot takes its value from the file
+      // as it stands, and on a machine that has no such file there is nothing to take — so the mark
+      // that asks for the value also says what to do about this, and the step is not blocked.
       final HostMachine machine = machineWith(text: carrying);
 
-      expect(await step.check(runWith(machine, answered)), isA<Blocked>());
+      expect(await step.check(runWith(machine, answered)), isA<Ready>());
+      await step.apply(runWith(machine, answered));
+
+      final String written = machine.files.contents[path]!;
+      expect(written, isNot(contains('release')));
+      expect(written, contains('fqdn: m1.example.com'));
+    });
+
+    test('THE INNOCENT NEIGHBOUR: the second run carries what the first one did not have', () async {
+      // Without this, a version that dropped the carried line ALWAYS would pass the assertion above
+      // and never write the value back on any run.
+      final HostMachine machine = machineWith(
+        text: carrying,
+        existing:
+            'fqdn: an-old-name\n'
+            'plane: an-old-plane\n'
+            'to: old@example.com\n'
+            'note: old\n'
+            'release: v1.2.3\n',
+      );
+
+      await step.apply(runWith(machine, answered));
+
+      expect(machine.files.contents[path], contains('release: v1.2.3'));
     });
   });
 }

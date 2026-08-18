@@ -372,7 +372,7 @@ const Map<StepName, RegisteredStep> hostSteps = <StepName, RegisteredStep>{
   ),
   StepName('write_file_from_template'): RegisteredStep(
     name: StepName('write_file_from_template'),
-    source: 'lib/src/steps/host/write_file_from_template.dart:26',
+    source: 'lib/src/steps/host/write_file_from_template.dart:27',
     create: WriteFileFromTemplate.fromArguments,
     arguments: WriteFileFromTemplate.arguments,
   ),

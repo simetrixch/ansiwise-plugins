@@ -33,7 +33,7 @@ void main() {
   );
 
   /// A machine where helm holds the release, answering [held] for its values.
-  StepContext machine({required String file, required String held}) => _contextOn(
+  StepContext machine({required String file, required String held, Logger? log}) => _contextOn(
     FakeShell()
       ..answers(
         'helm list --namespace ledger -o json',
@@ -41,6 +41,7 @@ void main() {
       )
       ..answers('helm get values ledger --namespace ledger -o json', held),
     FakeFiles(<String, String>{path: file}),
+    log: log,
   );
 
   test('the same values in a different order are the same values', () async {
@@ -125,15 +126,98 @@ void main() {
 
     expect(answer, isA<Ready>());
   });
+
+  // WHAT THE RECORD HOLDS when the step decides to act. An upgrade that exits 0 and installs
+  // nothing brings the second check here with a record of nothing but exit codes: output is kept
+  // only for a failed command or a `keep_output` row, and every command answered 0. So a decision
+  // to act carries its measurement itself, at info — the default record keeps nothing quieter —
+  // and these tests hold that the lines name what was read rather than only that something was.
+
+  test('a listing that does not hold the release says which releases it read', () async {
+    final _CapturedLog log = _CapturedLog();
+    final CheckResult answer = await release.check(
+      _contextOn(
+        FakeShell()..answers(
+          'helm list --namespace ledger -o json',
+          '[{"name":"registry","status":"deployed","chart":"registry-1.2.0"}]',
+        ),
+        FakeFiles(<String, String>{path: 'ui:\n  enabled: true\n'}),
+        log: log,
+      ),
+    );
+
+    expect(answer, isA<Ready>());
+    expect(
+      log.informed.join('\n'),
+      allOf(contains('registry'), contains('ledger is not among them')),
+      reason: 'one exit code is not a measurement — the record has to show what the listing named',
+    );
+  });
+
+  test('a namespace holding no releases at all is said as that', () async {
+    final _CapturedLog log = _CapturedLog();
+    final CheckResult answer = await release.check(
+      _contextOn(
+        FakeShell()..answers('helm list --namespace ledger -o json', '[]'),
+        FakeFiles(<String, String>{path: 'ui:\n  enabled: true\n'}),
+        log: log,
+      ),
+    );
+
+    expect(answer, isA<Ready>());
+    expect(log.informed.join('\n'), contains('no releases'));
+  });
+
+  test('the chart comparison that decides an upgrade reaches the record', () async {
+    final _CapturedLog log = _CapturedLog();
+    await release.check(
+      _contextOn(
+        FakeShell()..answers(
+          'helm list --namespace ledger -o json',
+          '[{"name":"ledger","status":"deployed","chart":"ledger-0.33.0"}]',
+        ),
+        FakeFiles(<String, String>{path: 'ui:\n  enabled: true\n'}),
+        log: log,
+      ),
+    );
+
+    expect(
+      log.informed.join('\n'),
+      allOf(contains('ledger-0.33.0'), contains('ledger-0.34.0')),
+      reason: 'held and wanted are the comparison, and the record shows both sides or neither',
+    );
+  });
+
+  test('values that differ from the file reach the record with the file named', () async {
+    final _CapturedLog log = _CapturedLog();
+    await release.check(
+      machine(file: 'ui:\n  enabled: true\n', held: '{"ui":{"enabled":false}}', log: log),
+    );
+
+    expect(log.informed.join('\n'), allOf(contains(path), contains('differ')));
+  });
+
+  test('a release already so has nothing to explain', () async {
+    // The innocent neighbour: a machine already in the wanted state produces a Satisfied with its
+    // own `because`, and no line about acting — a record that said "not installed" over a release
+    // that is there would misdirect exactly the way the bare answer did.
+    final _CapturedLog log = _CapturedLog();
+    final CheckResult answer = await release.check(
+      machine(file: 'ui:\n  enabled: true\n', held: '{"ui":{"enabled":true}}', log: log),
+    );
+
+    expect(answer, isA<Satisfied>());
+    expect(log.informed, isEmpty);
+  });
 }
 
-StepContext _contextOn(FakeShell shell, FakeFiles files) => StepContext(
+StepContext _contextOn(FakeShell shell, FakeFiles files, {Logger? log}) => StepContext(
   shell: shell,
   files: files,
   http: FakeHttp(),
   clock: FakeClock(),
   entropy: FakeEntropy(),
-  log: const _SilentLog(),
+  log: log ?? const _SilentLog(),
   step: const StepName('under_test'),
   arguments: Arguments.none,
   answers: Arguments.none,
@@ -154,4 +238,26 @@ final class _SilentLog implements Logger {
 
   @override
   void error(String message) {}
+}
+
+/// A logger the test can read back, kept by level because the level is part of what is asserted:
+/// a line the step says at debug is dropped by the default record, so saying it there is not
+/// saying it at all.
+final class _CapturedLog implements Logger {
+  final List<String> debugged = <String>[];
+  final List<String> informed = <String>[];
+  final List<String> warned = <String>[];
+  final List<String> errored = <String>[];
+
+  @override
+  void debug(String message) => debugged.add(message);
+
+  @override
+  void info(String message) => informed.add(message);
+
+  @override
+  void warn(String message) => warned.add(message);
+
+  @override
+  void error(String message) => errored.add(message);
 }

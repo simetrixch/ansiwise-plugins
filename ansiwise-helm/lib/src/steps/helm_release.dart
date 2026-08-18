@@ -110,20 +110,31 @@ final class HelmRelease extends IrreversibleStep {
 
   @override
   Future<CheckResult> check(StepContext context) async {
-    final Map<String, Object?>? installed = await _installed(context);
+    // EVERY DECISION TO ACT NAMES WHAT IT READ, at info, because the default record keeps nothing
+    // quieter. The run this was added for had an upgrade exit 0 and install nothing: the step then
+    // failed its own post-check, and the record held four exit codes and not one measurement —
+    // output is kept only for a command that failed or a row that said `keep_output`, and every
+    // command had answered 0. An operator reading that record could not see what the step saw, and
+    // the unwind then sent them to the repository row above, where nothing was wrong. These lines
+    // are the measurement: what the listing named, which chart was held against which, so a reader
+    // sees why the step decided the work was still to do.
+    final List<Map<String, Object?>>? releases = await _releases(context);
+    final Map<String, Object?>? installed = _entryFor(releases);
     if (installed == null) {
+      context.log.info(_absentFrom(releases));
       return const CheckResult.ready();
     }
 
     final Object? status = installed['status'];
     if (status != 'deployed') {
+      context.log.info('$release is listed with status $status, and this step produces deployed');
       return const CheckResult.ready();
     }
 
     final Object? held = installed['chart'];
     final String wanted = '$chartName-$chartVersion';
     if (held != wanted) {
-      context.log.debug('the installed chart is $held and this run pins $wanted');
+      context.log.info('the installed chart is $held and this run pins $wanted');
       return const CheckResult.ready();
     }
 
@@ -161,7 +172,7 @@ final class HelmRelease extends IrreversibleStep {
     final Object? wantedValues = _plain(loadYaml(written));
     final Object? currentValues = await _currentValues(context);
     if (_canonical(wantedValues) != _canonical(currentValues)) {
-      context.log.debug('$release is at $wanted and the values it holds differ from $path');
+      context.log.info('$release is at $wanted and the values it holds differ from $path');
       return const CheckResult.ready();
     }
     return CheckResult.satisfied('$release is deployed at $wanted with the values in $path');
@@ -202,8 +213,12 @@ final class HelmRelease extends IrreversibleStep {
     if (values case final String path) ...<String>['--values', path],
   ];
 
-  /// What helm holds under this release name in this namespace, or null when it holds nothing.
-  Future<Map<String, Object?>?> _installed(StepContext context) async {
+  /// Every release helm lists in [namespace], or null when the listing itself did not answer.
+  ///
+  /// The whole listing and not only the entry this step is after, because the listing is what the
+  /// step READ, and a decision to act is reported with what it was made on. An entry alone cannot
+  /// say the difference between "the release is not among these" and "helm answered nothing".
+  Future<List<Map<String, Object?>>?> _releases(StepContext context) async {
     final CommandResult listed = await context.shell.run(
       helmCommand(helm, <String>['list', '--namespace', namespace, '-o', 'json'], observes: true),
     );
@@ -214,12 +229,34 @@ final class HelmRelease extends IrreversibleStep {
     if (decoded is! List<Object?>) {
       return null;
     }
-    for (final Object? entry in decoded) {
-      if (entry is Map<String, Object?> && entry['name'] == release) {
+    return <Map<String, Object?>>[
+      for (final Object? entry in decoded)
+        if (entry is Map<String, Object?>) entry,
+    ];
+  }
+
+  /// The entry [releases] holds under this release name, or null when it holds none.
+  Map<String, Object?>? _entryFor(List<Map<String, Object?>>? releases) {
+    for (final Map<String, Object?> entry in releases ?? const <Map<String, Object?>>[]) {
+      if (entry['name'] == release) {
         return entry;
       }
     }
     return null;
+  }
+
+  /// What the listing said, when [release] was not in it — the record's line, not a verdict.
+  String _absentFrom(List<Map<String, Object?>>? releases) {
+    if (releases == null) {
+      return 'the listing of $namespace did not answer, so nothing shows $release is installed';
+    }
+    if (releases.isEmpty) {
+      return 'helm lists no releases in $namespace, so $release is not installed';
+    }
+    final String named = releases
+        .map((Map<String, Object?> entry) => '${entry['name']}')
+        .join(', ');
+    return 'helm lists $named in $namespace, and $release is not among them';
   }
 
   /// The values the release is currently holding, as helm gives them back.

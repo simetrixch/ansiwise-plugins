@@ -13,10 +13,11 @@ import 'fill_key_value_file.dart';
 ///
 /// **What a rewrite would otherwise destroy is kept by the template, not by this step.** A file of
 /// this kind often carries one value nothing here holds: something a later act put there, which a
-/// rewrite from answers alone would take back out. The framework's CARRIED slot `<name!>` is that
+/// rewrite from answers alone would take back out. The framework's CARRIED slot `<name!?>` is that
 /// mechanism — it takes its value from the file as it stands, so the rewrite hands the value back
-/// untouched. The step needs to know nothing about which value that is, and a template author says
-/// it in the one place the value appears.
+/// untouched, and on the first write, where nothing stands there yet, the line is left out. The step
+/// needs to know nothing about which value that is, and a template author says it in the one place
+/// the value appears.
 ///
 /// **Every slot says which answer fills it.** A slot is spelled with hyphens and an answer with
 /// underscores, so matching by name would reach only answers of a single word — and would fail in
