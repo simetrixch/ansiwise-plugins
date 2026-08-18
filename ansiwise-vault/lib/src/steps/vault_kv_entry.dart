@@ -35,6 +35,7 @@ final class VaultKvEntry extends IrreversibleStep {
     required this.mint,
     required this.fieldsOwnedElsewhere,
     required this.optionalFields,
+    required this.copyFrom,
     required this.layout,
     required this.secrets,
     this.elevated = false,
@@ -49,6 +50,7 @@ final class VaultKvEntry extends IrreversibleStep {
     mint: arguments.textList('mint'),
     fieldsOwnedElsewhere: arguments.textList('fields_owned_elsewhere'),
     optionalFields: arguments.textList('optional_fields'),
+    copyFrom: arguments.textList('copy_from'),
     layout: VaultLayout.fromArguments(arguments),
     secrets: arguments.text('secrets_path'),
     elevated: arguments.has('elevated') && arguments.flag('elevated'),
@@ -91,6 +93,17 @@ final class VaultKvEntry extends IrreversibleStep {
       describes:
           'the fields this run generates when the hand-filled input leaves them empty, so a value '
           'nobody can be asked for comes into being here and nowhere else',
+    ),
+    ArgumentSpec(
+      name: 'copy_from',
+      kind: ArgumentKind.textList,
+      required: false,
+      defaultValue: <String>[],
+      describes:
+          'the fields written from another entry of this store, each as <field>=<path>:<field>. For '
+          'a value that is agreed between two sides and must therefore be ONE value: it is minted '
+          'at the entry that owns it, and the tier a workload reads gets an entry of its own '
+          'holding that workload\'s value alone',
     ),
     ArgumentSpec(
       name: 'optional_fields',
@@ -172,6 +185,21 @@ final class VaultKvEntry extends IrreversibleStep {
   /// it simply works the way it works without it — and refusing the whole run for a value nobody
   /// promised is refusing to install a thing that is complete.
   final List<String> optionalFields;
+
+  /// The fields written FROM another entry of this same store, as `<field>=<path>:<field>`.
+  ///
+  /// **One value, one place, read by only what needs it.** A credential agreed between two sides —
+  /// a client secret the identity provider registered and the client presents — must be ONE value:
+  /// minted twice it is two, and the side presenting one is not holding what the side that
+  /// registered it expects. So it is minted once, at the entry that owns it.
+  ///
+  /// But the entry that owns it holds every such secret together, and the policy a workload's secret
+  /// reader logs in under permits its own tier and nothing else — deliberately, or one workload
+  /// could read another's credential. So the tier a workload reads gets an entry of its OWN, holding
+  /// that workload's value alone, written from the minted one.
+  ///
+  /// The source path may carry the same slots the destination does; both are filled from this run.
+  final List<String> copyFrom;
 
   /// Whether the file this row points at belongs to root, so every read and write of it is
   /// elevated.
@@ -285,7 +313,10 @@ final class VaultKvEntry extends IrreversibleStep {
     // A write to this store replaces the whole entry, so what is already there has to be carried
     // forward. That is what makes a generated field create-only: a value the entry already holds is
     // written back unchanged, and only a field it does not hold is made.
-    final Map<String, String> writing = <String, String>{...wanted.values};
+    final Map<String, String> writing = <String, String>{
+      ...wanted.values,
+      ...await _copied(context, vault, url, token.value ?? ''),
+    };
     if (wanted.mint.isNotEmpty) {
       final HttpAnswer held = await context.http.send(
         vaultRead(url, dataPath, token: token.value ?? ''),
@@ -313,6 +344,46 @@ final class VaultKvEntry extends IrreversibleStep {
         body: answer.body,
       );
     }
+  }
+
+  /// The value each copied field takes, read out of the entry that owns it.
+  ///
+  /// Read with the root token, like everything else this step does, and never written anywhere but
+  /// into the entry being made: a copied credential passes through this run and reaches no record.
+  Future<Map<String, String>> _copied(
+    StepContext context,
+    VaultProfile vault,
+    String url,
+    String token,
+  ) async {
+    final Map<String, String> taken = <String, String>{};
+    for (final String declared in copyFrom) {
+      final int equals = declared.indexOf('=');
+      final int colon = declared.lastIndexOf(':');
+      if (equals <= 0 || colon <= equals) {
+        throw StateError('"$declared" is not a <field>=<path>:<field> triple');
+      }
+      final String field = declared.substring(0, equals).trim();
+      final String source = vault
+          .forThisInstallation(context, declared.substring(equals + 1, colon).trim())
+          .value!;
+      final String sourceField = declared.substring(colon + 1).trim();
+
+      final HttpAnswer held = await context.http.send(
+        vaultRead(url, '$mount/data/$source', token: token),
+      );
+      final Object? data = decodedData(held.body)?['data'];
+      final Object? value = data is Map<String, Object?> ? data[sourceField] : null;
+      if (value is! String || value.isEmpty) {
+        throw StateError(
+          '$sourceField of $mount/data/$source is what $field of this entry is written from, and it '
+          'is not there. The entry that owns that value is written by an earlier row, so a run that '
+          'reaches this one without it has skipped that row rather than failed it',
+        );
+      }
+      taken[field] = value;
+    }
+    return taken;
   }
 
   /// How many bytes a generated field holds before it is written as hexadecimal.
@@ -347,6 +418,13 @@ final class VaultKvEntry extends IrreversibleStep {
     final Map<String, String> assignments = shellAssignments(content);
     final Map<String, String> values = <String, String>{};
     final List<String> toMint = <String>[];
+    final List<String> toCopy = <String>[];
+    // The destination of each copy, so a field whose value comes from another entry is not
+    // read as a variable somebody forgot to fill.
+    final Set<String> copiedFields = <String>{
+      for (final String declared in copyFrom)
+        if (declared.indexOf('=') > 0) declared.substring(0, declared.indexOf('=')).trim(),
+    };
     final List<String> wrong = <String>[];
 
     for (final String declared in fields) {
@@ -365,7 +443,9 @@ final class VaultKvEntry extends IrreversibleStep {
       final bool leftOutWhenUnfilled = ownedElsewhere || optional;
 
       if (value.isEmpty) {
-        if (mint.contains(field)) {
+        if (copiedFields.contains(field)) {
+          toCopy.add(field);
+        } else if (mint.contains(field)) {
           toMint.add(field);
         } else if (!leftOutWhenUnfilled) {
           wrong.add('$variable is empty in $secretsPath, and $field of $dataPath is read from it');
@@ -389,15 +469,21 @@ final class VaultKvEntry extends IrreversibleStep {
 
     // Everything wrong at once. An operator told about one variable per run is an operator running
     // the whole seed five times to learn five things, and every one of those runs writes.
-    return wrong.isEmpty ? _Body.values(values, mint: toMint) : _Body.unwritable(wrong.join('; '));
+    return wrong.isEmpty
+        ? _Body.values(values, mint: toMint, copied: toCopy)
+        : _Body.unwritable(wrong.join('; '));
   }
 }
 
 /// What one entry would hold, or why it cannot be composed.
 final class _Body {
-  const _Body.values(this.values, {this.mint = const <String>[]}) : refusal = null;
+  const _Body.values(this.values, {this.mint = const <String>[], this.copied = const <String>[]})
+    : refusal = null;
 
-  const _Body.unwritable(this.refusal) : values = const <String, String>{}, mint = const <String>[];
+  const _Body.unwritable(this.refusal)
+    : values = const <String, String>{},
+      mint = const <String>[],
+      copied = const <String>[];
 
   /// The fields whose value the hand-filled input supplies.
   final Map<String, String> values;
@@ -406,8 +492,15 @@ final class _Body {
   /// already hold them. Generating over a value already in use locks out whatever is using it.
   final List<String> mint;
 
+  /// The fields whose value is read out of another entry of this same store.
+  ///
+  /// Here for the same reason as [mint]: the variable in the hand-filled input is empty on
+  /// purpose, because nobody types this value. Without it an entry whose every field comes
+  /// from elsewhere would be judged empty and the row would write nothing at all.
+  final List<String> copied;
+
   final String? refusal;
 
   /// Whether this entry would write nothing at all.
-  bool get isEmpty => values.isEmpty && mint.isEmpty;
+  bool get isEmpty => values.isEmpty && mint.isEmpty && copied.isEmpty;
 }

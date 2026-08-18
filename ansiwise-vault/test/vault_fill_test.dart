@@ -95,6 +95,7 @@ void main() {
       mint: <String>['pat'],
       fieldsOwnedElsewhere: <String>[],
       optionalFields: <String>[],
+      copyFrom: <String>[],
       layout: layout,
       secrets: secretsPath,
     );
@@ -228,6 +229,7 @@ void main() {
         mint: <String>[],
         fieldsOwnedElsewhere: <String>[],
         optionalFields: <String>[],
+        copyFrom: <String>[],
         layout: layout,
         secrets: secretsPath,
       );
@@ -258,6 +260,7 @@ void main() {
         mint: <String>[],
         fieldsOwnedElsewhere: <String>[],
         optionalFields: <String>[],
+        copyFrom: <String>[],
         layout: layout,
         secrets: secretsPath,
       );
@@ -298,6 +301,7 @@ void main() {
         mint: <String>[],
         fieldsOwnedElsewhere: <String>['dkim-private-key'],
         optionalFields: <String>[],
+        copyFrom: <String>[],
         layout: layout,
         secrets: secretsPath,
       );
@@ -322,6 +326,7 @@ void main() {
         mint: <String>[],
         fieldsOwnedElsewhere: <String>[],
         optionalFields: <String>[],
+        copyFrom: <String>[],
         layout: layout,
         secrets: secretsPath,
       ).check(it.context);
@@ -350,6 +355,7 @@ void main() {
         mint: <String>[],
         fieldsOwnedElsewhere: <String>[],
         optionalFields: <String>[],
+        copyFrom: <String>[],
         layout: layout,
         secrets: secretsPath,
       ).check(it.context);
@@ -613,6 +619,7 @@ void main() {
         mint: <String>[],
         fieldsOwnedElsewhere: <String>[],
         optionalFields: <String>[],
+        copyFrom: <String>[],
         layout: layout,
         secrets: secretsPath,
       ).plan(prod.context);
@@ -886,6 +893,95 @@ void main() {
 
       expect(result, isA<Blocked>());
       expect((result as Blocked).reason, contains('JSON object'));
+    });
+  });
+
+  group('a field copied from the entry that owns it', () {
+    // The hand-filled input with the variable present and unanswered, which is what a value that
+    // comes from another entry rather than from a person looks like in that file.
+    const String unfilledManagerSecret = 'MANAGER_OIDC_CLIENT_SECRET=\n';
+
+    // The failure this exists for is a credential agreed between two sides. Minted twice it is two
+    // values, and the side presenting one is not holding what the side that registered it expects —
+    // a login that fails for a reason neither side reports. So it is minted ONCE, at the entry that
+    // owns it, and the tier a workload reads gets an entry of its own holding that value alone.
+    //
+    // Two entries and not one shared, because the owning entry holds every client's secret together
+    // and the policy a workload's reader logs in under permits its own tier and nothing else. One
+    // entry read by everybody would let a workload read another workload's credential.
+    const VaultKvEntry copying = VaultKvEntry(
+      repository: repository,
+      mount: 'secret',
+      path: 'dev/app/manager',
+      fields: <String>['oidc-client-secret=MANAGER_OIDC_CLIENT_SECRET'],
+      mint: <String>[],
+      fieldsOwnedElsewhere: <String>[],
+      optionalFields: <String>['oidc-client-secret'],
+      copyFrom: <String>['oidc-client-secret=dev/idp/bootstrap:controller-client-secret'],
+      layout: layout,
+      secrets: secretsPath,
+    );
+
+    /// A store whose owning entry holds [owned], and whose destination holds [destination].
+    ScriptedHttp storeHolding({String? owned, String? destination}) =>
+        ScriptedHttp((HttpRequest request, int nth) {
+          if (request.method != 'GET') {
+            return answer('');
+          }
+          final bool source = request.url.contains('idp/bootstrap');
+          final String? held = source ? owned : destination;
+          if (held == null) {
+            return answer('', status: 404);
+          }
+          return answer(
+            jsonEncode(<String, Object?>{
+              'data': <String, Object?>{
+                'data': <String, Object?>{
+                  source ? 'controller-client-secret' : 'oidc-client-secret': held,
+                },
+              },
+            }),
+          );
+        });
+
+    test('the destination is written with the value the owner holds', () async {
+      final ScriptedHttp http = storeHolding(owned: 'the-one-minted-value');
+      final ({StepContext context, MemoryRecorder recorder}) it = contextOf(
+        files: machineWith(unfilledManagerSecret),
+        http: http,
+      );
+
+      await copying.apply(it.context);
+
+      final Iterable<HttpRequest> writes = http.sent.where(
+        (HttpRequest each) => each.method != 'GET',
+      );
+      expect(writes, isNotEmpty);
+      expect(
+        writes.last.body,
+        contains('the-one-minted-value'),
+        reason: 'copied and never minted again: two mints are two values, and only one is agreed',
+      );
+    });
+
+    test('COUNTER-PROBE: an owner that holds nothing is a refusal, not a fresh value', () async {
+      // Without this the step could quietly generate one, and the two sides would hold different
+      // secrets while every step reported success.
+      final ({StepContext context, MemoryRecorder recorder}) it = contextOf(
+        files: machineWith(unfilledManagerSecret),
+        http: storeHolding(),
+      );
+
+      await expectLater(copying.apply(it.context), throwsA(isA<StateError>()));
+    });
+
+    test('and the destination already holding it is finished', () async {
+      final ({StepContext context, MemoryRecorder recorder}) it = contextOf(
+        files: machineWith(unfilledManagerSecret),
+        http: storeHolding(owned: 'the-one-minted-value', destination: 'the-one-minted-value'),
+      );
+
+      expect(await copying.check(it.context), isA<Satisfied>());
     });
   });
 }
