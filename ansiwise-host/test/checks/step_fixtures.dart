@@ -126,14 +126,14 @@ final Map<String, Fixture> stepFixtures = <String, Fixture>{
   // second has none. The value stands on the line AFTER the one naming the variable, which is the
   // shape the step exists for: a manifest written any other way is reported as declaring no such
   // variable, the step is blocked, and nothing about its second run would be measured.
-  'stamp_calico_pool_cidr_in_cni_manifest': (FakeShell shell, FakeFiles files, FakeHttp http) {
+  'stamp_variable_value_in_manifest': (FakeShell shell, FakeFiles files, FakeHttp http) {
     files.contents[_plausibleText] =
         'spec:\n'
         '  template:\n'
         '    spec:\n'
         '      containers:\n'
         '        - env:\n'
-        '            - name: ${StampCalicoPoolCidrInCniManifest.variable}\n'
+        '            - name: $_plausibleText\n'
         '              value: "10.1.0.0/16"\n';
   },
 };

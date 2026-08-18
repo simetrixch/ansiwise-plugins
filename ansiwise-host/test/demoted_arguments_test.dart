@@ -73,9 +73,9 @@ void main() {
       'fallback',
       'file_mode',
     ],
-    // Where the manifest stands is decided by whatever installed the cluster, and the permissions
-    // it is written with by whoever reads it. Neither is Calico's.
-    'stamp_calico_pool_cidr_in_cni_manifest': <String>['manifest_path', 'file_mode'],
+    // Where the manifest stands is decided by whatever wrote it, and the permissions it is written
+    // with by whoever reads it. Neither belongs to this package.
+    'stamp_variable_value_in_manifest': <String>['manifest_path', 'file_mode'],
     // How long an addon is given, and how often it is looked at. Both are one deployment's patience
     // with one machine, and a number here made this package decide it for every caller. The status
     // command is the row's for the same reason it is on the switching steps.

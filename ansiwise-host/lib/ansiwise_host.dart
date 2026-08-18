@@ -48,7 +48,7 @@ export 'src/steps/host/require_machine_size.dart';
 export 'src/steps/host/require_pinned_ubuntu.dart';
 export 'src/steps/host/set_process_flag.dart';
 export 'src/steps/host/set_process_flags.dart';
-export 'src/steps/host/stamp_calico_pool_cidr_in_cni_manifest.dart';
+export 'src/steps/host/stamp_variable_value_in_manifest.dart';
 export 'src/steps/host/wait_for_addons_enabled.dart';
 export 'src/steps/host/write_connmark_nft_table.dart';
 export 'src/steps/host/write_containerd_registry_mirror.dart';

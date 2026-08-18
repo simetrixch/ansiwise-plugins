@@ -38,7 +38,7 @@ import 'steps/host/require_pinned_ubuntu.dart';
 import 'steps/host/set_process_flag.dart';
 import 'steps/host/fill_key_value_file.dart';
 import 'steps/host/set_process_flags.dart';
-import 'steps/host/stamp_calico_pool_cidr_in_cni_manifest.dart';
+import 'steps/host/stamp_variable_value_in_manifest.dart';
 import 'steps/host/wait_for_addons_enabled.dart';
 import 'steps/host/wait_for_http.dart';
 import 'steps/host/write_connmark_nft_table.dart';
@@ -187,11 +187,11 @@ const Map<StepName, RegisteredStep> hostSteps = <StepName, RegisteredStep>{
   // entries stand in the order a program runs them: the pod range is stamped before anything is
   // given an address out of it, the addons go on, the wait proves they took, and whatever must
   // stay off is switched off last because some of them come on by themselves.
-  StepName('stamp_calico_pool_cidr_in_cni_manifest'): RegisteredStep(
-    name: StepName('stamp_calico_pool_cidr_in_cni_manifest'),
-    source: 'lib/src/steps/host/stamp_calico_pool_cidr_in_cni_manifest.dart:18',
-    create: StampCalicoPoolCidrInCniManifest.fromArguments,
-    arguments: StampCalicoPoolCidrInCniManifest.arguments,
+  StepName('stamp_variable_value_in_manifest'): RegisteredStep(
+    name: StepName('stamp_variable_value_in_manifest'),
+    source: 'lib/src/steps/host/stamp_variable_value_in_manifest.dart:23',
+    create: StampVariableValueInManifest.fromArguments,
+    arguments: StampVariableValueInManifest.arguments,
   ),
   StepName('enable_addons'): RegisteredStep(
     name: StepName('enable_addons'),

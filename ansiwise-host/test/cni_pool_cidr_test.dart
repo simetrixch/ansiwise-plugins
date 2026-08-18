@@ -12,8 +12,13 @@ void main() {
 
   // The whole path, the way a program row states it. Where the manifest stands is a fact of
   // whatever installed the cluster, so this package composes none.
-  const String manifestPath = '/var/lib/cni-network/cni.yaml';
+  const String manifestPath = '/var/lib/subject/manifest.yaml';
   const String podCidr = '10.244.0.0/16';
+
+  // INVENTED, and that is the change this file records. The name used to be a constant of the
+  // step, so the package knew what one product calls its address pool. It is an argument now, and
+  // a probe that borrowed a real one would put that knowledge back.
+  const String variable = 'SUBJECT_RANGE';
 
   /// `0600` — what a program row states for an argument file a privileged service reads.
   const int fileMode = 0x180;
@@ -29,15 +34,16 @@ void main() {
       '  template:\n'
       '    spec:\n'
       '      containers:\n'
-      '        - name: calico-node\n'
+      '        - name: subject\n'
       '          env:\n'
-      '            - name: CALICO_IPV4POOL_IPIP\n'
+      '            - name: SUBJECT_OTHER\n'
       '              value: "Never"\n'
-      '            - name: ${StampCalicoPoolCidrInCniManifest.variable}\n'
+      '            - name: $variable\n'
       '              value: "$cidr"\n';
 
-  const StampCalicoPoolCidrInCniManifest step = StampCalicoPoolCidrInCniManifest(
-    podCidr: podCidr,
+  const StampVariableValueInManifest step = StampVariableValueInManifest(
+    variable: variable,
+    value: podCidr,
     manifestPath: manifestPath,
     fileMode: fileMode,
   );
@@ -74,7 +80,7 @@ void main() {
       machine.files.contents[manifestPath] = 'kind: DaemonSet\nspec: {}\n';
 
       final CheckResult answer = await step.check(machine.contextFor(under));
-      expect((answer as Blocked).reason, contains(StampCalicoPoolCidrInCniManifest.variable));
+      expect((answer as Blocked).reason, contains(variable));
     });
 
     test('a machine with no manifest at all is refused, not passed over', () async {

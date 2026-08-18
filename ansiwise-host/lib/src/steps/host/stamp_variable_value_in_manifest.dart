@@ -1,24 +1,30 @@
 import 'package:ansiwise_api/ansiwise_api.dart';
 
-/// Puts a pod range into the network manifest Calico creates its address pool from.
+/// Puts a value into a manifest that writes a variable's NAME on one line and its VALUE on the next.
 ///
-/// **The value is not on the line that names it.** The manifest declares an environment variable as
-/// a name on one line and its value on the NEXT, so a rewrite that looks for the range on the same
-/// line as [variable] matches nothing, writes nothing, and reports success. That is why this reads
-/// the file back afterwards rather than trusting the write.
+/// **The value is not on the line that names it, and that is the whole shape.** A rewrite looking
+/// for the value on the same line as the name matches nothing, writes nothing, and reports success —
+/// which is why this reads the file back afterwards rather than trusting the write.
 ///
-/// **What this file decides, and what it does not.** Calico reads it once, when it creates the pool.
-/// It never mutates an existing pool from it. So a machine can carry a perfectly stamped manifest
-/// and run on the old pool, and the question "has the conversion happened" is asked of the live pool
-/// rather than of this file.
+/// **WHICH variable, and what reads it afterwards, is the row's to say.** Both arrive as arguments:
+/// this knows a file of that shape, and nothing about what the value means to whatever consumes it.
+/// It used to name one — the address pool of one network plugin — and that put a product's fact in a
+/// package that has to serve any of them.
+///
+/// **What this file decides, and what it does not.** Whatever reads a manifest ONCE, at creation,
+/// never mutates what it already made from a later edit. So a machine can carry a perfectly stamped
+/// manifest and still run on the old value, and "has it taken effect" is a question for the live
+/// thing rather than for this file. A row that stamps such a manifest belongs beside a row that asks
+/// the live one.
 ///
 /// A copy of the file goes to a timestamped backup before each real change. What an undo puts back
 /// is the text read before the change; the backups stay on the machine, and whatever applies the
-/// manifest to the cluster is what names one of them.
-final class StampCalicoPoolCidrInCniManifest extends ReversibleStep<String?> {
-  /// Puts [podCidr] into the manifest at [manifestPath].
-  const StampCalicoPoolCidrInCniManifest({
-    required this.podCidr,
+/// manifest is what names one of them.
+final class StampVariableValueInManifest extends ReversibleStep<String?> {
+  /// Puts [value] on the line below [variable] in the manifest at [manifestPath].
+  const StampVariableValueInManifest({
+    required this.variable,
+    required this.value,
     required this.manifestPath,
     required this.fileMode,
     this.elevated = false,
@@ -35,9 +41,10 @@ final class StampCalicoPoolCidrInCniManifest extends ReversibleStep<String?> {
   bool get restsOnAnEarlierStep => true;
 
   /// Builds the step from what the program gave it.
-  factory StampCalicoPoolCidrInCniManifest.fromArguments(Arguments arguments) =>
-      StampCalicoPoolCidrInCniManifest(
-        podCidr: arguments.text('pod_cidr'),
+  factory StampVariableValueInManifest.fromArguments(Arguments arguments) =>
+      StampVariableValueInManifest(
+        variable: arguments.text('variable'),
+        value: arguments.text('value'),
         manifestPath: arguments.text('manifest_path'),
         fileMode: arguments.integer('file_mode'),
         elevated: arguments.has('elevated') && arguments.flag('elevated'),
@@ -46,16 +53,19 @@ final class StampCalicoPoolCidrInCniManifest extends ReversibleStep<String?> {
   /// What this step accepts.
   static const List<ArgumentSpec> arguments = <ArgumentSpec>[
     ArgumentSpec(
-      name: 'pod_cidr',
+      name: 'variable',
       kind: ArgumentKind.text,
-      describes: 'the address range every pod on this cluster is given an address out of',
+      describes:
+          'the name written on the line ABOVE the value this stamps — whatever reads the manifest '
+          'calls it that, and this package is not one of them',
     ),
+    ArgumentSpec(name: 'value', kind: ArgumentKind.text, describes: 'what the variable is to hold'),
     ArgumentSpec(
       name: 'manifest_path',
       kind: ArgumentKind.text,
       describes:
-          'the network manifest Calico creates its address pool from — where whatever installed '
-          'the cluster keeps it, which is a fact of that installation and not of Calico',
+          'the manifest carrying that variable — where whatever wrote it keeps it, which is a fact '
+          'of one installation and not of this step',
     ),
     ArgumentSpec(
       name: 'file_mode',
@@ -77,13 +87,11 @@ final class StampCalicoPoolCidrInCniManifest extends ReversibleStep<String?> {
     ),
   ];
 
-  /// The environment variable whose value is the pool's range.
-  ///
-  /// Calico's own name for it, the same in every manifest that installs it.
-  static const String variable = 'CALICO_IPV4POOL_CIDR';
+  /// The name written on the line above the value this stamps.
+  final String variable;
 
-  /// The range every pod gets an address out of.
-  final String podCidr;
+  /// What that name is to hold.
+  final String value;
 
   /// The manifest holding the pool's declaration.
   final String manifestPath;
@@ -102,15 +110,15 @@ final class StampCalicoPoolCidrInCniManifest extends ReversibleStep<String?> {
       );
     }
     final String current = await context.files.read(manifestPath, elevated: elevated);
-    final String? stamped = stamp(current, podCidr);
+    final String? stamped = stamp(current, value);
     if (stamped == null) {
       return CheckResult.blocked(
-        '$manifestPath declares no $variable, so nothing here decides the pool and Calico would '
-        'create it on the shipped default — the manifest is not the one this cluster ships',
+        '$manifestPath declares no $variable, so nothing here decides that value and whatever reads '
+        'the manifest would take the one it shipped with — this is not the manifest the row meant',
       );
     }
     if (stamped == current) {
-      return CheckResult.satisfied('the manifest already declares $variable as $podCidr');
+      return CheckResult.satisfied('the manifest already declares $variable as $value');
     }
     return const CheckResult.ready();
   }
@@ -118,13 +126,13 @@ final class StampCalicoPoolCidrInCniManifest extends ReversibleStep<String?> {
   @override
   Future<StepPlan> plan(StepContext context) async {
     final String current = await _current(context);
-    return StepPlan.diff(manifestPath, before: current, after: stamp(current, podCidr) ?? current);
+    return StepPlan.diff(manifestPath, before: current, after: stamp(current, value) ?? current);
   }
 
   @override
   Future<void> apply(StepContext context) async {
     final String current = await _current(context);
-    final String? stamped = stamp(current, podCidr);
+    final String? stamped = stamp(current, value);
     if (stamped == null || stamped == current) {
       return;
     }
@@ -137,12 +145,12 @@ final class StampCalicoPoolCidrInCniManifest extends ReversibleStep<String?> {
     // file holds now is read rather than assumed. This is the failure the same-line expression
     // produced: a stamp that took nothing, and a phase that carried on.
     final String written = await context.files.read(manifestPath, elevated: elevated);
-    if (stamp(written, podCidr) != written) {
+    if (stamp(written, value) != written) {
       throw CommandFailed(
         argv: <String>['write', manifestPath],
         exitCode: 1,
         stdout: '',
-        stderr: 'the manifest was written and still does not declare $variable as $podCidr',
+        stderr: 'the manifest was written and still does not declare $variable as $value',
       );
     }
   }
@@ -168,22 +176,22 @@ final class StampCalicoPoolCidrInCniManifest extends ReversibleStep<String?> {
     await context.files.write(manifestPath, captured, mode: fileMode, elevated: elevated);
   }
 
-  /// [manifest] with the value under [variable] replaced by [podCidr], or null when it declares none.
+  /// [manifest] with the value under [variable] replaced by [value], or null when it declares none.
   ///
   /// The value is taken from the line FOLLOWING the one naming the variable, and only the value on
   /// that line is replaced — the indentation and the quoting it was written with stay as they are.
-  static String? stamp(String manifest, String podCidr) {
+  String? stamp(String manifest, String written) {
     final List<String> lines = manifest.split('\n');
     int stamped = 0;
     for (int i = 0; i < lines.length - 1; i++) {
       if (!lines[i].contains(variable)) {
         continue;
       }
-      final RegExpMatch? value = _value.firstMatch(lines[i + 1]);
-      if (value == null) {
+      final RegExpMatch? match = _value.firstMatch(lines[i + 1]);
+      if (match == null) {
         continue;
       }
-      lines[i + 1] = '${value.group(1)}${value.group(2)}$podCidr${value.group(2)}';
+      lines[i + 1] = '${match.group(1)}${match.group(2)}$written${match.group(2)}';
       stamped++;
     }
     return stamped == 0 ? null : lines.join('\n');
