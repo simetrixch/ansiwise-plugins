@@ -83,6 +83,27 @@ void main() {
     );
   });
 
+  test('a values file the two readers disagree about stops the row', () async {
+    // THE DEFECT THIS BLOCKS, planted whole: the file writes 0400, helm stored 256, and the
+    // comparison below would find 400 against 256 for ever. Blocked rather than reported, because
+    // only whoever wrote the file can say which of the two was meant.
+    final CheckResult answer = await release.check(
+      machine(file: 'secret:\n  defaultMode: 0400\n', held: '{"secret":{"defaultMode":256}}'),
+    );
+
+    expect(answer, isA<Blocked>());
+    expect((answer as Blocked).reason, contains('0400'));
+  });
+
+  test('a file that quotes what it means is not stopped', () async {
+    // The innocent neighbour: the same value, written the way both readers agree on.
+    final CheckResult answer = await release.check(
+      machine(file: 'secret:\n  defaultMode: 256\n', held: '{"secret":{"defaultMode":256}}'),
+    );
+
+    expect(answer, isA<Satisfied>());
+  });
+
   test('a real difference is still a difference', () async {
     final CheckResult answer = await release.check(
       machine(file: 'ui:\n  enabled: true\n', held: '{"ui":{"enabled":false}}'),

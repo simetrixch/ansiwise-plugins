@@ -21,7 +21,7 @@ const Map<StepName, RegisteredStep> helmSteps = <StepName, RegisteredStep>{
   ),
   StepName('helm_release'): RegisteredStep(
     name: StepName('helm_release'),
-    source: 'lib/src/steps/helm_release.dart:20',
+    source: 'lib/src/steps/helm_release.dart:21',
     create: HelmRelease.fromArguments,
     arguments: HelmRelease.arguments,
   ),

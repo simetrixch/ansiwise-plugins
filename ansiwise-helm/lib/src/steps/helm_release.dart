@@ -4,6 +4,7 @@ import 'package:yaml/yaml.dart';
 
 import 'package:ansiwise_api/ansiwise_api.dart';
 
+import 'ambiguous_scalar.dart';
 import 'helm_command.dart';
 
 /// Installs or converges one helm release, pinned to a chart version.
@@ -134,9 +135,30 @@ final class HelmRelease extends IrreversibleStep {
       return CheckResult.blocked('$path is not on this machine, and $release is configured by it');
     }
 
-    final Object? wantedValues = _plain(
-      loadYaml(await context.files.read(path, elevated: elevated)),
-    );
+    final String written = await context.files.read(path, elevated: elevated);
+
+    // WHAT THE TWO READERS OF THIS FILE DISAGREE ABOUT, refused before it is read as agreement.
+    //
+    // helm parses YAML 1.1 and this parses YAML 1.2, and a handful of scalars mean different things
+    // to the two. Without this the release installs perfectly and the comparison below compares
+    // helm's meaning with this one, finds them different, upgrades, asks again and gets the same
+    // answer — reporting on every run, forever, that the step ran and the machine is not in the
+    // state it produces. Measured on a machine, where it stopped a program at step 6 of 64.
+    //
+    // Blocked rather than reported, because there is nothing this row can do about it: the file has
+    // to say which of the two it means, and only whoever wrote it knows.
+    final List<AmbiguousScalar> ambiguous = ambiguousScalarsIn(written);
+    if (ambiguous.isNotEmpty) {
+      return CheckResult.blocked(
+        '$path is read by helm and by this step, and they do not agree on '
+        '${ambiguous.length == 1 ? 'one value' : '${ambiguous.length} values'}: '
+        '${ambiguous.map((AmbiguousScalar each) => each.sentence).join('; ')}. '
+        'Quote what is meant as text, or write the number the way both read alike — 256 rather '
+        'than 0400 — or this release can never be reported as installed',
+      );
+    }
+
+    final Object? wantedValues = _plain(loadYaml(written));
     final Object? currentValues = await _currentValues(context);
     if (_canonical(wantedValues) != _canonical(currentValues)) {
       context.log.debug('$release is at $wanted and the values it holds differ from $path');
