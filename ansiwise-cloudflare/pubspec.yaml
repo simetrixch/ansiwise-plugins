@@ -1,0 +1,41 @@
+# The DNS plugin: steps that publish records through the Cloudflare v4 API.
+#
+# This package knows the TOOL and never an application of it. Which zone a record lives in, which
+# names get records, which address they answer and where the API token stands are all a program
+# row's or an answer's to say — this knows only the shapes the API and the public record grammars
+# (SPF, DKIM, DMARC) define for themselves.
+#
+# The test of every step in this package: somebody pointing the same API at a completely different
+# set of domains could use it unchanged.
+name: ansiwise_cloudflare
+description: Tool-generic steps for DNS records behind the Cloudflare v4 API.
+publish_to: none
+
+# WHERE THE BINARY THIS PACKAGE ENDS UP IN IS COMPOSED. Nothing here produces one: a plugin declares
+# steps, and which plugins a binary carries is decided by a composition root that depends on them.
+# That root is github.com/simetrixch/ansiwise-cli, and `dart run tool/build.dart` there is what
+# compiles the executable a machine is given. Named because a clone of this repository alone cannot
+# build anything, and nothing else said where to look.
+repository: https://github.com/simetrixch/ansiwise-plugins
+version: 0.1.0
+
+environment:
+  sdk: ^3.12.0
+
+dependencies:
+  ansiwise_core:
+    git:
+      url: https://github.com/simetrixch/ansiwise-core.git
+      ref: master
+
+dev_dependencies:
+  test: ^1.31.2
+  # The analysis rule set this package includes ends at package:lints/recommended.yaml, and a
+  # nested include resolves through THIS package's dependency graph.
+  lints: ^6.1.0
+  # The scan that keeps this package to its tool and off any application of it.
+  ansiwise_checks:
+    git:
+      url: https://github.com/simetrixch/ansiwise-checks.git
+      ref: master
+      path: registry
