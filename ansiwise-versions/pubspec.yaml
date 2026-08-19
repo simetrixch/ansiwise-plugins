@@ -1,0 +1,40 @@
+# The versions plugin: the steps that hold one declaration of pinned component versions against
+# the files that carry each pin, and against what each component's upstream has published.
+#
+# It knows the tools and never an application of them. WHICH components are pinned, WHERE each pin
+# is written, and WHERE each upstream lives all stand in a declaration file a program row points
+# at — this package brings the file's grammar, the surgical stamping, and the upstream queries,
+# and carries no component of anybody's.
+name: ansiwise_versions
+description: Steps that stamp a declared version-pin file into the files carrying each pin, and report the pins against upstream.
+publish_to: none
+
+# WHERE THE BINARY THIS PACKAGE ENDS UP IN IS COMPOSED. Nothing here produces one: a plugin declares
+# steps, and which plugins a binary carries is decided by a composition root that depends on them.
+# That root is github.com/simetrixch/ansiwise-cli, and `dart run tool/build.dart` there is what
+# compiles the executable a machine is given. Named because a clone of this repository alone cannot
+# build anything, and nothing else said where to look.
+repository: https://github.com/simetrixch/ansiwise-plugins
+version: 0.1.0
+
+environment:
+  sdk: ^3.12.0
+
+dependencies:
+  ansiwise_core:
+    git:
+      url: https://github.com/simetrixch/ansiwise-core.git
+      ref: master
+  yaml: ^3.1.3
+
+dev_dependencies:
+  test: ^1.31.2
+  # The analysis rule set this package includes ends at package:lints/recommended.yaml, and a
+  # nested include resolves through THIS package's dependency graph.
+  lints: ^6.1.0
+  # The scan that keeps this package to its tools and off any application of them.
+  ansiwise_checks:
+    git:
+      url: https://github.com/simetrixch/ansiwise-checks.git
+      ref: master
+      path: registry

@@ -1,0 +1,56 @@
+# What this package may never name, anywhere under lib/ and test/.
+#
+# THE TEST FOR A WORD: could a vendor with the same tools and a completely different product still
+# use this package with that word in it? This package's tools are the declaration grammar it
+# defines itself, the chart and its repository index, the container build file, the tag lists of
+# registries speaking the distribution protocol, and the public release feeds — so it may say
+# chart, dependency, index, tag, registry, release and store, because those are the tools' own
+# words. A name of one product measured with them fails and goes on this list.
+#
+# One word per line. Blank lines and lines beginning with # are ignored; everything else is matched
+# case-insensitively and word-anchored, so a longer name that merely contains a word is no
+# occurrence of it.
+#
+# WORD-ANCHORED CUTS BOTH WAYS, and the blocks below are written knowing it. Anything that is not a
+# letter or a digit ends a word, so a bare name reports every longer one built on it with a
+# separator — and a longer name built WITHOUT a separator is a different word: `git` on this list
+# does not report `github`, which is one of this package's release feeds and stays sayable.
+#
+# THE LIST LIVES HERE, UNDER tool/, AND NOT BESIDE THE CHECK THAT READS IT. The scan reads test/ to
+# the byte, so a list written into test/checks/tool_purity_test.dart would itself be an occurrence
+# of every word on it and the check could never pass.
+
+# The product this package serves first, the platform it stands on, and the organisation behind
+# both. This block stands on every list in this tree, word for word.
+hostyour
+digita
+digitacloud
+digitaplatform
+simetrix
+simetrixch
+
+# That product's choices: the distribution it installs, the components it deploys, the tools it
+# drives those components with, the vendors it rents from, and the authority it gets its
+# certificates from. Each is a fact of one product, not of a pin or of the feeds pins are checked
+# against. `helm` is absent because the chart and its repository index ARE this package's tools,
+# and `snap` because the snap store is one of its feeds; every component NAME that happens to be
+# deployed somewhere — including those two tools' products — is still a fact of a declaration
+# file, never of this package.
+microk8s
+argocd
+tekton
+zot
+authentik
+external-secrets
+vault
+kubectl
+git
+netplan
+cloudflare
+hetzner
+letsencrypt
+
+# That product's own domain words.
+tenant
+consumer
+trunk
