@@ -33,6 +33,7 @@ const Map<String, Fixture> stepFixtures = <String, Fixture>{};
 /// A name leaves this list on the day a fake network can be arranged to answer differently after a
 /// request that changed something, the way `FakeShell.changes` already does for a command.
 const Set<String> notCoveredByAFakeMachine = <String>{
+  'file_from_vault',
   'vault_auth_method',
   'vault_auth_role',
   'vault_init',

@@ -15,6 +15,7 @@ library;
 
 export 'src/registry.dart';
 export 'src/steps/argument_text.dart';
+export 'src/steps/file_from_vault.dart';
 export 'src/steps/vault_api.dart';
 export 'src/steps/vault_auth_method.dart';
 export 'src/steps/vault_auth_role.dart';

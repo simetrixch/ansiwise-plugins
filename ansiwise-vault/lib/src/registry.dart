@@ -1,5 +1,6 @@
 import 'package:ansiwise_core/ansiwise_core.dart';
 
+import 'steps/file_from_vault.dart';
 import 'steps/vault_auth_method.dart';
 import 'steps/vault_auth_role.dart';
 import 'steps/vault_init.dart';
@@ -66,6 +67,12 @@ const Map<StepName, RegisteredStep> vaultSteps = <StepName, RegisteredStep>{
     create: VaultKvEntry.fromArguments,
     arguments: VaultKvEntry.arguments,
     answers: VaultKvEntry.answers,
+  ),
+  StepName('file_from_vault'): RegisteredStep(
+    name: StepName('file_from_vault'),
+    source: 'lib/src/steps/file_from_vault.dart:26',
+    create: FileFromVault.fromArguments,
+    arguments: FileFromVault.arguments,
   ),
 };
 

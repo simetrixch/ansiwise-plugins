@@ -121,6 +121,18 @@ final Map<String, Fixture> stepFixtures = <String, Fixture>{
     files.contents[_plausibleText] = '';
   },
 
+  // The service manager answers "enabled" only once the enable has run and "active" only once the
+  // restart has, which is what the step's own check reads — and what a fake that only records
+  // commands can never show.
+  'activate_service_unit': (FakeShell shell, FakeFiles files, FakeHttp http) {
+    shell.changes('systemctl enable $_plausibleText', () {
+      shell.answers('systemctl is-enabled $_plausibleText', 'enabled\n');
+    });
+    shell.changes('systemctl restart $_plausibleText', () {
+      shell.answers('systemctl is-active $_plausibleText', 'active\n');
+    });
+  },
+
   // The network manifest, at the path the probe hands the step, carrying the variable this step
   // stamps and a value that is NOT the one the probe asks for — so the first check has work and the
   // second has none. The value stands on the line AFTER the one naming the variable, which is the

@@ -87,6 +87,9 @@ const String publicSrcRoutingScriptTemplate = 'test/templates/public-src-routing
 /// See [connmarkNftTableTemplate].
 const String publicSrcRoutingUnitTemplate = 'test/templates/public-src-routing-unit.tpl';
 
+/// See [connmarkNftTableTemplate].
+const String serviceUnitTemplate = 'test/templates/service-unit.tpl';
+
 /// Every template fixture, keyed by the path a program row would name it under.
 ///
 /// READ OFF THE DISK, never pasted in. A test carrying its own copy of the text would measure that
@@ -98,6 +101,7 @@ Map<String, String> fixtureTemplates() => <String, String>{
     netplanPublicSrcRoutingTemplate,
     publicSrcRoutingScriptTemplate,
     publicSrcRoutingUnitTemplate,
+    serviceUnitTemplate,
   ])
     path: File(path).readAsStringSync(),
 };

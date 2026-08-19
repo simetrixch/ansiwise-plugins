@@ -2,6 +2,7 @@ import 'package:ansiwise_core/ansiwise_core.dart';
 
 import 'steps/copy_branch_file.dart';
 import 'steps/git_branch.dart';
+import 'steps/git_clone.dart';
 import 'steps/git_identity.dart';
 import 'steps/git_commit.dart';
 import 'steps/git_merge_ref.dart';
@@ -47,6 +48,12 @@ const Map<StepName, RegisteredStep> gitSteps = <StepName, RegisteredStep>{
     source: 'lib/src/steps/git_branch.dart:20',
     create: GitBranch.fromArguments,
     arguments: GitBranch.arguments,
+  ),
+  StepName('git_clone'): RegisteredStep(
+    name: StepName('git_clone'),
+    source: 'lib/src/steps/git_clone.dart:30',
+    create: GitClone.fromArguments,
+    arguments: GitClone.arguments,
   ),
   StepName('measure_value_in_branch_file'): RegisteredStep(
     name: StepName('measure_value_in_branch_file'),

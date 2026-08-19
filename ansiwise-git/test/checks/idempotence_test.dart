@@ -48,6 +48,13 @@ Future<void> main() => auditIdempotence(
 /// their own.
 const Set<String> notCoveredByAFakeMachine = <String>{
   'git_branch',
+  // The two files this step reads which repository and which credential out of stand at paths its
+  // row names, and the probe hands every text argument the same one-character value — so the
+  // settings file is not on the fake machine and the step refuses before it ever asks git anything.
+  // It is driven directly instead, over a machine that carries both files, in
+  // test/git_clone_test.dart: a checkout standing on the published tip is satisfied without a
+  // command that changes anything, and one that fell behind is fetched and placed.
+  'git_clone',
   // Both for the reason git_branch is here: each reads a name out of an answer its row chooses —
   // the branch being brought forward, the commit measured for it — and a probe holds no answers, so
   // each refuses before it merges or copies anything. What measures them instead is named:
