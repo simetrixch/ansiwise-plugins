@@ -32,6 +32,7 @@ final class VaultKvEntry extends IrreversibleStep {
     required this.mount,
     required this.path,
     required this.fields,
+    this.fieldsFromAnswers = const <String>[],
     required this.mint,
     required this.fieldsOwnedElsewhere,
     required this.optionalFields,
@@ -47,6 +48,7 @@ final class VaultKvEntry extends IrreversibleStep {
     mount: arguments.text('mount'),
     path: arguments.text('path'),
     fields: arguments.textList('fields'),
+    fieldsFromAnswers: arguments.textList('fields_from_answers'),
     mint: arguments.textList('mint'),
     fieldsOwnedElsewhere: arguments.textList('fields_owned_elsewhere'),
     optionalFields: arguments.textList('optional_fields'),
@@ -84,6 +86,17 @@ final class VaultKvEntry extends IrreversibleStep {
       describes:
           'each field of the entry as <field>=<VARIABLE>, naming the variable of the hand-filled '
           'input that holds its value — never the value',
+    ),
+    ArgumentSpec(
+      name: 'fields_from_answers',
+      kind: ArgumentKind.textList,
+      required: false,
+      defaultValue: <String>[],
+      describes:
+          'each field written from an ANSWER of this run, as <field>=<answer>. For a value the run '
+          'was told rather than one a file holds — the password that raises a command to root is '
+          'the case this exists for, and putting it in the hand-filled file as well would be the '
+          'same value in two places, drifting apart the first time one of them is changed',
     ),
     ArgumentSpec(
       name: 'mint',
@@ -162,6 +175,9 @@ final class VaultKvEntry extends IrreversibleStep {
 
   /// Each field as `<field>=<VARIABLE>`.
   final List<String> fields;
+
+  /// The fields written from an answer of this run, each as `<field>=<answer>`.
+  final List<String> fieldsFromAnswers;
 
   /// The fields this run generates when nothing supplies them.
   ///
@@ -480,6 +496,35 @@ final class VaultKvEntry extends IrreversibleStep {
         continue;
       }
       values[field] = value;
+    }
+
+    // The values this run was TOLD, which no file on the machine holds. Read after the file so a
+    // field named in both is a contradiction somebody sees rather than a silent precedence rule.
+    for (final String declared in fieldsFromAnswers) {
+      final int equals = declared.indexOf('=');
+      if (equals <= 0) {
+        wrong.add('"$declared" is not a <field>=<answer> pair');
+        continue;
+      }
+      final String field = declared.substring(0, equals).trim();
+      final String answer = declared.substring(equals + 1).trim();
+      if (values.containsKey(field)) {
+        wrong.add(
+          '$field of $dataPath is written from the hand-filled input AND from the answer "$answer", '
+          'and one field holds one value',
+        );
+        continue;
+      }
+      final String? held = context.answers.optionalText(answer);
+      if (held == null || held.isEmpty) {
+        if (fieldsOwnedElsewhere.contains(field) || optionalFields.contains(field)) {
+          context.log.debug('$field is left out of $dataPath: this run holds no answer "$answer"');
+          continue;
+        }
+        wrong.add('this run holds no answer "$answer", and $field of $dataPath is written from it');
+        continue;
+      }
+      values[field] = held;
     }
 
     // Everything wrong at once. An operator told about one variable per run is an operator running

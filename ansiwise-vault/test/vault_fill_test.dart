@@ -1110,4 +1110,133 @@ void main() {
       expect(await copying.check(it.context), isA<Satisfied>());
     });
   });
+  group('a field written from an ANSWER of this run', () {
+    // The case this exists for: the password that raises a command to root is something the run was
+    // TOLD, not something a file on the machine holds — and putting it in the hand-filled file as
+    // well would be the same value in two places, drifting apart the first time one is changed.
+    const VaultKvEntry fromAnswer = VaultKvEntry(
+      repository: repository,
+      mount: 'secret',
+      path: 'dev/machine/m1',
+      fields: <String>[],
+      fieldsFromAnswers: <String>['sudo-password=elevation_password'],
+      mint: <String>[],
+      fieldsOwnedElsewhere: <String>[],
+      optionalFields: <String>[],
+      copyFrom: <String>[],
+      layout: layout,
+      secrets: secretsPath,
+    );
+
+    ScriptedHttp absent() => ScriptedHttp(
+      (HttpRequest request, int nth) =>
+          request.method == 'GET' ? answer('', status: 404) : answer(''),
+    );
+
+    test('reaches the entry, and the value never came from a file', () async {
+      final ({StepContext context, MemoryRecorder recorder}) it = contextOf(
+        files: machineWith(''),
+        http: absent(),
+        answers: const Arguments(<String, Object>{
+          'stage': 'dev',
+          'elevation_password': 'what raises a command',
+        }),
+      );
+
+      expect(await fromAnswer.check(it.context), isA<Ready>());
+
+      final List<String> written = <String>[];
+      final ({StepContext context, MemoryRecorder recorder}) writing = contextOf(
+        files: machineWith(''),
+        http: ScriptedHttp((HttpRequest request, int nth) {
+          if (request.method != 'GET') {
+            written.add(request.body ?? '');
+          }
+          return request.method == 'GET' ? answer('', status: 404) : answer('');
+        }),
+        answers: const Arguments(<String, Object>{
+          'stage': 'dev',
+          'elevation_password': 'what raises a command',
+        }),
+      );
+      await fromAnswer.apply(writing.context);
+
+      expect(written, hasLength(1));
+      expect(written.single, contains('sudo-password'));
+      expect(
+        written.single,
+        contains('what raises a command'),
+        reason: 'the value the run was told is what has to reach the store',
+      );
+    });
+
+    test('a run holding no such answer is refused, and the answer is named', () async {
+      final ({StepContext context, MemoryRecorder recorder}) it = contextOf(
+        files: machineWith(''),
+        http: absent(),
+      );
+
+      final CheckResult judged = await fromAnswer.check(it.context);
+      expect(judged, isA<Blocked>());
+      expect((judged as Blocked).reason, contains('elevation_password'));
+    });
+
+    test(
+      'a field written from BOTH a file and an answer is refused — one field holds one value',
+      () async {
+        const VaultKvEntry both = VaultKvEntry(
+          repository: repository,
+          mount: 'secret',
+          path: 'dev/machine/m1',
+          fields: <String>['sudo-password=SUDO_PASSWORD'],
+          fieldsFromAnswers: <String>['sudo-password=elevation_password'],
+          mint: <String>[],
+          fieldsOwnedElsewhere: <String>[],
+          optionalFields: <String>[],
+          copyFrom: <String>[],
+          layout: layout,
+          secrets: secretsPath,
+        );
+        final ({StepContext context, MemoryRecorder recorder}) it = contextOf(
+          files: machineWith('SUDO_PASSWORD=from-the-file\n'),
+          http: absent(),
+          answers: const Arguments(<String, Object>{
+            'stage': 'dev',
+            'elevation_password': 'from-the-run',
+          }),
+        );
+
+        final CheckResult judged = await both.check(it.context);
+        expect(judged, isA<Blocked>());
+        expect((judged as Blocked).reason, contains('one field holds one value'));
+      },
+    );
+
+    test(
+      'THE INNOCENT NEIGHBOUR: a field an installation may not have is left out, not refused',
+      () async {
+        const VaultKvEntry optional = VaultKvEntry(
+          repository: repository,
+          mount: 'secret',
+          path: 'dev/machine/m1',
+          fields: <String>[],
+          fieldsFromAnswers: <String>['sudo-password=elevation_password'],
+          mint: <String>[],
+          fieldsOwnedElsewhere: <String>[],
+          optionalFields: <String>['sudo-password'],
+          copyFrom: <String>[],
+          layout: layout,
+          secrets: secretsPath,
+        );
+        final ({StepContext context, MemoryRecorder recorder}) it = contextOf(
+          files: machineWith(''),
+          http: absent(),
+        );
+
+        // Every field left out means nothing to write, which this step says rather than writing an
+        // entry that replaces what is there with nothing.
+        expect(await optional.check(it.context), isA<Satisfied>());
+      },
+    );
+  });
 }
