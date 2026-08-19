@@ -148,4 +148,52 @@ final Map<String, Fixture> stepFixtures = <String, Fixture>{
         '            - name: $_plausibleText\n'
         '              value: "10.1.0.0/16"\n';
   },
+
+  // The private-network client answers its own backend state, and each act flips it the way the
+  // real daemon does — which is what the postcondition of every step of this family reads, and
+  // what a fake that only records commands can never show.
+  'tailnet_leave': (FakeShell shell, FakeFiles files, FakeHttp http) {
+    shell.answers('tailscale status --json', '{"BackendState":"Running"}');
+    shell.changes('tailscale down', () {
+      shell.answers('tailscale status --json', '{"BackendState":"Stopped"}');
+    });
+  },
+  'tailnet_reconnect': (FakeShell shell, FakeFiles files, FakeHttp http) {
+    shell.answers('tailscale status --json', '{"BackendState":"Stopped"}');
+    shell.changes('tailscale up', () {
+      shell.answers('tailscale status --json', '{"BackendState":"Running"}');
+    });
+  },
+  'tailnet_logout': (FakeShell shell, FakeFiles files, FakeHttp http) {
+    shell.answers('tailscale status --json', '{"BackendState":"Running"}');
+    shell.changes('tailscale logout', () {
+      shell.answers('tailscale status --json', '{"BackendState":"NeedsLogin"}');
+    });
+  },
+
+  // The join is handed the answers the installation's programs declare — the coordinator address
+  // and the credential — and the fake client comes up logged in to exactly that address, which is
+  // what the second run's check compares against.
+  'tailnet_join': (FakeShell shell, FakeFiles files, FakeHttp http) {
+    shell.answers('tailscale status --json', '{"BackendState":"NeedsLogin"}');
+    shell.changes('tailscale up --login-server $_plausibleText '
+        '--auth-key file:/tmp/ansiwise-tailnet-authkey --accept-dns=false', () {
+      shell.answers('tailscale status --json', '{"BackendState":"Running"}');
+      shell.answers('tailscale debug prefs', '{"ControlURL":"$_plausibleText"}');
+    });
+  },
+
+  // The template, at the one path the probe hands both file arguments, carrying the marker line the
+  // renderer reads; the client holds an address, and the re-sign is what makes the certificate name
+  // it — the state change the real signer makes, and the thing the step's own proof reads.
+  'stamp_tailnet_address_in_certificate': (FakeShell shell, FakeFiles files, FakeHttp http) {
+    files.contents[_plausibleText] = '$_plausibleText\n';
+    shell.answers(
+      'tailscale status --json',
+      '{"BackendState":"Running","Self":{"TailscaleIPs":["100.64.0.7"]}}',
+    );
+    shell.changes(_plausibleText, () {
+      shell.answers('openssl x509 -in $_plausibleText -noout -text', 'IP Address:100.64.0.7\n');
+    });
+  },
 };

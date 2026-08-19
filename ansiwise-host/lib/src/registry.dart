@@ -26,6 +26,11 @@ import 'steps/host/install_packages.dart';
 import 'steps/host/install_pinned_tool.dart';
 import 'steps/host/install_snap.dart';
 import 'steps/host/install_tailscale_client.dart';
+import 'steps/host/stamp_tailnet_address_in_certificate.dart';
+import 'steps/host/tailnet_join.dart';
+import 'steps/host/tailnet_leave.dart';
+import 'steps/host/tailnet_logout.dart';
+import 'steps/host/tailnet_reconnect.dart';
 import 'steps/host/link_storage_path.dart';
 import 'steps/host/preflight_registry_pull_credential.dart';
 import 'steps/host/remove_snap.dart';
@@ -390,6 +395,44 @@ const Map<StepName, RegisteredStep> hostSteps = <StepName, RegisteredStep>{
     source: 'lib/src/steps/host/write_file_from_template.dart:27',
     create: WriteFileFromTemplate.fromArguments,
     arguments: WriteFileFromTemplate.arguments,
+  ),
+  // The private-network client's four acts, in the order a repair uses them: leave, come back with
+  // what the machine holds, discard what it holds, join with a fresh credential. The join is the
+  // one that declares answers: where the coordinator serves and the credential minted there are
+  // facts of one run, and neither may stand in a program file — one names an installation, the
+  // other is a secret.
+  StepName('tailnet_leave'): RegisteredStep(
+    name: StepName('tailnet_leave'),
+    source: 'lib/src/steps/host/tailnet_leave.dart:16',
+    create: TailnetLeave.fromArguments,
+    arguments: TailnetLeave.arguments,
+  ),
+  StepName('tailnet_reconnect'): RegisteredStep(
+    name: StepName('tailnet_reconnect'),
+    source: 'lib/src/steps/host/tailnet_reconnect.dart:21',
+    create: TailnetReconnect.fromArguments,
+    arguments: TailnetReconnect.arguments,
+  ),
+  StepName('tailnet_logout'): RegisteredStep(
+    name: StepName('tailnet_logout'),
+    source: 'lib/src/steps/host/tailnet_logout.dart:16',
+    create: TailnetLogout.fromArguments,
+    arguments: TailnetLogout.arguments,
+  ),
+  StepName('tailnet_join'): RegisteredStep(
+    name: StepName('tailnet_join'),
+    source: 'lib/src/steps/host/tailnet_join.dart:21',
+    create: TailnetJoin.fromArguments,
+    arguments: TailnetJoin.arguments,
+    answers: TailnetJoin.answers,
+  ),
+  // What makes the machine reachable at the address the join handed it: the serving certificate
+  // everything verified dials it by.
+  StepName('stamp_tailnet_address_in_certificate'): RegisteredStep(
+    name: StepName('stamp_tailnet_address_in_certificate'),
+    source: 'lib/src/steps/host/stamp_tailnet_address_in_certificate.dart:32',
+    create: StampTailnetAddressInCertificate.fromArguments,
+    arguments: StampTailnetAddressInCertificate.arguments,
   ),
 };
 
