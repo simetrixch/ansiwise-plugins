@@ -25,6 +25,15 @@ import 'fill_key_value_file.dart';
 /// value. The row binds them, and the framework refuses both directions: a slot nothing filled, and
 /// a value the template has no slot for.
 final class WriteFileFromTemplate extends ReversibleStep<String?> with FileStep, TemplateStep {
+  /// The file this writes usually stands in a checkout an earlier row of the same program makes,
+  /// and a binding that reads a recorded value reads a file an earlier row copies into place — so
+  /// before those rows have run there may be nothing here to read. In the two modes that change
+  /// nothing that is the normal state, and the record marks the row declared rather than counting
+  /// the refusal against the run — the same claim the key-value filler already makes for the same
+  /// reason.
+  @override
+  bool get restsOnAnEarlierStep => true;
+
   /// Writes the file at [path] from the template at [templatePath].
   const WriteFileFromTemplate({
     required this.templatePath,
@@ -135,14 +144,16 @@ final class WriteFileFromTemplate extends ReversibleStep<String?> with FileStep,
 
   @override
   Future<FileContent> contentFor(StepContext context) async {
-    // An answer holding nothing is left out rather than filled in empty, so an OPTIONAL slot's line
+    // A source holding nothing is left out rather than filled in empty, so an OPTIONAL slot's line
     // is dropped by the framework instead of being written with nothing after it. That is the
     // difference between a key this installation has no value for and one it has an empty value
     // for, and only the second is a value.
-    final Map<String, String> filled = <String, String>{
-      for (final MapEntry<String, KeyBinding> each in values.entries)
-        if (each.value.valueIn(context.answers) case final String value) each.key: value,
-    };
+    final Map<String, String> filled = <String, String>{};
+    for (final MapEntry<String, KeyBinding> each in values.entries) {
+      if (await each.value.resolveIn(context, elevated: elevated) case final String value) {
+        filled[each.key] = value;
+      }
+    }
 
     return FileContent.text(await renderedWith(context, filled));
   }

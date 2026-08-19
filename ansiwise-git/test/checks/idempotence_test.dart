@@ -48,6 +48,14 @@ Future<void> main() => auditIdempotence(
 /// their own.
 const Set<String> notCoveredByAFakeMachine = <String>{
   'git_branch',
+  // Both for the reason git_branch is here: each reads a name out of an answer its row chooses —
+  // the branch being brought forward, the commit measured for it — and a probe holds no answers, so
+  // each refuses before it merges or copies anything. What measures them instead is named:
+  // test/git_merge_ref_test.dart drives the merge over a fake checkout, up to and including a
+  // second run finding the commit already among the ancestors; test/copy_branch_file_test.dart
+  // does the same for the copy, whose second run finds the destination already holding the source.
+  'copy_branch_file',
+  'git_merge_ref',
   // For exactly the reason above: both values come from answers whose NAMES the row chooses, and a
   // probe holds none — so it would measure the step against a run that knows nothing, which is not
   // the act the step performs. test/git_identity_test.dart drives it over a fake checkout: applied

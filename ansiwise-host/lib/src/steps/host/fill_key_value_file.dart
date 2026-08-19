@@ -108,8 +108,10 @@ final class FillKeyValueFile extends ReversibleStep<String?> {
       name: 'values',
       kind: ArgumentKind.mapping,
       describes:
-          'which answer fills which key, as KEY: {answer: name} — and where the answer holds '
-          'several values and the file carries them on one line, KEY: {answer: name, join: ","}',
+          'where each key\'s value comes from: KEY: {answer: name} for a value this run holds, or '
+          'KEY: {file: path, key: name} for one a settings file on this machine records — and '
+          'where the source holds several values and the file carries them on one line, '
+          'join: "," beside it',
     ),
     elevationArgument,
   ];
@@ -165,7 +167,7 @@ final class FillKeyValueFile extends ReversibleStep<String?> {
       );
     }
 
-    final Map<String, String> wanted = _wanted(context);
+    final Map<String, String> wanted = await _wanted(context);
     final List<String> unwritable = <String>[
       for (final MapEntry<String, String> each in wanted.entries)
         if (KeyValueFile.holdsQuote(each.value)) each.key,
@@ -231,7 +233,7 @@ final class FillKeyValueFile extends ReversibleStep<String?> {
       );
     }
     final KeyValueFile file = await _read(context);
-    final Map<String, String> filling = _toFill(file, _wanted(context));
+    final Map<String, String> filling = _toFill(file, await _wanted(context));
     if (filling.isEmpty) {
       return StepPlan.nothing('every $subject value this file declares was already answered');
     }
@@ -262,7 +264,7 @@ final class FillKeyValueFile extends ReversibleStep<String?> {
       );
     }
 
-    final Map<String, String> filling = _toFill(file, _wanted(context));
+    final Map<String, String> filling = _toFill(file, await _wanted(context));
 
     // SAID OUT LOUD WHERE A VALUE IS REPLACED RATHER THAN SUPPLIED, and the keys are named because
     // the values cannot be: a row holding credentials must reach no record. Filling an empty key is
@@ -324,10 +326,15 @@ final class FillKeyValueFile extends ReversibleStep<String?> {
   ///
   /// An answer that is REQUIRED cannot be empty; one that is optional is a value this installation
   /// does not have, and a key it does not have belongs in the file as the template left it.
-  Map<String, String> _wanted(StepContext context) => <String, String>{
-    for (final MapEntry<String, KeyBinding> each in values.entries)
-      if (each.value.valueIn(context.answers) case final String value) each.key: value,
-  };
+  Future<Map<String, String>> _wanted(StepContext context) async {
+    final Map<String, String> wanted = <String, String>{};
+    for (final MapEntry<String, KeyBinding> each in values.entries) {
+      if (await each.value.resolveIn(context, elevated: elevated) case final String value) {
+        wanted[each.key] = value;
+      }
+    }
+    return wanted;
+  }
 
   /// The keys this run writes: every one nobody has answered, and every one answered DIFFERENTLY.
   ///
@@ -349,35 +356,96 @@ final class FillKeyValueFile extends ReversibleStep<String?> {
   };
 }
 
-/// Which answer fills one key, and how a list of values is written on one line.
+/// Where one key's value comes from, and how several values are written on one line.
 ///
-/// A row says `KEY: {answer: name}`, or `KEY: {answer: name, join: ","}` where the answer holds
-/// several values and the file has always carried them on one line. [join] is a named property of
-/// one entry and not an expression: it says which character stands between the values and nothing
-/// else. Without it, an answer holding several values is refused rather than written in whatever
-/// shape a list happens to print as.
+/// **Two sources, one per binding, and the row says which.** `KEY: {answer: name}` fills the key
+/// from what THIS run was told — the ordinary case. `KEY: {file: <path>, key: <k>}` fills it from
+/// what a settings file on this machine RECORDS, read off a line of the shape `key: value` or
+/// `KEY=value` — the inheritance case, where another installation already decided the value and
+/// asking for it again invites an answer that contradicts what stands written. Naming both in one
+/// binding is refused where the row is read: two statements of one value is a pair that can
+/// disagree.
+///
+/// **[join] and [split] are named properties of one entry and never expressions.** `join` says
+/// which text stands between several values written on one line — an answer holding a list is
+/// refused without it rather than written in whatever shape a list happens to print as. `split`
+/// belongs to the file source alone, because a file records several values AS one line and the
+/// separator they were recorded with is a fact of that file: the value is split there, and `join`
+/// then says how this file writes them. An answer needs no split — it holds its values apart
+/// already.
 final class KeyBinding {
-  /// Binds a key to [answer], written as one line separated by [join] where it holds several.
-  const KeyBinding({required this.answer, this.join});
+  /// Binds a key to one source, written as one line separated by [join] where it holds several.
+  const KeyBinding({this.answer, this.file, this.key, this.split, this.join});
 
-  /// The name of the answer this key is filled from.
-  final String answer;
+  /// The name of the answer this key is filled from, or null where a file records it.
+  final String? answer;
 
-  /// What stands between the values where the answer holds several, or null where it holds one.
+  /// The settings file the value is recorded in, or null where an answer holds it.
+  final String? file;
+
+  /// The key inside [file] whose value is taken.
+  final String? key;
+
+  /// What stands between the recorded values in [file], where it records several on one line.
+  final String? split;
+
+  /// What stands between the values where the source holds several, or null where it holds one.
   final String? join;
 
   /// The value this binding puts in the file, or null where this run has nothing to put.
   ///
-  /// Null covers BOTH an answer nobody gave and one given empty, because the two mean the same thing
-  /// to a file: this installation has no such value. Reading an absent one as a value would throw
-  /// where the answer is optional, and writing an empty one would put a key in the file that says
-  /// "answered with nothing" — which reads to every later check as answered.
-  String? valueIn(Arguments answers) {
-    if (!answers.has(answer)) {
+  /// Null covers an answer nobody gave, one given empty, a source file that is not there, and a key
+  /// it records nothing under — because all of them mean the same thing to the file being written:
+  /// this installation has no such value. Writing an empty one instead would put a key in the file
+  /// that says "answered with nothing", which reads to every later check as answered; and for an
+  /// optional slot the absent line IS the statement.
+  ///
+  /// [elevated] is the step's own: whether this machine's files need root is a property of the row
+  /// that pointed the step at them, and the source file stands on the same machine.
+  Future<String?> resolveIn(StepContext context, {bool elevated = false}) async {
+    if (file != null) {
+      return _recorded(context, elevated: elevated);
+    }
+    if (!context.answers.has(answer!)) {
       return null;
     }
-    final String value = join == null ? answers.text(answer) : answers.textList(answer).join(join!);
+    final String value = join == null
+        ? context.answers.text(answer!)
+        : context.answers.textList(answer!).join(join!);
     return value.isEmpty ? null : value;
+  }
+
+  /// The value the named file records under the named key, or null where it records none.
+  Future<String?> _recorded(StepContext context, {required bool elevated}) async {
+    if (!await context.files.exists(file!, elevated: elevated)) {
+      return null;
+    }
+    final String content = await context.files.read(file!, elevated: elevated);
+    final RegExp line = RegExp('^[ \\t]*${RegExp.escape(key!)}[ \\t]*[:=][ \\t]*(.*)\$');
+    for (final String each in content.split('\n')) {
+      final RegExpMatch? match = line.firstMatch(each.trimRight());
+      if (match == null) {
+        continue;
+      }
+      String value = match.group(1)!.trim();
+      if (value.length >= 2 &&
+          (value.startsWith('"') && value.endsWith('"') ||
+              value.startsWith("'") && value.endsWith("'"))) {
+        value = value.substring(1, value.length - 1);
+      }
+      if (value.isEmpty) {
+        return null;
+      }
+      if (split case final String separator) {
+        final List<String> parts = <String>[
+          for (final String part in value.split(separator))
+            if (part.trim().isNotEmpty) part.trim(),
+        ];
+        return parts.isEmpty ? null : parts.join(join!);
+      }
+      return value;
+    }
+    return null;
   }
 
   /// The bindings a row declares, refusing anything that is not one.
@@ -386,7 +454,7 @@ final class KeyBinding {
       throw ArgumentError.value(
         declared,
         'values',
-        'is a mapping of KEY to {answer: name} and optionally join',
+        'is a mapping of KEY to {answer: name} or {file: path, key: name}, each optionally joined',
       );
     }
     return <String, KeyBinding>{
@@ -396,17 +464,65 @@ final class KeyBinding {
 
   static KeyBinding _one(MapEntry<String, Object?> entry) {
     final Object? body = entry.value;
-    if (body is! Map<String, Object?> || body['answer'] is! String) {
+    if (body is! Map<String, Object?>) {
       throw ArgumentError.value(
         body,
         entry.key,
-        'names the answer it is filled from, as {answer: name} and optionally join',
+        'names its source, as {answer: name} or {file: path, key: name}',
       );
     }
+    final Object? answer = body['answer'];
+    final Object? file = body['file'];
+    final Object? key = body['key'];
+    final Object? split = body['split'];
     final Object? join = body['join'];
+    if ((answer is! String) == (file is! String)) {
+      // Neither source, or both: either way nothing says where the one value comes from.
+      throw ArgumentError.value(
+        body,
+        entry.key,
+        'names exactly one source — {answer: name} for a value this run holds, or '
+        '{file: path, key: name} for one a file on this machine records',
+      );
+    }
+    if (file is String && key is! String) {
+      throw ArgumentError.value(
+        body,
+        entry.key,
+        'reads a file and names no key, so nothing says which line of it holds the value',
+      );
+    }
+    if (answer is String && (key != null || split != null)) {
+      throw ArgumentError.value(
+        body,
+        entry.key,
+        'is filled from an answer, and "key" and "split" belong to the file source alone',
+      );
+    }
     if (join != null && join is! String) {
       throw ArgumentError.value(join, '${entry.key}.join', 'is the text between several values');
     }
-    return KeyBinding(answer: body['answer']! as String, join: join as String?);
+    if (split != null && split is! String) {
+      throw ArgumentError.value(
+        split,
+        '${entry.key}.split',
+        'is the text between the recorded values',
+      );
+    }
+    if (split is String && join is! String) {
+      throw ArgumentError.value(
+        body,
+        entry.key,
+        'splits the recorded value and says nothing about how this file writes the parts — '
+        'name "join" beside "split"',
+      );
+    }
+    return KeyBinding(
+      answer: answer as String?,
+      file: file as String?,
+      key: key as String?,
+      split: split as String?,
+      join: join as String?,
+    );
   }
 }

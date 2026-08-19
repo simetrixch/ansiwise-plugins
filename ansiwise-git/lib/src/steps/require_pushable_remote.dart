@@ -15,19 +15,29 @@ import 'package:ansiwise_core/ansiwise_core.dart';
 ///
 /// The three questions are asked in order and not in parallel, because each is meaningless without
 /// the one before it: there is no reachability without a remote, and no push without reachability.
+///
+/// **The branch is stated in one of two ways, and the row says which.** `branch` writes the name
+/// out, for a branch that is the same on every installation — the source branch a generation
+/// program pushes back to. `branch_answer` names the ANSWER the branch name is read out of, for a
+/// branch named per installation, which is a name no program file shipping to every machine can
+/// carry — the same shape the row that cuts such a branch uses. One of the two, never both: two
+/// statements of one name is a pair that can disagree, and the refusal for the pair names both.
 final class RequirePushableRemote extends ObservingStep {
-  /// Refuses unless [branch] could be pushed to [remote] from the checkout at [repository].
+  /// Refuses unless the branch this row names could be pushed to [remote] from the checkout at
+  /// [repository].
   const RequirePushableRemote({
     required this.repository,
     required this.remote,
-    required this.branch,
+    this.branch,
+    this.branchAnswer,
   });
 
   /// Builds the step from what the program gave it.
   factory RequirePushableRemote.fromArguments(Arguments arguments) => RequirePushableRemote(
     repository: arguments.text('repository'),
     remote: arguments.text('remote'),
-    branch: arguments.text('branch'),
+    branch: arguments.optionalText('branch'),
+    branchAnswer: arguments.optionalText('branch_answer'),
   );
 
   /// What this step accepts.
@@ -48,7 +58,19 @@ final class RequirePushableRemote extends ObservingStep {
     ArgumentSpec(
       name: 'branch',
       kind: ArgumentKind.text,
-      describes: 'the branch a push has to be accepted for',
+      required: false,
+      describes:
+          'the branch a push has to be accepted for, written out — for a branch that is the same '
+          'on every installation. Leave it off where branch_answer names it instead',
+    ),
+    ArgumentSpec(
+      name: 'branch_answer',
+      kind: ArgumentKind.answerName,
+      required: false,
+      describes:
+          'the name of the answer this run reads the branch name out of — for a branch named per '
+          'installation, whose name no program file can carry. Leave it off where branch writes '
+          'the name out',
     ),
   ];
 
@@ -58,11 +80,19 @@ final class RequirePushableRemote extends ObservingStep {
   /// The name the checkout holds the remote under.
   final String remote;
 
-  /// The branch the push is offered for.
-  final String branch;
+  /// The branch the push is offered for, written out, or null where the answer names it.
+  final String? branch;
+
+  /// The name of the answer the branch name is read out of, or null where it is written out.
+  final String? branchAnswer;
 
   @override
   Future<CheckResult> check(StepContext context) async {
+    final String? named = _branchNamed(context);
+    if (named == null) {
+      return CheckResult.blocked(_whyUnnamed(context));
+    }
+
     final CommandResult address = await _git(context, <String>['remote', 'get-url', remote]);
     if (!address.ok) {
       return CheckResult.blocked(
@@ -79,20 +109,45 @@ final class RequirePushableRemote extends ObservingStep {
       );
     }
 
-    final CommandResult offered = await _git(context, <String>[
-      'push',
-      '--dry-run',
-      remote,
-      branch,
-    ]);
+    final CommandResult offered = await _git(context, <String>['push', '--dry-run', remote, named]);
     if (!offered.ok) {
       return CheckResult.blocked(
-        '${address.trimmed} would refuse a push of $branch — either this credential may not write '
-        'there, or $remote/$branch has moved ahead of this checkout: ${offered.stderr.trim()}',
+        '${address.trimmed} would refuse a push of $named — either this credential may not write '
+        'there, or $remote/$named has moved ahead of this checkout: ${offered.stderr.trim()}',
       );
     }
 
     return CheckResult.satisfied('${address.trimmed} answers and would accept a push');
+  }
+
+  /// The branch this row is about, from whichever of the two statements the row made.
+  ///
+  /// Null where the row made none, made both, or pointed at an answer this run does not hold —
+  /// each said apart by [_whyUnnamed], because the three are three different mistakes.
+  String? _branchNamed(StepContext context) {
+    if (branch != null && branchAnswer != null) {
+      return null;
+    }
+    if (branchAnswer case final String name) {
+      final String? value = context.answers.optionalText(name);
+      return value == null || value.isEmpty ? null : value;
+    }
+    return branch == null || branch!.isEmpty ? null : branch;
+  }
+
+  /// Which of the three ways of not naming a branch this row took.
+  String _whyUnnamed(StepContext context) {
+    if (branch != null && branchAnswer != null) {
+      return 'this row writes a branch AND names an answer to read one from, and two statements of '
+          'one name is a pair that can disagree — keep whichever states the truth and drop the '
+          'other';
+    }
+    if (branchAnswer case final String name) {
+      return 'this run holds no answer called "$name", and that is where this row says the name of '
+          'the branch a push has to be accepted for comes from';
+    }
+    return 'this row names no branch at all — write "branch" for a name that is the same '
+        'everywhere, or "branch_answer" for one the run holds';
   }
 
   /// Runs a git command that reaches the remote, and cannot stop to ask anybody anything.

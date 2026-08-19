@@ -508,6 +508,150 @@ void main() {
       );
     });
   });
+
+  group('the value a FILE records, for a branch generated from another installation', () {
+    /// Where the other installation's values are recorded on this machine.
+    const String recordsPath = '/srv/records.yaml';
+
+    /// The row that stamps a marker with what the file records — the inheritance shape.
+    const StampPlaceholderInTrackedFiles inheriting = StampPlaceholderInTrackedFiles(
+      repository: repository,
+      refuseOnBranch: sourceBranch,
+      placeholder: '__ORIGIN__',
+      valueFile: recordsPath,
+      valueKey: 'origin',
+      keepMarker: keepMarker,
+      rule: rule,
+    );
+
+    FakeFiles recorded(
+      Map<String, String> checkout, {
+      String records = 'origin: m1.example.com\n',
+    }) {
+      final FakeFiles files = FakeFiles(<String, String>{
+        for (final MapEntry<String, String> f in checkout.entries) '$repository/${f.key}': f.value,
+        recordsPath: records,
+      });
+      return files;
+    }
+
+    test('the recorded value is stamped exactly as an answered one would be', () async {
+      final FakeFiles files = recorded(<String, String>{
+        'platform/values-dev.yaml': 'origin: __ORIGIN__\n',
+      });
+      final FakeShell shell = searching(
+        carrying: <String>['platform/values-dev.yaml'],
+        literal: '__ORIGIN__',
+      );
+
+      await inheriting.apply(contextOn(shell: shell, files: files));
+      expect(read(files, 'platform/values-dev.yaml'), 'origin: m1.example.com\n');
+    });
+
+    test('a named rule works the replacement out of the value, out of the closed set', () async {
+      const StampPlaceholderInTrackedFiles shortened = StampPlaceholderInTrackedFiles(
+        repository: repository,
+        refuseOnBranch: sourceBranch,
+        placeholder: '__ORIGIN_NAME__',
+        valueFile: recordsPath,
+        valueKey: 'origin',
+        valueRule: 'first_dns_label_of',
+        keepMarker: keepMarker,
+        rule: rule,
+      );
+      final FakeFiles files = recorded(<String, String>{
+        'platform/values-dev.yaml': 'name: __ORIGIN_NAME__\n',
+      });
+      final FakeShell shell = searching(
+        carrying: <String>['platform/values-dev.yaml'],
+        literal: '__ORIGIN_NAME__',
+      );
+
+      await shortened.apply(contextOn(shell: shell, files: files));
+      expect(read(files, 'platform/values-dev.yaml'), 'name: m1\n');
+    });
+
+    test('a file that is not there refuses by its path, and nothing is stamped', () async {
+      final FakeFiles files = FakeFiles(<String, String>{
+        '$repository/platform/values-dev.yaml': 'origin: __ORIGIN__\n',
+      });
+      final FakeShell shell = searching(
+        carrying: <String>['platform/values-dev.yaml'],
+        literal: '__ORIGIN__',
+      );
+
+      final CheckResult answer = await inheriting.check(contextOn(shell: shell, files: files));
+      expect((answer as Blocked).reason, contains(recordsPath));
+      expect(read(files, 'platform/values-dev.yaml'), contains('__ORIGIN__'));
+    });
+
+    test('a file that records no value under the key refuses by that key', () async {
+      final FakeFiles files = recorded(<String, String>{
+        'platform/values-dev.yaml': 'origin: __ORIGIN__\n',
+      }, records: 'another: value\n');
+      final FakeShell shell = searching(
+        carrying: <String>['platform/values-dev.yaml'],
+        literal: '__ORIGIN__',
+      );
+
+      final CheckResult answer = await inheriting.check(contextOn(shell: shell, files: files));
+      expect((answer as Blocked).reason, contains('"origin"'));
+    });
+
+    test('a row naming an answer AND a file is refused as the pair it is', () async {
+      const StampPlaceholderInTrackedFiles both = StampPlaceholderInTrackedFiles(
+        repository: repository,
+        refuseOnBranch: sourceBranch,
+        placeholder: '__ORIGIN__',
+        valueAnswer: 'fqdn',
+        valueFile: recordsPath,
+        valueKey: 'origin',
+        keepMarker: keepMarker,
+        rule: rule,
+      );
+      final FakeShell shell = searching(carrying: <String>[], literal: '__ORIGIN__');
+
+      final CheckResult answer = await both.check(
+        contextOn(shell: shell, files: recorded(<String, String>{})),
+      );
+      expect((answer as Blocked).reason, contains('pair'));
+    });
+
+    test('a row naming no source at all is refused as that', () async {
+      const StampPlaceholderInTrackedFiles neither = StampPlaceholderInTrackedFiles(
+        repository: repository,
+        refuseOnBranch: sourceBranch,
+        placeholder: '__ORIGIN__',
+        keepMarker: keepMarker,
+        rule: rule,
+      );
+      final FakeShell shell = searching(carrying: <String>[], literal: '__ORIGIN__');
+
+      final CheckResult answer = await neither.check(
+        contextOn(shell: shell, files: recorded(<String, String>{})),
+      );
+      expect((answer as Blocked).reason, contains('no source'));
+    });
+
+    test('a rule that is not in the closed set is refused naming the set', () async {
+      const StampPlaceholderInTrackedFiles misruled = StampPlaceholderInTrackedFiles(
+        repository: repository,
+        refuseOnBranch: sourceBranch,
+        placeholder: '__ORIGIN__',
+        valueFile: recordsPath,
+        valueKey: 'origin',
+        valueRule: 'first_word_of',
+        keepMarker: keepMarker,
+        rule: rule,
+      );
+      final FakeShell shell = searching(carrying: <String>[], literal: '__ORIGIN__');
+
+      final CheckResult answer = await misruled.check(
+        contextOn(shell: shell, files: recorded(<String, String>{})),
+      );
+      expect((answer as Blocked).reason, contains('first_dns_label_of'));
+    });
+  });
 }
 
 /// A file system that answers every read and drops every write.

@@ -176,13 +176,15 @@ final class CreateFileFromTemplate extends ReversibleStep<bool> with FileStep, T
         'file without one',
       );
     }
-    // An answer holding nothing is left out rather than filled in empty, so an OPTIONAL slot's line
+    // A source holding nothing is left out rather than filled in empty, so an OPTIONAL slot's line
     // is dropped by the framework instead of being written with nothing after it. A REQUIRED slot
-    // nobody answered is refused there by name, which is the whole reason the two kinds differ.
-    final Map<String, String> filled = <String, String>{
-      for (final MapEntry<String, KeyBinding> each in values.entries)
-        if (each.value.valueIn(context.answers) case final String value) each.key: value,
-    };
+    // nothing filled is refused there by name, which is the whole reason the two kinds differ.
+    final Map<String, String> filled = <String, String>{};
+    for (final MapEntry<String, KeyBinding> each in values.entries) {
+      if (await each.value.resolveIn(context, elevated: elevated) case final String value) {
+        filled[each.key] = value;
+      }
+    }
 
     return FileContent.text(await renderedWith(context, filled));
   }

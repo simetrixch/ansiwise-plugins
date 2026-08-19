@@ -124,11 +124,14 @@ final class SetProcessFlags extends ReversibleStep<String?> {
   ///
   /// A slot nothing filled is REFUSED rather than written out: `--oidc-issuer-url=<books-cluster>`
   /// reaching an argument file is a flag the process reads as that literal text.
-  String _filled(String text, StepContext context) {
-    final String written = filledSlots(text, <String, String>{
-      for (final MapEntry<String, KeyBinding> each in values.entries)
-        if (each.value.valueIn(context.answers) case final String value) each.key: value,
-    });
+  Future<String> _filled(String text, StepContext context) async {
+    final Map<String, String> held = <String, String>{};
+    for (final MapEntry<String, KeyBinding> each in values.entries) {
+      if (await each.value.resolveIn(context, elevated: elevated) case final String value) {
+        held[each.key] = value;
+      }
+    }
+    final String written = filledSlots(text, held);
     if (leftoverSlotIn(written) case final String left) {
       throw TemplateRefused(
         '$left in "$text" is filled by nothing: `values` says which answer fills each slot, and a '
@@ -148,7 +151,7 @@ final class SetProcessFlags extends ReversibleStep<String?> {
     final String current = await context.files.read(argsPath, elevated: elevated);
     String mutated = current;
     for (final String rawFlag in flags) {
-      mutated = SetProcessFlag.withFlag(mutated, _filled(rawFlag, context));
+      mutated = SetProcessFlag.withFlag(mutated, await _filled(rawFlag, context));
     }
 
     return current == mutated
@@ -163,7 +166,7 @@ final class SetProcessFlags extends ReversibleStep<String?> {
         : '';
     String mutated = current;
     for (final String rawFlag in flags) {
-      mutated = SetProcessFlag.withFlag(mutated, _filled(rawFlag, context));
+      mutated = SetProcessFlag.withFlag(mutated, await _filled(rawFlag, context));
     }
     return StepPlan.diff(argsPath, before: current, after: mutated);
   }
@@ -175,7 +178,7 @@ final class SetProcessFlags extends ReversibleStep<String?> {
         : '';
     String mutated = current;
     for (final String rawFlag in flags) {
-      mutated = SetProcessFlag.withFlag(mutated, _filled(rawFlag, context));
+      mutated = SetProcessFlag.withFlag(mutated, await _filled(rawFlag, context));
     }
     await context.files.write(argsPath, mutated, mode: fileMode, elevated: elevated);
     await SetProcessFlag.restartWith(context, restart, ready: ready, timeout: readyTimeout);

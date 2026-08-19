@@ -194,4 +194,84 @@ void main() {
       expect(machine.files.contents[path], contains('release: v1.2.3'));
     });
   });
+
+  group('the value a FILE records, for a file inherited from another installation', () {
+    /// Where the other installation's values are recorded on this machine.
+    const String recordsPath = '/srv/records.yaml';
+
+    const WriteFileFromTemplate inheriting = WriteFileFromTemplate(
+      templatePath: templatePath,
+      path: path,
+      fileMode: 0x1a4,
+      values: <String, KeyBinding>{
+        'fqdn': KeyBinding(answer: 'fqdn'),
+        'build-plane': KeyBinding(file: recordsPath, key: 'plane'),
+        'alert-recipients': KeyBinding(file: recordsPath, key: 'to', split: ', ', join: "', '"),
+        'note': KeyBinding(file: recordsPath, key: 'note'),
+      },
+    );
+
+    HostMachine recording(String records) {
+      final HostMachine machine = machineWith();
+      machine.files.contents[recordsPath] = records;
+      return machine;
+    }
+
+    test('a recorded value fills its slot exactly as an answered one would', () async {
+      final HostMachine machine = recording('plane: b1.example.com\nto: a@example.com\n');
+
+      await inheriting.apply(runWith(machine, answered));
+
+      expect(machine.files.contents[path], contains('plane: b1.example.com'));
+    });
+
+    test('a recorded line of several values is split as the file recorded them and joined as this '
+        'one writes them', () async {
+      final HostMachine machine = recording(
+        'plane: b1.example.com\nto: a@example.com, b@example.com\n',
+      );
+
+      await inheriting.apply(runWith(machine, answered));
+
+      expect(machine.files.contents[path], contains("to: a@example.com', 'b@example.com"));
+    });
+
+    test(
+      'a key the file does not record drops the OPTIONAL line, as an unanswered one does',
+      () async {
+        final HostMachine machine = recording('plane: b1.example.com\nto: a@example.com\n');
+
+        await inheriting.apply(runWith(machine, answered));
+
+        expect(machine.files.contents[path], isNot(contains('note:')));
+      },
+    );
+
+    test('a binding naming an answer AND a file is refused where the row is read', () {
+      expect(
+        () => KeyBinding.readFrom(<String, Object?>{
+          'fqdn': <String, Object?>{'answer': 'fqdn', 'file': recordsPath, 'key': 'fqdn'},
+        }),
+        throwsArgumentError,
+      );
+    });
+
+    test('a binding reading a file without a key is refused as that', () {
+      expect(
+        () => KeyBinding.readFrom(<String, Object?>{
+          'fqdn': <String, Object?>{'file': recordsPath},
+        }),
+        throwsArgumentError,
+      );
+    });
+
+    test('a binding splitting without saying how to join is refused as that', () {
+      expect(
+        () => KeyBinding.readFrom(<String, Object?>{
+          'to': <String, Object?>{'file': recordsPath, 'key': 'to', 'split': ', '},
+        }),
+        throwsArgumentError,
+      );
+    });
+  });
 }

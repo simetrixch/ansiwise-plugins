@@ -37,11 +37,23 @@ import 'stamp_selection.dart';
 /// at a branch that does not carry it. The marker itself is a word written into the tree being
 /// stamped, so the row states it and this step carries no answer of its own about it.
 ///
-/// **The replacement is an ANSWER, and the row says which one.** What one installation puts where
-/// the placeholder stands is the one value nobody can write into a file that ships to all of them,
-/// so what the row carries is the NAME of the question — `value_answer: fqdn` — and the reading
-/// happens here. A run holding no answer of that name is refused by name rather than stamping the
-/// literal out of every file and putting nothing in its place.
+/// **The replacement is an ANSWER or a RECORDED VALUE, and the row says which — never both.** What
+/// one installation puts where the placeholder stands is the one value nobody can write into a file
+/// that ships to all of them. Where the RUN holds it, the row carries the NAME of the question —
+/// `value_answer: fqdn` — and the reading happens here; a run holding no answer of that name is
+/// refused by name rather than stamping the literal out of every file and putting nothing in its
+/// place. Where a FILE on the machine records it — a branch generated FROM another installation
+/// inherits that installation's values, and asking for them again invites an answer that
+/// contradicts what stands written — the row carries `value_file` and `value_key`, and the value is
+/// read off a line of the shape `key: value` or `KEY=value`. Both at once is a pair that can
+/// disagree and is refused as that.
+///
+/// **`value_rule` names one of the framework's derivation rules to work the replacement out of the
+/// value, and it is a NAME out of a closed set, never an expression.** The case it exists for: the
+/// file records a domain, and the placeholder stands where that domain's first label belongs.
+/// Recording the label as well would be the same fact twice, and composing it in the program file
+/// would make the file compute — the same reasoning the framework's answer derivations rest on, and
+/// it is exactly those rules this reuses.
 ///
 /// **Scripts and product material are excluded as a class, and that is load-bearing.** The
 /// placeholder inside a script is never installation state — it is a guard, a fixture or a comment.
@@ -69,9 +81,12 @@ final class StampPlaceholderInTrackedFiles extends ReversibleStep<List<String>> 
     required this.repository,
     required this.refuseOnBranch,
     required this.placeholder,
-    required this.valueAnswer,
     required this.keepMarker,
     required this.rule,
+    this.valueAnswer,
+    this.valueFile,
+    this.valueKey,
+    this.valueRule,
     this.tree = '',
     this.keys = const <String>[],
     this.elevated = false,
@@ -88,7 +103,10 @@ final class StampPlaceholderInTrackedFiles extends ReversibleStep<List<String>> 
         repository: arguments.text('repository'),
         refuseOnBranch: arguments.text('refuse_on_branch'),
         placeholder: arguments.text('placeholder'),
-        valueAnswer: arguments.text('value_answer'),
+        valueAnswer: arguments.optionalText('value_answer'),
+        valueFile: arguments.optionalText('value_file'),
+        valueKey: arguments.optionalText('value_key'),
+        valueRule: arguments.optionalText('value_rule'),
         keepMarker: arguments.text('keep_marker'),
         tree: arguments.optionalText('tree') ?? '',
         keys: arguments.has('keys') ? arguments.textList('keys') : const <String>[],
@@ -128,9 +146,38 @@ final class StampPlaceholderInTrackedFiles extends ReversibleStep<List<String>> 
     ArgumentSpec(
       name: 'value_answer',
       kind: ArgumentKind.answerName,
+      required: false,
       describes:
           'the name of the answer this run reads the replacement out of — write "fqdn" here and '
-          'every placeholder is replaced by whatever this run answered for "fqdn"',
+          'every placeholder is replaced by whatever this run answered for "fqdn". Leave it off '
+          'where value_file records the value instead',
+    ),
+    // The OTHER source, for a value the run does not hold because another installation already
+    // decided it: a file on this machine records it, and the row names the file and the key. One
+    // source per row, never both — the check refuses the pair by name.
+    ArgumentSpec(
+      name: 'value_file',
+      kind: ArgumentKind.text,
+      required: false,
+      describes:
+          'the settings file on this machine the replacement is recorded in, read as one '
+          '"key: value" or "KEY=value" line per key. Leave it off where value_answer names the '
+          'value instead',
+    ),
+    ArgumentSpec(
+      name: 'value_key',
+      kind: ArgumentKind.text,
+      required: false,
+      describes: 'the key inside value_file whose value is the replacement',
+    ),
+    ArgumentSpec(
+      name: 'value_rule',
+      kind: ArgumentKind.text,
+      required: false,
+      describes:
+          'the name of one of the framework\'s single-source derivation rules, applied to the '
+          'value before it is stamped — first_dns_label_of turns a recorded domain into its short '
+          'name. Leave it off to stamp the value as it stands',
     ),
     // The marker is a word somebody wrote into the product's own files, so it is that product's and
     // not this step's. A default here would make a line reading somebody else's word survive a
@@ -207,8 +254,17 @@ final class StampPlaceholderInTrackedFiles extends ReversibleStep<List<String>> 
   /// The trailing comment that exempts a line from every stamp, as the row states it.
   final String keepMarker;
 
-  /// The name of the answer the replacement is read out of.
-  final String valueAnswer;
+  /// The name of the answer the replacement is read out of, or null where a file records it.
+  final String? valueAnswer;
+
+  /// The settings file the replacement is recorded in, or null where an answer holds it.
+  final String? valueFile;
+
+  /// The key inside [valueFile] whose value is the replacement.
+  final String? valueKey;
+
+  /// The name of the derivation rule applied to the value, or null to stamp it as it stands.
+  final String? valueRule;
 
   /// The checkout being stamped.
   final String repository;
@@ -241,9 +297,9 @@ final class StampPlaceholderInTrackedFiles extends ReversibleStep<List<String>> 
 
   @override
   Future<CheckResult> check(StepContext context) async {
-    final String? replacement = _replacement(context);
+    final String? replacement = await _replacement(context);
     if (replacement == null) {
-      return CheckResult.blocked(_unanswered);
+      return CheckResult.blocked(await _whyValueless(context));
     }
 
     final String? head = await _head(context);
@@ -266,11 +322,11 @@ final class StampPlaceholderInTrackedFiles extends ReversibleStep<List<String>> 
 
   @override
   Future<StepPlan> plan(StepContext context) async {
-    final String? replacement = _replacement(context);
+    final String? replacement = await _replacement(context);
     // Answered rather than thrown. A plan is what an operator reads to decide whether to let the run
     // happen, and a plan that failed to be produced tells them nothing about what would be done.
     if (replacement == null) {
-      return StepPlan.nothing(_unanswered);
+      return StepPlan.nothing(await _whyValueless(context));
     }
 
     final Map<String, String> left = await _stampable(context, replacement);
@@ -291,12 +347,12 @@ final class StampPlaceholderInTrackedFiles extends ReversibleStep<List<String>> 
 
   @override
   Future<void> apply(StepContext context) async {
-    final String? replacement = _replacement(context);
+    final String? replacement = await _replacement(context);
     if (replacement == null) {
       // The engine applies a step only after its check answered ready, and that check refuses this
       // by name — so reaching here is a call out of order. Stamping anyway would take the
       // placeholder out of every file it touched and put nothing where it stood.
-      throw StateError(_unanswered);
+      throw StateError(await _whyValueless(context));
     }
 
     final Map<String, String> stampable = await _stampable(context, replacement);
@@ -324,7 +380,7 @@ final class StampPlaceholderInTrackedFiles extends ReversibleStep<List<String>> 
   /// A run holding no answer of the row's name stamps nothing, so there is nothing to take back.
   @override
   Future<List<String>> capture(StepContext context) async {
-    if (_replacement(context) case final String replacement) {
+    if (await _replacement(context) case final String replacement) {
       return (await _stampable(context, replacement)).keys.toList();
     }
     return const <String>[];
@@ -429,20 +485,101 @@ final class StampPlaceholderInTrackedFiles extends ReversibleStep<List<String>> 
     return line.replaceFirstMapped(_pattern, (Match match) => '${match.group(1)}$replacement');
   }
 
-  /// What this run replaces every occurrence by, read out of the run under the name the row gave.
+  /// What this run replaces every occurrence by, from whichever source the row named.
   ///
-  /// Null where the run holds no answer of that name, or where it was left blank. Nothing stands in
-  /// for it: a stamp with an empty replacement takes the literal out of every file it touches and
-  /// leaves the value that literal stood for nowhere at all.
-  String? _replacement(StepContext context) {
-    final String? value = context.answers.optionalText(valueAnswer);
-    return value == null || value.isEmpty ? null : value;
+  /// Null where the row misdeclared its source, where the source holds nothing, or where it was
+  /// left blank — [_whyValueless] says which. Nothing stands in for it: a stamp with an empty
+  /// replacement takes the literal out of every file it touches and leaves the value that literal
+  /// stood for nowhere at all.
+  Future<String?> _replacement(StepContext context) async {
+    if (_misdeclared != null) {
+      return null;
+    }
+    final String? raw = valueAnswer != null
+        ? context.answers.optionalText(valueAnswer!)
+        : await _recorded(context);
+    if (raw == null || raw.isEmpty) {
+      return null;
+    }
+    if (valueRule case final String named) {
+      // The rule was vetted by [_misdeclared], so this cannot be null here.
+      return DerivationRule.named(named)!.applyTo(raw);
+    }
+    return raw;
   }
 
-  /// What is said about a run that answers nothing under the name this row named.
-  String get _unanswered =>
-      'this run holds no answer called "$valueAnswer", and that is where this row says the value '
-      'every "$placeholder" is replaced by comes from';
+  /// What is wrong with the row's own declaration of its value source, or null where it is sound.
+  ///
+  /// A property of the ROW and not of any machine, so it is answered without one — and answered
+  /// first, because a row that says two contradictory things must not be read as either of them.
+  String? get _misdeclared {
+    if (valueAnswer != null && valueFile != null) {
+      return 'this row names an answer AND a file for the value every "$placeholder" is replaced '
+          'by, and two statements of one value is a pair that can disagree — keep whichever states '
+          'the truth and drop the other';
+    }
+    if (valueAnswer == null && valueFile == null) {
+      return 'this row names no source at all for the value every "$placeholder" is replaced by — '
+          'write value_answer for a value the run holds, or value_file and value_key for one a '
+          'file on this machine records';
+    }
+    if (valueFile != null && (valueKey == null || valueKey!.isEmpty)) {
+      return 'this row reads the value out of $valueFile and names no value_key, so nothing says '
+          'which line of it holds the value';
+    }
+    if (valueRule case final String named) {
+      final DerivationRule? rule = DerivationRule.named(named);
+      if (rule == null) {
+        return '"$named" is not a derivation rule — it is one of '
+            '${DerivationRule.allWritten.join(', ')}';
+      }
+      if (rule.sources != 1) {
+        return '"$named" reads a pair of answers, and a stamp holds one value to work its '
+            'replacement out of';
+      }
+    }
+    return null;
+  }
+
+  /// The value the named file records under the named key, or null where it records none.
+  Future<String?> _recorded(StepContext context) async {
+    if (!await context.files.exists(valueFile!, elevated: elevated)) {
+      return null;
+    }
+    final String content = await context.files.read(valueFile!, elevated: elevated);
+    final RegExp line = RegExp('^[ \\t]*${RegExp.escape(valueKey!)}[ \\t]*[:=][ \\t]*(.*)\$');
+    for (final String each in content.split('\n')) {
+      final RegExpMatch? match = line.firstMatch(each.trimRight());
+      if (match == null) {
+        continue;
+      }
+      String value = match.group(1)!.trim();
+      if (value.length >= 2 &&
+          (value.startsWith('"') && value.endsWith('"') ||
+              value.startsWith("'") && value.endsWith("'"))) {
+        value = value.substring(1, value.length - 1);
+      }
+      return value;
+    }
+    return null;
+  }
+
+  /// Why no replacement could be produced, said so an operator can act on the right half.
+  Future<String> _whyValueless(StepContext context) async {
+    if (_misdeclared case final String wrong) {
+      return wrong;
+    }
+    if (valueAnswer case final String name) {
+      return 'this run holds no answer called "$name", and that is where this row says the value '
+          'every "$placeholder" is replaced by comes from';
+    }
+    if (!await context.files.exists(valueFile!, elevated: elevated)) {
+      return '$valueFile is not there, and it is where this row says the value every '
+          '"$placeholder" is replaced by is recorded';
+    }
+    return '$valueFile records no value under "$valueKey", and that is where this row says the '
+        'value every "$placeholder" is replaced by comes from';
+  }
 
   /// One of [keys] at the start of the line, the anchor some lines carry, and then the value itself.
   ///

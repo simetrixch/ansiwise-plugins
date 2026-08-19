@@ -134,6 +134,58 @@ void main() {
       expect(shell.ran, contains('git -C $repository push --dry-run upstream $base'));
     });
 
+    test('the branch may be read out of an answer, for a branch named per installation', () async {
+      const RequirePushableRemote perInstallation = RequirePushableRemote(
+        repository: repository,
+        remote: remote,
+        branchAnswer: nameAnswer,
+      );
+      final FakeShell shell = checkout()
+        ..answers('git -C $repository push --dry-run $remote $branch', '');
+
+      expect(await perInstallation.check(contextOn(shell: shell)), isA<Satisfied>());
+      expect(shell.ran, contains('git -C $repository push --dry-run $remote $branch'));
+    });
+
+    test('a run holding no answer under that name is refused by the name', () async {
+      const RequirePushableRemote perInstallation = RequirePushableRemote(
+        repository: repository,
+        remote: remote,
+        branchAnswer: nameAnswer,
+      );
+      final FakeShell shell = checkout();
+
+      final CheckResult answer = await perInstallation.check(contextOn(shell: shell, name: null));
+      expect((answer as Blocked).reason, contains(nameAnswer));
+      expect(
+        shell.ran.where((String c) => c.contains('push')),
+        isEmpty,
+        reason: 'there is no branch to offer a push of',
+      );
+    });
+
+    test('a row writing a branch AND naming an answer is refused as the pair it is', () async {
+      const RequirePushableRemote both = RequirePushableRemote(
+        repository: repository,
+        remote: remote,
+        branch: base,
+        branchAnswer: nameAnswer,
+      );
+
+      final CheckResult answer = await both.check(contextOn(shell: checkout()));
+      expect((answer as Blocked).reason, contains('disagree'));
+    });
+
+    test('a row naming neither is refused as that', () async {
+      const RequirePushableRemote neither = RequirePushableRemote(
+        repository: repository,
+        remote: remote,
+      );
+
+      final CheckResult answer = await neither.check(contextOn(shell: checkout()));
+      expect((answer as Blocked).reason, contains('no branch at all'));
+    });
+
     test('nothing it runs can stop to ask a question', () async {
       // There is no terminal on the other side of this run, so a prompt does not fail it — it hangs
       // it until the deadline, and a hung run cannot be told from a working one.
