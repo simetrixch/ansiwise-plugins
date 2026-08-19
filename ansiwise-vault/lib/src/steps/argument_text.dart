@@ -121,11 +121,15 @@ extension ArgumentPlaceholders on VaultProfile {
     if (_leftoverSlot.firstMatch(written)?.group(0) case final String left) {
       final String runSlot =
           layout.runSlot ?? 'no slot at all, because the row names no run_answer';
+      final String clusterSlot = layout.clusterAnswer == null
+          ? 'no sibling slot, because the row names no cluster_answer'
+          : '<${layout.clusterAnswer}>';
       return ArgumentText.unknown(
         '"$text" carries $left, and nothing in this run holds that name — a program file may write '
         '$vaultUrlPlaceholder, $clusterPlaceholder and $kubernetesMountPlaceholder, '
-        '$accessorPlaceholder where the step reads an auth mount to fill it from, and for the '
-        'answer this row names $runSlot; anything else would reach Vault as it stands',
+        '$accessorPlaceholder where the step reads an auth mount to fill it from, for the '
+        'answer this row names $runSlot, and for the sibling cluster it names $clusterSlot; '
+        'anything else would reach Vault as it stands',
       );
     }
     return ArgumentText.of(written);

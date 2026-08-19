@@ -1,11 +1,16 @@
 import 'package:ansiwise_core/ansiwise_core.dart';
 
 import 'steps/file_from_vault.dart';
+import 'steps/remove_vault_auth_method.dart';
+import 'steps/remove_vault_kv_entry.dart';
+import 'steps/remove_vault_policy.dart';
+import 'steps/remove_vault_role_member.dart';
 import 'steps/vault_auth_method.dart';
 import 'steps/vault_auth_role.dart';
 import 'steps/vault_init.dart';
 import 'steps/vault_kv_entry.dart';
 import 'steps/vault_kv_mount.dart';
+import 'steps/vault_login_probe.dart';
 import 'steps/vault_policy.dart';
 import 'steps/vault_unsealed.dart';
 
@@ -42,7 +47,7 @@ const Map<StepName, RegisteredStep> vaultSteps = <StepName, RegisteredStep>{
   ),
   StepName('vault_auth_method'): RegisteredStep(
     name: StepName('vault_auth_method'),
-    source: 'lib/src/steps/vault_auth_method.dart:32',
+    source: 'lib/src/steps/vault_auth_method.dart:34',
     create: VaultAuthMethod.fromArguments,
     arguments: VaultAuthMethod.arguments,
     answers: VaultAuthMethod.answers,
@@ -73,6 +78,41 @@ const Map<StepName, RegisteredStep> vaultSteps = <StepName, RegisteredStep>{
     source: 'lib/src/steps/file_from_vault.dart:26',
     create: FileFromVault.fromArguments,
     arguments: FileFromVault.arguments,
+  ),
+  // The gate that proves a mount's connection to its cluster with a real login attempt. Which
+  // answer holds the credential it presents is the row's to say, so no answer is declared here.
+  StepName('vault_login_probe'): RegisteredStep(
+    name: StepName('vault_login_probe'),
+    source: 'lib/src/steps/vault_login_probe.dart:29',
+    create: VaultLoginProbe.fromArguments,
+    arguments: VaultLoginProbe.arguments,
+  ),
+  // The four removal steps, for taking one cluster's surface off a Vault that serves several. Each
+  // proves absence rather than assuming it, and each spells its target with the same slots the
+  // writing rows used.
+  StepName('remove_vault_policy'): RegisteredStep(
+    name: StepName('remove_vault_policy'),
+    source: 'lib/src/steps/remove_vault_policy.dart:18',
+    create: RemoveVaultPolicy.fromArguments,
+    arguments: RemoveVaultPolicy.arguments,
+  ),
+  StepName('remove_vault_auth_method'): RegisteredStep(
+    name: StepName('remove_vault_auth_method'),
+    source: 'lib/src/steps/remove_vault_auth_method.dart:19',
+    create: RemoveVaultAuthMethod.fromArguments,
+    arguments: RemoveVaultAuthMethod.arguments,
+  ),
+  StepName('remove_vault_kv_entry'): RegisteredStep(
+    name: StepName('remove_vault_kv_entry'),
+    source: 'lib/src/steps/remove_vault_kv_entry.dart:18',
+    create: RemoveVaultKvEntry.fromArguments,
+    arguments: RemoveVaultKvEntry.arguments,
+  ),
+  StepName('remove_vault_role_member'): RegisteredStep(
+    name: StepName('remove_vault_role_member'),
+    source: 'lib/src/steps/remove_vault_role_member.dart:19',
+    create: RemoveVaultRoleMember.fromArguments,
+    arguments: RemoveVaultRoleMember.arguments,
   ),
 };
 

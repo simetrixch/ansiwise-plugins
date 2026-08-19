@@ -130,4 +130,53 @@ void main() {
       path,
     ]);
   });
+
+  group('the ownership label', () {
+    const KubernetesObject guarded = KubernetesObject(
+      repository: '/srv/checkout',
+      manifest: 'manifests/certificate.yaml',
+      ownerLabel: 'example.com/managed',
+      ownerLabelValue: 'true',
+    );
+    const String getKey = 'kubectl get --filename $path -o json';
+
+    test('a live object WITHOUT the label is refused, never applied over', () async {
+      // The planted defect this guards: a name collision handing somebody else's object to this
+      // manifest — the apply would rewrite its contents on the strength of a shared name.
+      final ClusterMachine machine = diffing(1);
+      machine.shell.answers(getKey, '{"kind":"Certificate","metadata":{"name":"c1","labels":{}}}');
+      final CheckResult answer = await guarded.check(machine.contextFor(under));
+      expect(answer, isA<Blocked>());
+      expect((answer as Blocked).reason, contains('belongs to something else'));
+    });
+
+    test('a live object CARRYING the label is this program\'s to rewrite', () async {
+      final ClusterMachine machine = diffing(1);
+      machine.shell.answers(
+        getKey,
+        '{"kind":"Certificate","metadata":{"name":"c1",'
+        '"labels":{"example.com/managed":"true"}}}',
+      );
+      expect(await guarded.check(machine.contextFor(under)), isA<Ready>());
+    });
+
+    test('objects the cluster does not hold collide with nothing', () async {
+      final ClusterMachine machine = diffing(1);
+      machine.shell.fails(getKey, stderr: 'not found');
+      expect(await guarded.check(machine.contextFor(under)), isA<Ready>());
+    });
+
+    test('a key with no value to hold it against is refused rather than guessed', () async {
+      const KubernetesObject halfALabel = KubernetesObject(
+        repository: '/srv/checkout',
+        manifest: 'manifests/certificate.yaml',
+        ownerLabel: 'example.com/managed',
+      );
+      final ClusterMachine machine = diffing(1);
+      machine.shell.answers(getKey, '{"kind":"Certificate","metadata":{"name":"c1","labels":{}}}');
+      final CheckResult answer = await halfALabel.check(machine.contextFor(under));
+      expect(answer, isA<Blocked>());
+      expect((answer as Blocked).reason, contains('owner_label_value'));
+    });
+  });
 }

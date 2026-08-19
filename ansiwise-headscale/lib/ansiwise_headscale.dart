@@ -8,4 +8,5 @@ library;
 
 export 'src/plugin.dart';
 export 'src/registry.dart';
+export 'src/steps/remove_tailnet_user.dart';
 export 'src/steps/tailnet_join_credential.dart';

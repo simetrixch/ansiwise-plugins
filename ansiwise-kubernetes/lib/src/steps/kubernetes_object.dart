@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:ansiwise_core/ansiwise_core.dart';
 
 import 'kubectl.dart';
@@ -29,6 +31,8 @@ final class KubernetesObject extends ReversibleStep<bool> {
   const KubernetesObject({
     required this.repository,
     required this.manifest,
+    this.ownerLabel,
+    this.ownerLabelValue,
     this.kubectl = const Kubectl(),
     this.elevated = false,
   });
@@ -37,6 +41,8 @@ final class KubernetesObject extends ReversibleStep<bool> {
   factory KubernetesObject.fromArguments(Arguments arguments) => KubernetesObject(
     repository: arguments.text('repository'),
     manifest: arguments.text('manifest'),
+    ownerLabel: arguments.optionalText('owner_label'),
+    ownerLabelValue: arguments.optionalText('owner_label_value'),
     kubectl: Kubectl.fromArguments(arguments),
     elevated: arguments.has('elevated') && arguments.flag('elevated'),
   );
@@ -53,6 +59,23 @@ final class KubernetesObject extends ReversibleStep<bool> {
       kind: ArgumentKind.text,
       describes: 'the manifest, as a path under that checkout',
     ),
+    ArgumentSpec(
+      name: 'owner_label',
+      kind: ArgumentKind.text,
+      required: false,
+      describes:
+          'the key of the label that marks the manifest\'s objects as this program\'s to rewrite. '
+          'Stated, a live object of the same name NOT carrying it with owner_label_value is '
+          'refused rather than applied over — it belongs to something else, and a name collision '
+          'must not hand its contents to this manifest. The manifest itself must carry the label, '
+          'or the object it applies would refuse its own next run',
+    ),
+    ArgumentSpec(
+      name: 'owner_label_value',
+      kind: ArgumentKind.text,
+      required: false,
+      describes: 'the value the ownership label must hold — the other half of owner_label',
+    ),
     Kubectl.argument,
     Kubectl.elevationArgument,
     elevationArgument,
@@ -63,6 +86,13 @@ final class KubernetesObject extends ReversibleStep<bool> {
 
   /// The manifest, relative to it.
   final String manifest;
+
+  /// The key of the label marking the manifest's objects as this program's to rewrite, or null
+  /// where the row states none.
+  final String? ownerLabel;
+
+  /// The value that label must hold, or null where the row states no label.
+  final String? ownerLabelValue;
 
   /// How the cluster is reached.
   final Kubectl kubectl;
@@ -79,6 +109,9 @@ final class KubernetesObject extends ReversibleStep<bool> {
       // Blocked and not failed: the tree is what it is, and no run can write this file. Saying which
       // path is missing is the whole of what an operator needs.
       return CheckResult.blocked('$manifest is not in this checkout, so there is nothing to apply');
+    }
+    if (await _collision(context) case final String collision) {
+      return CheckResult.blocked(collision);
     }
     final CommandResult found = await context.shell.run(
       kubectl.observing(<String>['diff', '--filename', path]),
@@ -143,4 +176,65 @@ final class KubernetesObject extends ReversibleStep<bool> {
   }
 
   List<String> get _apply => kubectl.argv(<String>['apply', '--filename', path]);
+
+  /// Why a live object of this manifest may not be applied over, or null when every one may.
+  ///
+  /// Asked only where the row states an owner label. A live object carrying the label is this
+  /// program's from an earlier run; one WITHOUT it belongs to something else, and applying this
+  /// manifest would hand that object's contents to a file that merely shares its name. Objects the
+  /// cluster does not hold collide with nothing.
+  Future<String?> _collision(StepContext context) async {
+    final String? key = ownerLabel;
+    if (key == null) {
+      return null;
+    }
+    final String? value = ownerLabelValue;
+    if (value == null || value.isEmpty) {
+      return 'owner_label names $key and no owner_label_value says what it must hold — without '
+          'both halves there is no mark to hold the live objects against';
+    }
+
+    final CommandResult found = await context.shell.run(
+      kubectl.observing(<String>['get', '--filename', path, '-o', 'json']),
+    );
+    if (found.exitCode != 0) {
+      // Nothing (or not everything) of the manifest is live — nothing here can collide.
+      return null;
+    }
+    final Object? decoded = _decodedJson(found.stdout);
+    if (decoded is! Map<String, Object?>) {
+      return 'the live objects of $manifest could not be read while holding them against the '
+          'label $key=$value — an unreadable listing must not pass for "all marked"';
+    }
+    final Object? items = decoded['items'];
+    final List<Object?> objects = items is List<Object?> ? items : <Object?>[decoded];
+    for (final Object? object in objects) {
+      if (object is! Map<String, Object?>) {
+        continue;
+      }
+      final Object? metadata = object['metadata'];
+      final Object? labels = metadata is Map<String, Object?> ? metadata['labels'] : null;
+      final Object? marked = labels is Map<String, Object?> ? labels[key] : null;
+      if (marked != value) {
+        final Object? kind = object['kind'];
+        final Object? name = metadata is Map<String, Object?> ? metadata['name'] : null;
+        return '$kind "$name" exists WITHOUT the label $key=$value — it belongs to something '
+            'else, and applying this manifest over it would hand its contents to a file that '
+            'merely shares its name';
+      }
+    }
+    return null;
+  }
+
+  /// [text] as JSON, or null when it is not.
+  static Object? _decodedJson(String text) {
+    if (text.trim().isEmpty) {
+      return null;
+    }
+    try {
+      return jsonDecode(text);
+    } on FormatException {
+      return null;
+    }
+  }
 }

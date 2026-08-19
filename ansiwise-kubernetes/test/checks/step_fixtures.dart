@@ -44,10 +44,33 @@ final Map<String, Fixture> stepFixtures = <String, Fixture>{
   'kubernetes_object': (FakeShell shell, FakeFiles files, FakeHttp http) {
     const String file = '$_plausibleText/$_plausibleText';
     files.contents[file] = 'kind: Namespace\n';
+    // The audit hands the OPTIONAL ownership label its placeholder for key and value alike, so the
+    // guard runs: the live object carries that label, which is the innocent case.
+    shell.answers(
+      '$_client get --filename $file -o json',
+      '{"kind":"Namespace","metadata":{"name":"$_plausibleText",'
+          '"labels":{"$_plausibleText":"$_plausibleText"}}}',
+    );
     shell.fails('$_client diff --filename $file');
     shell.changes(
       '$_client apply --filename $file',
       () => shell.answers('$_client diff --filename $file', ''),
+    );
+  },
+
+  // The live object carries the ownership label, so the guard admits it; the delete flips the
+  // cluster's answer to "none of these objects", which is the state the second check reads.
+  'remove_kubernetes_object': (FakeShell shell, FakeFiles files, FakeHttp http) {
+    const String file = '$_plausibleText/$_plausibleText';
+    files.contents[file] = 'kind: Namespace\n';
+    shell.answers(
+      '$_client get --filename $file -o json',
+      '{"kind":"Namespace","metadata":{"name":"$_plausibleText",'
+          '"labels":{"$_plausibleText":"$_plausibleText"}}}',
+    );
+    shell.changes(
+      '$_client delete --filename $file --ignore-not-found',
+      () => shell.fails('$_client get --filename $file -o json'),
     );
   },
   // The same arrangement as the reversible sibling, plus the client timeout this step carries. The

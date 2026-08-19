@@ -35,4 +35,18 @@ final Map<String, Fixture> stepFixtures = <String, Fixture>{
       );
     });
   },
+
+  // The coordinator holds the user and one node until the destroy, after which its user listing no
+  // longer carries it — the state change a real coordinator makes, without which the second run
+  // could never find the membership gone.
+  'remove_tailnet_user': (FakeShell shell, FakeFiles files, FakeHttp http) {
+    shell.answers('headscale users list -o json', '[{"name":"$_machine","id":1}]');
+    shell.answers('headscale nodes list --user 1 -o json', '[{"id":9,"name":"$_machine"}]');
+    shell.changes('headscale nodes delete --identifier 9 --force', () {
+      shell.answers('headscale nodes list --user 1 -o json', 'null');
+    });
+    shell.changes('headscale users destroy --identifier 1 --force', () {
+      shell.answers('headscale users list -o json', '[]');
+    });
+  },
 };

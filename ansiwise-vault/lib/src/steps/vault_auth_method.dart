@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:ansiwise_core/ansiwise_core.dart';
 import 'argument_text.dart';
 import 'vault_api.dart';
@@ -37,6 +39,9 @@ final class VaultAuthMethod extends ReversibleStep<bool> {
     required this.path,
     required this.layout,
     this.configuration,
+    this.configurationFromAnswers = const <String>[],
+    this.configurationDecoded = const <String>[],
+    this.configurationWriteOnly = const <String>[],
   });
 
   /// Builds the step from what the program gave it.
@@ -46,6 +51,9 @@ final class VaultAuthMethod extends ReversibleStep<bool> {
     path: arguments.text('path'),
     layout: VaultLayout.fromArguments(arguments),
     configuration: arguments.optionalText('configuration'),
+    configurationFromAnswers: arguments.textList('configuration_from_answers'),
+    configurationDecoded: arguments.textList('configuration_decoded'),
+    configurationWriteOnly: arguments.textList('configuration_write_only'),
   );
 
   /// What the mount is told about itself, or null where it needs nothing.
@@ -54,6 +62,31 @@ final class VaultAuthMethod extends ReversibleStep<bool> {
   /// this run. Nothing here reads a key of it: which keys a mount takes is Vault's business and
   /// which values are right is the installation's.
   final String? configuration;
+
+  /// The configuration keys written from an ANSWER of this run, each as `<key>=<answer>`.
+  ///
+  /// For the values a program file cannot hold and the profile does not know: a mount that
+  /// validates logins against ANOTHER cluster is told that cluster's API address, its certificate
+  /// authority and a reviewing credential, and all three are facts of one run — the credential a
+  /// secret among them. An answer's value reaches Vault in the request body and nowhere else: never
+  /// an argument, never a plan, never the record, which keeps method, address and status only.
+  final List<String> configurationFromAnswers;
+
+  /// The keys of [configurationFromAnswers] whose answer arrives base64-encoded and whose mount
+  /// takes the decoded text.
+  ///
+  /// A certificate is the case: it has line breaks, and a value with a line break in it cannot
+  /// travel as one answer — so it travels encoded, and the row says which keys to decode rather
+  /// than the step guessing from the shape of a value.
+  final List<String> configurationDecoded;
+
+  /// The configuration keys Vault accepts and never returns.
+  ///
+  /// A reviewing credential is the case: Vault takes it and its config read omits it, so a step
+  /// that compared it against the read would find it missing on every run, rewrite the mount, ask
+  /// again, still find it missing — and a step whose post-apply check never answers satisfied is a
+  /// step that fails while having done its work. Keys named here are written and not compared.
+  final List<String> configurationWriteOnly;
 
   /// What this step accepts.
   static const List<ArgumentSpec> arguments = <ArgumentSpec>[
@@ -86,6 +119,37 @@ final class VaultAuthMethod extends ReversibleStep<bool> {
           'after it is enabled. A mount that needs none is left without one; a mount that needs one '
           'and is not given it refuses every login with a message about a backend configuration '
           'rather than about what is missing',
+    ),
+    ArgumentSpec(
+      name: 'configuration_from_answers',
+      kind: ArgumentKind.textList,
+      required: false,
+      defaultValue: <String>[],
+      describes:
+          'the configuration keys written from an answer of this run, each as <key>=<answer> — for '
+          'a value no program file can hold and the profile does not know, such as the API address, '
+          'the certificate authority and the reviewing credential of ANOTHER cluster this mount '
+          'validates logins against. The value reaches Vault in the request body and nowhere else',
+    ),
+    ArgumentSpec(
+      name: 'configuration_decoded',
+      kind: ArgumentKind.textList,
+      required: false,
+      defaultValue: <String>[],
+      describes:
+          'the keys of configuration_from_answers whose answer arrives base64-encoded and whose '
+          'mount takes the decoded text — a certificate has line breaks and cannot travel as one '
+          'answer otherwise',
+    ),
+    ArgumentSpec(
+      name: 'configuration_write_only',
+      kind: ArgumentKind.textList,
+      required: false,
+      defaultValue: <String>[],
+      describes:
+          'the configuration keys Vault accepts and never returns, such as a reviewing credential '
+          '— written and not compared, because comparing a key the read omits would rewrite the '
+          'mount on every run and never call it finished',
     ),
     ...VaultLayout.arguments,
   ];
@@ -136,14 +200,15 @@ final class VaultAuthMethod extends ReversibleStep<bool> {
         // THE MOUNT BEING THERE IS NOT THE POSTCONDITION. A mount that is enabled and not told
         // where its cluster is refuses every login, so a check that stopped at the type would
         // report finished about a mount nothing can use.
-        final ArgumentText wanted = vault.forThisInstallation(context, configuration ?? '');
+        final _Configuration wanted = _wantedConfiguration(context, vault);
         if (wanted.refusal case final String refusal) {
           return CheckResult.blocked(refusal);
         }
-        if (configuration == null) {
+        final Map<String, Object?>? body = wanted.body;
+        if (body == null) {
           return CheckResult.satisfied('$at/ is a $type auth mount on this Vault');
         }
-        return await _configured(context, url, held, at, wanted.value ?? '')
+        return await _configured(context, url, held, at, body)
             ? CheckResult.satisfied('$at/ is a $type auth mount and holds what this run tells it')
             : const CheckResult.ready();
       }
@@ -166,7 +231,7 @@ final class VaultAuthMethod extends ReversibleStep<bool> {
     return StepPlan.request(
       'POST',
       '${vault.url}/v1/sys/auth/${mount.value}',
-      body: configuration == null
+      body: configuration == null && configurationFromAnswers.isEmpty
           ? 'a $type auth mount'
           : 'a $type auth mount, and what it is told about itself',
     );
@@ -197,19 +262,11 @@ final class VaultAuthMethod extends ReversibleStep<bool> {
       );
     }
 
-    if (configuration case final String written) {
-      final ArgumentText filled = vault.forThisInstallation(context, written);
-      if (filled.refusal case final String refusal) {
-        throw StateError(refusal);
-      }
-      final Map<String, Object?>? body = decodedObject(filled.value ?? '');
-      if (body == null) {
-        throw StateError(
-          'the configuration this row gives $at/ is not a JSON object, and Vault takes one — a '
-          'mount whose fields arrive as text is refused with a message about types rather than '
-          'about this row',
-        );
-      }
+    final _Configuration wanted = _wantedConfiguration(context, vault);
+    if (wanted.refusal case final String refusal) {
+      throw StateError(refusal);
+    }
+    if (wanted.body case final Map<String, Object?> body) {
       final HttpAnswer told = await context.http.send(
         vaultWrite(url, 'auth/$at/config', token: held, body: body),
       );
@@ -224,22 +281,84 @@ final class VaultAuthMethod extends ReversibleStep<bool> {
     }
   }
 
+  /// What this mount would be told about itself, or why it cannot be composed.
+  ///
+  /// The file's part and the answers' part in one object, because Vault takes one write: a key both
+  /// supply is a contradiction somebody sees rather than a silent precedence rule, and a key whose
+  /// answer this run does not hold is refused by the answer's name.
+  _Configuration _wantedConfiguration(StepContext context, VaultProfile vault) {
+    final Map<String, Object?> body = <String, Object?>{};
+    bool anything = false;
+
+    if (configuration case final String written) {
+      final ArgumentText filled = vault.forThisInstallation(context, written);
+      if (filled.refusal case final String refusal) {
+        return _Configuration.unwritable(refusal);
+      }
+      final Map<String, Object?>? decoded = decodedObject(filled.value ?? '');
+      if (decoded == null) {
+        return const _Configuration.unwritable(
+          'the configuration this row gives the mount is not a JSON object, and Vault takes one — '
+          'a mount whose fields arrive as text is refused with a message about types rather than '
+          'about this row',
+        );
+      }
+      body.addAll(decoded);
+      anything = true;
+    }
+
+    for (final String declared in configurationFromAnswers) {
+      final int equals = declared.indexOf('=');
+      if (equals <= 0) {
+        return _Configuration.unwritable('"$declared" is not a <key>=<answer> pair');
+      }
+      final String key = declared.substring(0, equals).trim();
+      final String answer = declared.substring(equals + 1).trim();
+      if (body.containsKey(key)) {
+        return _Configuration.unwritable(
+          '$key of the mount configuration is written from the file AND from the answer '
+          '"$answer", and one key holds one value',
+        );
+      }
+      final String? held = context.answers.optionalText(answer);
+      if (held == null || held.isEmpty) {
+        return _Configuration.unwritable(
+          'this run holds no answer "$answer", and $key of the mount configuration is written '
+          'from it',
+        );
+      }
+      if (configurationDecoded.contains(key)) {
+        try {
+          body[key] = utf8.decode(base64Decode(held.trim()));
+        } on FormatException {
+          return _Configuration.unwritable(
+            'the answer "$answer" does not decode as base64, and $key is declared decoded — the '
+            'value that travels under that answer is the encoded form of a text with line breaks',
+          );
+        }
+      } else {
+        body[key] = held;
+      }
+      anything = true;
+    }
+
+    return anything ? _Configuration.of(body) : const _Configuration.none();
+  }
+
   /// Whether the mount already holds every value this run tells it.
   ///
-  /// Only the keys this run writes are compared. Vault answers a config with defaults filled in and
-  /// with fields it derives itself, so demanding the whole object match would report a difference on
-  /// every run — and a mount that is rewritten on every run is one nothing can ever call finished.
+  /// Only the keys this run writes are compared, minus the ones declared write-only. Vault answers
+  /// a config with defaults filled in and with fields it derives itself, so demanding the whole
+  /// object match would report a difference on every run — and a mount that is rewritten on every
+  /// run is one nothing can ever call finished. A write-only key is the same trap from the other
+  /// side: the read omits it, so comparing it can never converge.
   Future<bool> _configured(
     StepContext context,
     String url,
     String token,
     String at,
-    String written,
+    Map<String, Object?> wanted,
   ) async {
-    final Map<String, Object?>? wanted = decodedObject(written);
-    if (wanted == null) {
-      return false;
-    }
     final HttpAnswer answer = await context.http.send(
       vaultRead(url, 'auth/$at/config', token: token),
     );
@@ -248,6 +367,9 @@ final class VaultAuthMethod extends ReversibleStep<bool> {
       return false;
     }
     for (final MapEntry<String, Object?> field in wanted.entries) {
+      if (configurationWriteOnly.contains(field.key)) {
+        continue;
+      }
       if (!sameJsonValue(held[field.key], field.value)) {
         context.log.debug('$at/ differs from this run in ${field.key}');
         return false;
@@ -307,4 +429,22 @@ final class VaultAuthMethod extends ReversibleStep<bool> {
     final Object? mount = mounts?['$at/'];
     return mount is Map<String, Object?> ? mount['type'] : null;
   }
+}
+
+/// What one mount would be told about itself, or why it cannot be composed.
+final class _Configuration {
+  /// Holds the whole configuration as it reaches Vault.
+  const _Configuration.of(Map<String, Object?> this.body) : refusal = null;
+
+  /// Records that the mount is told nothing at all.
+  const _Configuration.none() : body = null, refusal = null;
+
+  /// Records that it cannot be composed, because [refusal].
+  const _Configuration.unwritable(String this.refusal) : body = null;
+
+  /// The configuration, or null where the mount is told nothing or nothing can be composed.
+  final Map<String, Object?>? body;
+
+  /// Why it cannot be composed, or null when it can.
+  final String? refusal;
 }

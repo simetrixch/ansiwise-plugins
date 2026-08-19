@@ -1,5 +1,6 @@
 import 'package:ansiwise_core/ansiwise_core.dart';
 
+import 'steps/remove_tailnet_user.dart';
 import 'steps/tailnet_join_credential.dart';
 
 /// Every step this plugin carries, from the names a program file writes to the classes that
@@ -20,6 +21,15 @@ const Map<StepName, RegisteredStep> headscaleSteps = <StepName, RegisteredStep>{
     source: 'lib/src/steps/tailnet_join_credential.dart:29',
     create: TailnetJoinCredential.fromArguments,
     arguments: TailnetJoinCredential.arguments,
+  ),
+  // The mint's inverse, under the same doctrine: which answer holds the machine's name at the
+  // coordinator, and which one fills the marked slot in the invocation, are both said by the row —
+  // so this entry declares no answer of its own either.
+  StepName('remove_tailnet_user'): RegisteredStep(
+    name: StepName('remove_tailnet_user'),
+    source: 'lib/src/steps/remove_tailnet_user.dart:24',
+    create: RemoveTailnetUser.fromArguments,
+    arguments: RemoveTailnetUser.arguments,
   ),
 };
 

@@ -3,6 +3,7 @@ import 'steps/align_calico_backend.dart';
 import 'steps/apply_cluster_issuer.dart';
 import 'steps/delete_default_ipv4_ippool.dart';
 import 'steps/delete_existing_cluster_issuer.dart';
+import 'steps/export_cluster_credentials.dart';
 import 'steps/guard_populated_cluster_pod_cidr_migration.dart';
 import 'steps/kubernetes_configmap_from_directory.dart';
 import 'steps/kubernetes_namespace.dart';
@@ -13,6 +14,7 @@ import 'steps/patch_configmap_key.dart';
 import 'steps/patch_container_arguments_and_ports.dart';
 import 'steps/reapply_calico_manifest.dart';
 import 'steps/recycle_kube_system_pod_ips.dart';
+import 'steps/remove_kubernetes_object.dart';
 import 'steps/replace_calico_agent_for_pod_cidr.dart';
 import 'steps/require_pod_cidr_free_of_reserved_ranges.dart';
 import 'steps/restart_cert_manager_and_reapply_cluster_issuer.dart';
@@ -143,9 +145,25 @@ const Map<StepName, RegisteredStep> kubernetesSteps = <StepName, RegisteredStep>
   ),
   StepName('kubernetes_object'): RegisteredStep(
     name: StepName('kubernetes_object'),
-    source: 'lib/src/steps/kubernetes_object.dart:27',
+    source: 'lib/src/steps/kubernetes_object.dart:29',
     create: KubernetesObject.fromArguments,
     arguments: KubernetesObject.arguments,
+  ),
+  // The guarded removal: it deletes what a manifest names ONLY where every live object carries the
+  // ownership label the row states, so a name collision is refused rather than deleted.
+  StepName('remove_kubernetes_object'): RegisteredStep(
+    name: StepName('remove_kubernetes_object'),
+    source: 'lib/src/steps/remove_kubernetes_object.dart:23',
+    create: RemoveKubernetesObject.fromArguments,
+    arguments: RemoveKubernetesObject.arguments,
+  ),
+  // The credentials another machine's manager drives this cluster with, harvested into one file
+  // the row names. Which answer holds the address the other side dials is the row's to say.
+  StepName('export_cluster_credentials'): RegisteredStep(
+    name: StepName('export_cluster_credentials'),
+    source: 'lib/src/steps/export_cluster_credentials.dart:27',
+    create: ExportClusterCredentials.fromArguments,
+    arguments: ExportClusterCredentials.arguments,
   ),
   StepName('kubernetes_object_irreversible'): RegisteredStep(
     name: StepName('kubernetes_object_irreversible'),

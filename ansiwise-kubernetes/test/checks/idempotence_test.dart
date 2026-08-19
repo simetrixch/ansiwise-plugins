@@ -26,6 +26,12 @@ const Set<String> notCoveredByAFakeMachine = <String>{
   'apply_cluster_issuer',
   'delete_default_ipv4_ippool',
   'delete_existing_cluster_issuer',
+  // NOT a machine the fake cannot arrange — a probe that hands one placeholder to a PAIR argument:
+  // its `tokens` list takes <field>=<secret name> pairs and the probe plants the bare placeholder,
+  // so the check is blocked on the malformed pair before any machine is asked. A fixture cannot
+  // close that, because a fixture arranges the machine and not the arguments. The second run itself
+  // IS driven, against real pairs, in export_cluster_credentials_test.dart.
+  'export_cluster_credentials',
   // Its postcondition is a ConfigMap composed from a directory, and composing it is a kubectl call
   // whose OUTPUT the step then applies — a fake shell answers a command, it does not compose one.
   'kubernetes_configmap_from_directory',

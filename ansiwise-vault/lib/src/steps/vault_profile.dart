@@ -39,6 +39,7 @@ final class VaultLayout {
     required this.authPathKey,
     required this.credentials,
     this.runAnswer,
+    this.clusterAnswer,
   });
 
   /// Builds the layout from what the program gave the step carrying it.
@@ -49,6 +50,7 @@ final class VaultLayout {
     authPathKey: arguments.text('kubernetes_auth_path_key'),
     credentials: arguments.text('credentials_path'),
     runAnswer: arguments.optionalText('run_answer'),
+    clusterAnswer: arguments.optionalText('cluster_answer'),
   );
 
   /// The arguments every step of the vault family declares.
@@ -107,6 +109,24 @@ final class VaultLayout {
           "filled with this run's stage. Leave it off where the product has no such axis",
       required: false,
     ),
+    // The SECOND cluster one Vault can serve, and the reason it is an answer and not the profile's:
+    // one secret store can serve several clusters, and the profile can only describe the cluster it
+    // stands on. A run that builds or removes a SIBLING cluster's surface — its auth mount, its
+    // policies, the entries written for it — has to be told which sibling, and the profile's own
+    // short name (the <cluster> slot) keeps meaning the cluster this run stands on.
+    //
+    // Absent is a first-class case: with nothing here, no sibling slot is filled, and a text still
+    // carrying angle brackets is refused rather than sent.
+    ArgumentSpec(
+      name: 'cluster_answer',
+      kind: ArgumentKind.answerName,
+      describes:
+          'the name of the answer that holds the short name of the sibling cluster these rows act '
+          'on, where one Vault serves several clusters — its value fills the slot spelled with '
+          'that same name, beside the run_answer slot. Leave it off for rows about the cluster the '
+          'profile itself describes',
+      required: false,
+    ),
   ];
 
   /// Where the profile stands, under the checkout.
@@ -128,6 +148,10 @@ final class VaultLayout {
   /// the product running these steps has no such axis.
   final String? runAnswer;
 
+  /// The name of the answer holding the sibling cluster's short name, or null where these rows are
+  /// about the cluster the profile itself describes.
+  final String? clusterAnswer;
+
   /// The text that stands where this run's own value for [runAnswer] belongs, or null where there
   /// is no such answer.
   ///
@@ -135,18 +159,28 @@ final class VaultLayout {
   /// apart: a program that renames the answer renames the slot in the same act.
   String? get runSlot => runAnswer == null ? null : '<$runAnswer>';
 
-  /// [text] with this run's own value for [runAnswer] where the slot marks it.
+  /// The two answers whose values fill the slot spelled with their own name, in the order they are
+  /// filled. A null entry is a layout that does not name that one.
+  List<String?> get _fillingAnswers => <String?>[runAnswer, clusterAnswer];
+
+  /// [text] with this run's own value for [runAnswer] and [clusterAnswer] where their slots mark
+  /// it.
   ///
   /// Text carrying no slot, a layout naming no answer, and a run that does not hold the answer all
   /// come back unchanged — the last of them so the slot is still visible in whatever refusal
   /// reports the text, rather than being replaced by an empty string nobody could see.
   String runAnswerFilled(StepContext context, String text) {
-    final String? slot = runSlot;
-    final String? answer = runAnswer;
-    if (slot == null || answer == null || !text.contains(slot) || !context.answers.has(answer)) {
-      return text;
+    String written = text;
+    for (final String? answer in _fillingAnswers) {
+      if (answer == null || !context.answers.has(answer)) {
+        continue;
+      }
+      final String slot = '<$answer>';
+      if (written.contains(slot)) {
+        written = written.replaceAll(slot, context.answers.text(answer));
+      }
     }
-    return text.replaceAll(slot, context.answers.text(answer));
+    return written;
   }
 }
 

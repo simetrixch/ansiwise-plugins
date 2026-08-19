@@ -34,6 +34,10 @@ const Map<String, Fixture> stepFixtures = <String, Fixture>{};
 /// request that changed something, the way `FakeShell.changes` already does for a command.
 const Set<String> notCoveredByAFakeMachine = <String>{
   'file_from_vault',
+  'remove_vault_auth_method',
+  'remove_vault_kv_entry',
+  'remove_vault_policy',
+  'remove_vault_role_member',
   'vault_auth_method',
   'vault_auth_role',
   'vault_init',
