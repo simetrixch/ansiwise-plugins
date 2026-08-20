@@ -3,7 +3,6 @@ import 'conditions/key_is_true.dart';
 import 'conditions/answers_compare.dart';
 import 'conditions/keys_compare.dart';
 import 'steps/host/activate_public_src_routing.dart';
-import 'steps/host/activate_service_unit.dart';
 import 'steps/host/add_shell_alias.dart';
 import 'steps/host/add_user_to_group.dart';
 import 'steps/host/apply_netplan.dart';
@@ -53,7 +52,6 @@ import 'steps/host/write_file_from_template.dart';
 import 'steps/host/write_netplan_public_src_routing.dart';
 import 'steps/host/write_public_src_routing_script.dart';
 import 'steps/host/write_public_src_routing_unit.dart';
-import 'steps/host/write_service_unit.dart';
 
 /// Every step this plugin carries, from the names a program file writes to the classes that
 /// implement them.
@@ -342,19 +340,6 @@ const Map<StepName, RegisteredStep> hostSteps = <StepName, RegisteredStep>{
     source: 'lib/src/steps/host/activate_public_src_routing.dart:10',
     create: ActivatePublicSrcRouting.fromArguments,
     arguments: ActivatePublicSrcRouting.arguments,
-  ),
-  // A long-running service of the machine: its unit, and the switch that turns it on.
-  StepName('write_service_unit'): RegisteredStep(
-    name: StepName('write_service_unit'),
-    source: 'lib/src/steps/host/write_service_unit.dart:25',
-    create: WriteServiceUnit.fromArguments,
-    arguments: WriteServiceUnit.arguments,
-  ),
-  StepName('activate_service_unit'): RegisteredStep(
-    name: StepName('activate_service_unit'),
-    source: 'lib/src/steps/host/activate_service_unit.dart:19',
-    create: ActivateServiceUnit.fromArguments,
-    arguments: ActivateServiceUnit.arguments,
   ),
   // Measurements the network conversion of a cluster asks for.
   StepName('detect_host_upstream_resolvers'): RegisteredStep(

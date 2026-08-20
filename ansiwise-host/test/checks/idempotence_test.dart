@@ -83,12 +83,6 @@ const Set<String> notCoveredByAFakeMachine = <String>{
   // can plant an answer whose NAME comes out of an argument, which nothing here can do.
   'write_containerd_registry_mirror',
   'write_netplan_public_src_routing',
-  // The same reason as the template writers above, and the same answer. The probe hands every text
-  // argument with no default one identical one-character value, so the template this step reads and
-  // the unit file it writes are the same path — and a unit rendered from itself is not the act it
-  // performs. It is driven twice directly instead, over a machine where the two paths differ, in
-  // service_unit_test.
-  'write_service_unit',
   'write_public_src_routing_script',
   'write_public_src_routing_unit',
 };
