@@ -197,6 +197,104 @@ void main() {
     expect(log.informed.join('\n'), allOf(contains(path), contains('differ')));
   });
 
+  // WHAT THE UPGRADE ITSELF ANSWERED. The incident this package carries began with a helm upgrade
+  // that returned 0 and installed nothing: output is kept only for a failed command or a
+  // `keep_output` row, so the record held four exit codes and no measurement, and the unwind then
+  // took the namespace — and with it the release's own record — before anybody could look. What
+  // helm SAID is the one thing that separates an upgrade that did nothing from one whose work was
+  // removed after it, and these tests hold that the step says it.
+
+  const String upgrade =
+      'helm upgrade --install ledger example-charts/ledger --namespace ledger '
+      '--version 0.34.0 --values $path';
+
+  test('the report helm answered with reaches the record', () async {
+    final _CapturedLog log = _CapturedLog();
+    final FakeShell shell = FakeShell()
+      ..answers(
+        upgrade,
+        'Release "ledger" does not exist. Installing it now.\n'
+        'NAME: ledger\n'
+        'LAST DEPLOYED: Thu Aug 20 17:38:12 2026\n'
+        'NAMESPACE: ledger\n'
+        'STATUS: deployed\n'
+        'REVISION: 1\n',
+      );
+
+    await release.apply(_contextOn(shell, FakeFiles(<String, String>{path: '{}\n'}), log: log));
+
+    expect(
+      log.informed.join('\n'),
+      allOf(contains('ledger'), contains('deployed'), contains('revision 1')),
+      reason: 'an exit code says nothing about whether a release was installed, and helm said it',
+    );
+    expect(log.warned, isEmpty, reason: 'helm reported a release, which is what this row is for');
+  });
+
+  test('an upgrade that returns 0 and answers nothing is recorded as answering nothing', () async {
+    // THE DEFECT, planted as it was measured: every command returned 0, and the record could not
+    // say whether helm had written twelve lines nobody kept or none at all. A fake shell with no
+    // answer for a command returns exactly that — exit 0 and empty output.
+    final _CapturedLog log = _CapturedLog();
+
+    await release.apply(
+      _contextOn(FakeShell(), FakeFiles(<String, String>{path: '{}\n'}), log: log),
+    );
+
+    expect(
+      log.warned.join('\n'),
+      allOf(contains('returned 0'), contains('nothing at all')),
+      reason: 'a silent exit 0 is the case the whole incident turned on, so it is said out loud',
+    );
+    expect(log.informed, isEmpty, reason: 'nothing was reported, so nothing may read as a report');
+  });
+
+  test('an upgrade that answers many lines and no status keeps the LAST of them', () async {
+    // The other half of the incident's question, and the half nothing could answer: whether helm
+    // said nothing, or said twelve lines nobody kept. Bounded, because the answer goes on one line
+    // of a record — and bounded at the TAIL, because a tool says why it stopped at the end of what
+    // it wrote (ansiwise-core recording_ports.dart:59). Keeping the head drops the line a reader
+    // came for, and disagrees with what the record does with the same command's output one row over.
+    final _CapturedLog log = _CapturedLog();
+    final FakeShell shell = FakeShell()
+      ..answers(upgrade, <String>[for (int each = 1; each <= 12; each++) 'line $each'].join('\n'));
+
+    await release.apply(_contextOn(shell, FakeFiles(<String, String>{path: '{}\n'}), log: log));
+
+    final String said = log.warned.join('\n');
+    expect(said, contains('line 12'), reason: 'the last line is where a tool says why it stopped');
+    expect(said, contains('line 3'), reason: 'ten are kept, so twelve lines begin at the third');
+    expect(said, isNot(contains('line 1 ')), reason: 'the first two are the ones dropped');
+    expect(said, contains('2 line(s) more'), reason: 'what was dropped is counted, not hidden');
+  });
+
+  test('a failing upgrade carries what helm wrote on both streams', () async {
+    // Measured by hand on the machine: helm writes the line about installing to standard output and
+    // the reason it stopped to standard error. A refusal that carried only one of the two dropped
+    // half of what an operator reads first.
+    final FakeShell shell = FakeShell()
+      ..answer(
+        upgrade,
+        const CommandResult(
+          exitCode: 1,
+          stdout: 'Release "ledger" does not exist. Installing it now.',
+          stderr: 'Error: create: failed to create: namespaces "ledger" not found',
+          elapsed: Duration.zero,
+        ),
+      );
+
+    await expectLater(
+      release.apply(_contextOn(shell, FakeFiles(<String, String>{path: '{}\n'}))),
+      throwsA(
+        isA<CommandFailed>().having(
+          (CommandFailed failure) => failure.message,
+          'message',
+          allOf(contains('namespaces "ledger" not found'), contains('Installing it now')),
+        ),
+      ),
+    );
+  });
+
   test('a release already so has nothing to explain', () async {
     // The innocent neighbour: a machine already in the wanted state produces a Satisfied with its
     // own `because`, and no line about acting — a record that said "not installed" over a release

@@ -48,19 +48,25 @@ final Map<String, Fixture> stepFixtures = <String, Fixture>{
   'helm_release': (FakeShell shell, FakeFiles files, FakeHttp http) {
     const String list = 'helm list --namespace $_plausibleText -o json';
     const String heldValues = 'helm get values $_plausibleText --namespace $_plausibleText -o json';
+    const String upgrade =
+        'helm upgrade --install $_plausibleText $_plausibleText --namespace $_plausibleText '
+        '--version $_plausibleText --values $_plausibleText';
     files.contents[_plausibleText] = '{}\n';
     shell.fails(list);
-    shell.changes(
-      'helm upgrade --install $_plausibleText $_plausibleText --namespace $_plausibleText '
-      '--version $_plausibleText --values $_plausibleText',
-      () {
-        shell.answers(
-          list,
-          '[{"name": "$_plausibleText", "status": "deployed", '
-          '"chart": "$_plausibleText-$_plausibleText"}]',
-        );
-        shell.answers(heldValues, '{}');
-      },
+    // The report helm writes after an install, because the step reads it: a fake that answered an
+    // empty exit 0 would exercise the branch for an upgrade that said nothing, which is the case
+    // this fixture is not about.
+    shell.answers(
+      upgrade,
+      'NAME: $_plausibleText\nNAMESPACE: $_plausibleText\nSTATUS: deployed\nREVISION: 1\n',
     );
+    shell.changes(upgrade, () {
+      shell.answers(
+        list,
+        '[{"name": "$_plausibleText", "status": "deployed", '
+        '"chart": "$_plausibleText-$_plausibleText"}]',
+      );
+      shell.answers(heldValues, '{}');
+    });
   },
 };

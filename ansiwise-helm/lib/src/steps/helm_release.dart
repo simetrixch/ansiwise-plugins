@@ -196,8 +196,84 @@ final class HelmRelease extends IrreversibleStep {
       ),
     );
     if (!done.ok) {
-      throw CommandFailed(argv: _upgrade, exitCode: done.exitCode, stdout: '', stderr: done.stderr);
+      throw CommandFailed(
+        argv: _upgrade,
+        exitCode: done.exitCode,
+        stdout: done.stdout,
+        stderr: done.stderr,
+      );
     }
+    _sayWhatTheUpgradeAnswered(context, done);
+  }
+
+  /// Puts what the upgrade ANSWERED into the record, at exit zero as much as at any other.
+  ///
+  /// **An exit code is not a measurement, and this is the row where that cost the most.** A helm
+  /// upgrade that returned zero and installed nothing left a record of four exit codes: the output
+  /// of a command is kept only when it failed or when the program row said `keep_output`, and every
+  /// command here had answered zero. The step then failed its own post-check, the run unwound, and
+  /// the namespace the unwind took back carried the release's own record away with it — so by the
+  /// time anybody looked, the machine said the release had never been there. Nothing left could tell
+  /// an upgrade that did nothing from one whose work was removed after it.
+  ///
+  /// helm answers with its own report, and the line that decides is `STATUS`. Read from what THIS
+  /// command wrote rather than from a later question to the machine: a later question is answered by
+  /// the machine as it stands when it is asked, which is exactly the thing that had already changed.
+  ///
+  /// A report is a measurement and goes to the record as one. An answer holding no status line is
+  /// not, so what helm wrote goes down verbatim and bounded instead, and it is said at `warn`: the
+  /// command ran and returned zero, and this step's own `check` run again afterwards is what says
+  /// whether the release is there.
+  void _sayWhatTheUpgradeAnswered(StepContext context, CommandResult done) {
+    final String? status = _reported(done.stdout, 'STATUS');
+    if (status == null) {
+      context.log.warn(
+        'helm upgrade returned 0 for $release and answered no status, so nothing it said tells '
+        'whether a release was installed: ${_wrote(done)}',
+      );
+      return;
+    }
+    final String? revision = _reported(done.stdout, 'REVISION');
+    context.log.info(
+      'helm reports $release in $namespace as $status'
+      '${revision == null ? '' : ' at revision $revision'}',
+    );
+  }
+
+  /// What helm's report gives for [key], or null when its answer holds no such line.
+  ///
+  /// The block helm writes after an install or an upgrade is `KEY: value`, one per line, and the
+  /// first occurrence is the block itself — a later one belongs to the notes the chart printed.
+  static String? _reported(String answer, String key) {
+    for (final String line in LineSplitter.split(answer)) {
+      final String trimmed = line.trim();
+      if (trimmed.startsWith('$key:')) {
+        return trimmed.substring(key.length + 1).trim();
+      }
+    }
+    return null;
+  }
+
+  /// What the command wrote, on one line and bounded, for a record that has to hold the answer
+  /// itself because nothing in it could be read as a measurement.
+  static String _wrote(CommandResult done) {
+    final List<String> lines = <String>[
+      for (final String stream in <String>[done.stdout.trim(), done.stderr.trim()])
+        if (stream.isNotEmpty) ...LineSplitter.split(stream),
+    ];
+    if (lines.isEmpty) {
+      return 'it wrote nothing at all';
+    }
+    const int kept = 10;
+    if (lines.length <= kept) {
+      return 'it wrote "${lines.join(' / ')}"';
+    }
+    // THE TAIL, and the framework decided this before this step existed: a tool says why it stopped
+    // at the END of what it wrote (ansiwise-core recording_ports.dart:59). Keeping the head here
+    // would drop exactly the lines a reader came for, and would disagree with what the record does
+    // with the same command's output one row over.
+    final int dropped = lines.length - kept;
+    return 'it wrote "${lines.skip(dropped).join(' / ')}" after $dropped line(s) more';
   }
 
   List<String> get _upgrade => <String>[

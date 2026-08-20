@@ -70,7 +70,17 @@ final class HelmRepository extends ReversibleStep<String?> {
       helmCommand(helm, _add.sublist(helm.length)),
     );
     if (!added.ok) {
-      throw CommandFailed(argv: _add, exitCode: added.exitCode, stdout: '', stderr: added.stderr);
+      // BOTH STREAMS. helm writes the sentence that explains a failure to whichever stream it feels
+      // like — `Release "x" does not exist. Installing it now.` goes to stdout while the error goes
+      // to stderr — so a refusal carrying one of them shows an operator half of what happened. This
+      // is the row directly above the release, and it is where the release's own misdirection sent
+      // people to look.
+      throw CommandFailed(
+        argv: _add,
+        exitCode: added.exitCode,
+        stdout: added.stdout,
+        stderr: added.stderr,
+      );
     }
   }
 
