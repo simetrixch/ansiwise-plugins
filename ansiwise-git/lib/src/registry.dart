@@ -57,7 +57,7 @@ const Map<StepName, RegisteredStep> gitSteps = <StepName, RegisteredStep>{
   ),
   StepName('measure_value_in_branch_file'): RegisteredStep(
     name: StepName('measure_value_in_branch_file'),
-    source: 'lib/src/steps/measure_value_in_branch_file.dart:33',
+    source: 'lib/src/steps/measure_value_in_branch_file.dart:48',
     create: MeasureValueInBranchFile.fromArguments,
     arguments: MeasureValueInBranchFile.arguments,
     publishes: MeasureValueInBranchFile.publishes,

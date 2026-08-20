@@ -18,6 +18,21 @@ import 'package:ansiwise_core/ansiwise_core.dart';
 /// fills it with the branch this checkout stands on — a fact git answers, read here rather than
 /// asked as one more question that could contradict the checkout.
 ///
+/// **The two names come apart, and that is what the second slot is for.** The file the value stands
+/// in is not always the one named for this checkout's own branch: a map kept for ANOTHER
+/// installation is carried on this branch under that installation's name, and the checkout reading
+/// it never stands on the branch it names. So the path may also carry the slot named by
+/// `run_answer`, filled from that answer of the run — the same mechanism, under the same argument
+/// name, that `copy_branch_file` fills its two paths with.
+///
+/// **What it reaches, said plainly, because the path argument looks more general than it is.** It
+/// reaches one path inside the checkout at `repository`, as the branch that checkout stands on
+/// COMMITS it, with `<branch>` and the one slot `run_answer` names filled. It reaches nothing else:
+/// not the working copy, not a file only some other branch carries — check that branch out and the
+/// step reads it there — not a path outside the checkout, and not a second axis, because one run
+/// answer fills one slot and a path still carrying a slot after both are filled is refused rather
+/// than guessed at.
+///
 /// **The file is read as a settings file: one `key: value` or `KEY=value` line per key.** That is
 /// the one shape both notations this step meets have in common, and it is deliberately the whole of
 /// the grammar — no nesting, no list, no expression. A value that needs more shape than one line is
@@ -32,13 +47,19 @@ import 'package:ansiwise_core/ansiwise_core.dart';
 /// for the rows that follow.
 final class MeasureValueInBranchFile extends ObservingStep {
   /// Publishes what [key] holds in [path] at the head of the checkout at [repository].
-  const MeasureValueInBranchFile({required this.repository, required this.path, required this.key});
+  const MeasureValueInBranchFile({
+    required this.repository,
+    required this.path,
+    required this.key,
+    this.runAnswer,
+  });
 
   /// Builds the step from what the program gave it.
   factory MeasureValueInBranchFile.fromArguments(Arguments arguments) => MeasureValueInBranchFile(
     repository: arguments.text('repository'),
     path: arguments.text('path'),
     key: arguments.text('key'),
+    runAnswer: arguments.optionalText('run_answer'),
   );
 
   /// What this step accepts.
@@ -54,13 +75,24 @@ final class MeasureValueInBranchFile extends ObservingStep {
       describes:
           'the file inside the checkout, as the branch tracks it. It may carry the slot <branch> '
           'where the name of the branch this checkout stands on belongs, because such a file is '
-          'often named for its own branch and no program file can write that name',
+          'often named for its own branch and no program file can write that name, and the slot '
+          'named by run_answer where that answer\'s value belongs',
     ),
     ArgumentSpec(
       name: 'key',
       kind: ArgumentKind.text,
       describes:
           'the key whose value is published, on a line of the shape "key: value" or "KEY=value"',
+    ),
+    ArgumentSpec(
+      name: 'run_answer',
+      kind: ArgumentKind.answerName,
+      required: false,
+      describes:
+          'the name of the answer whose value fills the slot spelled with that same name in the '
+          'path — write "fqdn" here and every "<fqdn>" in it is filled with this run\'s fqdn, '
+          'which is how a file carrying ANOTHER installation\'s name is read off this branch. '
+          'Leave it off where the path is named for its own branch alone',
     ),
   ];
 
@@ -75,11 +107,14 @@ final class MeasureValueInBranchFile extends ObservingStep {
   /// The checkout whose branch carries the file.
   final String repository;
 
-  /// The file inside the checkout, with `<branch>` where the branch name belongs.
+  /// The file inside the checkout, before any slot in it is filled.
   final String path;
 
   /// The key whose value is published.
   final String key;
+
+  /// WHICH answer fills the slot spelled the same way in the path, or null where it carries none.
+  final String? runAnswer;
 
   /// **Published HERE, in the check, and that is the shape a measuring step has.** The check runs in
   /// every mode, so a dry run holds the value the rows after this one read — and a step that only
@@ -99,11 +134,14 @@ final class MeasureValueInBranchFile extends ObservingStep {
       );
     }
 
-    final String named = filledSlots(path, <String, String>{'branch': head.trimmed});
+    final String named = filledSlots(path, <String, String>{
+      'branch': head.trimmed,
+      ..._answerSlot(context),
+    });
     if (leftoverSlotIn(named) case final String leftover) {
       return CheckResult.blocked(
-        'the path "$path" still carries "$leftover" after filling <branch> — the one slot this '
-        'step fills — so the row names a file nothing can resolve',
+        'the path "$path" still carries "$leftover" after filling <branch> and the run\'s own '
+        'answer — the two slots this step fills — so the row names a file nothing can resolve',
       );
     }
 
@@ -128,6 +166,16 @@ final class MeasureValueInBranchFile extends ObservingStep {
 
     context.measurements.publish(const MeasurementName('value'), value);
     return CheckResult.satisfied('$named on ${head.trimmed} records $key: $value');
+  }
+
+  /// The one slot value the row's answer supplies, or nothing where it names none.
+  Map<String, String> _answerSlot(StepContext context) {
+    if (runAnswer case final String name) {
+      if (context.answers.optionalText(name) case final String value) {
+        return <String, String>{name: value};
+      }
+    }
+    return const <String, String>{};
   }
 
   /// The value the first line carrying [key] holds, or null where no line does.

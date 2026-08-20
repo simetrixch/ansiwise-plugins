@@ -165,4 +165,142 @@ void main() {
       expect((answer as Blocked).reason, contains('<stage>'));
     });
   });
+
+  group('the file may be named for something other than the branch', () {
+    /// The name of the answer that names the file, which is NOT the branch the checkout stands on.
+    const String fqdn = 's1.example.com';
+
+    const MeasureValueInBranchFile named = MeasureValueInBranchFile(
+      repository: repository,
+      path: 'clusters/active/<fqdn>.yaml',
+      key: key,
+      runAnswer: 'fqdn',
+    );
+
+    /// A context standing on [branch] whose run answers [fqdn] under "fqdn".
+    (StepContext, Measurements) answering({
+      required FakeShell shell,
+      Arguments answers = const Arguments(<String, Object>{'fqdn': fqdn}),
+    }) {
+      final Measurements published = Measurements();
+      return (
+        StepContext(
+          shell: shell,
+          files: FakeFiles(),
+          http: FakeHttp(),
+          clock: FakeClock(),
+          entropy: FakeEntropy(),
+          log: const SilentLog(),
+          step: const StepName('under_test'),
+          arguments: Arguments.none,
+          answers: answers,
+          measurements: published.forStep(
+            const StepName('under_test'),
+            MeasureValueInBranchFile.publishes,
+          ),
+          facts: Facts.none,
+        ),
+        published,
+      );
+    }
+
+    test('the slot the row names is filled from that answer, off another branch', () async {
+      final FakeShell shell = FakeShell()
+        ..answers('git -C $repository rev-parse --abbrev-ref HEAD', 'master\n')
+        ..answers('git -C $repository show HEAD:clusters/active/$fqdn.yaml', 'pin: v1.2.3\n');
+      final (StepContext context, Measurements published) = answering(shell: shell);
+
+      expect(await named.check(context), isA<Satisfied>());
+      expect(published.valueOf(const MeasurementName('value')), 'v1.2.3');
+    });
+
+    test('the branch slot stays the branch, so a row may carry both', () async {
+      const MeasureValueInBranchFile both = MeasureValueInBranchFile(
+        repository: repository,
+        path: 'records/<branch>/<fqdn>.yaml',
+        key: key,
+        runAnswer: 'fqdn',
+      );
+      final FakeShell shell = FakeShell()
+        ..answers('git -C $repository rev-parse --abbrev-ref HEAD', 'master\n')
+        ..answers('git -C $repository show HEAD:records/master/$fqdn.yaml', 'pin: v1.2.3\n');
+      final (StepContext context, Measurements published) = answering(shell: shell);
+
+      expect(await both.check(context), isA<Satisfied>());
+      expect(published.valueOf(const MeasurementName('value')), 'v1.2.3');
+    });
+
+    test('a run holding no such answer leaves the slot over, and that is refused', () async {
+      final FakeShell shell = FakeShell()
+        ..answers('git -C $repository rev-parse --abbrev-ref HEAD', 'master\n');
+      final (StepContext context, Measurements published) = answering(
+        shell: shell,
+        answers: Arguments.none,
+      );
+
+      final CheckResult answer = await named.check(context);
+      expect((answer as Blocked).reason, contains('<fqdn>'));
+      expect(published.valueOf(const MeasurementName('value')), isNull);
+    });
+  });
+
+  group('counter-probe: a program row using the slot', () {
+    /// The row this argument was found missing by: a checkout standing on ONE installation's
+    /// branch, reading the map another installation is recorded under. Written as a program file
+    /// rather than as a constructed step, because what was missing was the ARGUMENT, and the
+    /// resolver is the only thing that reads one.
+    const String program =
+        '''
+name: read-recorded-release
+roles: [master]
+answers:
+  - name: fqdn
+    kind: text
+    describes: the domain name of the installation whose map records the release
+steps:
+  - step: measure_value_in_branch_file
+    repository: $repository
+    path: clusters/active/<fqdn>.yaml
+    key: release
+    run_answer: fqdn
+    on_failure: exit
+''';
+
+    test('resolves against the registry, and before the argument existed it did not', () {
+      expect(
+        () => const ProgramResolver(
+          gitRegistry,
+        ).resolve(loadProgram(program, where: 'read-recorded-release.yaml')),
+        returnsNormally,
+      );
+    });
+
+    test('and the answer it names has to be one the program declares', () {
+      const String undeclared =
+          '''
+name: read-recorded-release
+roles: [master]
+steps:
+  - step: measure_value_in_branch_file
+    repository: $repository
+    path: clusters/active/<fqdn>.yaml
+    key: release
+    run_answer: fqdn
+    on_failure: exit
+''';
+
+      expect(
+        () => const ProgramResolver(
+          gitRegistry,
+        ).resolve(loadProgram(undeclared, where: 'read-recorded-release.yaml')),
+        throwsA(
+          isA<ProgramInvalid>().having(
+            (ProgramInvalid e) => e.message,
+            'message',
+            contains('names the answer "fqdn"'),
+          ),
+        ),
+      );
+    });
+  });
 }

@@ -198,8 +198,14 @@ final class CopyBranchFile extends ReversibleStep<String?> {
     }
     final String? named = await _sourceFor(context);
     if (named == null) {
-      return 'the path "$path" still carries a slot after filling <branch> and the run\'s own '
-          'answer, so the row names a file nothing can resolve';
+      // WHICH SLOTS WERE ACTUALLY FILLED, not which ones this step can fill. A row naming no
+      // `run_answer` filled one, and telling its operator that two were filled sends them looking
+      // for a second slot their row does not have.
+      final String filled = runAnswer == null
+          ? '<branch>, the one slot this row fills'
+          : '<branch> and <$runAnswer>';
+      return 'the path "$path" still carries a slot after filling $filled, so the row names a file '
+          'nothing can resolve';
     }
     return 'the branch $branch carries no file at $named, and it is what this row copies';
   }
