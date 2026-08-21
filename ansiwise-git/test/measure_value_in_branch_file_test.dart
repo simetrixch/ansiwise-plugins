@@ -26,7 +26,7 @@ void main() {
 
   /// A context whose measurements land in [published], so a test can read what a later row would.
   (StepContext, Measurements) measuring({required FakeShell shell}) {
-    final Measurements published = Measurements();
+    final Measurements published = Measurements(Redactor(const <String>[]));
     return (
       StepContext(
         shell: shell,
@@ -182,7 +182,7 @@ void main() {
       required FakeShell shell,
       Arguments answers = const Arguments(<String, Object>{'fqdn': fqdn}),
     }) {
-      final Measurements published = Measurements();
+      final Measurements published = Measurements(Redactor(const <String>[]));
       return (
         StepContext(
           shell: shell,

@@ -128,7 +128,9 @@ void main() {
               step: only.registered.name,
               arguments: Arguments.none,
               answers: Arguments.none,
-              measurements: Measurements().forStep(only.registered.name, only.registered.publishes),
+              measurements: Measurements(
+                Redactor(const <String>[]),
+              ).forStep(only.registered.name, only.registered.publishes),
               facts: Facts.none,
             ),
           );

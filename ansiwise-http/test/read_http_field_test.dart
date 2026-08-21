@@ -24,7 +24,7 @@ void main() {
     step: const StepName('read_http_field'),
     arguments: Arguments.none,
     answers: answers,
-    measurements: (measurements ?? Measurements()).forStep(
+    measurements: (measurements ?? Measurements(Redactor(const <String>[]))).forStep(
       const StepName('read_http_field'),
       ReadHttpField.publishes,
     ),
@@ -50,7 +50,7 @@ void main() {
     final ScriptedHttp http = ScriptedHttp(
       (HttpRequest request, int nth) => answerOf(200, '{"data":{"state":"present"}}'),
     );
-    final Measurements taken = Measurements();
+    final Measurements taken = Measurements(Redactor(const <String>[]));
 
     final CheckResult answer = await step().check(contextOn(http, measurements: taken));
 
@@ -123,7 +123,7 @@ void main() {
     final ScriptedHttp http = ScriptedHttp(
       (HttpRequest request, int nth) => answerOf(200, '{"data":{}}'),
     );
-    final Measurements taken = Measurements();
+    final Measurements taken = Measurements(Redactor(const <String>[]));
 
     final CheckResult answer = await step().check(contextOn(http, measurements: taken));
 
