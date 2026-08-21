@@ -24,6 +24,7 @@ final class WaitForHttpField extends ObservingStep {
   const WaitForHttpField({
     required this.waitingFor,
     required this.url,
+    required this.socketPath,
     required this.field,
     required this.until,
     required this.failing,
@@ -40,6 +41,7 @@ final class WaitForHttpField extends ObservingStep {
     // measurement names that measurement, and everything that examines a program before it runs
     // has to build every step — at that moment the value does not exist.
     url: arguments.optionalText('url') ?? '',
+    socketPath: arguments.optionalText('socket_path'),
     field: arguments.text('field'),
     until: arguments.textList('until'),
     failing: arguments.has('failing') ? arguments.textList('failing') : const <String>[],
@@ -66,6 +68,16 @@ final class WaitForHttpField extends ObservingStep {
           'names that measurement instead, which is why this is not required: the program is '
           'examined before anything is measured, and a step that could not be built then would '
           'refuse the program',
+    ),
+    ArgumentSpec(
+      name: 'socket_path',
+      kind: ArgumentKind.text,
+      required: false,
+      describes:
+          'the filesystem path of a unix domain socket file. Given, every ask goes to that file '
+          'instead of to a host — the address is still read as it stands and still supplies the '
+          'request path and the host header, and only where the bytes go changes. Leave it off for '
+          'asks that go over the network',
     ),
     ArgumentSpec(
       name: 'field',
@@ -128,6 +140,9 @@ final class WaitForHttpField extends ObservingStep {
 
   /// The address whose answer is watched, before any slot in it is filled.
   final String url;
+
+  /// The socket file every ask goes to instead of a host, or null to go over the network.
+  final String? socketPath;
 
   /// Which field of the answer carries the state.
   final String field;
@@ -246,6 +261,7 @@ final class WaitForHttpField extends ObservingStep {
           address,
           headers: composedHeaders(bearer: bearer.value),
           timeout: Duration(seconds: intervalSeconds),
+          socketPath: socketPath,
         ),
       );
     } on Object catch (why) {

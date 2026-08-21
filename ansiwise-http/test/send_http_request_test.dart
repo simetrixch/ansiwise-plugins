@@ -28,6 +28,7 @@ void main() {
   SendHttpRequest step({
     String method = 'POST',
     String url = address,
+    String? socketPath,
     String? body,
     String? contentType,
     Map<String, Object?>? values,
@@ -39,6 +40,7 @@ void main() {
     Arguments(<String, Object>{
       'method': method,
       'url': url,
+      'socket_path': ?socketPath,
       'body': ?body,
       'content_type': ?contentType,
       'values': ?values,
@@ -155,6 +157,36 @@ void main() {
       step().apply(context),
       throwsA(isA<RequestRefused>().having((RequestRefused f) => f.status, 'status', 409)),
     );
+  });
+
+  test('the probe and the change alike go to the socket file the row named', () async {
+    // No socket is opened here and none could be: this machine has none. What is measured is that
+    // BOTH requests of the row carry the path — a row whose probe went over the network and whose
+    // change went to the file would be reading one place and writing another.
+    const String socketFile = '/run/one/api.sock';
+    final ScriptedHttp http = networkThatChanges();
+    final StepContext context = contextOn(http);
+    final SendHttpRequest row = step(socketPath: socketFile);
+
+    expect(await row.check(context), isA<Ready>());
+    await row.apply(context);
+
+    expect(http.sent.map((HttpRequest each) => each.socketPath), everyElement(socketFile));
+    expect(http.sent.map((HttpRequest each) => each.method), contains('POST'));
+  });
+
+  test('a change over a socket is still a change, and a dry run refuses it', () async {
+    final ScriptedHttp http = networkThatChanges();
+    final Http planning = PlanningHttp(http, step: const StepName('send_http_request'));
+    final SendHttpRequest row = step(socketPath: '/run/one/api.sock');
+
+    await expectLater(
+      row.apply(contextOn(planning)),
+      throwsA(
+        isA<MutationRefused>().having((MutationRefused f) => f.what, 'what', contains(address)),
+      ),
+    );
+    expect(http.sent.where((HttpRequest each) => each.method == 'POST'), isEmpty);
   });
 
   test('it says what cannot be taken back, in the operator\'s words', () {

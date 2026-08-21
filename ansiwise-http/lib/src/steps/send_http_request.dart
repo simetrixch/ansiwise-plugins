@@ -26,6 +26,7 @@ final class SendHttpRequest extends IrreversibleStep {
   const SendHttpRequest({
     required this.method,
     required this.url,
+    required this.socketPath,
     required this.body,
     required this.contentType,
     required this.values,
@@ -43,6 +44,7 @@ final class SendHttpRequest extends IrreversibleStep {
     // measurement names that measurement, and everything that examines a program before it runs
     // has to build every step — at that moment the value does not exist.
     url: arguments.optionalText('url') ?? '',
+    socketPath: arguments.optionalText('socket_path'),
     body: arguments.optionalText('body'),
     contentType: arguments.optionalText('content_type'),
     values: answerBySlot(arguments.has('values') ? arguments.raw('values') : null),
@@ -72,6 +74,16 @@ final class SendHttpRequest extends IrreversibleStep {
           'that measurement instead, which is why this is not required: the program is examined '
           'before anything is measured, and a step that could not be built then would refuse the '
           'program',
+    ),
+    ArgumentSpec(
+      name: 'socket_path',
+      kind: ArgumentKind.text,
+      required: false,
+      describes:
+          'the filesystem path of a unix domain socket file. Given, the request and the '
+          'already-read alike go to that file instead of to a host — each address is still read as '
+          'it stands and still supplies the request path and the host header, and only where the '
+          'bytes go changes. Leave it off for requests that go over the network',
     ),
     ArgumentSpec(
       name: 'body',
@@ -144,6 +156,10 @@ final class SendHttpRequest extends IrreversibleStep {
 
   /// The address the request goes to, before any slot in it is filled.
   final String url;
+
+  /// The socket file every request of this row goes to instead of a host, or null to go over the
+  /// network.
+  final String? socketPath;
 
   /// The body the request carries, or null for none.
   final String? body;
@@ -232,6 +248,7 @@ final class SendHttpRequest extends IrreversibleStep {
         probe,
         headers: composedHeaders(bearer: bearer.value),
         timeout: Duration(seconds: timeoutSeconds),
+        socketPath: socketPath,
       ),
     );
     switch (readingOf(answer, url: probe)) {
@@ -301,6 +318,7 @@ final class SendHttpRequest extends IrreversibleStep {
         headers: composedHeaders(bearer: bearer.value, contentType: contentType),
         body: texts.content,
         timeout: Duration(seconds: timeoutSeconds),
+        socketPath: socketPath,
       ),
     );
     if (!answer.ok) {

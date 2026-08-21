@@ -22,6 +22,7 @@ final class ReadHttpField extends ObservingStep {
   /// Reads [field] out of the answer at [url].
   const ReadHttpField({
     required this.url,
+    required this.socketPath,
     required this.field,
     required this.values,
     required this.bearerAnswer,
@@ -35,6 +36,7 @@ final class ReadHttpField extends ObservingStep {
     // has to build every step — at that moment the value does not exist. Read as required, the
     // whole program would be refused before anything looked at anything.
     url: arguments.optionalText('url') ?? '',
+    socketPath: arguments.optionalText('socket_path'),
     field: arguments.text('field'),
     values: answerBySlot(arguments.has('values') ? arguments.raw('values') : null),
     bearerAnswer: arguments.has('bearer_answer') ? arguments.text('bearer_answer') : null,
@@ -52,6 +54,16 @@ final class ReadHttpField extends ObservingStep {
           'that measurement instead, which is why this is not required: the program is examined '
           'before anything is measured, and a step that could not be built then would refuse the '
           'program',
+    ),
+    ArgumentSpec(
+      name: 'socket_path',
+      kind: ArgumentKind.text,
+      required: false,
+      describes:
+          'the filesystem path of a unix domain socket file. Given, the one request goes to that '
+          'file instead of to a host — the address is still read as it stands and still supplies '
+          'the request path and the host header, and only where the bytes go changes. Leave it off '
+          'for a request that goes over the network',
     ),
     ArgumentSpec(
       name: 'field',
@@ -100,6 +112,9 @@ final class ReadHttpField extends ObservingStep {
   /// The address whose answer is read, before any slot in it is filled.
   final String url;
 
+  /// The socket file the request goes to instead of a host, or null to go over the network.
+  final String? socketPath;
+
   /// Which field of the answer is published, as a dotted path.
   final String field;
 
@@ -146,6 +161,7 @@ final class ReadHttpField extends ObservingStep {
         address,
         headers: composedHeaders(bearer: bearer.value),
         timeout: Duration(seconds: timeoutSeconds),
+        socketPath: socketPath,
       ),
     );
     switch (readingOf(answer, url: address)) {
