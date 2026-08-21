@@ -5,11 +5,17 @@ import 'http_conversation.dart';
 /// Sends one request that tells an address to change its own state, gated on a read that says
 /// whether that state already stands.
 ///
-/// **Everything about the request comes from its row.** The method, the address, the body, the
-/// answer a credential rides in — this step knows the protocol and never which interface it is
-/// pointed at. A value no program file may carry — a credential, an installation's own name —
-/// arrives through a declared answer and fills a named slot, so the file stays the same for every
-/// installation and the secret stays out of it.
+/// **Everything about the request comes from its row.** The method, the address, the body, where a
+/// credential comes from — this step knows the protocol and never which interface it is pointed at.
+/// A value no program file may carry — a credential, an installation's own name — arrives through a
+/// declared answer and fills a named slot, so the file stays the same for every installation and the
+/// secret stays out of it.
+///
+/// **A credential reaches the header two ways and only two.** From the operator, and then the row
+/// names the ANSWER it was given under; or from a measurement an earlier row published, filling
+/// `bearer`, which is declared secret and which the framework therefore fills only from a
+/// measurement declared secret too. The second is what a handshake is: what one exchange hands back
+/// is what the next request proves itself with. Naming both is refused rather than resolved.
 ///
 /// **Its check reads ONE thing before it acts: the answer at the row's own `already_url`.** The
 /// protocol has no way to ask an arbitrary interface "was this done", so the row names the read
@@ -31,6 +37,7 @@ final class SendHttpRequest extends IrreversibleStep {
     required this.contentType,
     required this.values,
     required this.bearerAnswer,
+    required this.bearer,
     required this.alreadyUrl,
     required this.alreadyField,
     required this.alreadyValue,
@@ -49,6 +56,7 @@ final class SendHttpRequest extends IrreversibleStep {
     contentType: arguments.optionalText('content_type'),
     values: answerBySlot(arguments.has('values') ? arguments.raw('values') : null),
     bearerAnswer: arguments.has('bearer_answer') ? arguments.text('bearer_answer') : null,
+    bearer: arguments.optionalText('bearer'),
     alreadyUrl: arguments.text('already_url'),
     alreadyField: arguments.text('already_field'),
     alreadyValue: arguments.text('already_value'),
@@ -120,6 +128,19 @@ final class SendHttpRequest extends IrreversibleStep {
           'where the address answers without one',
     ),
     ArgumentSpec(
+      name: 'bearer',
+      kind: ArgumentKind.text,
+      required: false,
+      secret: true,
+      describes:
+          'the bearer credential itself, for a row that has it from an earlier measurement rather '
+          'than from the operator. DECLARED SECRET, so the framework fills it only from a '
+          'measurement declared secret too — which is what makes the value one the redactor already '
+          'knows and hides everywhere. A program file never writes one here: a file ships to every '
+          'installation, and a credential in it is the same credential everywhere. Name '
+          '"bearer_answer" instead where the operator supplies it, and never both',
+    ),
+    ArgumentSpec(
       name: 'already_url',
       kind: ArgumentKind.text,
       describes:
@@ -172,6 +193,10 @@ final class SendHttpRequest extends IrreversibleStep {
 
   /// The name of the answer whose value rides the authorization header, or null for none.
   final String? bearerAnswer;
+
+  /// The credential a measurement filled, or null where this row takes it from an answer or
+  /// carries none.
+  final String? bearer;
 
   /// The address whose answer says whether the state already stands.
   final String alreadyUrl;
@@ -227,12 +252,13 @@ final class SendHttpRequest extends IrreversibleStep {
 
   @override
   Future<CheckResult> check(StepContext context) async {
-    final ({String? refusal, String? value}) bearer = answerValue(
+    final ({String? refusal, String? value}) carried = bearerCredential(
       context,
-      bearerAnswer,
+      answerName: bearerAnswer,
+      given: bearer,
       carries: 'the bearer credential the requests carry',
     );
-    if (bearer.refusal case final String refusal) {
+    if (carried.refusal case final String refusal) {
       return CheckResult.blocked(refusal);
     }
     final ({({String address, String? content, String probe})? texts, String? refusal}) filled =
@@ -246,7 +272,7 @@ final class SendHttpRequest extends IrreversibleStep {
       HttpRequest(
         'GET',
         probe,
-        headers: composedHeaders(bearer: bearer.value),
+        headers: composedHeaders(bearer: carried.value),
         timeout: Duration(seconds: timeoutSeconds),
         socketPath: socketPath,
       ),
@@ -296,12 +322,13 @@ final class SendHttpRequest extends IrreversibleStep {
 
   @override
   Future<void> apply(StepContext context) async {
-    final ({String? refusal, String? value}) bearer = answerValue(
+    final ({String? refusal, String? value}) carried = bearerCredential(
       context,
-      bearerAnswer,
+      answerName: bearerAnswer,
+      given: bearer,
       carries: 'the bearer credential the requests carry',
     );
-    if (bearer.refusal case final String refusal) {
+    if (carried.refusal case final String refusal) {
       throw StateError(refusal);
     }
     final ({({String address, String? content, String probe})? texts, String? refusal}) filled =
@@ -315,7 +342,7 @@ final class SendHttpRequest extends IrreversibleStep {
       HttpRequest(
         method,
         texts.address,
-        headers: composedHeaders(bearer: bearer.value, contentType: contentType),
+        headers: composedHeaders(bearer: carried.value, contentType: contentType),
         body: texts.content,
         timeout: Duration(seconds: timeoutSeconds),
         socketPath: socketPath,

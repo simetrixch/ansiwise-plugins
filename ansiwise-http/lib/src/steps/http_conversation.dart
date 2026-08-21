@@ -259,6 +259,51 @@ String? leftoverSlotRefusal(String url) {
   return (value: value, refusal: null);
 }
 
+/// The bearer credential this row's requests carry, from whichever of the two sources it names.
+///
+/// **Two sources, because a credential reaches a row two ways and only two.** It comes from the
+/// operator, and then the row names the ANSWER it was given under and no file carries the value; or
+/// it did not exist when the run started, and then it comes from a measurement an earlier row
+/// published — an argument declared secret, which the framework fills and which only a measurement
+/// declared secret may fill. The second is the whole of a handshake: what a row gets back from one
+/// exchange is what the next request has to prove itself with.
+///
+/// **Naming both is refused rather than resolved.** A precedence between two credentials is a rule
+/// a reader has to know before they can tell which one a request carried, and a row that meant the
+/// other one would look exactly the same.
+({String? value, String? refusal}) bearerCredential(
+  StepContext context, {
+  required String? answerName,
+  required String? given,
+  required String carries,
+}) {
+  // GIVEN AND EMPTY IS NOT THE SAME AS NOT GIVEN. A measurement filling this argument answered, and
+  // what it answered was nothing — a request sent without the header would go out unauthenticated on
+  // the strength of an empty answer, and the other end's refusal would be read as a fault of the
+  // address. An operator answer is refused the same way one line below.
+  if (given != null && given.isEmpty) {
+    return (
+      value: null,
+      refusal:
+          'the value filling "bearer" is empty, so there is nothing to carry — a request sent '
+          'without the header is not the same request',
+    );
+  }
+  final bool written = given != null && given.isNotEmpty;
+  if (answerName != null && written) {
+    return (
+      value: null,
+      refusal:
+          'this row names "bearer_answer" and fills "bearer" as well, and nothing says which of the '
+          'two rides the header — name one of them',
+    );
+  }
+  if (written) {
+    return (value: given, refusal: null);
+  }
+  return answerValue(context, answerName, carries: carries);
+}
+
 /// The headers one row's request carries: a credential and a body's declared type, nothing else.
 Map<String, String> composedHeaders({String? bearer, String? contentType}) => <String, String>{
   if (bearer != null) 'authorization': 'Bearer $bearer',
