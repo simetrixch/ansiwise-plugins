@@ -545,9 +545,27 @@ void main() {
       final ReleasedPackages packages = ReleasedPackages.read(PubspecsInRepository(repository));
       final List<String> foreign = <String>[];
       final List<String> pinned = <String>[];
+      int siblings = 0;
+      // A `git:` KEY, in whichever of the two shapes YAML allows it to be written: on a line of
+      // its own with the block indented under it, or inline inside braces. This is the second
+      // reader the assertion at the end of this test needs, and it must share no code with
+      // gitDependenciesIn or it would go blind in the same places.
+      //
+      // BOTH SHAPES ARE COUNTED BECAUSE ONLY ONE OF THEM IS PARSED. A first draft of this matched
+      // `git:` alone on a line, and an inline `dep: {git: {url: ..., ref: master}}` planted in a
+      // manifest stayed GREEN — the parser did not see it and neither did the counter, so the two
+      // agreed about a dependency nobody had looked at. That is the exact failure this assertion
+      // exists to report, reproduced by the assertion itself.
+      //
+      // The lookahead keeps a `git://` URL out: `url: git://host/x` would otherwise read as a key
+      // because of the space in front of it.
+      final RegExp aGitKey = RegExp(r'(?:^|[{,\s])git[ \t]*:(?!//)', multiLine: true);
+      int gitKeys = 0;
       for (final ManifestState manifest in packages.manifests) {
+        gitKeys += aGitKey.allMatches(manifest.text).length;
         for (final GitDependency each in gitDependenciesIn(manifest.text)) {
           if (each.isSiblingOf(packages.directories)) {
+            siblings += 1;
             continue;
           }
           foreign.add(followedAs(manifest.path, each));
@@ -571,6 +589,26 @@ void main() {
             'each foreign dependency is either a released tag or is reported as followed — one '
             'falling between the two would be a ref nothing looked at, which is what this whole '
             'check exists to stop',
+      );
+
+      // THE ASSERTION ABOVE CANNOT GO RED ON ITS OWN, and saying so is cheaper than letting a
+      // reader trust it further than it goes. Both of its sides are built out of the subject's own
+      // gitDependenciesIn, isSiblingOf, isReleased and followedAs, so it compares one formula
+      // against itself: a dependency the parser cannot SEE is missing from the left side and from
+      // the right side alike, and the two still match while nothing looked at that ref.
+      //
+      // So the count is taken a second time by a reader that shares nothing with the first: every
+      // `git:` key the manifests write, matched as a line. It is coarse on purpose — it knows
+      // nothing of siblings, refs or releases — and that is exactly why a block the parser lost
+      // track of shows up here as a number that does not add up.
+      expect(
+        foreign.length + siblings,
+        gitKeys,
+        reason:
+            'the manifests of this repository write $gitKeys git: key(s), and the parser answered '
+            '${foreign.length} foreign plus $siblings sibling. A key that is in neither is a '
+            'dependency the parser did not see, and the comparison above cannot report it because '
+            'it is absent from both of its sides',
       );
     });
   });
