@@ -1,0 +1,187 @@
+# release — a pushed tag becomes the ref every consumer of these packages names.
+#
+# WHAT STARTS IT. A pushed tag, and nothing else. The version and the channel in it are typed by a
+# person: which release a change deserves and how ripe it is are decisions, and nothing here takes
+# them. The tag is pushed by `cd release && dart run tool/release.dart <version> <channel>`, which
+# shows what has been released, proposes what could come next, sets one version across every package
+# of this repository, stamps that tag into every dependency one package here declares on another,
+# commits both and pushes an annotated tag — and it READS the filter below rather than carrying a
+# second copy of it, so a filter edited here is the filter a person is held to on the next run. THAT
+# PROGRAM CREATES NO RELEASE: the release, its notes and the pre-release marking are this file's
+# work, which is why it needs no `gh` and has no `gh` preflight.
+#
+# WHAT THE ARTEFACT IS: THE TREE. These packages are libraries. They compile to no file, nobody
+# downloads one, and every consumer resolves them as a git dependency — so there is nothing to
+# attach and nothing missing when nothing is attached. What a release publishes is a NAME for a
+# tree: `ref: <tag>` and a `path:` per package, which is what the release page spells out.
+#
+# WHY ONE TAG AND NOT ONE PER PACKAGE. A git dependency names a ref and a path, so one ref serves
+# every package of this repository and each consumer picks the paths it wants. One tag per package
+# would let a consumer hold two packages of this repository at two refs, and that is a tree pub
+# refuses to resolve — ansiwise-vault-kubernetes depends on two of its own siblings, so the two refs
+# meet each other inside the resolution. tool/release_packages.dart in the release package carries
+# the measured answer pub gave.
+#
+# THE GATE IS PER PACKAGE, because this repository has no gate of its own: there is no
+# repository-wide `tool/ci.dart` here, and each package answers for itself with `dart test` — the
+# analyzer, the formatter and every audit that package declares in its own checks.yaml run from
+# inside that suite. So the job below walks the packages rather than naming them, and a package added
+# to this repository is gated without an edit here.
+#
+# THE DART VERSION IS NOT PINNED HERE, and that is a gap rather than a decision: every pubspec in
+# this repository states `sdk: ^3.12.0` and nothing states which SDK the checks are true against, so
+# `stable` is what the jobs install. ansiwise-cli pins one in tool/gate/pins.dart and refuses to run
+# under any other; this repository has no such file yet.
+name: release
+
+on:
+  push:
+    tags:
+      # THE GRAMMAR IS THE ONE EVERY RELEASE OF EVERYTHING IS CUT UNDER, and it is owned by
+      # hostyour-manager/shared/release.ts:22: `<major>.<minor>.<patch>-<channel>-<ts14>`, channel
+      # one of alpha|beta|stable, ts14 the UTC yyyyMMddHHmmss the tag was composed at. So
+      # 0.1.0-alpha-20260821194500 and 0.1.0-stable-20260901120000 are tags; a bare 0.1.0 is not,
+      # v0.1.0 is not, and 0.1.0-beta.2 is not. The channel is ALWAYS there, and it is a CEILING on
+      # which environment may run the tag — alpha reaches dev, beta reaches test, stable reaches
+      # everywhere. That ceiling is enforced where deployments are written and NOT here
+      # (release.ts:8); what this filter decides is only whether a pushed tag releases at all.
+      #
+      # WHY THE ts14 IS IN THE TAG AND NOT AN AFTERTHOUGHT: two releases of one version on one
+      # channel are a real thing — the same version cut again from a later commit — and the stamp is
+      # what makes them two tags instead of one name pushed twice.
+      #
+      # WHAT THESE THREE PATTERNS SAY. One per channel, because a filter pattern has NO ALTERNATION
+      # and `alpha|beta|stable` cannot be written in one. This is a filter pattern and NOT a regular
+      # expression: `[0-9]` matches one digit, `+` says one or more of what stands before it, `*` is
+      # any run of characters carrying no `/`, and everything else — `.` and `-` included — stands
+      # for itself. A tag matches a pattern only as a WHOLE, which is what the fourteen spelled-out
+      # `[0-9]` rest on: the pattern ends after the fourteenth digit, so a fifteenth is left over and
+      # starts nothing, and so does 0.1.0-alpha-2026 with only four. There is no `*` anywhere in
+      # these patterns, so nothing behind the stamp is swallowed.
+      #
+      # WHERE THIS IS STILL WIDER THAN THE GRAMMAR. There is no alternation, so `0|[1-9][0-9]*`
+      # cannot be written and 01.2.3-stable-20260901120000 is admitted here though release.ts:22
+      # refuses it. Narrowing that away would take twenty-seven patterns for the three numbers alone
+      # — times three channels — or a negative `!` pattern, which release/tool/release_tag_filter.dart
+      # refuses to read because it reads what a filter ACCEPTS. What closes it instead is
+      # release/tool/release_versions.dart's numbersRefusalFor, in the program that composes the tag,
+      # and a leading zero is refused there before anything is pushed.
+      - '[0-9]+.[0-9]+.[0-9]+-alpha-[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]'
+      - '[0-9]+.[0-9]+.[0-9]+-beta-[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]'
+      - '[0-9]+.[0-9]+.[0-9]+-stable-[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  gate:
+    name: the gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: dart-lang/setup-dart@7654d458321ee25acccccfdb86cd48bd95768ff1 # v1.8.0
+        with:
+          sdk: stable
+
+      # A RELEASE OF A LIBRARY THAT DOES NOT COMPILE IS WORSE THAN NONE, because a consumer pins it
+      # and finds out later — at a moment nobody chose, in a repository nobody was looking at. So
+      # every package of this repository answers for itself on the tag, before anything is published.
+      #
+      # THE PACKAGES ARE WALKED AND NOT LISTED. A list here would be a second statement of what this
+      # repository holds, and the day a package was added the two would disagree with nothing able to
+      # notice — the release would be published with one package never gated. Every directory
+      # carrying a pubspec.yaml is a package, and that includes the release package itself, whose own
+      # suite is what holds this workflow's filter against the program that composes tags for it.
+      - name: dart test, in every package of this repository
+        shell: bash
+        run: |
+          set -euo pipefail
+          for manifest in */pubspec.yaml; do
+            package="${manifest%/pubspec.yaml}"
+            echo "::group::$package"
+            ( cd "$package" && dart pub get && dart test )
+            echo "::endgroup::"
+          done
+
+  publish:
+    name: the release
+    needs: gate
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      TAG: ${{ github.ref_name }}
+    steps:
+      # fetch-depth: 0 because the notes are read from the history: every tag standing here, to find
+      # the release this one follows, and the commit subjects in the range between the two. A shallow
+      # checkout has neither, and release/tool/release_notes.dart refuses rather than publish a page
+      # that says nothing changed because nobody looked.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - uses: dart-lang/setup-dart@7654d458321ee25acccccfdb86cd48bd95768ff1 # v1.8.0
+        with:
+          sdk: stable
+
+      # WHAT THE NOTES ARE, and why `--generate-notes` is not what makes them. Generated notes are
+      # built from the pull requests merged between two releases and the new contributors among them.
+      # THIS REPOSITORY HAS NO PULL REQUESTS: `gh pr list --state all` answers with nothing, and a merge
+      # commit is no test of that either way, since a squashed one leaves none. So there is nothing for
+      # GitHub to list and the page would carry a compare link and not one line about what changed.
+      # And the half a consumer actually needs — the ref and the path to pin, one pair per package
+      # standing in the tree at this tag — is not something GitHub could generate at all.
+      # release/tool/release_notes.dart reads the commit subjects out of the range and the packages
+      # off the tree, and prints `prerelease=true|false` read from the CHANNEL in the tag rather than
+      # from the hyphen every tag under this grammar carries.
+      #
+      # `dart pub get` IS RUN FIRST, and the reason is not that the programs need it. Everything
+      # under the release package's tool/ imports nothing but `dart:` and its own directory, so no
+      # `package:` import has to be resolved for them to start. But this package declares dev
+      # dependencies — one of them a git dependency — and `dart run` inside a package resolves
+      # them implicitly before it runs anything. Left implicit, a resolve that cannot reach pub.dev
+      # or GitHub fails inside a step named for writing release notes and says nothing about which
+      # of the two it was.
+      #
+      # The one line is GREPPED out of what the program wrote rather than redirected wholesale: this
+      # is the only thing standing between the tag and how the release is marked, and a stray line on
+      # stdout would become a `prerelease` output nobody wrote. A run that printed no such line fails
+      # the step, because no marking at all is better than a marking nothing decided.
+      - id: notes
+        name: dart run tool/release_notes.dart
+        shell: bash
+        working-directory: release
+        run: |
+          set -euo pipefail
+          dart pub get
+          said="$(dart run tool/release_notes.dart "$TAG" release-notes.md)"
+          grep -E '^prerelease=(true|false)$' <<<"$said" >> "$GITHUB_OUTPUT"
+          cat release-notes.md
+
+      # NO FILE IS ATTACHED, and there is nothing to look for: these packages produce none. The
+      # release exists so that a tag has a page, a marking and a set of notes — and so that the ref
+      # a consumer pins is a thing somebody published rather than a commit somebody happened to make.
+      #
+      # THE CHANNEL DECIDES THE MARKING AND NOTHING ELSE HERE. alpha and beta are pre-releases —
+      # hostyour-manager/shared/release.ts:12 ranks stable as the ripest — so they are marked
+      # `--prerelease` and stable is published plainly. The channel is also a CEILING on which
+      # environment may run the tag, and that ceiling is enforced where deployments are written
+      # (release.ts:8), not here: a release published plainly is not a release deployed anywhere.
+      - name: publish the release
+        shell: bash
+        working-directory: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PRERELEASE: ${{ steps.notes.outputs.prerelease }}
+        run: |
+          set -euo pipefail
+          if [ "$PRERELEASE" = true ]; then set -- --prerelease; else set --; fi
+          gh release create "$TAG" \
+            --title "$TAG" \
+            --notes-file release-notes.md \
+            "$@"

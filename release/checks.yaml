@@ -1,0 +1,36 @@
+# Every check this package makes, and the file that carries it.
+#
+# WHY THIS FILE EXISTS. `dart test` discovers whatever is on disk and reports whether any of it
+# failed. Delete a check file and nothing fails: the check is simply not there, and the run prints
+# that every check is green. It is worse than a missing test, because a check and its counter-probe
+# live in the same file — the thing that would have noticed goes with the thing it was watching.
+#
+# So the suite does not ask the disk what it checks. It is told here, and
+# test/checks/declared_checks_test.dart holds the disk against this file, naming whatever vanished.
+#
+# FORMAT. `<check>: <file, relative to this file>`, one per line, the reason on the comment line
+# directly above it.
+
+# The analyzer with infos and warnings fatal and the formatter find nothing to change in this
+# package's own tree.
+analysis: test/checks/analysis_test.dart
+# Every Dart directive of this package spells the path it names byte for byte, so a build for Linux
+# opens what a build for Windows opened.
+case-sensitivity: test/checks/case_sensitivity_test.dart
+# This file agrees with the suite on disk, and the refusal that enforces it can really go red.
+declared-checks: test/checks/declared_checks_test.dart
+# What .gitattributes declares LF is LF in the working copy.
+line-endings: test/checks/line_endings_test.dart
+# No abolished word stands in a file name, a directory name or a sub-command.
+naming: test/checks/naming_test.dart
+
+# A version and a channel compose one tag, the tag is held against the filter the workflow really
+# states, and nothing reaches a remote unless a person typed both.
+release: test/checks/release_test.dart
+# One tag carries every package of this repository: the walk finds all of them, the bump sets one
+# version across all of them, and every dependency one package here declares on another is stamped
+# to the tag rather than left naming a branch.
+release-packages: test/checks/release_packages_test.dart
+# The release page says what a consumer has to write to take this release, and is marked by the
+# channel in the tag rather than by the hyphen every tag under this grammar carries.
+release-notes: test/checks/release_notes_test.dart
