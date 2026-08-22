@@ -84,8 +84,9 @@ const List<ArgumentSpec> exchangeArguments = <ArgumentSpec>[
     kind: ArgumentKind.mapping,
     required: false,
     describes:
-        'which answer fills each slot of the address and the body, as `slot-name: {answer: name}`. '
-        'Leave it off where every text is written out whole',
+        'what fills each slot of the address and the body, as `slot-name: {answer: name}` for a '
+        'value this run was started with and `slot-name: {measured: name}` for one an earlier row '
+        'published. Leave it off where every text is written out whole',
   ),
   ArgumentSpec(
     name: 'bearer_answer',
@@ -160,7 +161,7 @@ final class ExchangeRow {
     socketPath: arguments.optionalText('socket_path'),
     body: arguments.optionalText('body'),
     contentType: arguments.optionalText('content_type'),
-    values: answerBySlot(arguments.has('values') ? arguments.raw('values') : null),
+    values: slotSources(arguments.has('values') ? arguments.raw('values') : null),
     bearerAnswer: arguments.has('bearer_answer') ? arguments.text('bearer_answer') : null,
     bearer: arguments.optionalText('bearer'),
     field: arguments.text('field'),
@@ -183,7 +184,7 @@ final class ExchangeRow {
   final String? contentType;
 
   /// Which answer fills each slot of the row's texts.
-  final Map<String, String> values;
+  final Map<String, SlotSource> values;
 
   /// The name of the answer whose value rides the authorization header, or null for none.
   final String? bearerAnswer;
@@ -213,7 +214,8 @@ final class ExchangeRow {
     if (carried.refusal case final String refusal) {
       return CheckResult.blocked(refusal);
     }
-    final ({({String address, String? content})? texts, String? refusal}) filled = _filled(context);
+    final ({({String address, String? content, String? socket})? texts, String? refusal}) filled =
+        _filled(context);
     return filled.refusal == null
         ? const CheckResult.ready()
         : CheckResult.blocked(filled.refusal!);
@@ -221,7 +223,8 @@ final class ExchangeRow {
 
   /// What this row would send, for the plan an operator reads before starting.
   StepPlan planned(StepContext context) {
-    final ({({String address, String? content})? texts, String? refusal}) filled = _filled(context);
+    final ({({String address, String? content, String? socket})? texts, String? refusal}) filled =
+        _filled(context);
     // A row whose texts refuse to fill has a blocked check, and its plan may still be asked. What
     // can honestly be said then is the request as the row wrote it, slots and all.
     return filled.texts == null
@@ -245,11 +248,12 @@ final class ExchangeRow {
     if (carried.refusal case final String refusal) {
       throw AnswerIncomplete(refusal);
     }
-    final ({({String address, String? content})? texts, String? refusal}) filled = _filled(context);
+    final ({({String address, String? content, String? socket})? texts, String? refusal}) filled =
+        _filled(context);
     if (filled.refusal case final String refusal) {
       throw AnswerIncomplete(refusal);
     }
-    final ({String address, String? content}) texts = filled.texts!;
+    final ({String address, String? content, String? socket}) texts = filled.texts!;
 
     final HttpAnswer answer = await context.http.send(
       HttpRequest(
@@ -258,7 +262,7 @@ final class ExchangeRow {
         headers: composedHeaders(bearer: carried.value, contentType: contentType),
         body: texts.content,
         timeout: Duration(seconds: timeoutSeconds),
-        socketPath: socketPath,
+        socketPath: texts.socket,
       ),
     );
     if (!answer.ok) {
@@ -307,12 +311,15 @@ final class ExchangeRow {
   );
 
   /// The row's texts with every slot filled, or the refusal that stops the row.
-  ({({String address, String? content})? texts, String? refusal}) _filled(StepContext context) {
+  ({({String address, String? content, String? socket})? texts, String? refusal}) _filled(
+    StepContext context,
+  ) {
     final ({Map<String, String>? filled, String? refusal}) slots = slotValues(context, values);
     if (slots.refusal case final String refusal) {
       return (texts: null, refusal: refusal);
     }
-    if (unusedSlotRefusal(slots.filled!, <String?>[url, body]) case final String refusal) {
+    if (unusedSlotRefusal(slots.filled!, <String?>[url, body, socketPath])
+        case final String refusal) {
       return (texts: null, refusal: refusal);
     }
     final String address = filledSlots(url, slots.filled!);
@@ -327,8 +334,12 @@ final class ExchangeRow {
     if (leftoverSlotRefusal(address) case final String refusal) {
       return (texts: null, refusal: refusal);
     }
+    final ({String? path, String? refusal}) socket = filledSocketPath(socketPath, slots.filled!);
+    if (socket.refusal case final String refusal) {
+      return (texts: null, refusal: refusal);
+    }
     final String? content = body == null ? null : filledSlots(body!, slots.filled!);
-    return (texts: (address: address, content: content), refusal: null);
+    return (texts: (address: address, content: content, socket: socket.path), refusal: null);
   }
 }
 

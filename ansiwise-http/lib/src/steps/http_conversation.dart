@@ -151,50 +151,107 @@ FieldReading fieldIn(Map<String, Object?> object, String path) {
   };
 }
 
-/// Which answer fills each slot of a row's texts, read out of the row's `values` mapping.
+/// Where one slot of a row's texts takes its value from.
 ///
-/// **One named slot standing for exactly one answer, and nothing that evaluates.** The mapping is
-/// `slot-name: {answer: name}`: the slot is spelled with hyphens where an answer is spelled with
-/// underscores, and the grammar forbids mixing them on purpose so no name has two spellings —
-/// which is why the answer is named outright rather than looked up by the slot's own name.
-Map<String, String> answerBySlot(Object? declared) {
-  if (declared == null) {
-    return const <String, String>{};
-  }
-  if (declared is! Map<String, Object?>) {
-    throw ArgumentError.value(declared, 'values', 'is a mapping of slot-name to {answer: name}');
-  }
-  final Map<String, String> bindings = <String, String>{};
-  for (final MapEntry<String, Object?> entry in declared.entries) {
-    final Object? body = entry.value;
-    if (body is! Map<String, Object?> || body.keys.length != 1 || body['answer'] is! String) {
-      throw ArgumentError.value(body, entry.key, 'is bound as {answer: name} and nothing else');
-    }
-    bindings[entry.key] = body['answer']! as String;
-  }
-  return bindings;
+/// **Two sources and no third.** An answer this run was started with, and a value that already
+/// stands in the row. The second is not a third grammar: a row writes `{measured: <name>}`, and the
+/// framework writes the carried value in over that body before the step is built — so what a
+/// running step meets under that name is the value itself.
+sealed class SlotSource {
+  const SlotSource();
 }
 
-/// The slot values this run holds for [bindings], or the refusal that stops the row.
+/// A slot filled from an answer this run holds.
+final class SlotAnswer extends SlotSource {
+  /// Binds a slot to the answer called [answer].
+  const SlotAnswer(this.answer);
+
+  /// The name of the answer, as the program declares it.
+  final String answer;
+}
+
+/// A slot whose value stands in the row already.
+final class SlotWritten extends SlotSource {
+  /// Holds [value], the text that fills the slot.
+  const SlotWritten(this.value);
+
+  /// What fills the slot.
+  final String value;
+}
+
+/// Where each slot of a row's texts takes its value from, read out of the row's `values` mapping.
+///
+/// **One named slot standing for exactly one value, and nothing that evaluates.** `slot-name:
+/// {answer: name}` names an answer: the slot is spelled with hyphens where an answer is spelled
+/// with underscores, and the grammar forbids mixing them on purpose so no name has two spellings —
+/// which is why the answer is named outright rather than looked up by the slot's own name.
+///
+/// **`slot-name: {measured: name}` names a value that does not exist yet.** The row publishing it
+/// has not run when a program is examined, so the entry stands for no value here and is left out —
+/// a step that could not be built while the value is missing would refuse the whole program before
+/// anything measured anything. By the time the row runs, the framework has written that value in
+/// where the body stood, which is why a written-out value is read here and not refused.
+Map<String, SlotSource> slotSources(Object? declared) {
+  if (declared == null) {
+    return const <String, SlotSource>{};
+  }
+  if (declared is! Map<String, Object?>) {
+    throw ArgumentError.value(
+      declared,
+      'values',
+      'is a mapping of slot-name to {answer: name} or {measured: name}',
+    );
+  }
+  final Map<String, SlotSource> sources = <String, SlotSource>{};
+  for (final MapEntry<String, Object?> entry in declared.entries) {
+    final Object? body = entry.value;
+    if (body case final String written) {
+      sources[entry.key] = SlotWritten(written);
+      continue;
+    }
+    if (body is Map<String, Object?> && body.keys.length == 1) {
+      if (body['answer'] case final String answer) {
+        sources[entry.key] = SlotAnswer(answer);
+        continue;
+      }
+      if (body['measured'] is String) {
+        continue;
+      }
+    }
+    throw ArgumentError.value(
+      body,
+      entry.key,
+      'is bound as {answer: name} or {measured: name} and nothing else',
+    );
+  }
+  return sources;
+}
+
+/// The slot values this run holds for [sources], or the refusal that stops the row.
 ///
 /// Refused rather than left empty: a slot whose answer nobody holds would stay in the text as its
 /// own seven literal characters, and whatever reads the request next would take them as content.
 ({Map<String, String>? filled, String? refusal}) slotValues(
   StepContext context,
-  Map<String, String> bindings,
+  Map<String, SlotSource> sources,
 ) {
   final Map<String, String> filled = <String, String>{};
-  for (final MapEntry<String, String> binding in bindings.entries) {
-    if (!context.answers.has(binding.value)) {
-      return (
-        filled: null,
-        refusal:
-            'this run holds no answer called "${binding.value}", and it is what fills '
-            '"<${binding.key}>" — the program has to declare an answer of that name for the '
-            'operator to be asked for one',
-      );
+  for (final MapEntry<String, SlotSource> each in sources.entries) {
+    switch (each.value) {
+      case SlotWritten(:final String value):
+        filled[each.key] = value;
+      case SlotAnswer(:final String answer):
+        if (!context.answers.has(answer)) {
+          return (
+            filled: null,
+            refusal:
+                'this run holds no answer called "$answer", and it is what fills "<${each.key}>" '
+                '— the program has to declare an answer of that name for the operator to be asked '
+                'for one',
+          );
+        }
+        filled[each.key] = context.answers.text(answer);
     }
-    filled[binding.key] = context.answers.text(binding.value);
   }
   return (filled: filled, refusal: null);
 }
@@ -227,6 +284,33 @@ String? leftoverSlotRefusal(String url) {
       ? null
       : '$url still carries $slot, and nothing filled it — name the answer that fills it in the '
             'values mapping, or write the address out whole';
+}
+
+/// The socket file this row's requests go to with every slot of it filled, or the refusal that
+/// stops the row.
+///
+/// **A path is filled the way an address is, and for the same reason.** Where a socket file stands
+/// is a fact of ONE machine — a directory something else on it chose, and often one carrying a name
+/// nobody wrote down — so a program file that shipped one written out would be right on the
+/// installation it was written against and wrong on every other. The row spells a slot and the run
+/// fills it, exactly as it does for the address.
+///
+/// Null for [socketPath] answers null: a row that names no socket file sends over the network, and
+/// there is nothing here to fill or refuse.
+({String? path, String? refusal}) filledSocketPath(String? socketPath, Map<String, String> filled) {
+  if (socketPath == null) {
+    return (path: null, refusal: null);
+  }
+  final String path = filledSlots(socketPath, filled);
+  if (leftoverSlotIn(path) case final String slot) {
+    return (
+      path: null,
+      refusal:
+          '$path still carries $slot, and nothing filled it — name the answer that fills it in the '
+          'values mapping, or write the socket file out whole',
+    );
+  }
+  return (path: path, refusal: null);
 }
 
 /// The value of the answer named by [answerName], or why it cannot ride a header.

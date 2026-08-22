@@ -71,28 +71,44 @@ void main() {
     });
   });
 
-  group('answerBySlot', () {
+  group('slotSources', () {
     test('reads slot-name to {answer: name}', () {
-      expect(
-        answerBySlot(<String, Object?>{
-          'api-host': <String, Object?>{'answer': 'api_host'},
-        }),
-        <String, String>{'api-host': 'api_host'},
-      );
+      final Map<String, SlotSource> sources = slotSources(<String, Object?>{
+        'api-host': <String, Object?>{'answer': 'api_host'},
+      });
+      expect(sources.keys, <String>['api-host']);
+      expect((sources['api-host']! as SlotAnswer).answer, 'api_host');
     });
 
     test('nothing declared is nothing bound', () {
-      expect(answerBySlot(null), isEmpty);
+      expect(slotSources(null), isEmpty);
     });
 
-    test('anything but {answer: name} under a slot is refused', () {
+    /// A row names {measured: name} and the framework writes the value in over that body before the
+    /// step is built. Both shapes therefore reach this reader, at two different moments of one run,
+    /// and neither may be refused: the body while nothing has published yet, the value once
+    /// something has.
+    test('a slot named for a measurement holds no value until the value is written in', () {
       expect(
-        () => answerBySlot(<String, Object?>{'api-host': 'api_host'}),
+        slotSources(<String, Object?>{
+          'run-id': <String, Object?>{'measured': 'created_run_id'},
+        }),
+        isEmpty,
+      );
+      final Map<String, SlotSource> written = slotSources(<String, Object?>{'run-id': 'r_1'});
+      expect((written['run-id']! as SlotWritten).value, 'r_1');
+    });
+
+    test('anything but a value, {answer: name} or {measured: name} is refused', () {
+      expect(
+        () => slotSources(<String, Object?>{
+          'api-host': <String, Object?>{'answer': 'a', 'join': ','},
+        }),
         throwsA(isA<ArgumentError>()),
       );
       expect(
-        () => answerBySlot(<String, Object?>{
-          'api-host': <String, Object?>{'answer': 'a', 'join': ','},
+        () => slotSources(<String, Object?>{
+          'api-host': <String, Object?>{'taken': 'a'},
         }),
         throwsA(isA<ArgumentError>()),
       );

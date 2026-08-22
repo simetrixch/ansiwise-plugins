@@ -26,6 +26,7 @@ final class ReadHttpField extends ObservingStep {
     required this.field,
     required this.values,
     required this.bearerAnswer,
+    required this.bearer,
     required this.timeoutSeconds,
   });
 
@@ -38,8 +39,9 @@ final class ReadHttpField extends ObservingStep {
     url: arguments.optionalText('url') ?? '',
     socketPath: arguments.optionalText('socket_path'),
     field: arguments.text('field'),
-    values: answerBySlot(arguments.has('values') ? arguments.raw('values') : null),
+    values: slotSources(arguments.has('values') ? arguments.raw('values') : null),
     bearerAnswer: arguments.has('bearer_answer') ? arguments.text('bearer_answer') : null,
+    bearer: arguments.optionalText('bearer'),
     timeoutSeconds: arguments.integer('timeout_seconds'),
   );
 
@@ -77,8 +79,9 @@ final class ReadHttpField extends ObservingStep {
       kind: ArgumentKind.mapping,
       required: false,
       describes:
-          'which answer fills each slot of the address, as `slot-name: {answer: name}`. Leave it '
-          'off where the address is written out whole',
+          'what fills each slot of the address, as `slot-name: {answer: name}` for a value this '
+          'run was started with and `slot-name: {measured: name}` for one an earlier row '
+          'published. Leave it off where the address is written out whole',
     ),
     ArgumentSpec(
       name: 'bearer_answer',
@@ -88,6 +91,20 @@ final class ReadHttpField extends ObservingStep {
           'the name of the answer whose value rides the authorization header as a bearer '
           'credential — never the credential itself, so no program file carries one. Leave it off '
           'where the address answers without one',
+    ),
+    ArgumentSpec(
+      name: 'bearer',
+      kind: ArgumentKind.text,
+      required: false,
+      secret: true,
+      describes:
+          'the bearer credential itself, for a row that has it from an earlier measurement rather '
+          'than from the operator — which is what a handshake is: what one exchange hands back is '
+          'what the next ask proves itself with. DECLARED SECRET, so the framework fills it only '
+          'from a measurement declared secret too, and the value is one the redactor already knows '
+          'and hides everywhere. A program file never writes one here: a file ships to every '
+          'installation, and a credential in it is the same credential everywhere. Name '
+          '"bearer_answer" instead where the operator supplies it, and never both',
     ),
     ArgumentSpec(
       name: 'timeout_seconds',
@@ -119,29 +136,34 @@ final class ReadHttpField extends ObservingStep {
   final String field;
 
   /// Which answer fills each slot of the address.
-  final Map<String, String> values;
+  final Map<String, SlotSource> values;
 
   /// The name of the answer whose value rides the authorization header, or null for none.
   final String? bearerAnswer;
+
+  /// The credential a measurement filled, or null where this row takes it from an answer or
+  /// carries none.
+  final String? bearer;
 
   /// How long the one request may take.
   final int timeoutSeconds;
 
   @override
   Future<CheckResult> check(StepContext context) async {
-    final ({String? refusal, String? value}) bearer = answerValue(
+    final ({String? refusal, String? value}) carried = bearerCredential(
       context,
-      bearerAnswer,
+      answerName: bearerAnswer,
+      given: bearer,
       carries: 'the bearer credential the request carries',
     );
-    if (bearer.refusal case final String refusal) {
+    if (carried.refusal case final String refusal) {
       return CheckResult.blocked(refusal);
     }
     final ({Map<String, String>? filled, String? refusal}) slots = slotValues(context, values);
     if (slots.refusal case final String refusal) {
       return CheckResult.blocked(refusal);
     }
-    if (unusedSlotRefusal(slots.filled!, <String?>[url]) case final String refusal) {
+    if (unusedSlotRefusal(slots.filled!, <String?>[url, socketPath]) case final String refusal) {
       return CheckResult.blocked(refusal);
     }
     final String address = filledSlots(url, slots.filled!);
@@ -154,14 +176,18 @@ final class ReadHttpField extends ObservingStep {
     if (leftoverSlotRefusal(address) case final String refusal) {
       return CheckResult.blocked(refusal);
     }
+    final ({String? path, String? refusal}) socket = filledSocketPath(socketPath, slots.filled!);
+    if (socket.refusal case final String refusal) {
+      return CheckResult.blocked(refusal);
+    }
 
     final HttpAnswer answer = await context.http.send(
       HttpRequest(
         'GET',
         address,
-        headers: composedHeaders(bearer: bearer.value),
+        headers: composedHeaders(bearer: carried.value),
         timeout: Duration(seconds: timeoutSeconds),
-        socketPath: socketPath,
+        socketPath: socket.path,
       ),
     );
     switch (readingOf(answer, url: address)) {

@@ -54,7 +54,7 @@ final class SendHttpRequest extends IrreversibleStep {
     socketPath: arguments.optionalText('socket_path'),
     body: arguments.optionalText('body'),
     contentType: arguments.optionalText('content_type'),
-    values: answerBySlot(arguments.has('values') ? arguments.raw('values') : null),
+    values: slotSources(arguments.has('values') ? arguments.raw('values') : null),
     bearerAnswer: arguments.has('bearer_answer') ? arguments.text('bearer_answer') : null,
     bearer: arguments.optionalText('bearer'),
     alreadyUrl: arguments.text('already_url'),
@@ -115,8 +115,10 @@ final class SendHttpRequest extends IrreversibleStep {
       kind: ArgumentKind.mapping,
       required: false,
       describes:
-          'which answer fills each slot of the address, the body and the already-address, as '
-          '`slot-name: {answer: name}`. Leave it off where every text is written out whole',
+          'what fills each slot of the address, the body and the already-address, as '
+          '`slot-name: {answer: name}` for a value this run was started with and '
+          '`slot-name: {measured: name}` for one an earlier row published. Leave it off where '
+          'every text is written out whole',
     ),
     ArgumentSpec(
       name: 'bearer_answer',
@@ -189,7 +191,7 @@ final class SendHttpRequest extends IrreversibleStep {
   final String? contentType;
 
   /// Which answer fills each slot of the row's texts.
-  final Map<String, String> values;
+  final Map<String, SlotSource> values;
 
   /// The name of the answer whose value rides the authorization header, or null for none.
   final String? bearerAnswer;
@@ -220,14 +222,13 @@ final class SendHttpRequest extends IrreversibleStep {
   ///
   /// One method for the check and the apply, so what was probed and what is sent cannot drift
   /// apart.
-  ({({String address, String? content, String probe})? texts, String? refusal}) _filled(
-    StepContext context,
-  ) {
+  ({({String address, String? content, String probe, String? socket})? texts, String? refusal})
+  _filled(StepContext context) {
     final ({Map<String, String>? filled, String? refusal}) slots = slotValues(context, values);
     if (slots.refusal case final String refusal) {
       return (texts: null, refusal: refusal);
     }
-    if (unusedSlotRefusal(slots.filled!, <String?>[url, body, alreadyUrl])
+    if (unusedSlotRefusal(slots.filled!, <String?>[url, body, alreadyUrl, socketPath])
         case final String refusal) {
       return (texts: null, refusal: refusal);
     }
@@ -246,8 +247,15 @@ final class SendHttpRequest extends IrreversibleStep {
         return (texts: null, refusal: refusal);
       }
     }
+    final ({String? path, String? refusal}) socket = filledSocketPath(socketPath, slots.filled!);
+    if (socket.refusal case final String refusal) {
+      return (texts: null, refusal: refusal);
+    }
     final String? content = body == null ? null : filledSlots(body!, slots.filled!);
-    return (texts: (address: address, content: content, probe: probe), refusal: null);
+    return (
+      texts: (address: address, content: content, probe: probe, socket: socket.path),
+      refusal: null,
+    );
   }
 
   @override
@@ -261,8 +269,11 @@ final class SendHttpRequest extends IrreversibleStep {
     if (carried.refusal case final String refusal) {
       return CheckResult.blocked(refusal);
     }
-    final ({({String address, String? content, String probe})? texts, String? refusal}) filled =
-        _filled(context);
+    final ({
+      ({String address, String? content, String probe, String? socket})? texts,
+      String? refusal,
+    })
+    filled = _filled(context);
     if (filled.refusal case final String refusal) {
       return CheckResult.blocked(refusal);
     }
@@ -274,7 +285,7 @@ final class SendHttpRequest extends IrreversibleStep {
         probe,
         headers: composedHeaders(bearer: carried.value),
         timeout: Duration(seconds: timeoutSeconds),
-        socketPath: socketPath,
+        socketPath: filled.texts!.socket,
       ),
     );
     switch (readingOf(answer, url: probe)) {
@@ -309,8 +320,11 @@ final class SendHttpRequest extends IrreversibleStep {
 
   @override
   Future<StepPlan> plan(StepContext context) async {
-    final ({({String address, String? content, String probe})? texts, String? refusal}) filled =
-        _filled(context);
+    final ({
+      ({String address, String? content, String probe, String? socket})? texts,
+      String? refusal,
+    })
+    filled = _filled(context);
     // A row whose texts refuse to fill has a blocked check, and its plan may still be asked — the
     // engine only plans a ready row, but what else asks a step is not this step's to know. What
     // can honestly be said then is the request as the row wrote it, slots and all.
@@ -331,12 +345,15 @@ final class SendHttpRequest extends IrreversibleStep {
     if (carried.refusal case final String refusal) {
       throw StateError(refusal);
     }
-    final ({({String address, String? content, String probe})? texts, String? refusal}) filled =
-        _filled(context);
+    final ({
+      ({String address, String? content, String probe, String? socket})? texts,
+      String? refusal,
+    })
+    filled = _filled(context);
     if (filled.refusal case final String refusal) {
       throw StateError(refusal);
     }
-    final ({String address, String? content, String probe}) texts = filled.texts!;
+    final ({String address, String? content, String probe, String? socket}) texts = filled.texts!;
 
     final HttpAnswer answer = await context.http.send(
       HttpRequest(
@@ -345,7 +362,7 @@ final class SendHttpRequest extends IrreversibleStep {
         headers: composedHeaders(bearer: carried.value, contentType: contentType),
         body: texts.content,
         timeout: Duration(seconds: timeoutSeconds),
-        socketPath: socketPath,
+        socketPath: texts.socket,
       ),
     );
     if (!answer.ok) {
