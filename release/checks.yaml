@@ -35,3 +35,11 @@ release-packages: test/checks/release_packages_test.dart
 # The release page says what a consumer has to write to take this release, and is marked by the
 # channel in the tag rather than by the hyphen every tag under this grammar carries.
 release-notes: test/checks/release_notes_test.dart
+# Every dependency THIS package resolves out of git names a release tag and never a branch. It is
+# one manifest — release/ own — and deliberately so: the twelve plugin manifests are already refused
+# a branch ref by the release program, whose _bumpsFor walks every one of them, while release/ is
+# the manifest that reader never reaches (PubspecsInRepository walks directories named ansiwise-*).
+# What it keeps here is not a resolution somebody else performs, since nothing depends on this
+# package, but the gate: the tree at a release tag IS the release, and the workflow runs this gate
+# over */pubspec.yaml.
+dependency-pins: test/checks/dependency_pins_test.dart
