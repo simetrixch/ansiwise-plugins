@@ -25,5 +25,5 @@ dev_dependencies:
   ansiwise_checks:
     git:
       url: https://github.com/simetrixch/ansiwise-checks.git
-      ref: 0.1.0-alpha-20260822220752
+      ref: 0.1.0-alpha-20260822222211
       path: registry
