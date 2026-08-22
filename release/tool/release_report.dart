@@ -176,11 +176,17 @@ String notesFor({
 }
 
 /// The screen shown when the program is run with no arguments: what the workflow releases on, what
-/// has been released, what a tag would name, what it would carry, and what could come next.
+/// has been released, what a tag would name, what it would carry, what it still follows a branch of,
+/// and what could come next.
 ///
 /// [branch] and [commit] describe what HEAD is, because the tag a release pushes names THIS commit —
 /// a person deciding a version is deciding which commit becomes a release, and a screen that hid it
 /// would hide half the decision.
+///
+/// WHAT IS FOLLOWED IS SHOWN BESIDE WHAT COULD COME NEXT, because the two are read together. The
+/// proposals below are versions a person may type, and while a dependency on another repository
+/// names a branch none of them can be cut at all — a screen offering them with nothing said would be
+/// offering a release this program is about to refuse.
 String listingOf(
   Releases releases, {
   required TagFilter filter,
@@ -208,6 +214,18 @@ String listingOf(
       ..writeln('')
       ..writeln('and they cannot be released as they stand:')
       ..writeln('  $why');
+  }
+  screen
+    ..writeln('')
+    ..writeln(
+      'what these packages follow rather than pin, which stops a release before it starts:',
+    );
+  final List<String> followed = packages.followed(filter);
+  if (followed.isEmpty) {
+    screen.writeln('  nothing — every dependency on another repository names a released tag');
+  }
+  for (final String following in followed) {
+    screen.writeln('  $following');
   }
   screen
     ..writeln('')
@@ -279,8 +297,9 @@ package.
 
 WITH NO ARGUMENTS IT CHANGES NOTHING. It reads the tags on origin, prints what has been released,
 lists every package the tag would carry and the version each declares, names the commit a release
-would carry, and proposes what could come next. It never picks a version: which release a change
-deserves is a decision, and a program that took it would hide it.
+would carry, lists every dependency on another repository that still names a branch, and proposes
+what could come next. It never picks a version: which release a change deserves is a decision, and a
+program that took it would hide it.
 
 WHAT THE TWO ARGUMENTS COMPOSE. The tag is <major>.<minor>.<patch>-<channel>-<ts14>, where the ts14
 is the UTC yyyyMMddHHmmss this program stamps at the moment you run it — never typed, which is what
@@ -298,6 +317,12 @@ every package's version is set to the one you typed, and every dependency one pa
 repository declares on another has its `ref:` stamped to the tag being cut — a tag whose inside
 still said `master` would pin nothing. An ANNOTATED tag is created on that commit, HEAD is pushed
 and the tag is pushed, and that is all that happens here.
+
+WHAT IS NOT STAMPED AND STOPS THE RELEASE INSTEAD. A dependency on ANOTHER repository — the
+framework, the audits — is left exactly as it stands, because the tag being cut is a name in THIS
+repository and writing it there would name a tag that repository does not have. So such a ref has to
+already name a released tag, and while one names a branch the release refuses and lists every line
+to put right. Pinning them is an edit in this repository, made before the release is run.
 
 WHAT DOES NOT HAPPEN. No release is created here — the workflow runs the gate over every package,
 creates the release, writes its notes and marks a pre-release. And no consumer gets anything: a

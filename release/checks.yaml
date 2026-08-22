@@ -28,8 +28,9 @@ naming: test/checks/naming_test.dart
 # states, and nothing reaches a remote unless a person typed both.
 release: test/checks/release_test.dart
 # One tag carries every package of this repository: the walk finds all of them, the bump sets one
-# version across all of them, and every dependency one package here declares on another is stamped
-# to the tag rather than left naming a branch.
+# version across all of them, every dependency one package here declares on another is stamped to the
+# tag rather than left naming a branch, and a dependency on ANOTHER repository stops the release
+# unless it already names a released tag, because there is no tag of ours to stamp it with.
 release-packages: test/checks/release_packages_test.dart
 # The release page says what a consumer has to write to take this release, and is marked by the
 # channel in the tag rather than by the hyphen every tag under this grammar carries.

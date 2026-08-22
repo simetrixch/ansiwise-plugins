@@ -38,7 +38,7 @@ void main() {
     'ansiwise-one/pubspec.yaml': plantedPubspec(
       name: 'ansiwise_one',
       version: '0.2.0',
-      dependsOn: <String, String>{'ansiwise_two': 'ansiwise-two'},
+      dependsOn: <String, PlantedDependency>{'ansiwise_two': (path: 'ansiwise-two', ref: 'master')},
     ),
     'ansiwise-two/pubspec.yaml': plantedPubspec(name: 'ansiwise_two', version: '0.2.0'),
   });

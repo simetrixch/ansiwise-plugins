@@ -4,24 +4,38 @@ import 'package:test/test.dart';
 
 import '../../tool/paths.dart';
 import '../../tool/release_packages.dart';
+import '../../tool/release_tag_filter.dart';
 import '../fakes.dart';
 
 /// release-packages — one tag carries every package of this repository, and the tree at that tag
 /// says so from the inside.
 ///
-/// **The two claims this file holds.** The first is that the walk finds every package rather than a
-/// list somebody maintained: it is run over THIS repository and held against the directories really
-/// standing in it, so a package added without an edit anywhere is a package this check notices. The
-/// second is that a release writes two things into every manifest — the one version, and the tag
-/// stamped into every dependency one package here declares on another — because a tag whose inside
-/// still names a branch pins nothing at all.
+/// **The three claims this file holds.** The first is that the walk finds every package rather than
+/// a list somebody maintained: it is run over THIS repository and held against the directories
+/// really standing in it, so a package added without an edit anywhere is a package this check
+/// notices. The second is that a release writes two things into every manifest — the one version,
+/// and the tag stamped into every dependency one package here declares on another — because a tag
+/// whose inside still names a branch pins nothing at all. The third is the other half of that
+/// sentence: a dependency on ANOTHER repository is never stamped, and a release is refused while one
+/// of them names a branch, because the tag being cut is a name in this repository and there is
+/// nothing here to put a foreign ref right with.
 ///
 /// **What the counter-probes are for.** A stamper that changed nothing would pass a check that only
 /// looked at the result, so the tree BEFORE the bump is asserted to really carry the branch name the
 /// stamp replaces. And a stamper matching the old value would work exactly once, so the bump is run
-/// twice and the second one has a tag standing where `master` stood.
+/// twice and the second one has a tag standing where `master` stood. For the third claim the probe
+/// runs the other way as well: a tree whose foreign refs all name released tags is asserted to be
+/// released, so a program that refused every tree would not read as one that refused the right one.
+///
+/// **How much the real-tree claim covers, and how much it does not.** What is asserted over this
+/// repository is that every foreign dependency it carries is either a released tag or is reported —
+/// none falls between the two. WHICH of the two it is today is deliberately not asserted: a check
+/// pinning that would go red on the day the refs are pinned, which is the day it should stay green.
 void main() {
   final Directory repository = repositoryOf(Directory.current);
+  final TagFilter theFilter = TagFilter.ofWorkflow(
+    File('${repository.path}/$releaseWorkflowPath').readAsStringSync(),
+  );
 
   group('the packages this repository releases', () {
     final ReleasedPackages packages = ReleasedPackages.read(PubspecsInRepository(repository));
@@ -146,7 +160,9 @@ void main() {
           plantedPubspec(
             name: 'ansiwise_one',
             version: '0.1.0',
-            dependsOn: <String, String>{'ansiwise_two': 'ansiwise-two'},
+            dependsOn: <String, PlantedDependency>{
+              'ansiwise_two': (path: 'ansiwise-two', ref: 'master'),
+            },
             pathBeforeRef: pathFirst,
           ),
         );
@@ -155,7 +171,54 @@ void main() {
         expect(found.single.path, 'ansiwise-two');
         expect(found.single.ref, 'master');
         expect(found.single.url, 'https://github.com/simetrixch/ansiwise-plugins.git');
+        expect(
+          found.single.package,
+          'ansiwise_two',
+          reason:
+              'the name the block stands under is the word a person edits, and a refusal naming '
+              'only the url would send them looking for which of two lines carried it',
+        );
       }
+    });
+
+    test('names the dependency the block stands under, over this repository', () {
+      final ManifestState manifest = ReleasedPackages.read(
+        PubspecsInRepository(repository),
+      ).manifests.first;
+
+      expect(
+        gitDependenciesIn(manifest.text).map((GitDependency each) => each.package),
+        everyElement(isNotNull),
+        reason:
+            'these manifests write a comment above almost every dependency, and a walk that took '
+            'the comment for the key would name a sentence where a package name belongs',
+      );
+      expect(
+        gitDependenciesIn(manifest.text).map((GitDependency each) => each.package),
+        contains('ansiwise_core'),
+      );
+    });
+
+    test('and a comment standing between the name and the git block is stepped over', () {
+      final GitDependency dependency = gitDependenciesIn(
+        'name: ansiwise_one\n'
+        'version: 0.1.0\n'
+        '\n'
+        'dependencies:\n'
+        '  ansiwise_core:\n'
+        '# the framework, see https://github.com/simetrixch/ansiwise-core\n'
+        '    git:\n'
+        '      url: https://github.com/simetrixch/ansiwise-core.git\n'
+        '      ref: master\n',
+      ).single;
+
+      expect(
+        dependency.package,
+        'ansiwise_core',
+        reason:
+            'a comment may stand at any indent, and one carrying a colon read as the key would '
+            'name a sentence in the line a person is sent to open',
+      );
     });
 
     test('is a sibling when its path names a package of this repository, and not otherwise', () {
@@ -163,7 +226,9 @@ void main() {
         plantedPubspec(
           name: 'ansiwise_one',
           version: '0.1.0',
-          dependsOn: <String, String>{'ansiwise_two': 'ansiwise-two'},
+          dependsOn: <String, PlantedDependency>{
+            'ansiwise_two': (path: 'ansiwise-two', ref: 'master'),
+          },
         ),
       ).single;
 
@@ -214,14 +279,22 @@ void main() {
         'ansiwise-one/pubspec.yaml': plantedPubspec(
           name: 'ansiwise_one',
           version: '0.1.0',
-          dependsOn: <String, String>{'ansiwise_two': 'ansiwise-two', 'ansiwise_core': 'core'},
+          dependsOn: <String, PlantedDependency>{
+            'ansiwise_two': (path: 'ansiwise-two', ref: 'master'),
+            'ansiwise_core': (path: null, ref: _theForeignTag),
+          },
         ),
         'ansiwise-two/pubspec.yaml': plantedPubspec(name: 'ansiwise_two', version: '0.1.0'),
       }),
     );
 
     test('is the one version, in every manifest', () {
-      final Bump bump = bumpFor(packages: plantedRepository(), version: '0.2.0', tag: tag);
+      final Bump bump = bumpFor(
+        packages: plantedRepository(),
+        version: '0.2.0',
+        tag: tag,
+        filter: theFilter,
+      );
 
       expect(bump.isGreen, isTrue, reason: bump.refusal ?? '');
       expect(bump.texts, hasLength(2));
@@ -240,7 +313,7 @@ void main() {
             'a stamper that does nothing',
       );
 
-      final Bump bump = bumpFor(packages: before, version: '0.2.0', tag: tag);
+      final Bump bump = bumpFor(packages: before, version: '0.2.0', tag: tag, filter: theFilter);
       final String stampedText = bump.texts['ansiwise-one/pubspec.yaml']!;
       final List<GitDependency> after = gitDependenciesIn(stampedText);
 
@@ -251,21 +324,28 @@ void main() {
         reason: 'a consumer naming this tag has to find the sibling at the same tag inside it',
       );
       expect(
-        after.firstWhere((GitDependency each) => each.path == 'core').ref,
-        'master',
+        after.firstWhere((GitDependency each) => each.package == 'ansiwise_core').ref,
+        _theForeignTag,
         reason:
-            'the framework is another repository and this tag says nothing about it — stamping it '
-            'here would pin somebody else to a name of ours',
+            'the framework is another repository and this tag is a name in ours — writing it here '
+            'would name a tag that repository does not have, so a consumer would resolve nothing '
+            'at all',
       );
     });
 
     test('the second time as well, though a tag stands where the branch stood', () {
-      final Bump first = bumpFor(packages: plantedRepository(), version: '0.2.0', tag: tag);
+      final Bump first = bumpFor(
+        packages: plantedRepository(),
+        version: '0.2.0',
+        tag: tag,
+        filter: theFilter,
+      );
       const String later = '0.3.0-stable-20261001120000';
       final Bump second = bumpFor(
         packages: ReleasedPackages.read(ManifestsInMemory(Map<String, String>.of(first.texts))),
         version: '0.3.0',
         tag: later,
+        filter: theFilter,
       );
 
       expect(
@@ -280,11 +360,17 @@ void main() {
     });
 
     test('nothing at all when the manifests already say it', () {
-      final Bump first = bumpFor(packages: plantedRepository(), version: '0.2.0', tag: tag);
+      final Bump first = bumpFor(
+        packages: plantedRepository(),
+        version: '0.2.0',
+        tag: tag,
+        filter: theFilter,
+      );
       final Bump again = bumpFor(
         packages: ReleasedPackages.read(ManifestsInMemory(Map<String, String>.of(first.texts))),
         version: '0.2.0',
         tag: tag,
+        filter: theFilter,
       );
 
       expect(
@@ -315,6 +401,7 @@ void main() {
         ),
         version: '0.2.0',
         tag: tag,
+        filter: theFilter,
       );
 
       expect(bump.isGreen, isFalse);
@@ -328,4 +415,170 @@ void main() {
       );
     });
   });
+
+  group('a dependency on another repository is not stamped, so it has to be pinned already', () {
+    const String tag = '0.2.0-beta-20260901120000';
+
+    ReleasedPackages plantedRepository({required String coreRef, required String checksRef}) =>
+        ReleasedPackages.read(
+          ManifestsInMemory(<String, String>{
+            'ansiwise-one/pubspec.yaml': plantedPubspec(
+              name: 'ansiwise_one',
+              version: '0.1.0',
+              dependsOn: <String, PlantedDependency>{
+                'ansiwise_two': (path: 'ansiwise-two', ref: 'master'),
+                'ansiwise_core': (path: null, ref: coreRef),
+              },
+            ),
+            'ansiwise-two/pubspec.yaml': plantedPubspec(
+              name: 'ansiwise_two',
+              version: '0.1.0',
+              dependsOn: <String, PlantedDependency>{
+                'ansiwise_checks': (path: 'registry', ref: checksRef),
+              },
+            ),
+          }),
+        );
+
+    test('a branch stops the release, and the line, the package and the ref are all named', () {
+      final ReleasedPackages packages = plantedRepository(
+        coreRef: 'master',
+        checksRef: _theForeignTag,
+      );
+      final Bump bump = bumpFor(packages: packages, version: '0.2.0', tag: tag, filter: theFilter);
+
+      expect(bump.isGreen, isFalse);
+      expect(bump.texts, isEmpty, reason: 'a refused release leaves a tree nobody has to put back');
+      expect(bump.refusal, contains('ansiwise-one/pubspec.yaml:'));
+      expect(bump.refusal, contains('ansiwise_core'));
+      expect(bump.refusal, contains('"master"'));
+      expect(
+        bump.refusal,
+        isNot(contains('ansiwise_checks')),
+        reason:
+            'the one already naming a released tag is not a line anybody has to touch, and a '
+            'refusal listing it would send somebody to a file that is right',
+      );
+    });
+
+    test('and a block with no ref line at all is stopped by the same question', () {
+      final Bump bump = bumpFor(
+        packages: ReleasedPackages.read(
+          ManifestsInMemory(<String, String>{
+            'ansiwise-one/pubspec.yaml':
+                'name: ansiwise_one\n'
+                'version: 0.1.0\n'
+                '\n'
+                'dependencies:\n'
+                '  ansiwise_core:\n'
+                '    git:\n'
+                '      url: https://github.com/simetrixch/ansiwise-core.git\n',
+          }),
+        ),
+        version: '0.2.0',
+        tag: tag,
+        filter: theFilter,
+      );
+
+      expect(bump.isGreen, isFalse);
+      expect(
+        bump.refusal,
+        contains('no ref at all, which is the default branch'),
+        reason:
+            'pub resolves the default branch when no ref is written, so a block carrying none is '
+            'the same pin as one naming master and has to read as one',
+      );
+    });
+
+    test('every one of them is named at once, rather than one refusal per run', () {
+      final Bump bump = bumpFor(
+        packages: plantedRepository(coreRef: 'master', checksRef: 'master'),
+        version: '0.2.0',
+        tag: tag,
+        filter: theFilter,
+      );
+
+      expect(bump.refusal, contains('ansiwise-one/pubspec.yaml:'));
+      expect(
+        bump.refusal,
+        contains('ansiwise-two/pubspec.yaml:'),
+        reason:
+            'twelve manifests naming the framework are twelve lines to put right, and one refusal '
+            'per run is twelve runs to find them',
+      );
+    });
+
+    test('and a tree whose foreign refs are all released tags is refused for nothing', () {
+      final ReleasedPackages packages = plantedRepository(
+        coreRef: _theForeignTag,
+        checksRef: _theForeignTag,
+      );
+      final Bump bump = bumpFor(packages: packages, version: '0.2.0', tag: tag, filter: theFilter);
+
+      expect(
+        packages.followed(theFilter),
+        isEmpty,
+        reason: 'a program that refused every tree would pass all three probes above',
+      );
+      expect(bump.isGreen, isTrue, reason: bump.refusal ?? '');
+      expect(
+        gitDependenciesIn(
+          bump.texts['ansiwise-one/pubspec.yaml']!,
+        ).firstWhere((GitDependency each) => each.package == 'ansiwise_core').ref,
+        _theForeignTag,
+        reason: 'what was already right is left exactly as it stood',
+      );
+    });
+
+    test('and what is reported opens with the line a person has to open', () {
+      final ReleasedPackages packages = plantedRepository(
+        coreRef: 'master',
+        checksRef: _theForeignTag,
+      );
+
+      expect(packages.followed(theFilter), <String>[
+        'ansiwise-one/pubspec.yaml:12 ansiwise_core at "master"',
+      ]);
+    });
+
+    test('over this repository, every foreign ref is judged and none falls between', () {
+      final ReleasedPackages packages = ReleasedPackages.read(PubspecsInRepository(repository));
+      final List<String> foreign = <String>[];
+      final List<String> pinned = <String>[];
+      for (final ManifestState manifest in packages.manifests) {
+        for (final GitDependency each in gitDependenciesIn(manifest.text)) {
+          if (each.isSiblingOf(packages.directories)) {
+            continue;
+          }
+          foreign.add(followedAs(manifest.path, each));
+          if (each.isReleased(theFilter)) {
+            pinned.add(followedAs(manifest.path, each));
+          }
+        }
+      }
+
+      expect(
+        foreign,
+        isNotEmpty,
+        reason:
+            'every package here depends on the framework, and an empty list would make the claim '
+            'below one about nothing',
+      );
+      expect(
+        <String>[...pinned, ...packages.followed(theFilter)]..sort(),
+        foreign..sort(),
+        reason:
+            'each foreign dependency is either a released tag or is reported as followed — one '
+            'falling between the two would be a ref nothing looked at, which is what this whole '
+            'check exists to stop',
+      );
+    });
+  });
 }
+
+/// A tag of ANOTHER repository, as a manifest here would write it once that repository has released.
+///
+/// It is spelled out rather than composed, and it is deliberately not a tag of this repository: what
+/// the checks below hold is that such a ref is left where it stands, so a value that happened to
+/// equal the tag being cut would agree with a stamper that overwrote it.
+const String _theForeignTag = '0.4.1-stable-20260701090000';

@@ -212,6 +212,31 @@ void main() {
       expect(outcome.text, contains('ansiwise-one'));
       expect(outcome.text, contains('ansiwise_two'));
       expect(outcome.text, contains('0.1.0'));
+      expect(
+        outcome.text,
+        contains('nothing — every dependency on another repository names a released tag'),
+        reason:
+            'a screen that said nothing when there is nothing to say would leave a person unable '
+            'to tell it from one that never looked',
+      );
+    });
+
+    test('and names what is followed rather than pinned, beside what could come next', () async {
+      final ReleaseOutcome outcome = await ReleaseCommand(
+        git: ScriptedGit(),
+        manifests: _manifests(foreignRef: 'master'),
+        filter: theFilter,
+        now: () => _theMoment,
+      ).show();
+
+      expect(outcome.text, contains('ansiwise_core at "master"'));
+      expect(
+        outcome.text,
+        contains('possible next versions'),
+        reason:
+            'the versions offered are the ones this program would refuse while that line stands, '
+            'so the two have to be read on one screen',
+      );
     });
 
     test('and a remote that could not be read is not an empty remote', () async {
@@ -370,6 +395,38 @@ void main() {
       expect(git.spelled.where((String each) => each.startsWith('push')), isEmpty);
     });
 
+    test('a dependency on another repository still naming a branch', () async {
+      final ScriptedGit git = _gitWithoutTheTag();
+      final ManifestsInMemory manifests = _manifests(foreignRef: 'master');
+      final ReleaseOutcome outcome = await ReleaseCommand(
+        git: git,
+        manifests: manifests,
+        filter: theFilter,
+        now: () => _theMoment,
+      ).release('0.2.0', 'beta');
+
+      expect(outcome.isGreen, isFalse);
+      expect(outcome.text, contains('ansiwise_core'));
+      expect(outcome.text, contains('"master"'));
+      expect(
+        manifests.written,
+        isEmpty,
+        reason: 'a refused release writes no manifest, so there is nothing for anybody to put back',
+      );
+      expect(
+        git.spelled.where((String each) => each.startsWith('push')),
+        isEmpty,
+        reason:
+            'the tag would carry twelve manifests resolving the framework from whatever master '
+            'holds that day, and once pushed a tag is what a consumer pins',
+      );
+      expect(
+        git.spelled.where((String each) => each.startsWith('commit')),
+        isEmpty,
+        reason: 'nothing is committed either, or the next run would tag a commit nobody asked for',
+      );
+    });
+
     test('packages that do not agree on one version', () async {
       final ScriptedGit git = ScriptedGit();
       final ReleaseOutcome outcome = await ReleaseCommand(
@@ -421,14 +478,24 @@ const String _theTag = '0.2.0-beta-20260901120000';
 ReleaseCommand _command(ScriptedGit git, TagFilter filter) =>
     ReleaseCommand(git: git, manifests: _manifests(), filter: filter, now: () => _theMoment);
 
-ManifestsInMemory _manifests() => ManifestsInMemory(<String, String>{
-  'ansiwise-one/pubspec.yaml': plantedPubspec(
-    name: 'ansiwise_one',
-    version: '0.1.0',
-    dependsOn: <String, String>{'ansiwise_two': 'ansiwise-two'},
-  ),
-  'ansiwise-two/pubspec.yaml': plantedPubspec(name: 'ansiwise_two', version: '0.1.0'),
-});
+ManifestsInMemory _manifests({String foreignRef = _theForeignTag}) =>
+    ManifestsInMemory(<String, String>{
+      'ansiwise-one/pubspec.yaml': plantedPubspec(
+        name: 'ansiwise_one',
+        version: '0.1.0',
+        dependsOn: <String, PlantedDependency>{
+          'ansiwise_two': (path: 'ansiwise-two', ref: 'master'),
+          'ansiwise_core': (path: null, ref: foreignRef),
+        },
+      ),
+      'ansiwise-two/pubspec.yaml': plantedPubspec(name: 'ansiwise_two', version: '0.1.0'),
+    });
+
+/// A tag of ANOTHER repository, as a manifest here writes it once that repository has released.
+///
+/// The planted tree carries a dependency on the framework because every real manifest here does, and
+/// a tree without one would let a release pass a question this program now asks of every manifest.
+const String _theForeignTag = '0.4.1-stable-20260701090000';
 
 ScriptedGit _gitWithoutTheTag() => ScriptedGit(
   answers: <String, GitAnswer>{

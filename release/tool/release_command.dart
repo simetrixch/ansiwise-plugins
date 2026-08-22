@@ -93,6 +93,10 @@ final class ReleaseCommand {
   /// Bumps to [version], stamps the sibling refs, commits, tags and pushes — or refuses and touches
   /// nothing.
   ///
+  /// A dependency on ANOTHER repository is not stamped and is required to name a released tag
+  /// already, so a tree still following somebody else's branch stops the release here rather than
+  /// becoming a tag that pins one package and follows another.
+  ///
   /// The two arguments are answered before any git is run: a tag that would start nothing, or a
   /// channel nothing can rank, is refused without a network at all, and the person is told which of
   /// the two they typed was the one that stopped it.
@@ -141,7 +145,7 @@ final class ReleaseCommand {
     // what version they are at cannot be released at all and there is no reason to ask a remote
     // about it first.
     final ReleasedPackages packages = ReleasedPackages.read(manifests);
-    final Bump bump = bumpFor(packages: packages, version: version, tag: tag);
+    final Bump bump = bumpFor(packages: packages, version: version, tag: tag, filter: filter);
     if (bump.refusal case final String why) {
       return ReleaseOutcome.refused(why);
     }

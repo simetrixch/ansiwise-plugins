@@ -63,16 +63,28 @@ final class ManifestsInMemory implements Manifests {
   }
 }
 
-/// A pubspec declaring [name] at [version], optionally depending on the siblings [dependsOn].
+/// What one dependency of a planted manifest names: the directory inside the repository it points
+/// at, or null when it names the whole repository, and the ref it is pinned at.
+typedef PlantedDependency = ({String? path, String ref});
+
+/// A pubspec declaring [name] at [version], depending on [dependsOn] at the path and ref each names.
 ///
 /// The shape is the one this repository's own manifests carry, `path:` after `ref:` — and one of the
 /// dependencies is written the other way round on purpose, because ansiwise-cli's pubspec.yaml
 /// really does spell one of its eleven that way and a reader that only handled one order would pass
 /// every check written by whoever wrote the reader.
+///
+/// A `path` of null writes no `path:` line at all, which is the shape a dependency on the framework
+/// really has: it names a whole repository rather than a directory inside one, and that is also what
+/// makes it no sibling of anything here.
+///
+/// EVERY BLOCK CARRIES ONE URL, and a planted dependency on another repository carries it too. What
+/// decides whether a dependency is a sibling is its `path:`, so nothing under test reads the url —
+/// writing a second spelling here would state a difference no program acts on.
 String plantedPubspec({
   required String name,
   String? version,
-  Map<String, String> dependsOn = const <String, String>{},
+  Map<String, PlantedDependency> dependsOn = const <String, PlantedDependency>{},
   bool pathBeforeRef = false,
 }) {
   final StringBuffer pubspec = StringBuffer()
@@ -84,20 +96,14 @@ String plantedPubspec({
   pubspec
     ..writeln('')
     ..writeln('dependencies:');
-  for (final MapEntry<String, String> entry in dependsOn.entries) {
+  for (final MapEntry<String, PlantedDependency> entry in dependsOn.entries) {
     pubspec
       ..writeln('  ${entry.key}:')
       ..writeln('    git:')
       ..writeln('      url: https://github.com/simetrixch/ansiwise-plugins.git');
-    if (pathBeforeRef) {
-      pubspec
-        ..writeln('      path: ${entry.value}')
-        ..writeln('      ref: master');
-    } else {
-      pubspec
-        ..writeln('      ref: master')
-        ..writeln('      path: ${entry.value}');
-    }
+    final String path = entry.value.path == null ? '' : '      path: ${entry.value.path}\n';
+    final String ref = '      ref: ${entry.value.ref}\n';
+    pubspec.write(pathBeforeRef ? '$path$ref' : '$ref$path');
   }
   return pubspec.toString();
 }

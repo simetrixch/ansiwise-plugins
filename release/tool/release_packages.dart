@@ -38,9 +38,26 @@
 /// and a program comparing spellings would quietly stamp nothing the day somebody wrote another
 /// one. A `path:` names a directory of this checkout, and whether that directory is a package here
 /// is a fact this program can read off the disk rather than a spelling it has to recognise.
+///
+/// A DEPENDENCY THAT IS NOT A SIBLING IS NOT STAMPED, AND THAT IS WHY IT IS REFUSED INSTEAD. The tag
+/// a release cuts is a name in THIS repository. Writing it into the dependency on ansiwise_core
+/// would name a tag ansiwise-core does not have, so a consumer resolving it would get nothing at
+/// all — worse than the branch it replaced, which at least resolves. Nor may the program pick a tag
+/// of its own: which version of the framework these packages were built and gated against is stated
+/// by the manifests, and a release choosing a different one would change what the gate ran over in
+/// the same act that published it.
+///
+/// SO A FOREIGN REF HAS TO ALREADY NAME A RELEASED TAG BEFORE A RELEASE STARTS, and one that names a
+/// branch stops it and is reported line by line. What counts as a released tag is the grammar
+/// hostyour-manager/shared/release.ts:22 owns and every repository of this organisation cuts under,
+/// read out of this repository's own workflow rather than spelled a second time here. Left alone,
+/// the alternative is a tag whose twelve manifests each resolve the framework from whatever master
+/// holds that day — the very defect the sibling half above exists to close, one repository out.
 library;
 
 import 'dart:io';
+
+import 'release_tag_filter.dart';
 
 /// The manifests of the packages a release carries, as something the release program is handed.
 ///
@@ -225,7 +242,34 @@ final class ReleasedPackages {
     }
     return null;
   }
+
+  /// Every dependency on ANOTHER repository naming something [filter] would not have released.
+  ///
+  /// A sibling is never in here, and the two halves are not the same question. A sibling's `ref:` is
+  /// a line this release is about to overwrite with the tag it is cutting, so a sibling naming a
+  /// branch today is already answered. A foreign ref names a commit in a repository this release
+  /// does not tag, so nothing here can put it right and it has to be right before the release runs.
+  ///
+  /// Read by the screen and by the refusal, so that what a person is shown and what stops them are
+  /// one answer rather than two that can drift apart.
+  List<String> followed(TagFilter filter) => <String>[
+    for (final ManifestState manifest in manifests)
+      for (final GitDependency dependency in gitDependenciesIn(manifest.text))
+        if (!dependency.isSiblingOf(directories) && !dependency.isReleased(filter))
+          followedAs(manifest.path, dependency),
+  ];
 }
+
+/// How one dependency naming no released tag reads on the screen and in a refusal.
+///
+/// It opens with `path:line` because twelve manifests naming `master` are twelve separate lines to
+/// put right, and a sentence naming only the ref would say which value is wrong without saying where
+/// it is written. The dependency's own name follows where the manifest gives it one, since that is
+/// the word standing over the block a person edits.
+String followedAs(String manifest, GitDependency dependency) =>
+    '$manifest:${dependency.gitLine + 1}'
+    '${dependency.package == null ? '' : ' ${dependency.package}'} at '
+    '${dependency.ref == null ? 'no ref at all, which is the default branch' : '"${dependency.ref}"'}';
 
 /// What a release would write into the manifests, or why it could not be composed.
 final class Bump {
@@ -265,9 +309,50 @@ final class Bump {
 /// A MANIFEST THAT ALREADY SAYS BOTH IS NOT AN ERROR AND IS NOT A WRITE. Cutting 0.1.0 on alpha and
 /// then on stable is two releases of one version, and the version half of the second has nothing to
 /// change; the ref half always does, because the ts14 makes every tag a new one.
-Bump bumpFor({required ReleasedPackages packages, required String version, required String tag}) {
+///
+/// A THIRD THING IS ASKED AND NEVER WRITTEN: every dependency these manifests declare on ANOTHER
+/// repository has to name a tag [filter] would have released. There is no edit that could put such a
+/// ref right — the tag being cut is a name in this repository — so it is a refusal and not a write,
+/// and every one of them is named at once rather than one per run.
+Bump bumpFor({
+  required ReleasedPackages packages,
+  required String version,
+  required String tag,
+  required TagFilter filter,
+}) {
   if (packages.refusal case final String why) {
     return Bump.refused(why);
+  }
+  // BEFORE ANY REF IS JUDGED, because a shape the reader cannot see is not a dependency that passed
+  // — it is one nothing looked at, and the two are indistinguishable in a green run.
+  final List<String> unreadable = <String>[
+    for (final ManifestState manifest in packages.manifests)
+      for (final String where in unreadableGitShapesIn(manifest.text)) '${manifest.path} $where',
+  ];
+  if (unreadable.isNotEmpty) {
+    return Bump.refused(
+      'these lines write a git dependency in a shape this program does not read — '
+      '${unreadable.join('; ')}. `pub` takes them and so would a release, which is the problem: a '
+      'one-line `git: <url>` names no ref and follows the default branch, and a dependency written '
+      'inside braces keeps its ref where the walk for indented keys never looks. Either way the '
+      'line would be neither stamped nor refused, and a tag published over it would pin nothing '
+      'while looking pinned. Write the dependency as a block — `git:` on its own line with `url:`, '
+      '`ref:` and `path:` indented under it — which is the shape every manifest of this repository '
+      'already uses',
+    );
+  }
+  final List<String> followed = packages.followed(filter);
+  if (followed.isNotEmpty) {
+    return Bump.refused(
+      'these packages name another repository at something that is no released tag — '
+      '${followed.join('; ')}. The tag $tag is a name in THIS repository and says nothing about '
+      'theirs, so there is no line here to stamp and this program will not guess which version was '
+      'meant. These packages compile to no file, so the tree at $tag IS the release, and a tree '
+      'naming a branch resolves to something else tomorrow under the same name — the pin a consumer '
+      'took the tag for. Pin each of them to a released tag of the repository it names first. What '
+      'counts as a released tag is the grammar hostyour-manager/shared/release.ts:22 owns and every '
+      'repository of this organisation cuts under, read here out of $releaseWorkflowPath',
+    );
   }
   final Set<String> siblings = packages.directories;
   final Map<String, String> texts = <String, String>{};
@@ -335,11 +420,13 @@ String? declaredNameIn(String pubspec) => _declaredName.firstMatch(pubspec)?.gro
 
 final RegExp _declaredName = RegExp(r'^name:[ \t]*(\S+)[ \t]*$', multiLine: true);
 
-/// One `git:` block of a pubspec, read into the three things a release cares about.
+/// One `git:` block of a pubspec, read into the things a release cares about.
 final class GitDependency {
-  /// The block opened at [gitLine], naming [url] and [path] and pinned at [ref] on [refLine].
+  /// The block opened at [gitLine] under [package], naming [url] and [path], pinned at [ref] on
+  /// [refLine].
   const GitDependency({
     required this.gitLine,
+    required this.package,
     required this.url,
     required this.path,
     required this.ref,
@@ -349,6 +436,12 @@ final class GitDependency {
 
   /// The line the `git:` key stands on, counted from zero.
   final int gitLine;
+
+  /// The name the manifest writes this dependency under, or null when nothing encloses the `git:`.
+  ///
+  /// It is the word a person edits — `ansiwise_core`, not the directory and not the url — and it is
+  /// the key the `git:` block stands inside rather than anything read out of that block.
+  final String? package;
 
   /// The url it names, or null when it names none.
   final String? url;
@@ -370,6 +463,13 @@ final class GitDependency {
   /// [siblings] are the package directories of this repository, so a `path:` among them is a
   /// dependency inside this repository and every other one points somewhere else entirely.
   bool isSiblingOf(Set<String> siblings) => path != null && siblings.contains(path);
+
+  /// Whether what it names is a tag [filter] would have released, rather than a branch.
+  ///
+  /// A block carrying no `ref:` line answers no rather than being passed over: pub then resolves the
+  /// repository's default branch, which is the same thing as naming one and is the outcome this
+  /// question exists to find.
+  bool isReleased(TagFilter filter) => ref != null && filter.accepts(ref!);
 }
 
 /// Every `git:` block in [pubspec], in the order they stand.
@@ -379,6 +479,15 @@ final class GitDependency {
 /// dependency is written as. The keys inside a block may stand in any order — this repository's own
 /// consumers already write `path:` before `ref:` in one place and after it in another — so nothing
 /// here depends on which comes first.
+///
+/// **A SHAPE THIS READER CANNOT SEE IS REFUSED, never passed over.** `pub` also accepts a git
+/// dependency written on one line — `git: <url>`, which follows the default branch and names no
+/// ref — and one written as a flow mapping in braces. Neither is a block, so neither reaches the
+/// walk below, and a reader that simply skipped them would let exactly the defect this program
+/// exists to stop through: a manifest following a branch, published under a tag, reported as
+/// pinned. Teaching the walk to read them would be a YAML parser inside a program that may import
+/// no parser. So [unreadableGitShapesIn] finds them by their shape and the release stops, naming
+/// the line and the block form to write instead.
 List<GitDependency> gitDependenciesIn(String pubspec) {
   final List<String> lines = pubspec.split('\n');
   final List<GitDependency> found = <GitDependency>[];
@@ -413,6 +522,7 @@ List<GitDependency> gitDependenciesIn(String pubspec) {
     found.add(
       GitDependency(
         gitLine: index,
+        package: _enclosingKeyOf(lines, index),
         url: url,
         path: path,
         ref: ref,
@@ -450,6 +560,29 @@ List<GitDependency> gitDependenciesIn(String pubspec) {
   return (lines.join('\n'), stamped);
 }
 
+/// The key the line at [line] of [lines] stands inside, or null when it stands inside no bare key.
+///
+/// It is the nearest line above carrying a SMALLER indent, which is how a block is written: the
+/// dependency's name stands one level out from the `git:` inside it. A COMMENT IS STEPPED OVER
+/// RATHER THAN READ, because YAML lets one stand at any indent — a `#` line written flush left
+/// between the name and the `git:` under it is the nearest smaller indent there is, and one carrying
+/// a colon, which an address does, would otherwise be handed back as the name.
+String? _enclosingKeyOf(List<String> lines, int line) {
+  final int indent = _indentOf(lines[line]);
+  for (int above = line - 1; above >= 0; above--) {
+    final String content = lines[above].trim();
+    if (content.isEmpty || content.startsWith('#') || _indentOf(lines[above]) >= indent) {
+      continue;
+    }
+    if (_valueOf(lines[above]).isNotEmpty) {
+      return null;
+    }
+    final String key = _keyOf(lines[above]);
+    return key.isEmpty ? null : key;
+  }
+  return null;
+}
+
 int _indentOf(String line) => line.length - line.trimLeft().length;
 
 String _keyOf(String line) {
@@ -462,4 +595,37 @@ String _valueOf(String line) {
   final String content = line.trim();
   final int colon = content.indexOf(':');
   return colon < 0 ? '' : content.substring(colon + 1).trim();
+}
+
+/// Every line of [pubspec] that writes a git dependency in a shape [gitDependenciesIn] cannot read.
+///
+/// Two of them, and both are legal `pub`:
+///
+///   * `git: <url>` on one line. It names no ref, so it follows the default branch of the
+///     repository it points at — the same defect as a written-out `ref: master`, wearing no clothes.
+///   * a flow mapping, `<name>: {git: {url: ..., ref: ...}}` or `git: {url: ..., ref: ...}`. The
+///     whole dependency stands on the name line, so the walk that looks for indented keys under a
+///     bare `git:` never opens it.
+///
+/// Reported as LINES rather than as dependencies, because what is known about them is where they
+/// stand and nothing else — reading the ref out of a brace is the parser this program may not have.
+List<String> unreadableGitShapesIn(String pubspec) {
+  final List<String> lines = pubspec.split('\n');
+  final List<String> found = <String>[];
+  for (int index = 0; index < lines.length; index++) {
+    final String content = lines[index].trim();
+    if (content.isEmpty || content.startsWith('#')) {
+      continue;
+    }
+    final String value = _valueOf(lines[index]);
+    if (value.isEmpty) {
+      continue;
+    }
+    final bool oneLineGit = _keyOf(lines[index]) == 'git';
+    final bool flowMapping = value.startsWith('{') && value.contains('git');
+    if (oneLineGit || flowMapping) {
+      found.add('line ${index + 1}: $content');
+    }
+  }
+  return found;
 }
