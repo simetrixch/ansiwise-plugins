@@ -265,6 +265,112 @@ void main() {
       expect((result as Blocked).reason, contains('platform_branch'));
     });
 
+    test('the directory is made for its owner and handed over before git is asked', () async {
+      // A checkout under a path only root may write cannot be created by the account that has to
+      // use it, and one created AS root is one git then refuses to that account outright. Both are
+      // the same act: make it with elevation, own it as the answer says.
+      const GitClone owned = GitClone(
+        repository: path,
+        host: host,
+        branch: base,
+        originAnswer: originAnswer,
+        ownerAnswer: 'operator_user',
+        runAnswer: null,
+      );
+      final FakeShell shell = bare();
+      await owned.apply(
+        contextOn(
+          shell: shell,
+          files: FakeFiles(),
+          name: openOwnerName,
+          answerName: originAnswer,
+          also: const <String, Object>{'operator_user': 'digi1'},
+        ),
+      );
+
+      expect(
+        shell.ran,
+        containsAllInOrder(<String>[
+          'install -d -o digi1 -g digi1 $path',
+          'chown -R digi1:digi1 $path',
+          'git clone --branch $base $openUrl $path',
+        ]),
+        reason: 'git is asked nothing until the directory is one the run may use',
+      );
+    });
+
+    test('a checkout standing under the WRONG owner is work, not a satisfied machine', () async {
+      // What a machine left by an earlier shape of this row looks like: the tree is there, on the
+      // right branch, at the right tip — and git will not read a word of it.
+      const GitClone owned = GitClone(
+        repository: path,
+        host: host,
+        branch: base,
+        originAnswer: originAnswer,
+        ownerAnswer: 'operator_user',
+        runAnswer: null,
+      );
+      // EVERYTHING ELSE MATCHES, which is the whole point: the tree is there, its remote is right,
+      // it is on the branch and at the tip. Only the owner is wrong, so a check that missed that
+      // would call this machine finished. The first shape of this test used the shared `standing`
+      // fixture, whose remote is the settings-based address — so it passed for the wrong reason and
+      // stayed green when the ownership reading was taken out.
+      final FakeShell shell = FakeShell();
+      shell
+        ..answers('stat -c %U $path', 'root\n')
+        ..answers('git -C $path rev-parse --is-inside-work-tree', 'true\n')
+        ..answers('git -C $path remote get-url origin', '$openUrl\n')
+        ..answers('git -C $path rev-parse --abbrev-ref HEAD', '$base\n')
+        ..answers('git ls-remote --heads $openUrl $base', '$tip\trefs/heads/$base\n')
+        ..answers('git -C $path rev-parse HEAD', '$tip\n');
+
+      expect(
+        await owned.check(
+          contextOn(
+            shell: shell,
+            files: FakeFiles(),
+            name: openOwnerName,
+            answerName: originAnswer,
+            also: const <String, Object>{'operator_user': 'digi1'},
+          ),
+        ),
+        isA<Ready>(),
+        reason: 'every git question would come back as the same refusal, saying nothing',
+      );
+    });
+
+    test('a checkout already under the right owner is not disturbed', () async {
+      const GitClone owned = GitClone(
+        repository: path,
+        host: host,
+        branch: base,
+        originAnswer: openOwnerName,
+        ownerAnswer: 'operator_user',
+        runAnswer: null,
+      );
+      final FakeShell shell = FakeShell();
+      shell
+        ..answers('stat -c %U $path', 'digi1\n')
+        ..answers('git -C $path rev-parse --is-inside-work-tree', 'true\n')
+        ..answers('git -C $path remote get-url origin', '$openUrl\n')
+        ..answers('git -C $path rev-parse --abbrev-ref HEAD', '$base\n')
+        ..answers('git ls-remote --heads $openUrl $base', '$tip\trefs/heads/$base\n')
+        ..answers('git -C $path rev-parse HEAD', '$tip\n');
+
+      expect(
+        await owned.check(
+          contextOn(
+            shell: shell,
+            files: FakeFiles(),
+            name: openOwnerName,
+            answerName: openOwnerName,
+            also: const <String, Object>{'operator_user': 'digi1'},
+          ),
+        ),
+        isA<Satisfied>(),
+      );
+    });
+
     test('INNOCENT CASE: the shape every other case here uses is untouched', () async {
       final FakeShell shell = bare();
       await step.apply(contextOn(shell: shell, files: settings()));

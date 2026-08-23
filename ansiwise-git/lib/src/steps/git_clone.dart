@@ -35,6 +35,7 @@ final class GitClone extends IrreversibleStep {
     required this.runAnswer,
     this.branch,
     this.branchAnswer,
+    this.ownerAnswer,
     this.originFile,
     this.originKey,
     this.originAnswer,
@@ -50,6 +51,7 @@ final class GitClone extends IrreversibleStep {
     host: arguments.text('host'),
     branch: arguments.optionalText('branch'),
     branchAnswer: arguments.optionalText('branch_answer'),
+    ownerAnswer: arguments.optionalText('owner_answer'),
     originFile: arguments.optionalText('origin_file'),
     originKey: arguments.optionalText('origin_key'),
     originAnswer: arguments.optionalText('origin_answer'),
@@ -93,6 +95,23 @@ final class GitClone extends IrreversibleStep {
       describes:
           'the name of the answer holding that branch, where it is one installation\'s own and '
           'cannot be written into a file that ships to every installation',
+      required: false,
+    ),
+    // WHO OWNS THE CHECKOUT DECIDES WHO CAN USE IT AFTERWARDS, and git enforces that itself: it
+    // refuses a repository owned by another account outright — "detected dubious ownership" — so a
+    // tree cloned as root is a tree every later step running as the operator is locked out of.
+    //
+    // The directory usually cannot be MADE by that account either: a checkout under /srv sits in a
+    // directory only root may write. So it is created elevated and handed over, and everything git
+    // does afterwards runs as its owner. That is one act and belongs to the row that makes the
+    // checkout, not to a second row somebody has to remember.
+    ArgumentSpec(
+      name: 'owner_answer',
+      kind: ArgumentKind.answerName,
+      describes:
+          'the name of the answer holding the account this checkout belongs to. Given, the '
+          'directory is created for that account with elevation and git is run as it; left off, '
+          'the checkout belongs to whoever the run is',
       required: false,
     ),
     // The names and never the values. The two files are one installation's own, written by an
@@ -192,6 +211,9 @@ final class GitClone extends IrreversibleStep {
   /// The answer holding that branch, where it is one installation's own.
   final String? branchAnswer;
 
+  /// The answer holding the account this checkout belongs to, where it is not the run's own.
+  final String? ownerAnswer;
+
   /// The settings file recording the repository as owner/name, and its key.
   final String? originFile;
 
@@ -231,6 +253,17 @@ final class GitClone extends IrreversibleStep {
     }
     final String url = source.url ?? '';
     final String standsOn = source.branch ?? '';
+
+    // WHO OWNS IT IS ASKED FIRST, because git refuses a repository owned by another account before
+    // it answers anything else — "detected dubious ownership" — so every question below would come
+    // back as a failure that says nothing about the checkout.
+    if (await _ownedByAnother(context) case final String owner) {
+      context.log.info(
+        '$repository belongs to $owner and this run is not it, so git will not read it at all — '
+        'the directory is handed over before anything else is asked of it',
+      );
+      return const CheckResult.ready();
+    }
 
     if (!(await _observe(context, <String>[
       '-C',
@@ -326,6 +359,34 @@ final class GitClone extends IrreversibleStep {
     final String url = source.url ?? '';
     final String standsOn = source.branch ?? '';
     final Map<String, String> reaching = source.credentialEnvironment(host);
+
+    // THE DIRECTORY IS MADE AND HANDED OVER BEFORE GIT IS ASKED ANYTHING. A checkout under a path
+    // only root may write cannot be created by the account that has to use it, and one created as
+    // root is one git then refuses to that account. Both are the same act from the machine's side:
+    // make it with elevation, own it as the answer says, and every git command afterwards is an
+    // ordinary one.
+    //
+    // `-R` because this also corrects a tree that is ALREADY there under the wrong owner, which is
+    // what a machine left by an earlier shape of this row looks like.
+    if (ownerAnswer case final String name) {
+      if (context.answers.optionalText(name) case final String account) {
+        await _mustRunAs(context, <String>[
+          'install',
+          '-d',
+          '-o',
+          account,
+          '-g',
+          account,
+          repository,
+        ], elevated: true);
+        await _mustRunAs(context, <String>[
+          'chown',
+          '-R',
+          '$account:$account',
+          repository,
+        ], elevated: true);
+      }
+    }
 
     if (!(await _observe(context, <String>[
       '-C',
@@ -550,6 +611,47 @@ final class GitClone extends IrreversibleStep {
       elevated: elevated,
     ),
   );
+
+  /// The account [repository] belongs to where it is not the one this run is, or null.
+  ///
+  /// Read with `stat` rather than by asking git, because git is the thing that refuses: a
+  /// repository owned by another account makes every one of its commands fail with the same
+  /// message, and a check that learned the ownership from that failure would be reading a symptom.
+  ///
+  /// A path that is not there yet, and a machine whose `stat` answers nothing, are both "no other
+  /// owner" — there is nothing to hand over, and the clone below makes it.
+  Future<String?> _ownedByAnother(StepContext context) async {
+    if (ownerAnswer case final String name) {
+      if (context.answers.optionalText(name) case final String account) {
+        final CommandResult owner = await context.shell.run(
+          Command.observing('stat', arguments: <String>['-c', '%U', repository]),
+        );
+        if (owner.ok && owner.trimmed.isNotEmpty && owner.trimmed != account) {
+          return owner.trimmed;
+        }
+      }
+    }
+    return null;
+  }
+
+  /// One command that is NOT git, run for its effect on the machine.
+  ///
+  /// Separate from [_mustRun] because that one always starts `git` and always at this row's own
+  /// elevation, and the two commands that hand a directory over are neither: they are `install` and
+  /// `chown`, and they are elevated whatever the row said about the files it reads.
+  Future<void> _mustRunAs(StepContext context, List<String> argv, {required bool elevated}) async {
+    final CommandResult answer = await context.shell.run(
+      Command.detailed(argv.first, arguments: argv.sublist(1), elevated: elevated),
+    );
+    if (!answer.ok) {
+      throw CommandFailed(
+        argv: argv,
+        exitCode: answer.exitCode,
+        stdout: answer.stdout,
+        stderr: answer.stderr,
+      );
+    }
+  }
 
   Future<void> _mustRun(
     StepContext context,
