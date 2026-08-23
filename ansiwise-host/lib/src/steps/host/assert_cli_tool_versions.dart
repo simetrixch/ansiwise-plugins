@@ -149,23 +149,49 @@ final class AssertCliToolVersions extends ObservingStep {
   ///
   /// Shared with the step that fetches a pinned release, because the version on the machine is what
   /// it decides its own skip on and a second way of reading it here would answer differently.
-  static Future<String?> installedVersion(
+  /// **THREE STATES COME BACK WITHOUT A VERSION AND THEY ARE NOT ONE THING.** A tool that is not on
+  /// the machine, one that is there and would not answer, and one that answered something no shape
+  /// could read are three different situations for whoever reads the report — and told the first
+  /// when it is the third, they go and place a binary that is already standing there.
+  ///
+  /// The third is not hypothetical: a binary built outside a release answers a word rather than a
+  /// number, deliberately, so that nothing compares it to a pin. A developer's build on a machine
+  /// is exactly that, and it used to be reported as absent.
+  static Future<({String? version, String problem})> installedVersion(
     StepContext context,
     String tool,
     List<String> versionCommand,
   ) async {
     if (!await EnsureToolPrerequisites.onPath(context, tool)) {
-      return null;
+      return (version: null, problem: '$tool is not on this machine');
     }
     final CommandResult answer = await context.shell.run(
       Command.observing(tool, arguments: versionCommand),
     );
     if (!answer.ok) {
-      return null;
+      final String said = answer.stderr.trim();
+      return (
+        version: null,
+        problem:
+            '$tool is on this machine and would not say what version it is: '
+            '${versionCommand.join(' ')} '
+            '${said.isEmpty ? 'failed and said nothing' : 'said $said'}',
+      );
     }
     // The first line only. One of these prints the version and then the commit it was built from
     // and more besides, and every pin here is held against a bare version.
-    return versionIn(answer.stdout.split('\n').first);
+    final String first = answer.stdout.split('\n').first;
+    final String? read = versionIn(first);
+    if (read == null) {
+      return (
+        version: null,
+        problem:
+            '$tool answered "${first.trim()}", and nothing on that line is shaped like a version. '
+            'A binary built outside a release answers a word rather than a number on purpose, so '
+            'that nothing compares it to a pin — which is what this reads like',
+      );
+    }
+    return (version: read, problem: '');
   }
 
   /// The version [said] carries, or null where nothing on it is shaped like one.
@@ -232,9 +258,14 @@ final class AssertCliToolVersions extends ObservingStep {
         continue;
       }
 
-      final String? installed = await installedVersion(context, tool, reader);
+      final ({String? version, String problem}) reading = await installedVersion(
+        context,
+        tool,
+        reader,
+      );
+      final String? installed = reading.version;
       if (installed == null) {
-        problems.add('$tool is not on this machine');
+        problems.add(reading.problem);
         continue;
       }
       if (installed == bare(pin, pinPrefixes)) {

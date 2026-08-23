@@ -218,11 +218,11 @@ final class InstallPinnedTool extends IrreversibleStep {
         'version — so it would fetch the release again on every run',
       );
     }
-    final String? installed = await AssertCliToolVersions.installedVersion(
+    final String? installed = (await AssertCliToolVersions.installedVersion(
       context,
       tool,
       versionCommand,
-    );
+    )).version;
     if (installed == AssertCliToolVersions.bare(version, pinPrefixes)) {
       return CheckResult.satisfied('$tool is at $installed');
     }

@@ -494,20 +494,55 @@ void main() {
       // the build behind it on the one line.
       final HostMachine machine = withTools();
       expect(
-        await AssertCliToolVersions.installedVersion(
+        (await AssertCliToolVersions.installedVersion(
           machine.contextFor(under),
           'tailscale',
           <String>['version'],
-        ),
+        )).version,
         '1.98.10',
       );
       expect(
-        await AssertCliToolVersions.installedVersion(
+        (await AssertCliToolVersions.installedVersion(
           machine.contextFor(under),
           'packed-cli',
           <String>['version'],
-        ),
+        )).version,
         '2.0.3',
+      );
+    });
+
+    // A TOOL WITHOUT A VERSION IS THREE DIFFERENT SITUATIONS, and the report has to tell them
+    // apart. The third — present, answering, unreadable — is what a binary built outside a release
+    // looks like: it answers a WORD rather than a number, deliberately, so that nothing compares it
+    // to a pin. Reported as absent, it sends an operator to place a binary already standing there.
+    test('a tool that is absent, one that will not answer, and one that answers a word', () async {
+      final HostMachine machine = withTools();
+      machine.shell
+        ..fails(onThePathKey('gone-cli'))
+        ..answers(onThePathKey('mute-cli'), '/usr/local/bin/mute-cli\n')
+        ..fails('mute-cli --version', stderr: 'error while loading shared libraries')
+        ..answers(onThePathKey('unstamped-cli'), '/usr/local/bin/unstamped-cli\n')
+        ..answers('unstamped-cli --version', 'unreleased\n');
+
+      Future<String> problemOf(String tool) async => (await AssertCliToolVersions.installedVersion(
+        machine.contextFor(under),
+        tool,
+        <String>['--version'],
+      )).problem;
+
+      expect(await problemOf('gone-cli'), contains('is not on this machine'));
+      expect(
+        await problemOf('mute-cli'),
+        allOf(
+          contains('would not say what version it is'),
+          contains('error while loading shared libraries'),
+        ),
+        reason: 'the words the tool said are the only thing that says which failure this is',
+      );
+      expect(
+        await problemOf('unstamped-cli'),
+        allOf(contains('unreleased'), isNot(contains('is not on this machine'))),
+        reason: 'it IS on the machine, and quoting what it answered is what shows that',
       );
     });
 
@@ -525,6 +560,37 @@ void main() {
       final String reason = (answer as Blocked).reason;
       expect(reason, contains('jq is not on this machine'));
       expect(reason, contains('yq is not on this machine'));
+    });
+
+    test('a tool that IS there and answers a word is not reported as missing', () async {
+      // The whole report an operator acts on, not the reader underneath it. A binary built outside
+      // a release answers `unreleased` — a word rather than a number, on purpose, so that nothing
+      // compares it to a pin — and reported as absent it sends somebody to place a binary that is
+      // already standing there.
+      final HostMachine machine = withTools();
+      machine.shell.answers('yq --version', 'unreleased\n');
+
+      final CheckResult answer = await step.check(machine.contextFor(under));
+      final String reason = (answer as Blocked).reason;
+      expect(
+        reason,
+        allOf(contains('yq answered "unreleased"'), isNot(contains('yq is not on this machine'))),
+        reason: 'quoting what it said is the whole of what tells the two situations apart',
+      );
+    });
+
+    test('a tool that is there and will not answer says so, with what it said', () async {
+      final HostMachine machine = withTools();
+      machine.shell.fails('yq --version', stderr: 'error while loading shared libraries');
+
+      final CheckResult answer = await step.check(machine.contextFor(under));
+      expect(
+        (answer as Blocked).reason,
+        allOf(
+          contains('yq is on this machine and would not say what version it is'),
+          contains('error while loading shared libraries'),
+        ),
+      );
     });
 
     test(
