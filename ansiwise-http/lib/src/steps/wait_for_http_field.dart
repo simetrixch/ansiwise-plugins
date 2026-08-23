@@ -31,6 +31,7 @@ final class WaitForHttpField extends ObservingStep {
     required this.values,
     required this.bearerAnswer,
     required this.bearer,
+    required this.acceptsAnyCertificate,
     required this.timeoutSeconds,
     required this.intervalSeconds,
   });
@@ -49,6 +50,8 @@ final class WaitForHttpField extends ObservingStep {
     values: slotSources(arguments.has('values') ? arguments.raw('values') : null),
     bearerAnswer: arguments.has('bearer_answer') ? arguments.text('bearer_answer') : null,
     bearer: arguments.optionalText('bearer'),
+    acceptsAnyCertificate:
+        arguments.has('accepts_any_certificate') && arguments.flag('accepts_any_certificate'),
     timeoutSeconds: arguments.integer('timeout_seconds'),
     intervalSeconds: arguments.integer('interval_seconds'),
   );
@@ -137,6 +140,20 @@ final class WaitForHttpField extends ObservingStep {
           '"bearer_answer" instead where the operator supplies it, and never both',
     ),
     ArgumentSpec(
+      name: 'accepts_any_certificate',
+      kind: ArgumentKind.flag,
+      required: false,
+      defaultValue: false,
+      describes:
+          'whether a certificate that cannot be verified is accepted, for the one case where the '
+          'wait and the certificate come out of the same run: a route is published before its '
+          'issuer has finished, so the proxy serves its own default certificate for the first part '
+          'of exactly the window this wait covers, and a verifying ask reports the service as '
+          'unreachable while it is running. Say it only for an address inside the installation '
+          'being built, and never for one out on the internet, where the certificate is the only '
+          'thing establishing that the answer came from who it claims',
+    ),
+    ArgumentSpec(
       name: 'timeout_seconds',
       kind: ArgumentKind.integer,
       required: false,
@@ -179,6 +196,12 @@ final class WaitForHttpField extends ObservingStep {
   /// The credential a measurement filled, or null where this row takes it from an answer or
   /// carries none.
   final String? bearer;
+
+  /// Whether a certificate that cannot be verified ends the ask or is accepted.
+  ///
+  /// See `HttpRequest.acceptsAnyCertificate`: it is narrow on purpose, and what it gives up is the
+  /// proof of WHO answered — never the answer itself, which is the only thing this step reads.
+  final bool acceptsAnyCertificate;
 
   /// How long the state is given.
   final int timeoutSeconds;
@@ -288,6 +311,7 @@ final class WaitForHttpField extends ObservingStep {
           headers: composedHeaders(bearer: carried.value),
           timeout: Duration(seconds: intervalSeconds),
           socketPath: socket.path,
+          acceptsAnyCertificate: acceptsAnyCertificate,
         ),
       );
     } on Object catch (why) {

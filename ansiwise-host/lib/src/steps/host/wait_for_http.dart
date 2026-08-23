@@ -17,7 +17,12 @@ import 'package:ansiwise_core/ansiwise_core.dart';
 /// here changes anything at either end.
 final class WaitForHttp extends ObservingStep with WaitStep {
   /// Polls [url] until it answers, giving up after [timeoutSeconds].
-  const WaitForHttp({required this.url, required this.timeoutSeconds, this.intervalSeconds = 5});
+  const WaitForHttp({
+    required this.url,
+    required this.timeoutSeconds,
+    this.acceptsAnyCertificate = false,
+    this.intervalSeconds = 5,
+  });
 
   /// Builds the step from what the program gave it.
   factory WaitForHttp.fromArguments(Arguments arguments) => WaitForHttp(
@@ -27,6 +32,8 @@ final class WaitForHttp extends ObservingStep with WaitStep {
     // Read as required, the whole program is refused before anything looks at anything.
     url: arguments.optionalText('url') ?? '',
     timeoutSeconds: arguments.integer('timeout_seconds'),
+    acceptsAnyCertificate:
+        arguments.has('accepts_any_certificate') && arguments.flag('accepts_any_certificate'),
     intervalSeconds: arguments.integer('interval_seconds'),
   );
 
@@ -40,6 +47,20 @@ final class WaitForHttp extends ObservingStep with WaitStep {
           'the address to wait for. A row that has it from an earlier measurement names that '
           'measurement instead, which is why this is not required: the program is examined before '
           'anything is measured, and a step that could not be built then would refuse the program',
+    ),
+    ArgumentSpec(
+      name: 'accepts_any_certificate',
+      kind: ArgumentKind.flag,
+      required: false,
+      defaultValue: false,
+      describes:
+          'whether a certificate that cannot be verified is accepted, for the one case where the '
+          'wait and the certificate come out of the same run: a route is published before its '
+          'issuer has finished, so the proxy serves its own default certificate for the first part '
+          'of exactly the window this wait covers, and a verifying ask reports the address as '
+          'unreachable while it is answering. Say it only for an address inside the installation '
+          'being built, and never for one out on the internet, where the certificate is the only '
+          'thing establishing that the answer came from who it claims',
     ),
     ArgumentSpec(
       name: 'timeout_seconds',
@@ -62,6 +83,12 @@ final class WaitForHttp extends ObservingStep with WaitStep {
 
   /// How long the asking is given.
   final int timeoutSeconds;
+
+  /// Whether a certificate that cannot be verified ends the ask or is accepted.
+  ///
+  /// See `HttpRequest.acceptsAnyCertificate`. What it gives up is the proof of WHO answered, which
+  /// this step never reads: it waits for the address to answer AT ALL.
+  final bool acceptsAnyCertificate;
 
   /// How long to leave between asks.
   final int intervalSeconds;
@@ -86,7 +113,9 @@ final class WaitForHttp extends ObservingStep with WaitStep {
     //
     // Any answer at all is the answer. An address that could not be reached does not come back with
     // a status, it throws — and the wait carries that reason to the deadline rather than losing it.
-    await context.http.send(HttpRequest('GET', url, timeout: interval));
+    await context.http.send(
+      HttpRequest('GET', url, timeout: interval, acceptsAnyCertificate: acceptsAnyCertificate),
+    );
     return (held: true, saw: null);
   }
 }

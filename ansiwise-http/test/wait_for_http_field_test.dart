@@ -31,6 +31,7 @@ void main() {
     List<String>? failing,
     int timeoutSeconds = 60,
     int intervalSeconds = 5,
+    bool? acceptsAnyCertificate,
   }) => WaitForHttpField.fromArguments(
     Arguments(<String, Object>{
       'waiting_for': 'the thing to be present',
@@ -40,8 +41,34 @@ void main() {
       'failing': ?failing,
       'timeout_seconds': timeoutSeconds,
       'interval_seconds': intervalSeconds,
+      'accepts_any_certificate': ?acceptsAnyCertificate,
     }),
   );
+
+  // WHAT THE ROW SAYS ABOUT THE CERTIFICATE REACHES THE REQUEST, and the two halves fail in
+  // opposite directions. The address a readiness wait is aimed at belongs to the installation being
+  // built, and its certificate is issued by the same run: the proxy in front of it serves its own
+  // default for the first part of exactly this window, so a row that could not say "the answer is
+  // what I am reading, not who is answering" would wait out its whole deadline in front of a
+  // service that is up. Both drive fromArguments and read what the port was HANDED, because a step
+  // that carried the value in a field and never put it on the request would satisfy anything less.
+  test('a row that says nothing about certificates asks for the check to be made', () async {
+    final ScriptedHttp http = ScriptedHttp(
+      (HttpRequest request, int nth) => answerOf(200, '{"state":"present"}'),
+    );
+    await step().check(contextOn(http));
+    expect(http.sent.single.acceptsAnyCertificate, isFalse);
+  });
+
+  test('a row that says so hands it to the port, and nothing else about the ask changes', () async {
+    final ScriptedHttp http = ScriptedHttp(
+      (HttpRequest request, int nth) => answerOf(200, '{"state":"present"}'),
+    );
+    await step(acceptsAnyCertificate: true).check(contextOn(http));
+    expect(http.sent.single.acceptsAnyCertificate, isTrue);
+    expect(http.sent.single.method, 'GET', reason: 'it is still a read and still only measures');
+    expect(http.sent.single.url, address);
+  });
 
   test('an arrived value satisfies the check', () async {
     final ScriptedHttp http = ScriptedHttp(
