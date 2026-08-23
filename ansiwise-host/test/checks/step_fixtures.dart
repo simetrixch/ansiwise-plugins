@@ -54,6 +54,19 @@ final Map<String, Fixture> stepFixtures = <String, Fixture>{
     });
   },
 
+  // `getent group` answers nothing for a group that is not there and the group's line once it is,
+  // which is the whole of what this step reads — and a fake shell that only records `groupadd`
+  // would answer the same nothing on the second run. The probe hands both text arguments the same
+  // value, so the name and the number here are one string; the step is written to ask `getent` the
+  // same way for either, so that costs the fixture nothing.
+  'create_group': (FakeShell shell, FakeFiles files, FakeHttp http) {
+    shell
+      ..fails('getent group $_plausibleText')
+      ..changes('groupadd --gid $_plausibleText $_plausibleText', () {
+        shell.answers('getent group $_plausibleText', '$_plausibleText:x:$_plausibleText:');
+      });
+  },
+
   // The kernel renders /proc/<pid>/exe as `<path> (deleted)` while a process is executing an inode
   // that no longer has a name — which is what a service running a replaced binary looks like, and
   // the whole of what this step reads. The restart is what gives the process a named inode again,

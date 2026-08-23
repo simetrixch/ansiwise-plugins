@@ -6,6 +6,7 @@ import 'steps/host/activate_public_src_routing.dart';
 import 'steps/host/add_shell_alias.dart';
 import 'steps/host/restart_stale_service.dart';
 import 'steps/host/add_user_to_group.dart';
+import 'steps/host/create_group.dart';
 import 'steps/host/apply_netplan.dart';
 import 'steps/host/assert_cli_tool_versions.dart';
 import 'steps/host/assert_netplan_merged.dart';
@@ -222,6 +223,13 @@ const Map<StepName, RegisteredStep> hostSteps = <StepName, RegisteredStep>{
     source: 'lib/src/steps/host/disable_addons.dart:16',
     create: DisableAddons.fromArguments,
     arguments: DisableAddons.arguments,
+  ),
+  // The group an account is put into, which has to be on the machine before anything can name it.
+  StepName('create_group'): RegisteredStep(
+    name: StepName('create_group'),
+    source: 'lib/src/steps/host/create_group.dart:18',
+    create: CreateGroup.fromArguments,
+    arguments: CreateGroup.arguments,
   ),
   // The operator's account.
   StepName('add_user_to_group'): RegisteredStep(

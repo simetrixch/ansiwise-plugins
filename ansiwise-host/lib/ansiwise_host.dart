@@ -14,6 +14,7 @@ export 'src/steps/host/activate_public_src_routing.dart';
 export 'src/steps/host/add_shell_alias.dart';
 export 'src/steps/host/restart_stale_service.dart';
 export 'src/steps/host/add_user_to_group.dart';
+export 'src/steps/host/create_group.dart';
 export 'src/steps/host/addon_status.dart';
 export 'src/steps/host/apply_netplan.dart';
 export 'src/steps/host/assert_cli_tool_versions.dart';
