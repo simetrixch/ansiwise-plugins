@@ -1,6 +1,7 @@
 import 'package:ansiwise_core/ansiwise_core.dart';
 
 import 'steps/file_from_vault.dart';
+import 'steps/measure_vault_url.dart';
 import 'steps/remove_vault_auth_method.dart';
 import 'steps/remove_vault_kv_entry.dart';
 import 'steps/remove_vault_policy.dart';
@@ -78,6 +79,22 @@ const Map<StepName, RegisteredStep> vaultSteps = <StepName, RegisteredStep>{
     source: 'lib/src/steps/file_from_vault.dart:26',
     create: FileFromVault.fromArguments,
     arguments: FileFromVault.arguments,
+  ),
+  // The one step of this family that hands something OUT rather than writing something in: the
+  // address the profile records, published so that a row of another package — a wait, a gate — can
+  // be pointed at the same Vault the rows around it talk to. It declares no answer of its own, for
+  // the reason the entries above give.
+  StepName('measure_vault_url'): RegisteredStep(
+    name: StepName('measure_vault_url'),
+    source: 'lib/src/steps/measure_vault_url.dart:26',
+    create: MeasureVaultUrl.fromArguments,
+    arguments: MeasureVaultUrl.arguments,
+    publishes: <MeasurementSpec>[
+      MeasurementSpec(
+        name: MeasurementName('vault_url'),
+        describes: "the address this installation's Vault answers at, as its profile records it",
+      ),
+    ],
   ),
   // The gate that proves a mount's connection to its cluster with a real login attempt. Which
   // answer holds the credential it presents is the row's to say, so no answer is declared here.

@@ -16,6 +16,7 @@ library;
 export 'src/registry.dart';
 export 'src/steps/argument_text.dart';
 export 'src/steps/file_from_vault.dart';
+export 'src/steps/measure_vault_url.dart';
 export 'src/steps/remove_vault_auth_method.dart';
 export 'src/steps/remove_vault_kv_entry.dart';
 export 'src/steps/remove_vault_policy.dart';

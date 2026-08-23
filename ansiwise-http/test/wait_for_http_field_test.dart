@@ -128,6 +128,42 @@ void main() {
     expect(http.sent.length, 2);
   });
 
+  test('a non-2xx answer with no JSON in it is the in-between too, and is waited through', () async {
+    // The shape a reverse proxy in front of a service with no endpoint behind it produces: the
+    // address resolves, something answers, and what answers is 503 with a line of prose. Until this
+    // case was covered the suite knew 404 and a thrown connection error and no status in between,
+    // so `readingOf` could have started calling this final without anything here noticing.
+    final ScriptedHttp http = ScriptedHttp(
+      (HttpRequest request, int nth) =>
+          nth < 2 ? answerOf(503, 'Service Unavailable') : answerOf(200, '{"state":"present"}'),
+    );
+    final FakeClock clock = FakeClock();
+
+    await step().apply(contextOn(http, clock: clock));
+
+    expect(http.sent.length, 3);
+    expect(clock.slept.length, 2);
+  });
+
+  test('and one that never stops answering 503 says so at the deadline', () async {
+    // What the operator is left with when the wait does run out: the status the address kept
+    // answering, rather than only the number of seconds that were spent on it.
+    final ScriptedHttp http = ScriptedHttp(
+      (HttpRequest request, int nth) => answerOf(503, 'Service Unavailable'),
+    );
+
+    await expectLater(
+      step(timeoutSeconds: 10, intervalSeconds: 5).apply(contextOn(http)),
+      throwsA(
+        isA<WaitedTooLong>().having(
+          (WaitedTooLong failure) => failure.waitingFor,
+          'waitingFor',
+          contains('503'),
+        ),
+      ),
+    );
+  });
+
   test('a value in until and in failing at once is refused, not raced', () async {
     final ScriptedHttp http = ScriptedHttp((HttpRequest request, int nth) => answerOf(404));
     final CheckResult answer = await step(
