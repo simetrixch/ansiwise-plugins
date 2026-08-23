@@ -227,6 +227,44 @@ void main() {
       );
     });
 
+    test('stands on the branch the run answers, and not on one written into the row', () async {
+      // The material of an installation stands on THAT installation's branch. A row writing one
+      // would move every other installation's checkout onto it the next time it ran.
+      const GitClone answered = GitClone(
+        repository: path,
+        host: host,
+        branchAnswer: 'platform_branch',
+        originAnswer: originAnswer,
+        runAnswer: null,
+      );
+      final FakeShell shell = bare();
+      await answered.apply(
+        contextOn(
+          shell: shell,
+          files: FakeFiles(),
+          name: openOwnerName,
+          answerName: originAnswer,
+          also: const <String, Object>{'platform_branch': 'apps1.example.com'},
+        ),
+      );
+      expect(shell.ran, contains('git clone --branch apps1.example.com $openUrl $path'));
+    });
+
+    test('a run holding no branch answer is refused, naming that answer', () async {
+      const GitClone answered = GitClone(
+        repository: path,
+        host: host,
+        branchAnswer: 'platform_branch',
+        originAnswer: originAnswer,
+        runAnswer: null,
+      );
+      final CheckResult result = await answered.check(
+        contextOn(shell: bare(), files: FakeFiles(), name: openOwnerName, answerName: originAnswer),
+      );
+      expect(result, isA<Blocked>());
+      expect((result as Blocked).reason, contains('platform_branch'));
+    });
+
     test('INNOCENT CASE: the shape every other case here uses is untouched', () async {
       final FakeShell shell = bare();
       await step.apply(contextOn(shell: shell, files: settings()));
@@ -269,6 +307,36 @@ void main() {
       expect(shell.ran, isEmpty, reason: 'the row is wrong wherever it runs, so nothing is asked');
       return (result as Blocked).reason;
     }
+
+    test('both branches — two answers to which branch it stands on', () async {
+      expect(
+        await refusalOf(
+          const GitClone(
+            repository: path,
+            host: host,
+            branch: base,
+            branchAnswer: 'platform_branch',
+            originAnswer: 'platform_repo',
+            runAnswer: null,
+          ),
+        ),
+        allOf(contains('branch'), contains('branch_answer')),
+      );
+    });
+
+    test('neither branch — nothing says which one it stands on', () async {
+      expect(
+        await refusalOf(
+          const GitClone(
+            repository: path,
+            host: host,
+            originAnswer: 'platform_repo',
+            runAnswer: null,
+          ),
+        ),
+        allOf(contains('branch'), contains('branch_answer')),
+      );
+    });
 
     test('both origin sources — two answers to one question', () async {
       expect(
