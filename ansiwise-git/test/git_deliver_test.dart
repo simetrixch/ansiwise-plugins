@@ -53,6 +53,91 @@ void main() {
 
       expect(shell.ran.where((String c) => c.contains('commit')), isEmpty);
     });
+
+    test(
+      'a path this row names and the checkout does not hold is refused before anything is staged',
+      () async {
+        // The shape that was found on a real machine: a directory was renamed in the tree, the rows
+        // that write into it followed, and this row went on naming the old name. git add refuses a
+        // pathspec matching nothing, so the run staged the paths before it and then died — with two
+        // files written, no commit, and git's message rather than this step's.
+        const GitCommit naming = GitCommit(
+          repository: repository,
+          paths: <String>['clusters', 'cluster'],
+          message: 'what this run wrote',
+        );
+        final FakeShell shell = checkout(head: branch)
+          ..answers(
+            'git -C $repository status --porcelain -- clusters cluster',
+            ' M clusters/one.yaml\n',
+          )
+          ..fails('git -C $repository ls-files --error-unmatch -- cluster');
+
+        expect(
+          await naming.check(contextOn(shell: shell)),
+          isA<Blocked>().having((Blocked blocked) => blocked.reason, 'reason', contains('cluster')),
+        );
+      },
+    );
+
+    test('THE INNOCENT NEIGHBOUR: a path only this run has written is not read as absent', () async {
+      // What installation state looks like on the first run of a freshly cut branch: git has never
+      // heard of the file, and add takes it anyway. Asking the index alone would refuse the whole
+      // row at the one moment it matters most.
+      final FakeShell shell = dirty()
+        ..fails('git -C $repository ls-files --error-unmatch -- clusters')
+        ..answers(
+          'git -C $repository ls-files --others --exclude-standard -- clusters',
+          'clusters/active/one.yaml\n',
+        );
+
+      expect(await commit.check(contextOn(shell: shell)), isA<Ready>());
+    });
+
+    test(
+      'THE CASE THIS REFUSAL EXISTS FOR: a status git could not carry out is not "nothing differs"',
+      () async {
+        // The silent-success shape this whole step exists to prevent, one level in: a status that
+        // FAILED read as an empty one makes the check answer satisfied, so the commit is never made
+        // and the run reports success over a checkout nobody could look at.
+        final FakeShell shell = checkout(head: branch)
+          ..fails(
+            'git -C $repository status --porcelain -- clusters configs',
+            exitCode: 128,
+            stderr: 'fatal: unable to read index',
+          );
+
+        expect(await commit.check(contextOn(shell: shell)), isA<Blocked>());
+      },
+    );
+
+    test(
+      'what this row names none of is written into the record, and does not fail the run',
+      () async {
+        // The whole-tree question, which is a DIFFERENT FakeShell key from the one dirty() arranges:
+        // no `--` and no paths. That is what makes this measure what the row named none of rather
+        // than what it named.
+        final FakeShell shell = dirty()
+          ..answers('git -C $repository status --porcelain', ' M installation/profile.yaml\n');
+        final RecordingLog log = RecordingLog();
+
+        await commit.apply(contextOn(shell: shell, log: log));
+
+        expect(log.warnings.single, contains('installation/profile.yaml'));
+      },
+    );
+
+    test(
+      'THE INNOCENT NEIGHBOUR: a checkout carrying nothing else produces no such line',
+      () async {
+        final FakeShell shell = dirty()..answers('git -C $repository status --porcelain', '');
+        final RecordingLog log = RecordingLog();
+
+        await commit.apply(contextOn(shell: shell, log: log));
+
+        expect(log.warnings, isEmpty);
+      },
+    );
   });
 
   group('proving it left the machine', () {
@@ -108,6 +193,27 @@ void main() {
 
     test('and where it landed at the right commit, nothing is thrown', () async {
       await push.apply(contextOn(shell: pushable(remoteAt: tip)));
+    });
+
+    test('every command that reaches the remote refuses to be asked anything', () async {
+      // There is no terminal on the other side of a run a client opened. A git that decides to ask
+      // for a credential does not fail the push, it hangs it until the deadline — and a run that
+      // hangs says nothing at all, where a refusal names what could not write.
+      final FakeShell shell = pushable(remoteAt: tip);
+      await push.apply(contextOn(shell: shell));
+
+      final Iterable<Command> reaching = shell.commands.where(
+        (Command each) => each.arguments.contains('push') || each.arguments.contains('ls-remote'),
+      );
+      expect(reaching, isNotEmpty);
+      for (final Command each in reaching) {
+        expect(
+          each.environment['GIT_TERMINAL_PROMPT'],
+          '0',
+          reason: '${each.argv.join(' ')} would stop and ask',
+        );
+        expect(each.environment['GIT_SSH_COMMAND'], contains('BatchMode=yes'));
+      }
     });
   });
 }

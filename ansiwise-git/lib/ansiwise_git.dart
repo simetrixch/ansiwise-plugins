@@ -14,6 +14,7 @@ export 'src/steps/git_identity.dart';
 export 'src/steps/git_commit.dart';
 export 'src/steps/git_merge_ref.dart';
 export 'src/steps/git_push.dart';
+export 'src/steps/git_push_credential.dart';
 export 'src/steps/measure_value_in_branch_file.dart';
 export 'src/steps/require_git_identity.dart';
 export 'src/steps/require_pushable_remote.dart';

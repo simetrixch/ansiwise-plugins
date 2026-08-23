@@ -2,6 +2,8 @@ import 'dart:convert';
 
 import 'package:ansiwise_core/ansiwise_core.dart';
 
+import 'recorded_value.dart';
+
 /// Puts a checkout of one repository at a path on this machine, on a stated branch, and moves it to
 /// that branch's published tip on every later run.
 ///
@@ -469,14 +471,19 @@ final class GitClone extends IrreversibleStep {
       return _Reading.open(url: url, branch: standsOn);
     }
 
-    final String? credentialPath = _filled(context, credentialFile!);
+    final String? credentialPath = filledPath(context, credentialFile!, runAnswer);
     if (credentialPath == null) {
       return const _Reading.unreadable(
         'a path of this row still carries a slot nothing filled — the row names run_answer for '
         'the answer that fills it, and this run holds no value under that name',
       );
     }
-    final String? credential = await _recorded(context, credentialPath, credentialKey!);
+    final String? credential = await recordedValue(
+      context,
+      credentialPath,
+      credentialKey!,
+      elevated: elevated,
+    );
     if (credential == null) {
       return _Reading.unreadable(
         '${credentialKey!} of $credentialPath is what the repository is read with, and it is not '
@@ -537,8 +544,10 @@ final class GitClone extends IrreversibleStep {
     if (originAnswer case final String name) {
       return context.answers.optionalText(name);
     }
-    final String? originPath = _filled(context, originFile!);
-    return originPath == null ? null : _recorded(context, originPath, originKey!);
+    final String? originPath = filledPath(context, originFile!, runAnswer);
+    return originPath == null
+        ? null
+        : recordedValue(context, originPath, originKey!, elevated: elevated);
   }
 
   /// Why the owner/name could not be read, said in terms of where this row looked for it.
@@ -548,54 +557,13 @@ final class GitClone extends IrreversibleStep {
           'repository this checkout is cloned from — a first checkout is made before any file of '
           'this machine records it, so the answer is the only place it stands';
     }
-    final String? originPath = _filled(context, originFile!);
+    final String? originPath = filledPath(context, originFile!, runAnswer);
     if (originPath == null) {
       return 'a path of this row still carries a slot nothing filled — the row names run_answer '
           'for the answer that fills it, and this run holds no value under that name';
     }
     return '${originKey!} of $originPath is which repository this checkout is cloned from, and it '
         'is not there — the program that generates this installation writes it';
-  }
-
-  /// [text] with the run's own value in its slot, or null while a slot stands unfilled.
-  String? _filled(StepContext context, String text) {
-    String written = text;
-    if (runAnswer case final String name) {
-      if (context.answers.optionalText(name) case final String value) {
-        written = filledSlots(written, <String, String>{name: value});
-      }
-    }
-    return leftoverSlotIn(written) == null ? written : null;
-  }
-
-  /// The value [file] records under [key], or null where it records none worth reading.
-  ///
-  /// The file is `KEY=value` lines, which is the shape both settings files of an installation are
-  /// written in. A value still carrying angle brackets is the text that marks it unfilled, and it
-  /// is refused like an absent one: sent onward it would become part of an address.
-  Future<String?> _recorded(StepContext context, String file, String key) async {
-    if (!await context.files.exists(file, elevated: elevated)) {
-      return null;
-    }
-    final String content = await context.files.read(file, elevated: elevated);
-    final RegExp line = RegExp('^[ \\t]*${RegExp.escape(key)}[ \\t]*=[ \\t]*(.*)\$');
-    for (final String each in content.split('\n')) {
-      final RegExpMatch? match = line.firstMatch(each.trimRight());
-      if (match == null) {
-        continue;
-      }
-      String value = match.group(1)!.trim();
-      if (value.length >= 2 &&
-          (value.startsWith('"') && value.endsWith('"') ||
-              value.startsWith("'") && value.endsWith("'"))) {
-        value = value.substring(1, value.length - 1);
-      }
-      if (value.isEmpty || (value.contains('<') && value.contains('>'))) {
-        return null;
-      }
-      return value;
-    }
-    return null;
   }
 
   Future<CommandResult> _observe(

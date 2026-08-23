@@ -7,6 +7,7 @@ import 'steps/git_identity.dart';
 import 'steps/git_commit.dart';
 import 'steps/git_merge_ref.dart';
 import 'steps/git_push.dart';
+import 'steps/git_push_credential.dart';
 import 'steps/measure_value_in_branch_file.dart';
 import 'steps/require_git_identity.dart';
 import 'steps/require_pushable_remote.dart';
@@ -51,7 +52,7 @@ const Map<StepName, RegisteredStep> gitSteps = <StepName, RegisteredStep>{
   ),
   StepName('git_clone'): RegisteredStep(
     name: StepName('git_clone'),
-    source: 'lib/src/steps/git_clone.dart:30',
+    source: 'lib/src/steps/git_clone.dart:32',
     create: GitClone.fromArguments,
     arguments: GitClone.arguments,
   ),
@@ -76,15 +77,23 @@ const Map<StepName, RegisteredStep> gitSteps = <StepName, RegisteredStep>{
   ),
   StepName('git_commit'): RegisteredStep(
     name: StepName('git_commit'),
-    source: 'lib/src/steps/git_commit.dart:20',
+    source: 'lib/src/steps/git_commit.dart:34',
     create: GitCommit.fromArguments,
     arguments: GitCommit.arguments,
   ),
   StepName('git_push'): RegisteredStep(
     name: StepName('git_push'),
-    source: 'lib/src/steps/git_push.dart:19',
+    source: 'lib/src/steps/git_push.dart:25',
     create: GitPush.fromArguments,
     arguments: GitPush.arguments,
+  ),
+  // Directly after the push, because the two are written together in a program: this is what the
+  // push's own doc means by the helper it says is arranged before any program runs.
+  StepName('git_push_credential'): RegisteredStep(
+    name: StepName('git_push_credential'),
+    source: 'lib/src/steps/git_push_credential.dart:35',
+    create: GitPushCredential.fromArguments,
+    arguments: GitPushCredential.arguments,
   ),
   StepName('replace_text_in_tracked_files'): RegisteredStep(
     name: StepName('replace_text_in_tracked_files'),

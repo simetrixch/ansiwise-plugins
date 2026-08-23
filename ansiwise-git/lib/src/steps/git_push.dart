@@ -16,6 +16,12 @@ import 'package:ansiwise_core/ansiwise_core.dart';
 /// landed. How the machine is allowed to write to that remote is arranged before any program runs —
 /// a key, a helper, an agent — and a step that carried a credential would make every caller hand it
 /// one whether their remote wanted it or not.
+///
+/// **Refusing to be ASKED for a credential is not the same as carrying one.** There is no terminal
+/// on the other side of a run a client opened, so a prompt does not fail the push — it hangs it
+/// until the deadline, and the record then says nothing at all rather than "this credential may not
+/// write there". So both commands that reach the network are told to refuse every question instead
+/// of asking it, the same way the gate that offers a push is.
 final class GitPush extends IrreversibleStep {
   /// Pushes the branch [repository] stands on to [remote].
   const GitPush({required this.repository, required this.remote});
@@ -84,7 +90,11 @@ final class GitPush extends IrreversibleStep {
   Future<void> apply(StepContext context) async {
     final String branch = (await _head(context))!;
     final CommandResult pushed = await context.shell.run(
-      Command('git', <String>['-C', repository, 'push', remote, branch]),
+      Command.detailed(
+        'git',
+        arguments: <String>['-C', repository, 'push', remote, branch],
+        environment: _nonInteractive,
+      ),
     );
     if (!pushed.ok) {
       throw CommandFailed(
@@ -138,9 +148,11 @@ final class GitPush extends IrreversibleStep {
   /// The commit [remote] carries [branch] at, or null where it carries no such branch.
   Future<String?> _remoteTip(StepContext context, String branch) async {
     final CommandResult answer = await context.shell.run(
-      Command.observing(
+      Command.detailed(
         'git',
         arguments: <String>['-C', repository, 'ls-remote', '--heads', remote, branch],
+        environment: _nonInteractive,
+        observes: true,
       ),
     );
     if (!answer.ok || answer.trimmed.isEmpty) {
@@ -148,4 +160,13 @@ final class GitPush extends IrreversibleStep {
     }
     return answer.trimmed.split(RegExp(r'\s+')).first;
   }
+
+  /// What stops git asking a question nobody is there to answer.
+  ///
+  /// `GIT_TERMINAL_PROMPT=0` turns git's own credential prompt into a refusal, and `BatchMode=yes`
+  /// does the same for the passphrase and host-key questions ssh would otherwise ask.
+  static const Map<String, String> _nonInteractive = <String, String>{
+    'GIT_TERMINAL_PROMPT': '0',
+    'GIT_SSH_COMMAND': 'ssh -oBatchMode=yes',
+  };
 }

@@ -36,19 +36,22 @@ const String branch = 'm1.example.com';
 /// [also] is for the rows that read MORE THAN ONE answer — a checkout naming both which repository
 /// it is from and which branch it stands on. A case stating one of the two and not the other is
 /// what proves each is read on its own, so they are separate rather than one map.
+/// [log] is for the cases where what a step SAYS is the thing being measured. It defaults to the
+/// one that keeps nothing, so a case that is about the machine is not made to arrange a log.
 StepContext contextOn({
   FakeShell? shell,
   FakeFiles? files,
   String? name = branch,
   String answerName = nameAnswer,
   Map<String, Object> also = const <String, Object>{},
+  Logger log = const SilentLog(),
 }) => StepContext(
   shell: shell ?? FakeShell(),
   files: files ?? FakeFiles(),
   http: FakeHttp(),
   clock: FakeClock(),
   entropy: FakeEntropy(),
-  log: const SilentLog(),
+  log: log,
   step: const StepName('under_test'),
   arguments: Arguments.none,
   // The branch name is an ANSWER: nobody can write one into a file that ships to every machine, so
@@ -95,6 +98,30 @@ final class SilentLog implements Logger {
 
   @override
   void warn(String message) {}
+
+  @override
+  void error(String message) {}
+}
+
+/// A log that keeps what it was given, for the cases where what a step SAYS is the thing measured.
+///
+/// A step whose only observable effect is a line in the record has no probe at all against a log
+/// that throws its lines away — the case would go in unmeasured and read like coverage.
+final class RecordingLog implements Logger {
+  /// Creates the log.
+  RecordingLog();
+
+  /// Every warning, in the order it was written.
+  final List<String> warnings = <String>[];
+
+  @override
+  void debug(String message) {}
+
+  @override
+  void info(String message) {}
+
+  @override
+  void warn(String message) => warnings.add(message);
 
   @override
   void error(String message) {}

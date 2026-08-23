@@ -78,6 +78,13 @@ const Set<String> notCoveredByAFakeMachine = <String>{
   // the same commit is satisfied before it sends.
   'git_commit',
   'git_push',
+  // The credential it writes comes from an answer or from a file whose NAME its row chooses, and a
+  // probe holds no answers and hands every text argument the same one-character value — so it is
+  // handed BOTH sources at once, which the row's own shape refusal rightly rejects before this
+  // machine is asked anything. What measures the same property instead is named:
+  // test/git_push_credential_test.dart applies it over a fake checkout and asserts that the check
+  // afterwards answers satisfied, so the second run has nothing to do.
+  'git_push_credential',
   'replace_regex_in_tracked_file',
   'replace_text_in_tracked_files',
   'stamp_placeholder_in_tracked_files',
