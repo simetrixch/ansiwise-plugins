@@ -645,5 +645,60 @@ void main() {
     test('it says what is lost, because the file is replaced whole', () {
       expect(step.irreversibleReason, contains('another cluster'));
     });
+
+    // A COMMAND THAT WOULD NOT ANSWER IS THREE DIFFERENT STATES, and only one of them is about the
+    // cluster. The cluster may not be running; the account may be one the distribution does not
+    // admit; or the session may predate the group that grants that admission — which is what every
+    // first bring-up produces, because the same run is what puts the account in that group and
+    // supplementary groups are read once, when a session starts.
+    //
+    // Told only that the cluster would not hand its credentials over, an operator goes and looks at
+    // a cluster that is perfectly healthy. So the command's OWN WORDS are what the refusal carries.
+    test('a refusal carries what the command said, not a sentence about the cluster', () async {
+      final HostMachine machine = HostMachine();
+      machine.shell
+        ..answers(
+          'getent passwd $operatorUser',
+          '$operatorUser:x:1000:1000::$operatorHome:/bin/bash\n',
+        )
+        ..fails(
+          'cluster config',
+          stderr:
+              'Insufficient permissions to access the cluster. You can either try again with sudo '
+              'or add the user $operatorUser to the cluster group',
+        );
+
+      final CheckResult result = await step.check(machine.contextFor(under));
+      expect(result, isA<Blocked>());
+      expect(
+        (result as Blocked).reason,
+        allOf(contains('Insufficient permissions'), contains('group')),
+        reason:
+            'the distribution names the group in its own sentence, and that sentence is the whole '
+            'difference between a broken cluster and a session started one step too early',
+      );
+      expect(
+        result.reason,
+        contains(credentialsCommand.join(' ')),
+        reason: 'an operator has to know WHICH command said it before they can run it themselves',
+      );
+    });
+
+    test('a command that succeeds and prints nothing is named as that, not as a failure', () async {
+      // An empty answer is neither a working cluster nor a refused one, and reporting it as a
+      // failure with no words behind it is the shape that sends somebody looking for a message
+      // nothing wrote.
+      final HostMachine machine = HostMachine();
+      machine.shell
+        ..answers(
+          'getent passwd $operatorUser',
+          '$operatorUser:x:1000:1000::$operatorHome:/bin/bash\n',
+        )
+        ..answers('cluster config', '');
+
+      final CheckResult result = await step.check(machine.contextFor(under));
+      expect(result, isA<Blocked>());
+      expect((result as Blocked).reason, contains('answered nothing at all'));
+    });
   });
 }

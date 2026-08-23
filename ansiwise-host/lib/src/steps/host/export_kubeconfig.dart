@@ -91,10 +91,12 @@ final class ExportKubeconfig extends IrreversibleStep {
       );
     }
     final String path = '$home/$directoryName/config';
-    final String? wanted = await _credentials(context);
+    final ({String? credentials, String said}) asked = await _credentials(context);
+    final String? wanted = asked.credentials;
     if (wanted == null) {
-      return const CheckResult.blocked(
-        'the cluster would not hand out its credentials, so there is nothing to write',
+      return CheckResult.blocked(
+        'the cluster would not hand out its credentials, so there is nothing to write. '
+        '${credentialsCommand.join(' ')} said: ${asked.said}',
       );
     }
     if (!await context.files.exists(path, elevated: elevated)) {
@@ -127,13 +129,14 @@ final class ExportKubeconfig extends IrreversibleStep {
     if (home == null) {
       return;
     }
-    final String? credentials = await _credentials(context);
+    final ({String? credentials, String said}) asked = await _credentials(context);
+    final String? credentials = asked.credentials;
     if (credentials == null) {
       throw CommandFailed(
         argv: credentialsCommand,
         exitCode: 1,
         stdout: '',
-        stderr: 'the cluster would not hand out its credentials',
+        stderr: 'the cluster would not hand out its credentials: ${asked.said}',
       );
     }
     final String directory = '$home/$directoryName';
@@ -155,11 +158,35 @@ final class ExportKubeconfig extends IrreversibleStep {
     );
   }
 
-  /// The credentials the cluster hands out, or null when it will not.
-  Future<String?> _credentials(StepContext context) async {
+  /// The credentials the cluster hands out, or WHY it would not.
+  ///
+  /// **THE COMMAND'S OWN WORDS ARE CARRIED OUT OF HERE**, because they are the only thing that says
+  /// which of several very different states this is. A cluster that is not running, an account the
+  /// cluster distribution does not admit, a session that predates the group granting that
+  /// admission — all three come back as a command that failed, and only one of them is about the
+  /// cluster at all.
+  ///
+  /// The third costs the most and is the easiest to misread. A machine's first bring-up puts the
+  /// operating account into the group the distribution grants access through, and supplementary
+  /// groups are read once, when a session starts — so the session doing the granting does not have
+  /// it, and this command fails in a run where everything else succeeded. Told only that "the
+  /// cluster would not hand out its credentials", an operator goes and looks at a cluster that is
+  /// perfectly healthy. Told what the command said, they read the distribution's own sentence about
+  /// the group and log in again.
+  Future<({String? credentials, String said})> _credentials(StepContext context) async {
     final CommandResult config = await context.shell.run(
       Command.observing(credentialsCommand.first, arguments: credentialsCommand.sublist(1)),
     );
-    return config.ok && config.stdout.trim().isNotEmpty ? config.stdout : null;
+    if (config.ok && config.stdout.trim().isNotEmpty) {
+      return (credentials: config.stdout, said: '');
+    }
+    // An empty answer from a command that SUCCEEDED says nothing at all, so it is named as that
+    // rather than reported as a failure with no words behind it.
+    final String said = config.stderr.trim().isNotEmpty
+        ? config.stderr.trim()
+        : config.ok
+        ? 'it answered nothing at all'
+        : 'it failed and said nothing';
+    return (credentials: null, said: said);
   }
 }
