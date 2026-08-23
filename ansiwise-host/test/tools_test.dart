@@ -32,6 +32,24 @@ const InstallPinnedTool packedCli = InstallPinnedTool(
   pinPrefixes: pinPrefixes,
 );
 
+/// A tool whose version is a RELEASE TAG rather than a bare number — a stamped binary answers
+/// `<major>.<minor>.<patch>-<channel>-<ts14>`, ts14 being a UTC `yyyyMMddHHmmss`.
+///
+/// Invented for the same reason as the two around it, and its pin is the whole of what separates it
+/// from them: a tag BEGINS with three numbers a bare-version reader matches, so a reader that stops
+/// there answers something the tool never printed and the machine is fetched again on every run.
+const InstallPinnedTool stampedCli = InstallPinnedTool(
+  tool: 'stamped-cli',
+  version: '0.1.0-alpha-20260822223803',
+  url:
+      'https://releases.example.invalid/stamped-cli/'
+      '${InstallPinnedTool.versionPlaceholder}/stamped-cli',
+  directory: InstallPinnedTool.defaultDirectory,
+  archive: null,
+  versionCommand: <String>['--version'],
+  pinPrefixes: pinPrefixes,
+);
+
 const InstallPinnedTool yqCli = InstallPinnedTool(
   tool: 'yq',
   version: 'v4.53.3',
@@ -120,6 +138,31 @@ void main() {
 
       expect(await yqCli.check(machine.contextFor(under)), isA<Satisfied>());
       expect(machine.changing, isEmpty);
+    });
+
+    test('a tool answering a release tag is held against its pin whole, and left alone', () async {
+      // The machine that costs something: it is AT the pin, and a reader stopping at the first
+      // three numbers of the tag holds `0.1.0` against a pin that is still whole, never matches,
+      // and fetches the release again on every run — silently, because every fetch succeeds.
+      final HostMachine machine = HostMachine();
+      machine.shell
+        ..answers(onThePathKey('stamped-cli'), '/usr/local/bin/stamped-cli\n')
+        ..answers('stamped-cli --version', '${stampedCli.version}\n');
+
+      expect(await stampedCli.check(machine.contextFor(under)), isA<Satisfied>());
+      expect(machine.changing, isEmpty);
+    });
+
+    test('a release-tagged tool at another stamp of the same numbers is fetched', () async {
+      // The other half, and the reason the tag is compared whole rather than trimmed to its numbers
+      // on both sides: a rebuild of the same version IS three equal numbers and a different stamp,
+      // so a comparison that only reached the numbers would call this machine right.
+      final HostMachine machine = HostMachine();
+      machine.shell
+        ..answers(onThePathKey('stamped-cli'), '/usr/local/bin/stamped-cli\n')
+        ..answers('stamped-cli --version', '0.1.0-alpha-20260101000000\n');
+
+      expect(await stampedCli.check(machine.contextFor(under)), isA<Ready>());
     });
 
     test('a tool from the package manager skips on being there, taking no version', () async {
@@ -263,28 +306,39 @@ void main() {
   });
 
   group('the pins held against the machine', () {
+    // The release-tagged tool stands in the same list as the bare-numbered ones, because one run
+    // holds every tool a program pins and the two shapes have to be read side by side rather than
+    // each in a suite of its own.
     const AssertCliToolVersions step = AssertCliToolVersions(
-      tools: <String>['packed-cli=v2.0.3', 'yq=v4.53.3', 'jq=jq-1.8.2', 'tailscale=v1.98.10'],
+      tools: <String>[
+        'packed-cli=v2.0.3',
+        'yq=v4.53.3',
+        'jq=jq-1.8.2',
+        'tailscale=v1.98.10',
+        'stamped-cli=0.1.0-alpha-20260822223803',
+      ],
       unpinnable: <String>['jq', 'tailscale'],
       versionCommands: <String>[
         'packed-cli=version',
         'yq=--version',
         'jq=--version',
         'tailscale=version',
+        'stamped-cli=--version',
       ],
       pinPrefixes: pinPrefixes,
     );
 
     HostMachine withTools({Map<String, String> answers = const <String, String>{}}) {
       final HostMachine machine = HostMachine();
-      for (final String tool in <String>['packed-cli', 'yq', 'jq', 'tailscale']) {
+      for (final String tool in <String>['packed-cli', 'yq', 'jq', 'tailscale', 'stamped-cli']) {
         machine.shell.answers(onThePathKey(tool), '/usr/local/bin/$tool\n');
       }
       machine.shell
         ..answers('packed-cli version', 'Packed CLI v2.0.3 (abcdef1), built 2026-01-01\n')
         ..answers('yq --version', 'yq (https://github.com/mikefarah/yq/) version v4.53.3\n')
         ..answers('jq --version', 'jq-1.8.2\n')
-        ..answers('tailscale version', '1.98.10\n  tailscale commit: abcdef1\n');
+        ..answers('tailscale version', '1.98.10\n  tailscale commit: abcdef1\n')
+        ..answers('stamped-cli --version', '0.1.0-alpha-20260822223803\n');
       answers.forEach(machine.shell.answers);
       return machine;
     }
@@ -307,6 +361,76 @@ void main() {
 
     test('a row that names no shape leaves every pin as it stands', () {
       expect(AssertCliToolVersions.bare('v4.53.3', <String>[]), 'v4.53.3');
+    });
+
+    test('a release tag carries no shape to take off, so the whole tag is what is compared', () {
+      expect(
+        AssertCliToolVersions.bare('0.1.0-alpha-20260822223803', pinPrefixes),
+        '0.1.0-alpha-20260822223803',
+      );
+    });
+
+    test('a release tag is read whole, and not as the three numbers it begins with', () {
+      expect(
+        AssertCliToolVersions.versionIn('0.1.0-alpha-20260822223803'),
+        '0.1.0-alpha-20260822223803',
+      );
+      expect(
+        AssertCliToolVersions.versionIn('12.7.30-stable-20250101235959'),
+        '12.7.30-stable-20250101235959',
+      );
+    });
+
+    test('a bare version is read exactly as it is read today', () {
+      // Every shape the tools pinned before a release tag existed answer in, held here so that
+      // making room for the fuller shape cannot quietly change what any of them reads as.
+      expect(
+        AssertCliToolVersions.versionIn('yq (https://github.com/mikefarah/yq/) version v4.53.3'),
+        '4.53.3',
+      );
+      expect(AssertCliToolVersions.versionIn('1.98.10'), '1.98.10');
+      expect(
+        AssertCliToolVersions.versionIn('Packed CLI v2.0.3 (abcdef1), built 2026-01-01'),
+        '2.0.3',
+      );
+      expect(AssertCliToolVersions.versionIn('jq-1.8.2'), '1.8.2');
+      expect(AssertCliToolVersions.versionIn('cluster-cli: v3.4.5'), '3.4.5');
+      expect(AssertCliToolVersions.versionIn('v2.0'), '2.0');
+    });
+
+    test('a line carrying nothing shaped like a version is no version, and not a guess', () {
+      // What a binary built without a tag answers. It is deliberately not shaped like a version, so
+      // that nothing comparing can mistake it for a released one.
+      expect(AssertCliToolVersions.versionIn('unreleased'), isNull);
+    });
+
+    test('the ORDER of the two shapes is what does it, and the other order answers wrongly', () {
+      // Held against a reader that differs from the real one in nothing but the order, so what is
+      // measured here is the order and not the shapes. The shorter shape matches INSIDE the fuller
+      // one, so trying it first stops at three numbers of a tag and answers a version the tool never
+      // printed — and that value, against a pin that stays whole, is a machine refetched forever.
+      String? shorterFirst(String said) {
+        for (final RegExp shape in <RegExp>[
+          RegExp(r'\d+\.\d+(\.\d+)?'),
+          RegExp(r'\d+\.\d+\.\d+-[A-Za-z]+-\d{14}'),
+        ]) {
+          final RegExpMatch? found = shape.firstMatch(said);
+          if (found != null) {
+            return found.group(0);
+          }
+        }
+        return null;
+      }
+
+      const String tag = '0.1.0-alpha-20260822223803';
+      expect(shorterFirst(tag), '0.1.0', reason: 'this is the answer the other order gives');
+      expect(AssertCliToolVersions.versionIn(tag), tag);
+
+      // And the order costs the bare shapes nothing, because the fuller shape does not fit a line
+      // without a channel and a stamp on it: both orders reach the same reader for those.
+      for (final String said in <String>['v4.53.3', '1.98.10', 'jq-1.8.2', 'unreleased']) {
+        expect(shorterFirst(said), AssertCliToolVersions.versionIn(said));
+      }
     });
 
     test('a version reader answers with the bare version and nothing else', () async {
@@ -359,6 +483,16 @@ void main() {
         expect(machine.said.join('\n'), contains('no run can reach the pin'));
       },
     );
+
+    test('a release-tagged tool that drifted is named at the whole tag it is at', () async {
+      // Three numbers equal and the stamp not — a rebuild of the same version. What the operator is
+      // told has to be the tag the binary answered, because the numbers alone name two releases.
+      final HostMachine machine = withTools(
+        answers: <String, String>{'stamped-cli --version': '0.1.0-alpha-20260101000000\n'},
+      );
+      final CheckResult answer = await step.check(machine.contextFor(under));
+      expect((answer as Blocked).reason, contains('stamped-cli is at 0.1.0-alpha-20260101000000'));
+    });
 
     test('a version difference on a tool fetched at a pin fails', () async {
       final HostMachine machine = withTools(

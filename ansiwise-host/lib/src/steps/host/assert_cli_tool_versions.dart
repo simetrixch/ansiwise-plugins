@@ -165,9 +165,39 @@ final class AssertCliToolVersions extends ObservingStep {
     }
     // The first line only. One of these prints the version and then the commit it was built from
     // and more besides, and every pin here is held against a bare version.
-    final String first = answer.stdout.split('\n').first;
-    final RegExpMatch? version = _version.firstMatch(first);
-    return version?.group(0);
+    return versionIn(answer.stdout.split('\n').first);
+  }
+
+  /// The version [said] carries, or null where nothing on it is shaped like one.
+  ///
+  /// Both steps that hold a machine against a pin read a version through here, so what a version
+  /// looks like is spelled once rather than twice. Two spellings that drift apart give a tool read
+  /// one way by the step that fetches it and another way by the step that holds every tool against
+  /// its pin: the fetch never skips and the assertion reports the machine right, and each run
+  /// quietly fetches the release again.
+  ///
+  /// **The FULLER shape is tried first, and that order is the whole of it.** A tool that stamps its
+  /// binaries with a release tag answers `<major>.<minor>.<patch>-<channel>-<ts14>`, so what it says
+  /// BEGINS with something the plain numbered shape matches: a reader that tries the shorter one
+  /// first stops at `0.1.0` inside `0.1.0-alpha-20260822223803` and answers a version the tool never
+  /// said. That answer is then held against a pin that is still whole, so it never matches, and the
+  /// release is fetched again on every run — silently, because each fetch succeeds. The shorter
+  /// shape is the bare number the rest of the pinned tools answer, and it is reached by a line the
+  /// fuller one does not fit.
+  ///
+  /// **The shape decides before the position on the line does.** Where one line carries both — a
+  /// release tag with some other number in front of it — the release tag is what comes back, and
+  /// not whichever stands first. A tool answers ONE version, which is why the readers take the first
+  /// line at all, so such a line is a shape nobody has produced — while the other order is the
+  /// defect above on every release-tagged tool there is.
+  static String? versionIn(String said) {
+    for (final RegExp shape in _versionShapes) {
+      final RegExpMatch? found = shape.firstMatch(said);
+      if (found != null) {
+        return found.group(0);
+      }
+    }
+    return null;
   }
 
   @override
@@ -233,6 +263,23 @@ final class AssertCliToolVersions extends ObservingStep {
     return CheckResult.satisfied('every pinned tool is at its pin: ${right.join(', ')}');
   }
 
-  /// The first thing on a line that looks like a version.
-  static final RegExp _version = RegExp(r'\d+\.\d+(\.\d+)?');
+  /// The shapes a tool writes a version in, FULLEST FIRST — [versionIn] states why the order is the
+  /// whole of it.
+  ///
+  /// The first is the release-tag grammar a stamped binary answers with,
+  /// `<major>.<minor>.<patch>-<channel>-<ts14>`, where ts14 is a UTC `yyyyMMddHHmmss`. The authority
+  /// for it is the anchored form that also names its channels by hand, and it lives beside the
+  /// pipeline that mints the tags, in a repository this package may not name — a tool package names
+  /// no product built on its tools, which is why the grammar is described here rather than cited.
+  /// That form JUDGES whether a tag is well formed; this one only has to FIND a tag inside a line
+  /// some tool printed, so it is deliberately the looser of the two. A channel word added later is
+  /// still read whole here, where a stricter copy would fall through to the second shape and take
+  /// three numbers out of a tag it did not recognise — the exact failure this list is ordered to
+  /// prevent, arrived at from the other side.
+  ///
+  /// The second is the bare number every other pinned tool answers with, two parts or three.
+  static final List<RegExp> _versionShapes = <RegExp>[
+    RegExp(r'\d+\.\d+\.\d+-[A-Za-z]+-\d{14}'),
+    RegExp(r'\d+\.\d+(\.\d+)?'),
+  ];
 }
