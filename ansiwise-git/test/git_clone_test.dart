@@ -168,4 +168,156 @@ void main() {
       },
     );
   });
+
+  // ---------------------------------------------------------------------------------------------
+  // THE FIRST CHECKOUT OF AN INSTALLATION, which has no earlier program to have written a file.
+  //
+  // Every case above reads which repository and with what right OUT OF THE MACHINE, which is right
+  // and stays the ordinary way. It cannot be the only way: the programs live in a checkout, so the
+  // very first one is made before any program of that installation has run and before any file it
+  // would have written exists. Such a checkout names its repository in an ANSWER — still a NAME in
+  // the program file, with the value coming from the installation's own answers — and, where the
+  // repository is served to anybody, is read with no credential at all.
+  // ---------------------------------------------------------------------------------------------
+  group('a checkout made before this machine records anything', () {
+    const String openOwnerName = 'acme/acme-platform';
+    const String openUrl = 'https://$host/$openOwnerName.git';
+    const String originAnswer = 'platform_repo';
+
+    const GitClone open = GitClone(
+      repository: path,
+      host: host,
+      branch: base,
+      originAnswer: originAnswer,
+      runAnswer: null,
+    );
+
+    StepContext holding(String? ownerName, {FakeShell? shell}) => contextOn(
+      shell: shell ?? bare(),
+      files: FakeFiles(),
+      name: ownerName,
+      answerName: originAnswer,
+    );
+
+    test('is cloned from the answer, with no file of this machine read at all', () async {
+      final FakeShell shell = bare();
+      await open.apply(holding(openOwnerName, shell: shell));
+      expect(shell.ran, contains('git clone --branch $base $openUrl $path'));
+    });
+
+    test('carries NO authorization header, because none was asked for', () async {
+      // An empty environment and a header saying `null:null` are not the same thing. The second is
+      // sent to a server that never asked for one and is refused by some of them.
+      final FakeShell shell = bare();
+      await open.apply(holding(openOwnerName, shell: shell));
+      final Command clone = shell.commands.firstWhere(
+        (Command command) => command.arguments.first == 'clone',
+      );
+      expect(clone.environment.containsKey('GIT_CONFIG_KEY_0'), isFalse);
+      expect(clone.environment.containsKey('GIT_CONFIG_VALUE_0'), isFalse);
+    });
+
+    test('a run holding no such answer is refused, naming the answer and not a file', () async {
+      final CheckResult result = await open.check(holding(null));
+      expect(result, isA<Blocked>());
+      expect(
+        (result as Blocked).reason,
+        allOf(contains(originAnswer), isNot(contains('.dev'))),
+        reason: 'a refusal pointing at a settings file sends somebody to a file that is not there',
+      );
+    });
+
+    test('INNOCENT CASE: the shape every other case here uses is untouched', () async {
+      final FakeShell shell = bare();
+      await step.apply(contextOn(shell: shell, files: settings()));
+      final Command clone = shell.commands.firstWhere(
+        (Command command) => command.arguments.first == 'clone',
+      );
+      expect(clone.environment['GIT_CONFIG_VALUE_0'], startsWith('Authorization: Basic '));
+      expect(shell.ran, contains('git clone --branch $base $url $path'));
+    });
+  });
+
+  group('COUNTER-PROBE: a row whose own shape is wrong is refused before a machine is asked', () {
+    /// The row as it would stand with [named] given and everything else left off.
+    GitClone rowWith({
+      String? originFile,
+      String? originKey,
+      String? originAnswer,
+      String? credentialFile,
+      String? credentialKey,
+      String? credentialUser,
+    }) => GitClone(
+      repository: path,
+      host: host,
+      branch: base,
+      originFile: originFile,
+      originKey: originKey,
+      originAnswer: originAnswer,
+      credentialFile: credentialFile,
+      credentialKey: credentialKey,
+      credentialUser: credentialUser,
+      runAnswer: null,
+    );
+
+    Future<String> refusalOf(GitClone row) async {
+      final FakeShell shell = bare();
+      final CheckResult result = await row.check(
+        contextOn(shell: shell, files: settings(), name: 'acme/whatever', answerName: 'anything'),
+      );
+      expect(result, isA<Blocked>(), reason: 'a row of this shape can never be read');
+      expect(shell.ran, isEmpty, reason: 'the row is wrong wherever it runs, so nothing is asked');
+      return (result as Blocked).reason;
+    }
+
+    test('both origin sources — two answers to one question', () async {
+      expect(
+        await refusalOf(
+          rowWith(originFile: settingsFile, originKey: settingsKey, originAnswer: 'platform_repo'),
+        ),
+        allOf(contains('origin_file'), contains('origin_answer')),
+      );
+    });
+
+    test('neither origin source — nothing says which repository', () async {
+      expect(await refusalOf(rowWith()), allOf(contains('origin_file'), contains('origin_answer')));
+    });
+
+    test('a file with no key names no value in it', () async {
+      expect(
+        await refusalOf(rowWith(originFile: settingsFile)),
+        allOf(contains('origin_file'), contains('origin_key')),
+      );
+    });
+
+    for (final (String half, GitClone Function() row) in <(String, GitClone Function())>[
+      (
+        'a credential with no account name',
+        () => const GitClone(
+          repository: path,
+          host: host,
+          branch: base,
+          originAnswer: 'platform_repo',
+          credentialFile: credentialFile,
+          credentialKey: credentialKey,
+          runAnswer: null,
+        ),
+      ),
+      (
+        'an account name with nothing behind it',
+        () => const GitClone(
+          repository: path,
+          host: host,
+          branch: base,
+          originAnswer: 'platform_repo',
+          credentialUser: 'reader',
+          runAnswer: null,
+        ),
+      ),
+    ]) {
+      test('$half — the three are a group', () async {
+        expect(await refusalOf(row()), contains('three credential arguments'));
+      });
+    }
+  });
 }

@@ -33,12 +33,13 @@ final class GitClone extends IrreversibleStep {
     required this.repository,
     required this.host,
     required this.branch,
-    required this.originFile,
-    required this.originKey,
-    required this.credentialFile,
-    required this.credentialKey,
-    required this.credentialUser,
     required this.runAnswer,
+    this.originFile,
+    this.originKey,
+    this.originAnswer,
+    this.credentialFile,
+    this.credentialKey,
+    this.credentialUser,
     this.elevated = false,
   });
 
@@ -47,11 +48,12 @@ final class GitClone extends IrreversibleStep {
     repository: arguments.text('repository'),
     host: arguments.text('host'),
     branch: arguments.text('branch'),
-    originFile: arguments.text('origin_file'),
-    originKey: arguments.text('origin_key'),
-    credentialFile: arguments.text('credential_file'),
-    credentialKey: arguments.text('credential_key'),
-    credentialUser: arguments.text('credential_user'),
+    originFile: arguments.optionalText('origin_file'),
+    originKey: arguments.optionalText('origin_key'),
+    originAnswer: arguments.optionalText('origin_answer'),
+    credentialFile: arguments.optionalText('credential_file'),
+    credentialKey: arguments.optionalText('credential_key'),
+    credentialUser: arguments.optionalText('credential_user'),
     runAnswer: arguments.optionalText('run_answer'),
     elevated: arguments.has('elevated') && arguments.flag('elevated'),
   );
@@ -78,29 +80,60 @@ final class GitClone extends IrreversibleStep {
     // The names and never the values. The two files are one installation's own, written by an
     // earlier program of the same installation — a repository name or a credential written here
     // would ship one installation's to every installation.
+    //
+    // TWO WAYS TO SAY WHICH REPOSITORY, AND EXACTLY ONE OF THEM PER ROW. Reading it out of a
+    // settings file is the ordinary way and stays the ordinary way: the file is written by an
+    // earlier program, so the value is the machine's own and the row carries only names. But the
+    // FIRST checkout of an installation has no earlier program — the programs live in a checkout
+    // that does not exist yet — so there is no file to read, and origin_answer names the answer
+    // holding owner/name instead. That is still a NAME in the program file; the value comes from
+    // the installation's answers, which is where an installation's own facts live.
+    //
+    // A ROW GIVING NEITHER, OR BOTH, IS REFUSED. Neither leaves nothing to clone from; both are two
+    // answers to one question, and the day they disagree the checkout points wherever the reader
+    // happened to look first.
     ArgumentSpec(
       name: 'origin_file',
       kind: ArgumentKind.text,
       describes:
           'the settings file of this machine that records which repository this checkout is '
-          'cloned from, as owner/name. It may carry the slot named by run_answer',
+          'cloned from, as owner/name. It may carry the slot named by run_answer. Give this with '
+          'origin_key, or give origin_answer instead — never both',
+      required: false,
     ),
     ArgumentSpec(
       name: 'origin_key',
       kind: ArgumentKind.text,
       describes: 'the key of that file the owner/name stands under',
+      required: false,
     ),
+    ArgumentSpec(
+      name: 'origin_answer',
+      kind: ArgumentKind.answerName,
+      describes:
+          'the name of the answer holding owner/name, for a checkout made before any file of this '
+          'machine records it — the first one of an installation. Give this or the origin_file '
+          'pair, never both',
+      required: false,
+    ),
+    // THE CREDENTIAL IS A GROUP AND IT IS OPTIONAL AS A GROUP. A public repository is read with
+    // none, and handing one over anyway would put a credential on the network for a server that
+    // never asked. A row giving some of the three and not the others is refused rather than read
+    // as either: a credential with no account name is a credential nothing can present.
     ArgumentSpec(
       name: 'credential_file',
       kind: ArgumentKind.text,
       describes:
           'the file of this machine that holds the credential the repository is read with. It may '
-          'carry the slot named by run_answer',
+          'carry the slot named by run_answer. Leave the three credential arguments off together '
+          'for a repository that is served to anybody',
+      required: false,
     ),
     ArgumentSpec(
       name: 'credential_key',
       kind: ArgumentKind.text,
       describes: 'the key of that file the credential stands under',
+      required: false,
     ),
     ArgumentSpec(
       name: 'credential_user',
@@ -108,6 +141,7 @@ final class GitClone extends IrreversibleStep {
       describes:
           'the account name the credential is presented under. What the host wants here is the '
           "host's own convention, so it is stated by the row rather than known by this step",
+      required: false,
     ),
     ArgumentSpec(
       name: 'run_answer',
@@ -138,19 +172,22 @@ final class GitClone extends IrreversibleStep {
   final String branch;
 
   /// The settings file recording the repository as owner/name, and its key.
-  final String originFile;
+  final String? originFile;
 
   /// See [originFile].
-  final String originKey;
+  final String? originKey;
+
+  /// The answer holding owner/name, where no file of this machine records it yet.
+  final String? originAnswer;
 
   /// The file holding the read credential, and its key.
-  final String credentialFile;
+  final String? credentialFile;
 
   /// See [credentialFile].
-  final String credentialKey;
+  final String? credentialKey;
 
   /// The account name the credential is presented under.
-  final String credentialUser;
+  final String? credentialUser;
 
   /// The name of the answer that fills the slot of the same name in the two file paths.
   final String? runAnswer;
@@ -307,36 +344,106 @@ final class GitClone extends IrreversibleStep {
   }
 
   /// What the machine's own settings say this checkout is, or why they cannot be read.
+  ///
+  /// THE ROW'S OWN SHAPE IS ANSWERED FIRST, before this machine is asked anything. A row naming
+  /// neither origin source, or both, or part of the credential group, is wrong wherever it runs —
+  /// so it is refused without a file being opened, and the refusal names the row rather than the
+  /// machine.
   Future<_Reading> _read(StepContext context) async {
-    final String? originPath = _filled(context, originFile);
-    final String? credentialPath = _filled(context, credentialFile);
-    if (originPath == null || credentialPath == null) {
+    if (_shapeRefusal case final String refusal) {
+      return _Reading.unreadable(refusal);
+    }
+
+    final String? ownerName = await _ownerName(context);
+    if (ownerName == null) {
+      return _Reading.unreadable(_originRefusal(context));
+    }
+    final String url = 'https://$host/$ownerName.git';
+
+    // NO CREDENTIAL IS A STATE AND NOT AN OMISSION. A repository served to anybody is read with
+    // none, and the row said so by leaving all three off — which the shape check above has already
+    // held it to.
+    if (credentialFile == null) {
+      return _Reading.open(url: url);
+    }
+
+    final String? credentialPath = _filled(context, credentialFile!);
+    if (credentialPath == null) {
       return const _Reading.unreadable(
         'a path of this row still carries a slot nothing filled — the row names run_answer for '
         'the answer that fills it, and this run holds no value under that name',
       );
     }
-    final String? ownerName = await _recorded(context, originPath, originKey);
-    if (ownerName == null) {
-      return _Reading.unreadable(
-        '$originKey of $originPath is which repository this checkout is cloned from, and it is '
-        'not there — the program that generates this installation writes it',
-      );
-    }
-    final String? credential = await _recorded(context, credentialPath, credentialKey);
+    final String? credential = await _recorded(context, credentialPath, credentialKey!);
     if (credential == null) {
       return _Reading.unreadable(
-        '$credentialKey of $credentialPath is what the repository is read with, and it is not '
+        '${credentialKey!} of $credentialPath is what the repository is read with, and it is not '
         'there — it is obtained once, from whoever serves the repository, and filled into that '
         'file',
       );
     }
     return _Reading.of(
-      url: 'https://$host/$ownerName.git',
-      credentialUser: credentialUser,
+      url: url,
+      credentialUser: credentialUser!,
       credential: credential,
       credentialPath: credentialPath,
     );
+  }
+
+  /// Why this ROW cannot be read, whatever machine it runs on, or null when it can.
+  String? get _shapeRefusal {
+    final bool byFile = originFile != null || originKey != null;
+    final bool byAnswer = originAnswer != null;
+    if (byFile && byAnswer) {
+      return 'this row names both origin_file and origin_answer, which are two answers to which '
+          'repository this checkout is cloned from. Whichever a reader took first would be the one '
+          'that decided, and the other would sit there looking like it had been read';
+    }
+    if (!byFile && !byAnswer) {
+      return 'this row names neither origin_file with origin_key nor origin_answer, so nothing '
+          'says which repository this checkout is cloned from';
+    }
+    if (byFile && (originFile == null || originKey == null)) {
+      return 'this row names one of origin_file and origin_key and not the other, and a file with '
+          'no key names no value in it';
+    }
+    final int credentialParts = <String?>[
+      credentialFile,
+      credentialKey,
+      credentialUser,
+    ].where((String? each) => each != null).length;
+    if (credentialParts != 0 && credentialParts != 3) {
+      return 'this row names $credentialParts of the three credential arguments. They are a group: '
+          'all three for a repository read with a credential, none for one served to anybody. A '
+          'credential with no account name is one nothing can present, and an account name with no '
+          'credential is a word with nothing behind it';
+    }
+    return null;
+  }
+
+  /// The owner/name this checkout is cloned from, out of whichever source the row named.
+  Future<String?> _ownerName(StepContext context) async {
+    if (originAnswer case final String name) {
+      return context.answers.optionalText(name);
+    }
+    final String? originPath = _filled(context, originFile!);
+    return originPath == null ? null : _recorded(context, originPath, originKey!);
+  }
+
+  /// Why the owner/name could not be read, said in terms of where this row looked for it.
+  String _originRefusal(StepContext context) {
+    if (originAnswer case final String name) {
+      return 'this run holds no value under the answer "$name", and that answer is which '
+          'repository this checkout is cloned from — a first checkout is made before any file of '
+          'this machine records it, so the answer is the only place it stands';
+    }
+    final String? originPath = _filled(context, originFile!);
+    if (originPath == null) {
+      return 'a path of this row still carries a slot nothing filled — the row names run_answer '
+          'for the answer that fills it, and this run holds no value under that name';
+    }
+    return '${originKey!} of $originPath is which repository this checkout is cloned from, and it '
+        'is not there — the program that generates this installation writes it';
   }
 
   /// [text] with the run's own value in its slot, or null while a slot stands unfilled.
@@ -422,6 +529,13 @@ final class _Reading {
     required String this.credentialPath,
   }) : refusal = null;
 
+  /// A repository served to anybody: an address and no credential at all.
+  const _Reading.open({required String this.url})
+    : credentialUser = null,
+      credential = null,
+      credentialPath = null,
+      refusal = null;
+
   const _Reading.unreadable(String this.refusal)
     : url = null,
       credentialUser = null,
@@ -445,10 +559,15 @@ final class _Reading {
 
   /// The credential as git takes it without it appearing in any argument: an authorization header,
   /// set through git's configuration-by-environment for every address on [host].
-  Map<String, String> credentialEnvironment(String host) => <String, String>{
-    'GIT_CONFIG_COUNT': '1',
-    'GIT_CONFIG_KEY_0': 'http.https://$host/.extraHeader',
-    'GIT_CONFIG_VALUE_0':
-        'Authorization: Basic ${base64Encode(utf8.encode('$credentialUser:$credential'))}',
-  };
+  /// EMPTY WHERE THERE IS NO CREDENTIAL, which is not the same as an empty one. A header carrying
+  /// `null:null` would be sent to a server that never asked for one and would be refused by some
+  /// of them; no header at all is what a public repository is read with.
+  Map<String, String> credentialEnvironment(String host) => credential == null
+      ? const <String, String>{}
+      : <String, String>{
+          'GIT_CONFIG_COUNT': '1',
+          'GIT_CONFIG_KEY_0': 'http.https://$host/.extraHeader',
+          'GIT_CONFIG_VALUE_0':
+              'Authorization: Basic ${base64Encode(utf8.encode('$credentialUser:$credential'))}',
+        };
 }
