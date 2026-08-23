@@ -17,10 +17,12 @@ import 'key_value_file.dart';
 /// evaluates: a row cannot compose two answers, cannot test one, and cannot write a key the
 /// template does not declare.
 ///
-/// **A key that already holds a value is never rewritten**, and a value still equal to the
-/// template's own counts as no value at all. The first half is what lets an operator edit the file
-/// and keep their edit through every later run; the second is what keeps a file somebody copied and
-/// never filled from being read as an answered one.
+/// **A key an ANSWER names is written from that answer whenever the two differ; a key no answer
+/// names is never touched.** So an operator's hand edit survives every later run — unless they
+/// edited a key the run is also told, which was never a place to edit it: the next run was always
+/// going to be told the answer and not read the file. A value still equal to the template's own
+/// counts as no value at all, which keeps a file somebody copied and never filled from being read
+/// as an answered one.
 ///
 /// **What the plan shows depends on what the row says the file holds.** A row marked as carrying
 /// credentials plans the KEYS and never the values, because a plan is read out of the run record.
