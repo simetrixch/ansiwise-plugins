@@ -236,11 +236,31 @@ final class InstallPinnedTool extends IrreversibleStep {
   Future<void> apply(StepContext context) async {
     final String? packed = archive;
     if (packed == null) {
-      await _mustRun(context, _fetch);
-      // A file curl wrote carries no execute bit, and one unzip wrote carries the mode the archive
-      // recorded — so this is on the unpacked path only. 755: a tool every account on the machine
-      // runs.
-      await _mustRun(context, <String>['chmod', '755', path]);
+      // FETCHED BESIDE THE TARGET AND THEN MOVED ONTO IT, never written into it. `curl --output`
+      // opens the file that is already there and writes through it, and Linux refuses that on a
+      // file some process is EXECUTING — so a tool a service runs could not be replaced at all.
+      // Measured: `curl: (23) client returned ERROR on write`, with the old file left intact.
+      //
+      // A rename replaces the directory ENTRY. The running process keeps the inode it started
+      // from, which is why nothing in flight changes underneath itself, and the next invocation is
+      // the new file. The incoming name stands beside the target rather than in a temporary
+      // directory, because a rename is only atomic within one filesystem and /tmp is often another.
+      //
+      // WHAT IT DOES NOT DO IS RESTART ANYTHING. A service goes on running the inode it started
+      // from until its unit is restarted, and no step of this framework restarts one — see the
+      // issue this comment's neighbour names.
+      try {
+        await _mustRun(context, _fetch);
+        // A file curl wrote carries no execute bit, and one unzip wrote carries the mode the
+        // archive recorded — so this is on the unpacked path only. 755: a tool every account on
+        // the machine runs. It is set BEFORE the move, so the target is never briefly unreadable.
+        await _mustRun(context, <String>['chmod', '755', incoming]);
+        await _mustRun(context, <String>['mv', '-f', incoming, path]);
+      } finally {
+        // Whatever happened. A half-finished download left beside the tool is a file nothing
+        // names, and the next run would fetch over it and be none the wiser.
+        await context.files.delete(incoming, elevated: elevated);
+      }
       return;
     }
     try {
@@ -253,6 +273,12 @@ final class InstallPinnedTool extends IrreversibleStep {
     }
   }
 
+  /// Where a release that IS the binary is written before it is moved onto [path].
+  ///
+  /// Beside the target and not in a temporary directory, because a rename is atomic only within one
+  /// filesystem and /tmp is frequently another one.
+  String get incoming => '$path.incoming';
+
   List<String> get _fetch => <String>[
     'curl',
     '--silent',
@@ -260,7 +286,7 @@ final class InstallPinnedTool extends IrreversibleStep {
     '--fail',
     '--location',
     '--output',
-    archive ?? path,
+    archive ?? incoming,
     fetchedFrom,
   ];
 

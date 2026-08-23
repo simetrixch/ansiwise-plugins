@@ -303,6 +303,61 @@ void main() {
       await expectLater(packedCli.apply(machine.contextFor(under)), throwsA(isA<CommandFailed>()));
       expect(machine.files.deleted, contains(packedCli.archive));
     });
+
+    // A TOOL A SERVICE RUNS COULD NOT BE REPLACED AT ALL while the fetch wrote into the file that
+    // was already there. `curl --output` opens the target and writes through it, and Linux refuses
+    // that on a file some process is EXECUTING. Measured on a real machine against a running
+    // binary: `curl: (23) client returned ERROR on write of 16375 bytes`, and the old file left
+    // intact — a clean failure, and a failure every single time.
+    //
+    // A rename replaces the directory ENTRY instead, so the running process keeps the inode it
+    // started from and the next invocation is the new file.
+    test(
+      'the fetch lands beside the tool and is MOVED onto it, never written through it',
+      () async {
+        final HostMachine machine = HostMachine();
+        machine.shell.fails(onThePathKey('yq'));
+
+        await yqCli.apply(machine.contextFor(under));
+
+        final String target = '${yqCli.directory}/yq';
+        expect(
+          machine.shell.ran,
+          containsAllInOrder(<String>[
+            'chmod 755 $target.incoming',
+            'mv -f $target.incoming $target',
+          ]),
+          reason:
+              'the execute bit is set before the move, so the target is never briefly there and '
+              'unrunnable',
+        );
+        expect(
+          machine.shell.ran.where((String each) => each.startsWith('curl ')).single,
+          allOf(contains('--output $target.incoming'), isNot(contains('--output $target '))),
+        );
+      },
+    );
+
+    test('the incoming file stands BESIDE the target, on its own filesystem', () async {
+      // A rename is atomic only within one filesystem, and /tmp is frequently another one — a
+      // fetch into /tmp would fall back to a copy, which writes through the target again.
+      expect(yqCli.incoming, startsWith('${yqCli.directory}/'));
+    });
+
+    test('a fetch that failed leaves nothing beside the tool', () async {
+      // A half-finished download under a name nothing reads is what the next run would fetch over
+      // and be none the wiser about.
+      final HostMachine machine = HostMachine();
+      machine.shell
+        ..fails(onThePathKey('yq'))
+        ..fails(
+          'curl --silent --show-error --fail --location --output '
+          '${yqCli.directory}/yq.incoming ${yqCli.fetchedFrom}',
+        );
+
+      await expectLater(yqCli.apply(machine.contextFor(under)), throwsA(isA<CommandFailed>()));
+      expect(machine.files.deleted, contains('${yqCli.directory}/yq.incoming'));
+    });
   });
 
   group('the pins held against the machine', () {
