@@ -51,18 +51,58 @@ final class AddUserToGroup extends ReversibleStep<bool> {
       );
     }
 
-    final CommandResult groups = await context.shell.run(
-      Command.observing('groups', arguments: <String>[InstallAuthorizedKey.userIn(context)]),
-    );
-    if (!groups.ok) {
+    final String? gid = await _gidOf(context);
+    if (gid == null) {
       return CheckResult.blocked(
-        "the groups of ${InstallAuthorizedKey.userIn(context)} could not be read: ${groups.stderr.trim()}",
+        'no group on this machine is $group, so there is nothing for '
+        '${InstallAuthorizedKey.userIn(context)} to be a member of — the step that makes the group '
+        'has not run',
       );
     }
-    if (groups.stdout.split(RegExp(r'[\s:]+')).contains(group)) {
-      return CheckResult.satisfied('${InstallAuthorizedKey.userIn(context)} is in $group');
+
+    final bool? member = await _isMember(context, gid);
+    if (member == null) {
+      return CheckResult.blocked(
+        'the groups of ${InstallAuthorizedKey.userIn(context)} could not be read',
+      );
     }
-    return const CheckResult.ready();
+    return member
+        ? CheckResult.satisfied('${InstallAuthorizedKey.userIn(context)} is in $group')
+        : const CheckResult.ready();
+  }
+
+  /// The number the row's group carries, or null where no group on this machine is it.
+  ///
+  /// `getent group` answers the same line whether it was asked by name or by number, which is what
+  /// lets a row state either.
+  Future<String?> _gidOf(StepContext context) async {
+    final CommandResult found = await context.shell.run(
+      Command.observing('getent', arguments: <String>['group', group]),
+    );
+    if (!found.ok || found.trimmed.isEmpty) {
+      return null;
+    }
+    final List<String> fields = found.trimmed.split(':');
+    return fields.length > 2 && fields[2].isNotEmpty ? fields[2] : null;
+  }
+
+  /// Whether the account carries [gid], or null where its groups could not be read.
+  ///
+  /// **THE NUMBERS AND NOT THE NAMES.** `groups` prints names, and a row that states a NUMBER — as
+  /// one must whenever the group belongs to something outside this machine, which writes a number
+  /// onto it and was never told a name — is then compared against a list it can never appear in.
+  /// The step ran, `usermod` succeeded, the account WAS a member, and the framework reported "the
+  /// step ran and the machine is still not in the state it produces" on every run afterwards.
+  /// `id -G` prints the numbers, and the row's group is resolved to one before the comparison, so a
+  /// row may state either and both are read the same way.
+  Future<bool?> _isMember(StepContext context, String gid) async {
+    final CommandResult carried = await context.shell.run(
+      Command.observing('id', arguments: <String>['-G', InstallAuthorizedKey.userIn(context)]),
+    );
+    if (!carried.ok) {
+      return null;
+    }
+    return carried.stdout.split(RegExp(r'\s+')).contains(gid);
   }
 
   @override
@@ -94,10 +134,10 @@ final class AddUserToGroup extends ReversibleStep<bool> {
   /// ran would lose one this step never gave it.
   @override
   Future<bool> capture(StepContext context) async {
-    final CommandResult groups = await context.shell.run(
-      Command.observing('groups', arguments: <String>[InstallAuthorizedKey.userIn(context)]),
-    );
-    return groups.ok && groups.stdout.split(RegExp(r'[\s:]+')).contains(group);
+    if (await _gidOf(context) case final String gid) {
+      return await _isMember(context, gid) ?? false;
+    }
+    return false;
   }
 
   @override

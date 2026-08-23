@@ -20,12 +20,10 @@ void main() {
     final HostMachine machine = HostMachine();
     machine.shell
       ..answers('getent passwd $operatorUser', '$operatorUser:x:1000:1000::$operatorHome:/bin/sh\n')
-      ..answers('groups $operatorUser', '$operatorUser : $operatorUser sudo\n')
+      ..answers('getent group operators', 'operators:x:3000:\n')
+      ..answers('id -G $operatorUser', '1000 27\n')
       ..changes('usermod --append --groups operators $operatorUser', () {
-        machine.shell.answers(
-          'groups $operatorUser',
-          '$operatorUser : $operatorUser sudo operators\n',
-        );
+        machine.shell.answers('id -G $operatorUser', '1000 27 3000\n');
       });
 
     final StepContext context = machine.contextFor(under);
@@ -34,6 +32,50 @@ void main() {
     await step.apply(context);
     expect(await step.check(context), isA<Satisfied>());
     expect(machine.said.join('\n'), contains('next login'));
+  });
+
+  // THE ROW MAY STATE A NUMBER, and until this was held it could not. A group that belongs to
+  // something outside this machine is known to it by number only — a process elsewhere writes a
+  // file onto the host carrying a group number, and the host was never told a name. The membership
+  // used to be read out of `groups`, which prints NAMES, so a row stating a number was compared
+  // against a list the number can never appear in: `usermod` succeeded, the account WAS a member,
+  // and the framework reported "the step ran and the machine is still not in the state it produces"
+  // on that run and on every run after it.
+  test('a row naming the group by number reads the membership it produced', () async {
+    const AddUserToGroup byNumber = AddUserToGroup(group: '65532');
+    final HostMachine machine = HostMachine();
+    machine.shell
+      ..answers('getent passwd $operatorUser', '$operatorUser:x:1000:1000::$operatorHome:/bin/sh\n')
+      ..answers('getent group 65532', 'nonroot:x:65532:\n')
+      ..answers('id -G $operatorUser', '1000 27\n')
+      ..changes('usermod --append --groups 65532 $operatorUser', () {
+        machine.shell.answers('id -G $operatorUser', '1000 27 65532\n');
+      });
+
+    final StepContext context = machine.contextFor(under);
+
+    expect(await byNumber.check(context), isA<Ready>());
+    await byNumber.apply(context);
+    expect(
+      await byNumber.check(context),
+      isA<Satisfied>(),
+      reason:
+          'the machine answers the membership as the number 65532 under the name nonroot, and the '
+          'row said the number — reading only the names would miss what the step just did',
+    );
+  });
+
+  test('a group no machine carries is refused before usermod is asked', () async {
+    final HostMachine machine = HostMachine()
+      ..shell.answers(
+        'getent passwd $operatorUser',
+        '$operatorUser:x:1000:1000::$operatorHome:/bin/sh\n',
+      )
+      ..shell.fails('getent group operators');
+
+    final CheckResult answer = await step.check(machine.contextFor(under));
+    expect((answer as Blocked).reason, contains('nothing for'));
+    expect(machine.changing, isEmpty);
   });
 
   test('a machine carrying no such account is refused', () async {
