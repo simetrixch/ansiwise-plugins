@@ -4,6 +4,7 @@ import 'conditions/answers_compare.dart';
 import 'conditions/keys_compare.dart';
 import 'steps/host/activate_public_src_routing.dart';
 import 'steps/host/add_shell_alias.dart';
+import 'steps/host/restart_stale_service.dart';
 import 'steps/host/add_user_to_group.dart';
 import 'steps/host/apply_netplan.dart';
 import 'steps/host/assert_cli_tool_versions.dart';
@@ -229,6 +230,15 @@ const Map<StepName, RegisteredStep> hostSteps = <StepName, RegisteredStep>{
     create: AddUserToGroup.fromArguments,
     arguments: AddUserToGroup.arguments,
     answers: AddUserToGroup.answers,
+  ),
+  // The one step that changes nothing on disk and everything about what is RUNNING. A replaced
+  // executable leaves a service on the inode it started from, so a machine can report itself at a
+  // pin and be serving what stood there before.
+  StepName('restart_stale_service'): RegisteredStep(
+    name: StepName('restart_stale_service'),
+    source: 'lib/src/steps/host/restart_stale_service.dart:27',
+    create: RestartStaleService.fromArguments,
+    arguments: RestartStaleService.arguments,
   ),
   StepName('add_shell_alias'): RegisteredStep(
     name: StepName('add_shell_alias'),

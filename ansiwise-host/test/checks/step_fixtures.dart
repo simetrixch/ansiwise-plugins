@@ -54,6 +54,24 @@ final Map<String, Fixture> stepFixtures = <String, Fixture>{
     });
   },
 
+  // The kernel renders /proc/<pid>/exe as `<path> (deleted)` while a process is executing an inode
+  // that no longer has a name — which is what a service running a replaced binary looks like, and
+  // the whole of what this step reads. The restart is what gives the process a named inode again,
+  // so the fake answers the link differently after it, exactly as a real machine would.
+  'restart_stale_service': (FakeShell shell, FakeFiles files, FakeHttp http) {
+    const String pid = '4242';
+    const String running = '/usr/local/bin/$_plausibleText';
+    shell
+      ..answers(
+        'systemctl show -p LoadState -p ActiveState -p MainPID $_plausibleText',
+        'LoadState=loaded\nActiveState=active\nMainPID=$pid\n',
+      )
+      ..answers('readlink /proc/$pid/exe', '$running ${RestartStaleService.deletedMarker}\n')
+      ..changes('systemctl restart $_plausibleText', () {
+        shell.answers('readlink /proc/$pid/exe', '$running\n');
+      });
+  },
+
   // The archive holds two files until `apt-get clean` empties it.
   'clean_package_cache': (FakeShell shell, FakeFiles files, FakeHttp http) {
     files.contents['${CleanPackageCache.archives}/one.deb'] = '';

@@ -12,6 +12,7 @@ export 'src/conditions/keys_compare.dart';
 export 'src/registry.dart';
 export 'src/steps/host/activate_public_src_routing.dart';
 export 'src/steps/host/add_shell_alias.dart';
+export 'src/steps/host/restart_stale_service.dart';
 export 'src/steps/host/add_user_to_group.dart';
 export 'src/steps/host/addon_status.dart';
 export 'src/steps/host/apply_netplan.dart';
