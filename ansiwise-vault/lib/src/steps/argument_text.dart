@@ -66,6 +66,15 @@ const String kubernetesMountPlaceholder = '<kubernetes-mount>';
 /// The text a program file writes where the address of this installation's Vault belongs.
 const String vaultUrlPlaceholder = '<vault-url>';
 
+/// The text a program file writes where the address of this installation's identity provider belongs.
+///
+/// A mount that admits a person rather than a workload is told where to send them, and that address
+/// belongs to one installation exactly as Vault's own does. It is filled from the profile key the
+/// layout names, and a row that writes the slot without naming that key is refused: the alternative
+/// is a mount configured to send people nowhere, which answers every login with a message about a
+/// backend rather than about an address.
+const String idpUrlPlaceholder = '<idp-url>';
+
 /// The text of one step argument once this installation's own names are in it, or why they are not.
 final class ArgumentText {
   /// Records the text as it reaches Vault.
@@ -98,6 +107,19 @@ extension ArgumentPlaceholders on VaultProfile {
     if (written.contains(vaultUrlPlaceholder)) {
       written = written.replaceAll(vaultUrlPlaceholder, url ?? '');
     }
+    if (written.contains(idpUrlPlaceholder)) {
+      if (idpUrl case final String address) {
+        written = written.replaceAll(idpUrlPlaceholder, address);
+      } else {
+        return ArgumentText.unknown(
+          layout.idpUrlKey == null
+              ? '"$text" carries $idpUrlPlaceholder, and this row names no idp_url_key — the key of '
+                    'the profile that address is written under has to be stated where the slot is '
+                    'written, because only the row templating on it knows which key it means'
+              : _missing(path, layout.idpUrlKey!, idpUrlPlaceholder, text),
+        );
+      }
+    }
     if (written.contains(clusterPlaceholder)) {
       if (clusterName case final String name) {
         written = written.replaceAll(clusterPlaceholder, name);
@@ -126,7 +148,8 @@ extension ArgumentPlaceholders on VaultProfile {
           : '<${layout.clusterAnswer}>';
       return ArgumentText.unknown(
         '"$text" carries $left, and nothing in this run holds that name — a program file may write '
-        '$vaultUrlPlaceholder, $clusterPlaceholder and $kubernetesMountPlaceholder, '
+        '$vaultUrlPlaceholder, $idpUrlPlaceholder, $clusterPlaceholder and '
+        '$kubernetesMountPlaceholder, '
         '$accessorPlaceholder where the step reads an auth mount to fill it from, for the '
         'answer this row names $runSlot, and for the sibling cluster it names $clusterSlot; '
         'anything else would reach Vault as it stands',

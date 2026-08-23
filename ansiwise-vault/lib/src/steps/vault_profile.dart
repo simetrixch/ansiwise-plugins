@@ -38,6 +38,7 @@ final class VaultLayout {
     required this.nameKey,
     required this.authPathKey,
     required this.credentials,
+    this.idpUrlKey,
     this.runAnswer,
     this.clusterAnswer,
   });
@@ -49,6 +50,7 @@ final class VaultLayout {
     nameKey: arguments.text('cluster_name_key'),
     authPathKey: arguments.text('kubernetes_auth_path_key'),
     credentials: arguments.text('credentials_path'),
+    idpUrlKey: arguments.optionalText('idp_url_key'),
     runAnswer: arguments.optionalText('run_answer'),
     clusterAnswer: arguments.optionalText('cluster_answer'),
   );
@@ -84,6 +86,16 @@ final class VaultLayout {
           "the key of the profile the cluster's own auth mount is written under — read rather "
           'than composed, because whatever logs in through that mount reads the same key to '
           'decide where',
+    ),
+    ArgumentSpec(
+      name: 'idp_url_key',
+      kind: ArgumentKind.text,
+      required: false,
+      describes:
+          "the key of the profile the identity provider's address is written under, for a row whose "
+          'argument templates on it. Read and never composed, for the same reason the address of '
+          'Vault above is: the checkout that was generated for this installation wrote both, and a '
+          'second composition here would agree with what is deployed only by accident',
     ),
     ArgumentSpec(
       name: 'credentials_path',
@@ -144,6 +156,12 @@ final class VaultLayout {
   /// Where the credential file stands, under the checkout, with the run answer's place marked.
   final String credentials;
 
+  /// The key of the profile the identity provider's address is written under, or null where the row
+  /// names none. Every step of this family carries the layout, and only a row that templates on that
+  /// address has to say where it stands — so it is optional, and a text naming the slot without it
+  /// is refused rather than filled with nothing.
+  final String? idpUrlKey;
+
   /// The name of the answer whose value fills the slot spelled with that same name, or null where
   /// the product running these steps has no such axis.
   final String? runAnswer;
@@ -198,6 +216,7 @@ final class VaultProfile {
     required String this.url,
     this.clusterName,
     this.kubernetesAuthPath,
+    this.idpUrl,
   }) : refusal = null;
 
   /// Records that the profile at [path] could not be read, because [refusal].
@@ -207,7 +226,8 @@ final class VaultProfile {
     required String this.refusal,
   }) : url = null,
        clusterName = null,
-       kubernetesAuthPath = null;
+       kubernetesAuthPath = null,
+       idpUrl = null;
 
   /// Where the profile stands, which is what a refusal names.
   final String path;
@@ -227,6 +247,10 @@ final class VaultProfile {
 
   /// The auth mount every workload on this cluster logs in through, or null where it is not there.
   final String? kubernetesAuthPath;
+
+  /// Where this installation's identity provider answers, or null where the layout names no key for
+  /// it or the profile carries none under that key.
+  final String? idpUrl;
 
   /// Why nothing can be read, or null when it can.
   final String? refusal;
@@ -283,6 +307,7 @@ Future<VaultProfile> vaultProfileFrom(
     url: url,
     clusterName: _text(profile, layout.nameKey),
     kubernetesAuthPath: _text(profile, layout.authPathKey),
+    idpUrl: layout.idpUrlKey == null ? null : _text(profile, layout.idpUrlKey!),
   );
 }
 
