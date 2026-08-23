@@ -32,8 +32,9 @@ final class GitClone extends IrreversibleStep {
   const GitClone({
     required this.repository,
     required this.host,
-    required this.branch,
     required this.runAnswer,
+    this.branch,
+    this.branchAnswer,
     this.originFile,
     this.originKey,
     this.originAnswer,
@@ -47,7 +48,8 @@ final class GitClone extends IrreversibleStep {
   factory GitClone.fromArguments(Arguments arguments) => GitClone(
     repository: arguments.text('repository'),
     host: arguments.text('host'),
-    branch: arguments.text('branch'),
+    branch: arguments.optionalText('branch'),
+    branchAnswer: arguments.optionalText('branch_answer'),
     originFile: arguments.optionalText('origin_file'),
     originKey: arguments.optionalText('origin_key'),
     originAnswer: arguments.optionalText('origin_answer'),
@@ -72,10 +74,26 @@ final class GitClone extends IrreversibleStep {
           'the https host the repository is served from, which with the recorded owner/name '
           'composes the address the clone reads',
     ),
+    // THE BRANCH IS EITHER WRITTEN OR ANSWERED, for the same reason the origin is. A checkout of
+    // one product's own tree stands on a branch that tree defines, and the row writes it. A
+    // checkout of an INSTALLATION's tree stands on that installation's branch, which no program
+    // file may name — so branch_answer names the answer holding it. Writing one installation's
+    // branch here would move every other installation's checkout onto it.
     ArgumentSpec(
       name: 'branch',
       kind: ArgumentKind.text,
-      describes: 'the branch the checkout stands on, and the one every later run moves it to',
+      describes:
+          'the branch the checkout stands on, and the one every later run moves it to. Give this '
+          'or branch_answer, never both',
+      required: false,
+    ),
+    ArgumentSpec(
+      name: 'branch_answer',
+      kind: ArgumentKind.answerName,
+      describes:
+          'the name of the answer holding that branch, where it is one installation\'s own and '
+          'cannot be written into a file that ships to every installation',
+      required: false,
     ),
     // The names and never the values. The two files are one installation's own, written by an
     // earlier program of the same installation — a repository name or a credential written here
@@ -168,8 +186,11 @@ final class GitClone extends IrreversibleStep {
   /// The https host the repository is served from.
   final String host;
 
-  /// The branch the checkout stands on.
-  final String branch;
+  /// The branch the checkout stands on, where the row writes it.
+  final String? branch;
+
+  /// The answer holding that branch, where it is one installation's own.
+  final String? branchAnswer;
 
   /// The settings file recording the repository as owner/name, and its key.
   final String? originFile;
@@ -197,7 +218,8 @@ final class GitClone extends IrreversibleStep {
 
   @override
   String get irreversibleReason =>
-      'the checkout at $repository is placed on the published tip of $branch — where one already '
+      'the checkout at $repository is placed on the published tip of the branch this row names '
+      '— where one already '
       'stood, the position it stood on is kept nowhere on this machine, and a machine that carried '
       'none gains a directory nothing here removes again';
 
@@ -208,6 +230,7 @@ final class GitClone extends IrreversibleStep {
       return CheckResult.blocked(refusal);
     }
     final String url = source.url ?? '';
+    final String standsOn = source.branch ?? '';
 
     if (!(await _observe(context, <String>[
       '-C',
@@ -236,7 +259,7 @@ final class GitClone extends IrreversibleStep {
       '--abbrev-ref',
       'HEAD',
     ]);
-    if (head.trimmed != branch) {
+    if (head.trimmed != standsOn) {
       return const CheckResult.ready();
     }
 
@@ -246,11 +269,11 @@ final class GitClone extends IrreversibleStep {
       'ls-remote',
       '--heads',
       url,
-      branch,
+      standsOn,
     ], environment: source.credentialEnvironment(host));
     if (!published.ok) {
       return CheckResult.blocked(
-        'the repository at $url could not be asked where $branch stands — the credential '
+        'the repository at $url could not be asked where $standsOn stands — the credential '
         'under $credentialKey of ${source.credentialPath} is what it was asked with, so it is that '
         'or the network: ${published.stderr.trim()}',
       );
@@ -258,7 +281,7 @@ final class GitClone extends IrreversibleStep {
     final String tip = published.trimmed.split(RegExp(r'\s+')).first;
     if (tip.isEmpty) {
       return CheckResult.blocked(
-        '$url publishes no branch called $branch, and that is the branch this checkout '
+        '$url publishes no branch called $standsOn, and that is the branch this checkout '
         'stands on',
       );
     }
@@ -272,7 +295,7 @@ final class GitClone extends IrreversibleStep {
     if (standing.trimmed != tip) {
       return const CheckResult.ready();
     }
-    return CheckResult.satisfied('$repository stands on the published tip of $branch');
+    return CheckResult.satisfied('$repository stands on the published tip of $standsOn');
   }
 
   @override
@@ -281,13 +304,14 @@ final class GitClone extends IrreversibleStep {
     if (source.refusal case final String refusal) {
       return StepPlan.nothing(refusal);
     }
+    final String standsOn = source.branch ?? '';
     // The address without the credential, which is also the address the command really carries —
     // the credential rides the environment precisely so no plan and no record hold it.
     return StepPlan.argv(<String>[
       'git',
       'clone',
       '--branch',
-      branch,
+      standsOn,
       source.url ?? '',
       repository,
     ]);
@@ -300,6 +324,7 @@ final class GitClone extends IrreversibleStep {
       throw StateError(refusal);
     }
     final String url = source.url ?? '';
+    final String standsOn = source.branch ?? '';
     final Map<String, String> reaching = source.credentialEnvironment(host);
 
     if (!(await _observe(context, <String>[
@@ -311,7 +336,7 @@ final class GitClone extends IrreversibleStep {
       await _mustRun(context, <String>[
         'clone',
         '--branch',
-        branch,
+        standsOn,
         url,
         repository,
       ], environment: reaching);
@@ -335,12 +360,19 @@ final class GitClone extends IrreversibleStep {
       repository,
       'fetch',
       'origin',
-      branch,
+      standsOn,
     ], environment: reaching);
     // The local branch is PLACED on the fetched tip rather than merged onto it. This checkout is
     // read by what runs from it and written by nobody, so a divergence is drift to correct — and
     // the irreversible reason above is where that policy is priced.
-    await _mustRun(context, <String>['-C', repository, 'checkout', '-B', branch, 'origin/$branch']);
+    await _mustRun(context, <String>[
+      '-C',
+      repository,
+      'checkout',
+      '-B',
+      standsOn,
+      'origin/$standsOn',
+    ]);
   }
 
   /// What the machine's own settings say this checkout is, or why they cannot be read.
@@ -354,6 +386,15 @@ final class GitClone extends IrreversibleStep {
       return _Reading.unreadable(refusal);
     }
 
+    final String? standsOn = branch ?? context.answers.optionalText(branchAnswer!);
+    if (standsOn == null) {
+      return _Reading.unreadable(
+        'this run holds no value under the answer "${branchAnswer!}", and that answer is the '
+        'branch this checkout stands on — an installation states its own, because a branch written '
+        'into a program file would be the branch of one installation moved onto every other',
+      );
+    }
+
     final String? ownerName = await _ownerName(context);
     if (ownerName == null) {
       return _Reading.unreadable(_originRefusal(context));
@@ -364,7 +405,7 @@ final class GitClone extends IrreversibleStep {
     // none, and the row said so by leaving all three off — which the shape check above has already
     // held it to.
     if (credentialFile == null) {
-      return _Reading.open(url: url);
+      return _Reading.open(url: url, branch: standsOn);
     }
 
     final String? credentialPath = _filled(context, credentialFile!);
@@ -384,6 +425,7 @@ final class GitClone extends IrreversibleStep {
     }
     return _Reading.of(
       url: url,
+      branch: standsOn,
       credentialUser: credentialUser!,
       credential: credential,
       credentialPath: credentialPath,
@@ -392,6 +434,14 @@ final class GitClone extends IrreversibleStep {
 
   /// Why this ROW cannot be read, whatever machine it runs on, or null when it can.
   String? get _shapeRefusal {
+    if (branch != null && branchAnswer != null) {
+      return 'this row names both branch and branch_answer, which are two answers to which branch '
+          'this checkout stands on';
+    }
+    if (branch == null && branchAnswer == null) {
+      return 'this row names neither branch nor branch_answer, so nothing says which branch this '
+          'checkout stands on';
+    }
     final bool byFile = originFile != null || originKey != null;
     final bool byAnswer = originAnswer != null;
     if (byFile && byAnswer) {
@@ -524,13 +574,14 @@ final class GitClone extends IrreversibleStep {
 final class _Reading {
   const _Reading.of({
     required String this.url,
+    required String this.branch,
     required String this.credentialUser,
     required String this.credential,
     required String this.credentialPath,
   }) : refusal = null;
 
   /// A repository served to anybody: an address and no credential at all.
-  const _Reading.open({required String this.url})
+  const _Reading.open({required String this.url, required String this.branch})
     : credentialUser = null,
       credential = null,
       credentialPath = null,
@@ -538,12 +589,16 @@ final class _Reading {
 
   const _Reading.unreadable(String this.refusal)
     : url = null,
+      branch = null,
       credentialUser = null,
       credential = null,
       credentialPath = null;
 
   /// The address of the repository, with no credential in it.
   final String? url;
+
+  /// The branch this checkout stands on, out of whichever source the row named.
+  final String? branch;
 
   /// The account name the credential is presented under.
   final String? credentialUser;

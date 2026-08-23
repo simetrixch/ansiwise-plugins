@@ -32,11 +32,16 @@ const String branch = 'm1.example.com';
 /// A null [name] is a run that holds no such answer at all, which is what a program declaring
 /// nothing under the name its row points at produces. [answerName] varies where a case is about the
 /// row choosing which answer to read.
+///
+/// [also] is for the rows that read MORE THAN ONE answer — a checkout naming both which repository
+/// it is from and which branch it stands on. A case stating one of the two and not the other is
+/// what proves each is read on its own, so they are separate rather than one map.
 StepContext contextOn({
   FakeShell? shell,
   FakeFiles? files,
   String? name = branch,
   String answerName = nameAnswer,
+  Map<String, Object> also = const <String, Object>{},
 }) => StepContext(
   shell: shell ?? FakeShell(),
   files: files ?? FakeFiles(),
@@ -48,7 +53,7 @@ StepContext contextOn({
   arguments: Arguments.none,
   // The branch name is an ANSWER: nobody can write one into a file that ships to every machine, so
   // it varies per case here rather than per step instance.
-  answers: name == null ? Arguments.none : Arguments(<String, Object>{answerName: name}),
+  answers: Arguments(<String, Object>{answerName: ?name, ...also}),
   facts: Facts.none,
 );
 
