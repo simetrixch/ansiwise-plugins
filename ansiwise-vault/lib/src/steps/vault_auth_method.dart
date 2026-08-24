@@ -40,6 +40,7 @@ final class VaultAuthMethod extends ReversibleStep<bool> {
     required this.layout,
     this.configuration,
     this.configurationFromAnswers = const <String>[],
+    this.configurationFromEntries = const <String>[],
     this.configurationDecoded = const <String>[],
     this.configurationWriteOnly = const <String>[],
   });
@@ -52,6 +53,7 @@ final class VaultAuthMethod extends ReversibleStep<bool> {
     layout: VaultLayout.fromArguments(arguments),
     configuration: arguments.optionalText('configuration'),
     configurationFromAnswers: arguments.textList('configuration_from_answers'),
+    configurationFromEntries: arguments.textList('configuration_from_entries'),
     configurationDecoded: arguments.textList('configuration_decoded'),
     configurationWriteOnly: arguments.textList('configuration_write_only'),
   );
@@ -71,6 +73,19 @@ final class VaultAuthMethod extends ReversibleStep<bool> {
   /// secret among them. An answer's value reaches Vault in the request body and nowhere else: never
   /// an argument, never a plan, never the record, which keeps method, address and status only.
   final List<String> configurationFromAnswers;
+
+  /// The configuration keys written from an ENTRY of this Vault, each as `<key>=<mount>/<path>:<field>`.
+  ///
+  /// For the values that neither the program file nor the run holds because this Vault MINTED them.
+  /// A browser login is the case: the identity provider's clients are registered with secrets an
+  /// earlier row generates inside the store, so the value exists only there — it never was an
+  /// answer and never may become one, since an answer travels through the operator's session.
+  ///
+  /// The mount stands in the reference because this row names none of its own. `vault_kv_entry`
+  /// writes the same reference as `copy_from` and leaves the mount out, having stated it on the
+  /// row; the same notation with the mount in front is the same idea where there is nothing to
+  /// leave it out of.
+  final List<String> configurationFromEntries;
 
   /// The keys of [configurationFromAnswers] whose answer arrives base64-encoded and whose mount
   /// takes the decoded text.
@@ -130,6 +145,17 @@ final class VaultAuthMethod extends ReversibleStep<bool> {
           'a value no program file can hold and the profile does not know, such as the API address, '
           'the certificate authority and the reviewing credential of ANOTHER cluster this mount '
           'validates logins against. The value reaches Vault in the request body and nowhere else',
+    ),
+    ArgumentSpec(
+      name: 'configuration_from_entries',
+      kind: ArgumentKind.textList,
+      required: false,
+      defaultValue: <String>[],
+      describes:
+          'the configuration keys written from an entry of this Vault, each as '
+          '<key>=<mount>/<path>:<field> — for a value this store minted itself, such as the secret '
+          'a client of the identity provider was registered with, which never was an answer of any '
+          'run and cannot become one',
     ),
     ArgumentSpec(
       name: 'configuration_decoded',
@@ -200,7 +226,7 @@ final class VaultAuthMethod extends ReversibleStep<bool> {
         // THE MOUNT BEING THERE IS NOT THE POSTCONDITION. A mount that is enabled and not told
         // where its cluster is refuses every login, so a check that stopped at the type would
         // report finished about a mount nothing can use.
-        final _Configuration wanted = _wantedConfiguration(context, vault);
+        final _Configuration wanted = await _wantedConfiguration(context, vault, url, held);
         if (wanted.refusal case final String refusal) {
           return CheckResult.blocked(refusal);
         }
@@ -231,7 +257,10 @@ final class VaultAuthMethod extends ReversibleStep<bool> {
     return StepPlan.request(
       'POST',
       '${vault.url}/v1/sys/auth/${mount.value}',
-      body: configuration == null && configurationFromAnswers.isEmpty
+      body:
+          configuration == null &&
+              configurationFromAnswers.isEmpty &&
+              configurationFromEntries.isEmpty
           ? 'a $type auth mount'
           : 'a $type auth mount, and what it is told about itself',
     );
@@ -262,7 +291,7 @@ final class VaultAuthMethod extends ReversibleStep<bool> {
       );
     }
 
-    final _Configuration wanted = _wantedConfiguration(context, vault);
+    final _Configuration wanted = await _wantedConfiguration(context, vault, url, held);
     if (wanted.refusal case final String refusal) {
       throw StateError(refusal);
     }
@@ -286,7 +315,12 @@ final class VaultAuthMethod extends ReversibleStep<bool> {
   /// The file's part and the answers' part in one object, because Vault takes one write: a key both
   /// supply is a contradiction somebody sees rather than a silent precedence rule, and a key whose
   /// answer this run does not hold is refused by the answer's name.
-  _Configuration _wantedConfiguration(StepContext context, VaultProfile vault) {
+  Future<_Configuration> _wantedConfiguration(
+    StepContext context,
+    VaultProfile vault,
+    String url,
+    String token,
+  ) async {
     final Map<String, Object?> body = <String, Object?>{};
     bool anything = false;
 
@@ -339,6 +373,48 @@ final class VaultAuthMethod extends ReversibleStep<bool> {
       } else {
         body[key] = held;
       }
+      anything = true;
+    }
+
+    for (final String declared in configurationFromEntries) {
+      final int equals = declared.indexOf('=');
+      final int colon = declared.lastIndexOf(':');
+      final int slash = declared.indexOf('/', equals + 1);
+      if (equals <= 0 || slash <= equals || colon <= slash) {
+        return _Configuration.unwritable(
+          '"$declared" is not a <key>=<mount>/<path>:<field> reference',
+        );
+      }
+      final String key = declared.substring(0, equals).trim();
+      final String mount = declared.substring(equals + 1, slash).trim();
+      final String field = declared.substring(colon + 1).trim();
+      if (body.containsKey(key)) {
+        return _Configuration.unwritable(
+          '$key of the mount configuration is written twice — once from the row and once from '
+          '$mount/$field — and one key holds one value',
+        );
+      }
+      final ArgumentText entry = vault.forThisInstallation(
+        context,
+        declared.substring(slash + 1, colon).trim(),
+      );
+      if (entry.refusal case final String refusal) {
+        return _Configuration.unwritable(refusal);
+      }
+      final String at = entry.value ?? '';
+      final HttpAnswer held = await context.http.send(
+        vaultRead(url, '$mount/data/$at', token: token),
+      );
+      final Object? data = decodedData(held.body)?['data'];
+      final Object? value = data is Map<String, Object?> ? data[field] : null;
+      if (value is! String || value.isEmpty) {
+        return _Configuration.unwritable(
+          '$field of $mount/data/$at is what $key of the mount configuration is written from, and '
+          'it is not there. The entry that owns that value is written by an earlier row, so a run '
+          'reaching this one without it has skipped that row rather than failed it',
+        );
+      }
+      body[key] = value;
       anything = true;
     }
 
