@@ -30,9 +30,9 @@ import 'package:ansiwise_core/ansiwise_core.dart';
 /// **[waitingFor] is what a reached deadline reports**, so a program row has to give it: the failure
 /// reads `waited 300s for <this> and it did not happen`, and whoever reads that line has to learn
 /// from it which thing did not happen.
-final class WaitForAnswer extends ObservingStep with WaitStep {
+final class WaitForCommandOutput extends ObservingStep with WaitStep {
   /// Asks [command] every [intervalSeconds] until it writes [answer], for at most [timeoutSeconds].
-  const WaitForAnswer({
+  const WaitForCommandOutput({
     required this.waitingFor,
     required this.command,
     required this.commandArguments,
@@ -43,7 +43,7 @@ final class WaitForAnswer extends ObservingStep with WaitStep {
   });
 
   /// Builds the step from what the program gave it.
-  factory WaitForAnswer.fromArguments(Arguments arguments) => WaitForAnswer(
+  factory WaitForCommandOutput.fromArguments(Arguments arguments) => WaitForCommandOutput(
     waitingFor: arguments.text('waiting_for'),
     command: arguments.text('command'),
     commandArguments: arguments.textList('command_arguments'),

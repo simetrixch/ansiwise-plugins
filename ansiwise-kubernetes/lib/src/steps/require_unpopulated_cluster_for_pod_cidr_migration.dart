@@ -1,5 +1,5 @@
 import 'package:ansiwise_core/ansiwise_core.dart';
-import 'delete_default_ipv4_ippool.dart';
+import 'remove_default_ipv4_ippool.dart';
 import 'kubectl.dart';
 
 /// Refuses to move the pod network of a cluster that is carrying workloads.
@@ -20,9 +20,9 @@ import 'kubectl.dart';
 /// **A cluster that is already converted is not guarded, because there is nothing to guard.** When
 /// the live pool and kube-proxy's arguments both carry the range, no migration is going to happen
 /// and the count of workloads does not matter.
-final class GuardPopulatedClusterPodCidrMigration extends ObservingStep {
+final class RequireUnpopulatedClusterForPodCidrMigration extends ObservingStep {
   /// Refuses a populated cluster unless [allowPopulatedMigration] was set.
-  const GuardPopulatedClusterPodCidrMigration({
+  const RequireUnpopulatedClusterForPodCidrMigration({
     required this.podCidr,
     required this.argsPath,
     required this.allowPopulatedMigration,
@@ -31,8 +31,8 @@ final class GuardPopulatedClusterPodCidrMigration extends ObservingStep {
   });
 
   /// Builds the step from what the program gave it.
-  factory GuardPopulatedClusterPodCidrMigration.fromArguments(Arguments arguments) =>
-      GuardPopulatedClusterPodCidrMigration(
+  factory RequireUnpopulatedClusterForPodCidrMigration.fromArguments(Arguments arguments) =>
+      RequireUnpopulatedClusterForPodCidrMigration(
         podCidr: arguments.text('pod_cidr'),
         argsPath: arguments.text('args_path'),
         allowPopulatedMigration: arguments.flag('allow_populated_migration'),
@@ -150,7 +150,7 @@ final class GuardPopulatedClusterPodCidrMigration extends ObservingStep {
 
   /// Whether both halves of the conversion are already done.
   Future<bool> _converged(StepContext context) async {
-    if (await DeleteDefaultIpv4Ippool.liveCidr(context, kubectl) != podCidr) {
+    if (await RemoveDefaultIpv4Ippool.liveCidr(context, kubectl) != podCidr) {
       return false;
     }
     if (!await context.files.exists(argsPath, elevated: elevated)) {

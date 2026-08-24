@@ -1,5 +1,5 @@
 import 'package:ansiwise_core/ansiwise_core.dart';
-import 'detect_public_nic.dart';
+import 'measure_public_nic.dart';
 
 /// Writes the network drop-in that sends replies from the public address out the public gateway.
 ///
@@ -111,7 +111,7 @@ final class WriteNetplanPublicSrcRouting extends ReversibleStep<String?>
   /// answers both.
   @override
   Future<FileContent> contentFor(StepContext context) async {
-    final PublicNic? nic = await DetectPublicNic.detect(context);
+    final PublicNic? nic = await MeasurePublicNic.measure(context);
     return nic == null
         ? const FileContent.nothing(
             'this machine answers by the interface its public address is on, so nothing has to be '

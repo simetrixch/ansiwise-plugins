@@ -1,5 +1,5 @@
 import 'package:ansiwise_core/ansiwise_core.dart';
-import 'detect_public_nic.dart';
+import 'measure_public_nic.dart';
 
 /// Switches the steering service on, and puts the kernel state back whenever it is not there.
 ///
@@ -54,7 +54,7 @@ final class ActivatePublicSrcRouting extends ReversibleStep<bool> {
 
   @override
   Future<CheckResult> check(StepContext context) async {
-    if (await DetectPublicNic.detect(context) == null) {
+    if (await MeasurePublicNic.measure(context) == null) {
       return const CheckResult.satisfied(
         'nothing is steered on this machine, so there is no service to switch on',
       );

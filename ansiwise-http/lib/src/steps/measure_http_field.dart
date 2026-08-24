@@ -18,9 +18,9 @@ import 'http_conversation.dart';
 /// there or does not hold one value are each a blocked check that says what came back — never an
 /// empty measurement, because a row downstream cannot tell "the field holds nothing" from "nothing
 /// here could be read".
-final class ReadHttpField extends ObservingStep {
+final class MeasureHttpField extends ObservingStep {
   /// Reads [field] out of the answer at [url].
-  const ReadHttpField({
+  const MeasureHttpField({
     required this.url,
     required this.socketPath,
     required this.field,
@@ -31,7 +31,7 @@ final class ReadHttpField extends ObservingStep {
   });
 
   /// Builds the step from what the program gave it.
-  factory ReadHttpField.fromArguments(Arguments arguments) => ReadHttpField(
+  factory MeasureHttpField.fromArguments(Arguments arguments) => MeasureHttpField(
     // OPTIONAL, AND NOT BECAUSE A ROW MAY LEAVE IT OUT. A row that has the address from an earlier
     // measurement names that measurement, and everything that examines a program before it runs
     // has to build every step — at that moment the value does not exist. Read as required, the

@@ -26,8 +26,8 @@ void main() {
   const Map<String, List<String>> demoted = <String, List<String>>{
     'activate_public_src_routing': <String>['mark', 'table'],
     'apply_netplan': <String>['table'],
-    'assert_cli_tool_versions': <String>['pin_prefixes'],
-    'assert_netplan_merged': <String>['installer_key', 'drop_in_key'],
+    'require_cli_tool_versions': <String>['pin_prefixes'],
+    'require_netplan_merged': <String>['installer_key', 'drop_in_key'],
     // Where such a file goes and who may read it. Both are decided by what the file is FOR, which
     // is the one thing this step is built never to know, so neither may carry an answer here.
     'create_file_from_template': <String>['path', 'file_mode'],
@@ -45,7 +45,7 @@ void main() {
     // registry is mirrored at all — and the two names the run's own answers are read under, because
     // which machine this is and which machine the mirror runs on are things one installation states
     // about itself and no program file that ships everywhere can carry.
-    'preflight_registry_pull_credential': <String>[
+    'require_registry_pull_credential': <String>[
       'repository',
       'profile_path',
       'mirror_host_key',
@@ -182,7 +182,7 @@ void main() {
     // Absent-with-no-default rather than absent-with-a-value, because any value would be one
     // product's word for its own axis.
     for (final String step in <String>[
-      'preflight_registry_pull_credential',
+      'require_registry_pull_credential',
       'write_containerd_registry_mirror',
     ]) {
       test('$step names no axis of its own until a row does', () {

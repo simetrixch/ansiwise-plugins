@@ -1,5 +1,5 @@
 import 'package:ansiwise_core/ansiwise_core.dart';
-import 'detect_public_nic.dart';
+import 'measure_public_nic.dart';
 
 /// Puts the written network configuration into the running kernel.
 ///
@@ -42,7 +42,7 @@ final class ApplyNetplan extends IrreversibleStep {
 
   @override
   Future<CheckResult> check(StepContext context) async {
-    final PublicNic? nic = await DetectPublicNic.detect(context);
+    final PublicNic? nic = await MeasurePublicNic.measure(context);
     if (nic == null) {
       return const CheckResult.satisfied(
         'nothing is steered on this machine, so there is nothing to apply',

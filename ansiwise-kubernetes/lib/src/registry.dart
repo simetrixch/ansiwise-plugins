@@ -1,26 +1,26 @@
 import 'package:ansiwise_core/ansiwise_core.dart';
 import 'steps/align_calico_backend.dart';
 import 'steps/apply_cluster_issuer.dart';
-import 'steps/delete_default_ipv4_ippool.dart';
-import 'steps/delete_existing_cluster_issuer.dart';
 import 'steps/export_cluster_credentials.dart';
-import 'steps/guard_populated_cluster_pod_cidr_migration.dart';
 import 'steps/kubernetes_configmap_from_directory.dart';
 import 'steps/kubernetes_namespace.dart';
-import 'steps/kubernetes_object.dart';
 import 'steps/kubernetes_object_irreversible.dart';
+import 'steps/kubernetes_object_reversible.dart';
 import 'steps/oidc_admins_binding.dart';
 import 'steps/patch_configmap_key.dart';
 import 'steps/patch_container_arguments_and_ports.dart';
 import 'steps/reapply_calico_manifest.dart';
 import 'steps/recycle_kube_system_pod_ips.dart';
+import 'steps/remove_default_ipv4_ippool.dart';
+import 'steps/remove_existing_cluster_issuer.dart';
 import 'steps/remove_kubernetes_object.dart';
 import 'steps/replace_calico_agent_for_pod_cidr.dart';
 import 'steps/require_pod_cidr_free_of_reserved_ranges.dart';
+import 'steps/require_unpopulated_cluster_for_pod_cidr_migration.dart';
 import 'steps/restart_cert_manager_and_reapply_cluster_issuer.dart';
 import 'steps/set_default_storage_class.dart';
 import 'steps/verify_ippool_converged_with_self_heal.dart';
-import 'steps/wait_for_answer.dart';
+import 'steps/wait_for_command_output.dart';
 import 'steps/write_cluster_issuer_manifest.dart';
 
 /// The map from the names a program file writes to the classes that implement them.
@@ -32,11 +32,11 @@ import 'steps/write_cluster_issuer_manifest.dart';
 /// The `source` of each entry is the line its class is declared on. It is what the record reports
 /// and what an operator opens when a step fails.
 const Map<StepName, RegisteredStep> kubernetesSteps = <StepName, RegisteredStep>{
-  StepName('wait_for_answer'): RegisteredStep(
-    name: StepName('wait_for_answer'),
-    source: 'lib/src/steps/wait_for_answer.dart:33',
-    create: WaitForAnswer.fromArguments,
-    arguments: WaitForAnswer.arguments,
+  StepName('wait_for_command_output'): RegisteredStep(
+    name: StepName('wait_for_command_output'),
+    source: 'lib/src/steps/wait_for_command_output.dart:33',
+    create: WaitForCommandOutput.fromArguments,
+    arguments: WaitForCommandOutput.arguments,
   ),
   StepName('require_pod_cidr_free_of_reserved_ranges'): RegisteredStep(
     name: StepName('require_pod_cidr_free_of_reserved_ranges'),
@@ -45,17 +45,17 @@ const Map<StepName, RegisteredStep> kubernetesSteps = <StepName, RegisteredStep>
     arguments: RequirePodCidrFreeOfReservedRanges.arguments,
     answers: RequirePodCidrFreeOfReservedRanges.answers,
   ),
-  StepName('guard_populated_cluster_pod_cidr_migration'): RegisteredStep(
-    name: StepName('guard_populated_cluster_pod_cidr_migration'),
-    source: 'lib/src/steps/guard_populated_cluster_pod_cidr_migration.dart:23',
-    create: GuardPopulatedClusterPodCidrMigration.fromArguments,
-    arguments: GuardPopulatedClusterPodCidrMigration.arguments,
+  StepName('require_unpopulated_cluster_for_pod_cidr_migration'): RegisteredStep(
+    name: StepName('require_unpopulated_cluster_for_pod_cidr_migration'),
+    source: 'lib/src/steps/require_unpopulated_cluster_for_pod_cidr_migration.dart:23',
+    create: RequireUnpopulatedClusterForPodCidrMigration.fromArguments,
+    arguments: RequireUnpopulatedClusterForPodCidrMigration.arguments,
   ),
-  StepName('delete_default_ipv4_ippool'): RegisteredStep(
-    name: StepName('delete_default_ipv4_ippool'),
-    source: 'lib/src/steps/delete_default_ipv4_ippool.dart:16',
-    create: DeleteDefaultIpv4Ippool.fromArguments,
-    arguments: DeleteDefaultIpv4Ippool.arguments,
+  StepName('remove_default_ipv4_ippool'): RegisteredStep(
+    name: StepName('remove_default_ipv4_ippool'),
+    source: 'lib/src/steps/remove_default_ipv4_ippool.dart:16',
+    create: RemoveDefaultIpv4Ippool.fromArguments,
+    arguments: RemoveDefaultIpv4Ippool.arguments,
   ),
   StepName('reapply_calico_manifest'): RegisteredStep(
     name: StepName('reapply_calico_manifest'),
@@ -105,11 +105,11 @@ const Map<StepName, RegisteredStep> kubernetesSteps = <StepName, RegisteredStep>
     create: SetDefaultStorageClass.fromArguments,
     arguments: SetDefaultStorageClass.arguments,
   ),
-  StepName('delete_existing_cluster_issuer'): RegisteredStep(
-    name: StepName('delete_existing_cluster_issuer'),
-    source: 'lib/src/steps/delete_existing_cluster_issuer.dart:10',
-    create: DeleteExistingClusterIssuer.fromArguments,
-    arguments: DeleteExistingClusterIssuer.arguments,
+  StepName('remove_existing_cluster_issuer'): RegisteredStep(
+    name: StepName('remove_existing_cluster_issuer'),
+    source: 'lib/src/steps/remove_existing_cluster_issuer.dart:10',
+    create: RemoveExistingClusterIssuer.fromArguments,
+    arguments: RemoveExistingClusterIssuer.arguments,
   ),
   // Rendered before it is applied, and both are given the same file under the same name.
   StepName('write_cluster_issuer_manifest'): RegisteredStep(
@@ -143,11 +143,11 @@ const Map<StepName, RegisteredStep> kubernetesSteps = <StepName, RegisteredStep>
     create: KubernetesConfigmapFromDirectory.fromArguments,
     arguments: KubernetesConfigmapFromDirectory.arguments,
   ),
-  StepName('kubernetes_object'): RegisteredStep(
-    name: StepName('kubernetes_object'),
-    source: 'lib/src/steps/kubernetes_object.dart:29',
-    create: KubernetesObject.fromArguments,
-    arguments: KubernetesObject.arguments,
+  StepName('kubernetes_object_reversible'): RegisteredStep(
+    name: StepName('kubernetes_object_reversible'),
+    source: 'lib/src/steps/kubernetes_object_reversible.dart:29',
+    create: KubernetesObjectReversible.fromArguments,
+    arguments: KubernetesObjectReversible.arguments,
   ),
   // The guarded removal: it deletes what a manifest names ONLY where every live object carries the
   // ownership label the row states, so a name collision is refused rather than deleted.

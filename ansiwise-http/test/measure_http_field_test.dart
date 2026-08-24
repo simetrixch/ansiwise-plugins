@@ -21,22 +21,22 @@ void main() {
     clock: FakeClock(),
     entropy: FakeEntropy(),
     log: const NothingSaid(),
-    step: const StepName('read_http_field'),
+    step: const StepName('measure_http_field'),
     arguments: Arguments.none,
     answers: answers,
     measurements: (measurements ?? Measurements(Redactor(const <String>[]))).forStep(
-      const StepName('read_http_field'),
-      ReadHttpField.publishes,
+      const StepName('measure_http_field'),
+      MeasureHttpField.publishes,
     ),
     facts: Facts.none,
   );
 
-  ReadHttpField step({
+  MeasureHttpField step({
     String url = address,
     String field = 'data.state',
     Map<String, Object?>? values,
     String? bearerAnswer,
-  }) => ReadHttpField.fromArguments(
+  }) => MeasureHttpField.fromArguments(
     Arguments(<String, Object>{
       'url': url,
       'field': field,

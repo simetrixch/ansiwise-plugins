@@ -13,13 +13,13 @@ import 'on_the_path.dart';
 /// **One gate up front rather than three failures further down.** One of these fetches the tools and
 /// the other unpacks one of them. Without them the downloads fail one at a time and the run reports
 /// three unrelated problems instead of the one.
-final class EnsureToolPrerequisites extends IrreversibleStep {
+final class InstallToolPrerequisites extends IrreversibleStep {
   /// Puts [packages] on the machine, judging by the commands they carry.
-  const EnsureToolPrerequisites({required this.packages});
+  const InstallToolPrerequisites({required this.packages});
 
   /// Builds the step from what the program gave it.
-  factory EnsureToolPrerequisites.fromArguments(Arguments arguments) =>
-      EnsureToolPrerequisites(packages: arguments.textList('packages'));
+  factory InstallToolPrerequisites.fromArguments(Arguments arguments) =>
+      InstallToolPrerequisites(packages: arguments.textList('packages'));
 
   /// What this step accepts.
   static const List<ArgumentSpec> arguments = <ArgumentSpec>[

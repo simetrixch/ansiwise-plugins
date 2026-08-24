@@ -4,48 +4,48 @@ import 'conditions/answers_compare.dart';
 import 'conditions/keys_compare.dart';
 import 'steps/host/activate_public_src_routing.dart';
 import 'steps/host/add_shell_alias.dart';
-import 'steps/host/restart_stale_service.dart';
 import 'steps/host/add_user_to_group.dart';
-import 'steps/host/create_group.dart';
 import 'steps/host/apply_netplan.dart';
-import 'steps/host/assert_cli_tool_versions.dart';
-import 'steps/host/assert_netplan_merged.dart';
-import 'steps/host/check_storage_mount.dart';
 import 'steps/host/clean_package_cache.dart';
 import 'steps/host/create_file_from_template.dart';
+import 'steps/host/create_group.dart';
 import 'steps/host/create_storage_directory.dart';
-import 'steps/host/detect_host_iptables_backend.dart';
-import 'steps/host/detect_host_upstream_resolvers.dart';
-import 'steps/host/detect_public_nic.dart';
 import 'steps/host/disable_addons.dart';
 import 'steps/host/disable_password_login.dart';
 import 'steps/host/enable_addons.dart';
-import 'steps/host/ensure_tool_prerequisites.dart';
 import 'steps/host/export_kubeconfig.dart';
+import 'steps/host/fill_key_value_file.dart';
 import 'steps/host/install_authorized_key.dart';
 import 'steps/host/install_packages.dart';
 import 'steps/host/install_pinned_tool.dart';
 import 'steps/host/install_snap.dart';
 import 'steps/host/install_tailscale_client.dart';
+import 'steps/host/install_tool_prerequisites.dart';
+import 'steps/host/link_storage_path.dart';
+import 'steps/host/measure_host_iptables_backend.dart';
+import 'steps/host/measure_host_upstream_resolvers.dart';
+import 'steps/host/measure_public_nic.dart';
+import 'steps/host/remove_snap.dart';
+import 'steps/host/remove_unused_packages.dart';
+import 'steps/host/require_answer_matches.dart';
+import 'steps/host/require_cli_tool_versions.dart';
+import 'steps/host/require_commands.dart';
+import 'steps/host/require_free_disk.dart';
+import 'steps/host/require_key_login_possible.dart';
+import 'steps/host/require_machine_size.dart';
+import 'steps/host/require_netplan_merged.dart';
+import 'steps/host/require_pinned_ubuntu.dart';
+import 'steps/host/require_registry_pull_credential.dart';
+import 'steps/host/require_storage_mount.dart';
+import 'steps/host/restart_stale_service.dart';
+import 'steps/host/set_process_flag.dart';
+import 'steps/host/set_process_flags.dart';
 import 'steps/host/stamp_tailnet_address_in_certificate.dart';
+import 'steps/host/stamp_variable_value_in_manifest.dart';
 import 'steps/host/tailnet_join.dart';
 import 'steps/host/tailnet_leave.dart';
 import 'steps/host/tailnet_logout.dart';
 import 'steps/host/tailnet_reconnect.dart';
-import 'steps/host/link_storage_path.dart';
-import 'steps/host/preflight_registry_pull_credential.dart';
-import 'steps/host/remove_snap.dart';
-import 'steps/host/remove_unused_packages.dart';
-import 'steps/host/require_commands.dart';
-import 'steps/host/require_free_disk.dart';
-import 'steps/host/require_answer_matches.dart';
-import 'steps/host/require_key_login_possible.dart';
-import 'steps/host/require_machine_size.dart';
-import 'steps/host/require_pinned_ubuntu.dart';
-import 'steps/host/set_process_flag.dart';
-import 'steps/host/fill_key_value_file.dart';
-import 'steps/host/set_process_flags.dart';
-import 'steps/host/stamp_variable_value_in_manifest.dart';
 import 'steps/host/wait_for_addons_enabled.dart';
 import 'steps/host/wait_for_http.dart';
 import 'steps/host/write_connmark_nft_table.dart';
@@ -178,11 +178,11 @@ const Map<StepName, RegisteredStep> hostSteps = <StepName, RegisteredStep>{
   // run with the machine half built. Both entries declare no answer of their own — which machine
   // this is, and which machine the mirror runs on, are read out of the run under the names the row
   // gives, so this package carries neither name.
-  StepName('preflight_registry_pull_credential'): RegisteredStep(
-    name: StepName('preflight_registry_pull_credential'),
-    source: 'lib/src/steps/host/preflight_registry_pull_credential.dart:28',
-    create: PreflightRegistryPullCredential.fromArguments,
-    arguments: PreflightRegistryPullCredential.arguments,
+  StepName('require_registry_pull_credential'): RegisteredStep(
+    name: StepName('require_registry_pull_credential'),
+    source: 'lib/src/steps/host/require_registry_pull_credential.dart:28',
+    create: RequireRegistryPullCredential.fromArguments,
+    arguments: RequireRegistryPullCredential.arguments,
   ),
   StepName('write_containerd_registry_mirror'): RegisteredStep(
     name: StepName('write_containerd_registry_mirror'),
@@ -263,12 +263,12 @@ const Map<StepName, RegisteredStep> hostSteps = <StepName, RegisteredStep>{
     answers: ExportKubeconfig.answers,
   ),
   // Storage.
-  StepName('check_storage_mount'): RegisteredStep(
-    name: StepName('check_storage_mount'),
-    source: 'lib/src/steps/host/check_storage_mount.dart:12',
-    create: CheckStorageMount.fromArguments,
-    arguments: CheckStorageMount.arguments,
-    answers: CheckStorageMount.answers,
+  StepName('require_storage_mount'): RegisteredStep(
+    name: StepName('require_storage_mount'),
+    source: 'lib/src/steps/host/require_storage_mount.dart:12',
+    create: RequireStorageMount.fromArguments,
+    arguments: RequireStorageMount.arguments,
+    answers: RequireStorageMount.answers,
   ),
   StepName('create_storage_directory'): RegisteredStep(
     name: StepName('create_storage_directory'),
@@ -285,11 +285,11 @@ const Map<StepName, RegisteredStep> hostSteps = <StepName, RegisteredStep>{
     answers: LinkStoragePath.answers,
   ),
   // Tools fetched onto the machine.
-  StepName('ensure_tool_prerequisites'): RegisteredStep(
-    name: StepName('ensure_tool_prerequisites'),
-    source: 'lib/src/steps/host/ensure_tool_prerequisites.dart:16',
-    create: EnsureToolPrerequisites.fromArguments,
-    arguments: EnsureToolPrerequisites.arguments,
+  StepName('install_tool_prerequisites'): RegisteredStep(
+    name: StepName('install_tool_prerequisites'),
+    source: 'lib/src/steps/host/install_tool_prerequisites.dart:16',
+    create: InstallToolPrerequisites.fromArguments,
+    arguments: InstallToolPrerequisites.arguments,
   ),
   StepName('install_pinned_tool'): RegisteredStep(
     name: StepName('install_pinned_tool'),
@@ -303,19 +303,19 @@ const Map<StepName, RegisteredStep> hostSteps = <StepName, RegisteredStep>{
     create: InstallTailscaleClient.fromArguments,
     arguments: InstallTailscaleClient.arguments,
   ),
-  StepName('assert_cli_tool_versions'): RegisteredStep(
-    name: StepName('assert_cli_tool_versions'),
-    source: 'lib/src/steps/host/assert_cli_tool_versions.dart:28',
-    create: AssertCliToolVersions.fromArguments,
-    arguments: AssertCliToolVersions.arguments,
+  StepName('require_cli_tool_versions'): RegisteredStep(
+    name: StepName('require_cli_tool_versions'),
+    source: 'lib/src/steps/host/require_cli_tool_versions.dart:28',
+    create: RequireCliToolVersions.fromArguments,
+    arguments: RequireCliToolVersions.arguments,
   ),
   // Steering replies on a machine whose public address arrives on one interface while another
   // owns the default route. The entries stand in the order a program runs them.
-  StepName('detect_public_nic'): RegisteredStep(
-    name: StepName('detect_public_nic'),
-    source: 'lib/src/steps/host/detect_public_nic.dart:18',
-    create: DetectPublicNic.fromArguments,
-    arguments: DetectPublicNic.arguments,
+  StepName('measure_public_nic'): RegisteredStep(
+    name: StepName('measure_public_nic'),
+    source: 'lib/src/steps/host/measure_public_nic.dart:18',
+    create: MeasurePublicNic.fromArguments,
+    arguments: MeasurePublicNic.arguments,
   ),
   StepName('write_netplan_public_src_routing'): RegisteredStep(
     name: StepName('write_netplan_public_src_routing'),
@@ -323,11 +323,11 @@ const Map<StepName, RegisteredStep> hostSteps = <StepName, RegisteredStep>{
     create: WriteNetplanPublicSrcRouting.fromArguments,
     arguments: WriteNetplanPublicSrcRouting.arguments,
   ),
-  StepName('assert_netplan_merged'): RegisteredStep(
-    name: StepName('assert_netplan_merged'),
-    source: 'lib/src/steps/host/assert_netplan_merged.dart:15',
-    create: AssertNetplanMerged.fromArguments,
-    arguments: AssertNetplanMerged.arguments,
+  StepName('require_netplan_merged'): RegisteredStep(
+    name: StepName('require_netplan_merged'),
+    source: 'lib/src/steps/host/require_netplan_merged.dart:15',
+    create: RequireNetplanMerged.fromArguments,
+    arguments: RequireNetplanMerged.arguments,
   ),
   StepName('apply_netplan'): RegisteredStep(
     name: StepName('apply_netplan'),
@@ -360,11 +360,11 @@ const Map<StepName, RegisteredStep> hostSteps = <StepName, RegisteredStep>{
     arguments: ActivatePublicSrcRouting.arguments,
   ),
   // Measurements the network conversion of a cluster asks for.
-  StepName('detect_host_upstream_resolvers'): RegisteredStep(
-    name: StepName('detect_host_upstream_resolvers'),
-    source: 'lib/src/steps/host/detect_host_upstream_resolvers.dart:21',
-    create: DetectHostUpstreamResolvers.fromArguments,
-    arguments: DetectHostUpstreamResolvers.arguments,
+  StepName('measure_host_upstream_resolvers'): RegisteredStep(
+    name: StepName('measure_host_upstream_resolvers'),
+    source: 'lib/src/steps/host/measure_host_upstream_resolvers.dart:21',
+    create: MeasureHostUpstreamResolvers.fromArguments,
+    arguments: MeasureHostUpstreamResolvers.arguments,
     publishes: <MeasurementSpec>[
       MeasurementSpec(
         name: MeasurementName('upstream_servers'),
@@ -372,11 +372,11 @@ const Map<StepName, RegisteredStep> hostSteps = <StepName, RegisteredStep>{
       ),
     ],
   ),
-  StepName('detect_host_iptables_backend'): RegisteredStep(
-    name: StepName('detect_host_iptables_backend'),
-    source: 'lib/src/steps/host/detect_host_iptables_backend.dart:13',
-    create: DetectHostIptablesBackend.fromArguments,
-    arguments: DetectHostIptablesBackend.arguments,
+  StepName('measure_host_iptables_backend'): RegisteredStep(
+    name: StepName('measure_host_iptables_backend'),
+    source: 'lib/src/steps/host/measure_host_iptables_backend.dart:13',
+    create: MeasureHostIptablesBackend.fromArguments,
+    arguments: MeasureHostIptablesBackend.arguments,
     publishes: <MeasurementSpec>[
       MeasurementSpec(
         name: MeasurementName('backend'),

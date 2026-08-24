@@ -14,7 +14,6 @@ import 'steps/git_push_credential.dart';
 import 'steps/measure_value_in_branch_file.dart';
 import 'steps/require_git_identity.dart';
 import 'steps/require_pushable_remote.dart';
-import 'steps/replace_text_in_tracked_files.dart';
 import 'steps/replace_regex_in_tracked_file.dart';
 import 'steps/branch/stamp_placeholder_in_tracked_files.dart';
 
@@ -122,12 +121,6 @@ const Map<StepName, RegisteredStep> gitSteps = <StepName, RegisteredStep>{
     source: 'lib/src/steps/git_push_credential.dart:35',
     create: GitPushCredential.fromArguments,
     arguments: GitPushCredential.arguments,
-  ),
-  StepName('replace_text_in_tracked_files'): RegisteredStep(
-    name: StepName('replace_text_in_tracked_files'),
-    source: 'lib/src/steps/replace_text_in_tracked_files.dart:10',
-    create: ReplaceTextInTrackedFiles.fromArguments,
-    arguments: ReplaceTextInTrackedFiles.arguments,
   ),
   StepName('replace_regex_in_tracked_file'): RegisteredStep(
     name: StepName('replace_regex_in_tracked_file'),

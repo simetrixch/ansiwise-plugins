@@ -1,5 +1,5 @@
 import 'package:ansiwise_core/ansiwise_core.dart';
-import 'detect_public_nic.dart';
+import 'measure_public_nic.dart';
 
 /// Writes the rules that mark a connection arriving on the public address, so its replies can be
 /// steered.
@@ -109,7 +109,7 @@ final class WriteConnmarkNftTable extends ReversibleStep<String?> with FileStep,
   /// One reading answers both, which is why the mixin asks one question.
   @override
   Future<FileContent> contentFor(StepContext context) async {
-    final PublicNic? nic = await DetectPublicNic.detect(context);
+    final PublicNic? nic = await MeasurePublicNic.measure(context);
     return nic == null
         ? const FileContent.nothing(
             'nothing is steered on this machine, so no connection has to be marked',

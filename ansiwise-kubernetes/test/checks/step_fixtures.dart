@@ -41,7 +41,7 @@ final Map<String, Fixture> stepFixtures = <String, Fixture>{
   // The manifest has to be in the checkout at all, or the check is blocked before it asks anything.
   // `kubectl diff` then reports a difference until the apply, and none afterwards — which is the
   // postcondition, answered by the API server rather than by a comparison of our own.
-  'kubernetes_object': (FakeShell shell, FakeFiles files, FakeHttp http) {
+  'kubernetes_object_reversible': (FakeShell shell, FakeFiles files, FakeHttp http) {
     const String file = '$_plausibleText/$_plausibleText';
     files.contents[file] = 'kind: Namespace\n';
     // The audit hands the OPTIONAL ownership label its placeholder for key and value alike, so the

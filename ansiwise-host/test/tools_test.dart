@@ -67,7 +67,7 @@ void main() {
   const StepName under = StepName('under_test');
 
   group('the two things every tool download needs', () {
-    const EnsureToolPrerequisites step = EnsureToolPrerequisites(
+    const InstallToolPrerequisites step = InstallToolPrerequisites(
       packages: <String>['curl', 'unzip'],
     );
 
@@ -364,7 +364,7 @@ void main() {
     // The release-tagged tool stands in the same list as the bare-numbered ones, because one run
     // holds every tool a program pins and the two shapes have to be read side by side rather than
     // each in a suite of its own.
-    const AssertCliToolVersions step = AssertCliToolVersions(
+    const RequireCliToolVersions step = RequireCliToolVersions(
       tools: <String>[
         'packed-cli=v2.0.3',
         'yq=v4.53.3',
@@ -399,39 +399,39 @@ void main() {
     }
 
     test('the tag shape comes off before the comparison', () {
-      expect(AssertCliToolVersions.bare('v4.53.3', pinPrefixes), '4.53.3');
-      expect(AssertCliToolVersions.bare('jq-1.8.2', pinPrefixes), '1.8.2');
-      expect(AssertCliToolVersions.bare('2.0.3', pinPrefixes), '2.0.3');
+      expect(RequireCliToolVersions.bare('v4.53.3', pinPrefixes), '4.53.3');
+      expect(RequireCliToolVersions.bare('jq-1.8.2', pinPrefixes), '1.8.2');
+      expect(RequireCliToolVersions.bare('2.0.3', pinPrefixes), '2.0.3');
     });
 
     test('at most ONE shape comes off, so two of them cannot eat into the version', () {
       // The defect this replaced: every shape was stripped in turn, so a tag beginning with one of
       // them and holding another lost both and was compared as a number no tool answers with.
-      expect(AssertCliToolVersions.bare('vjq-1.7', pinPrefixes), 'jq-1.7');
+      expect(RequireCliToolVersions.bare('vjq-1.7', pinPrefixes), 'jq-1.7');
     });
 
     test('the longest shape wins, so one that begins with another is not cut short', () {
-      expect(AssertCliToolVersions.bare('jq-1.8.2', <String>['j', 'jq-']), '1.8.2');
+      expect(RequireCliToolVersions.bare('jq-1.8.2', <String>['j', 'jq-']), '1.8.2');
     });
 
     test('a row that names no shape leaves every pin as it stands', () {
-      expect(AssertCliToolVersions.bare('v4.53.3', <String>[]), 'v4.53.3');
+      expect(RequireCliToolVersions.bare('v4.53.3', <String>[]), 'v4.53.3');
     });
 
     test('a release tag carries no shape to take off, so the whole tag is what is compared', () {
       expect(
-        AssertCliToolVersions.bare('0.1.0-alpha-20260822223803', pinPrefixes),
+        RequireCliToolVersions.bare('0.1.0-alpha-20260822223803', pinPrefixes),
         '0.1.0-alpha-20260822223803',
       );
     });
 
     test('a release tag is read whole, and not as the three numbers it begins with', () {
       expect(
-        AssertCliToolVersions.versionIn('0.1.0-alpha-20260822223803'),
+        RequireCliToolVersions.versionIn('0.1.0-alpha-20260822223803'),
         '0.1.0-alpha-20260822223803',
       );
       expect(
-        AssertCliToolVersions.versionIn('12.7.30-stable-20250101235959'),
+        RequireCliToolVersions.versionIn('12.7.30-stable-20250101235959'),
         '12.7.30-stable-20250101235959',
       );
     });
@@ -440,23 +440,23 @@ void main() {
       // Every shape the tools pinned before a release tag existed answer in, held here so that
       // making room for the fuller shape cannot quietly change what any of them reads as.
       expect(
-        AssertCliToolVersions.versionIn('yq (https://github.com/mikefarah/yq/) version v4.53.3'),
+        RequireCliToolVersions.versionIn('yq (https://github.com/mikefarah/yq/) version v4.53.3'),
         '4.53.3',
       );
-      expect(AssertCliToolVersions.versionIn('1.98.10'), '1.98.10');
+      expect(RequireCliToolVersions.versionIn('1.98.10'), '1.98.10');
       expect(
-        AssertCliToolVersions.versionIn('Packed CLI v2.0.3 (abcdef1), built 2026-01-01'),
+        RequireCliToolVersions.versionIn('Packed CLI v2.0.3 (abcdef1), built 2026-01-01'),
         '2.0.3',
       );
-      expect(AssertCliToolVersions.versionIn('jq-1.8.2'), '1.8.2');
-      expect(AssertCliToolVersions.versionIn('cluster-cli: v3.4.5'), '3.4.5');
-      expect(AssertCliToolVersions.versionIn('v2.0'), '2.0');
+      expect(RequireCliToolVersions.versionIn('jq-1.8.2'), '1.8.2');
+      expect(RequireCliToolVersions.versionIn('cluster-cli: v3.4.5'), '3.4.5');
+      expect(RequireCliToolVersions.versionIn('v2.0'), '2.0');
     });
 
     test('a line carrying nothing shaped like a version is no version, and not a guess', () {
       // What a binary built without a tag answers. It is deliberately not shaped like a version, so
       // that nothing comparing can mistake it for a released one.
-      expect(AssertCliToolVersions.versionIn('unreleased'), isNull);
+      expect(RequireCliToolVersions.versionIn('unreleased'), isNull);
     });
 
     test('the ORDER of the two shapes is what does it, and the other order answers wrongly', () {
@@ -479,12 +479,12 @@ void main() {
 
       const String tag = '0.1.0-alpha-20260822223803';
       expect(shorterFirst(tag), '0.1.0', reason: 'this is the answer the other order gives');
-      expect(AssertCliToolVersions.versionIn(tag), tag);
+      expect(RequireCliToolVersions.versionIn(tag), tag);
 
       // And the order costs the bare shapes nothing, because the fuller shape does not fit a line
       // without a channel and a stamp on it: both orders reach the same reader for those.
       for (final String said in <String>['v4.53.3', '1.98.10', 'jq-1.8.2', 'unreleased']) {
-        expect(shorterFirst(said), AssertCliToolVersions.versionIn(said));
+        expect(shorterFirst(said), RequireCliToolVersions.versionIn(said));
       }
     });
 
@@ -494,7 +494,7 @@ void main() {
       // the build behind it on the one line.
       final HostMachine machine = withTools();
       expect(
-        (await AssertCliToolVersions.installedVersion(
+        (await RequireCliToolVersions.installedVersion(
           machine.contextFor(under),
           'tailscale',
           <String>['version'],
@@ -502,7 +502,7 @@ void main() {
         '1.98.10',
       );
       expect(
-        (await AssertCliToolVersions.installedVersion(
+        (await RequireCliToolVersions.installedVersion(
           machine.contextFor(under),
           'packed-cli',
           <String>['version'],
@@ -524,7 +524,7 @@ void main() {
         ..answers(onThePathKey('unstamped-cli'), '/usr/local/bin/unstamped-cli\n')
         ..answers('unstamped-cli --version', 'unreleased\n');
 
-      Future<String> problemOf(String tool) async => (await AssertCliToolVersions.installedVersion(
+      Future<String> problemOf(String tool) async => (await RequireCliToolVersions.installedVersion(
         machine.contextFor(under),
         tool,
         <String>['--version'],
@@ -628,7 +628,7 @@ void main() {
     test('a tool named here with nothing able to ask it its version is caught', () async {
       // The assertion is the only thing binding the list to the steps that install them: a tool
       // added to one and not the other would otherwise never be installed and nothing would say so.
-      const AssertCliToolVersions unknown = AssertCliToolVersions(
+      const RequireCliToolVersions unknown = RequireCliToolVersions(
         tools: <String>['silent-cli=v4.2.3'],
         unpinnable: <String>[],
         versionCommands: <String>[],
@@ -641,7 +641,7 @@ void main() {
     test('an entry that does not read as a tool and its arguments is no reader at all', () async {
       // Half a line is worse than none: it would otherwise be kept as a tool with an empty command,
       // and the machine would be asked its version by running the tool with no arguments at all.
-      const AssertCliToolVersions malformed = AssertCliToolVersions(
+      const RequireCliToolVersions malformed = RequireCliToolVersions(
         tools: <String>['yq=v4.53.3'],
         unpinnable: <String>[],
         versionCommands: <String>['yq=', '=--version', 'yq'],

@@ -82,7 +82,7 @@ void main() {
         );
         machine.files.contents['/etc/resolv.conf'] = 'nameserver 127.0.0.53\n';
 
-        expect(await DetectHostUpstreamResolvers.detect(machine.contextFor(under)), <String>[
+        expect(await MeasureHostUpstreamResolvers.measure(machine.contextFor(under)), <String>[
           '185.12.64.1',
           '185.12.64.2',
         ]);
@@ -94,7 +94,7 @@ void main() {
       machine.shell.answers('resolvectl status', 'Global\n  DNS Servers: 127.0.0.53\n');
       machine.files.contents['/etc/resolv.conf'] = 'nameserver 127.0.0.53\nnameserver 9.9.9.9\n';
 
-      expect(await DetectHostUpstreamResolvers.detect(machine.contextFor(under)), <String>[
+      expect(await MeasureHostUpstreamResolvers.measure(machine.contextFor(under)), <String>[
         '9.9.9.9',
       ]);
     });
@@ -102,7 +102,7 @@ void main() {
     test('an address carrying the interface it is valid on comes back without it', () async {
       final HostMachine machine = HostMachine();
       machine.shell.answers('resolvectl status', '  DNS Servers: fe80::1%eth0\n');
-      expect(await DetectHostUpstreamResolvers.detect(machine.contextFor(under)), <String>[
+      expect(await MeasureHostUpstreamResolvers.measure(machine.contextFor(under)), <String>[
         'fe80::1',
       ]);
     });
@@ -113,7 +113,7 @@ void main() {
         'resolvectl status',
         '  DNS Servers: 185.12.64.1 185.12.64.2\n  Current DNS Server: 185.12.64.1\n',
       );
-      expect(await DetectHostUpstreamResolvers.detect(machine.contextFor(under)), <String>[
+      expect(await MeasureHostUpstreamResolvers.measure(machine.contextFor(under)), <String>[
         '185.12.64.1',
         '185.12.64.2',
       ]);
@@ -124,7 +124,7 @@ void main() {
       machine.shell.answers('resolvectl status', '  DNS Servers: 127.0.0.53\n');
       machine.files.contents['/etc/resolv.conf'] = 'nameserver 127.0.0.53\n';
 
-      const DetectHostUpstreamResolvers step = DetectHostUpstreamResolvers(
+      const MeasureHostUpstreamResolvers step = MeasureHostUpstreamResolvers(
         resolvConf: '/etc/resolv.conf',
       );
       expect(await step.check(machine.contextFor(under)), isA<Blocked>());
@@ -139,7 +139,7 @@ void main() {
       final HostMachine machine = HostMachine()
         ..shell.fails('readlink -f /etc/alternatives/iptables')
         ..shell.fails('readlink -f /usr/sbin/iptables');
-      expect(await DetectHostIptablesBackend.detect(machine.contextFor(under)), isNull);
+      expect(await MeasureHostIptablesBackend.measure(machine.contextFor(under)), isNull);
     });
 
     test('and the step blocks on it rather than reporting a reading it did not take', () async {
@@ -149,8 +149,8 @@ void main() {
         ..shell.fails('readlink -f /etc/alternatives/iptables')
         ..shell.fails('readlink -f /usr/sbin/iptables');
 
-      final CheckResult answer = await const DetectHostIptablesBackend(
-        alternativesLink: DetectHostIptablesBackend.defaultLink,
+      final CheckResult answer = await const MeasureHostIptablesBackend(
+        alternativesLink: MeasureHostIptablesBackend.defaultLink,
       ).check(machine.contextFor(under));
 
       expect((answer as Blocked).reason, contains('could be read'));
@@ -163,8 +163,8 @@ void main() {
           ..shell.answers('readlink -f /etc/alternatives/iptables', '/usr/sbin/iptables-nft\n');
 
         expect(
-          await const DetectHostIptablesBackend(
-            alternativesLink: DetectHostIptablesBackend.defaultLink,
+          await const MeasureHostIptablesBackend(
+            alternativesLink: MeasureHostIptablesBackend.defaultLink,
           ).check(machine.contextFor(under)),
           isA<Satisfied>(),
         );
@@ -178,8 +178,8 @@ void main() {
           '/usr/sbin/xtables-legacy-multi\n',
         );
       expect(
-        await DetectHostIptablesBackend.detect(machine.contextFor(under)),
-        DetectHostIptablesBackend.legacy,
+        await MeasureHostIptablesBackend.measure(machine.contextFor(under)),
+        MeasureHostIptablesBackend.legacy,
       );
     });
   });

@@ -30,7 +30,7 @@ Future<void> main() => auditIdempotence(
 /// A name leaves this list by gaining a fixture in a fixtures map that arranges the fake machine for
 /// it. A name arrives here only by somebody adding it, which is the point: a step written tomorrow
 /// either brings its fixture or is written down as unproven.
-/// **Three more arrived with the steps that moved into this package, and each is here for its own
+/// **Two more arrived with the steps that moved into this package, and each is here for its own
 /// measured reason** — not because the list was the quick way to make the audit green.
 ///
 /// `stamp_placeholder_in_tracked_files` refuses for exactly the reason `git_branch` does: the value
@@ -39,13 +39,9 @@ Future<void> main() => auditIdempotence(
 /// its rows over a fake checkout.
 ///
 /// `replace_regex_in_tracked_file` is blocked before it starts, because the file it is told to
-/// modify has to exist and a probe hands it a one-character path.
-///
-/// `replace_text_in_tracked_files` is the other shape and the worse one: the fake machine ALREADY
-/// satisfies it — the probe's placeholder is in no file, so there is no work and the step never goes
-/// from having some to having none. **Nothing else measures these last two**, and that is stated
-/// here rather than left to be discovered: they came out of the dissolved package without a test of
-/// their own.
+/// modify has to exist and a probe hands it a one-character path. **Nothing else measures it**, and
+/// that is stated here rather than left to be discovered: it came out of the dissolved package
+/// without a test of its own.
 const Set<String> notCoveredByAFakeMachine = <String>{
   'git_branch',
   // The two files this step reads which repository and which credential out of stand at paths its
@@ -107,6 +103,5 @@ const Set<String> notCoveredByAFakeMachine = <String>{
   // stands rather than gaining a second one, and the undo puts back exactly what was there.
   'write_value_in_branch_file',
   'replace_regex_in_tracked_file',
-  'replace_text_in_tracked_files',
   'stamp_placeholder_in_tracked_files',
 };

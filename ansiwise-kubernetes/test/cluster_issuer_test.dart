@@ -42,14 +42,14 @@ void main() {
     test('happens only when that was asked for', () async {
       final ClusterMachine machine = ClusterMachine()..shell.answers(issuerExists, 'my-issuer');
 
-      const DeleteExistingClusterIssuer left = DeleteExistingClusterIssuer(
+      const RemoveExistingClusterIssuer left = RemoveExistingClusterIssuer(
         name: 'my-issuer',
         force: false,
       );
       expect(await left.check(machine.contextFor(under)), isA<Satisfied>());
       expect(machine.changing, isEmpty);
 
-      const DeleteExistingClusterIssuer asked = DeleteExistingClusterIssuer(
+      const RemoveExistingClusterIssuer asked = RemoveExistingClusterIssuer(
         name: 'my-issuer',
         force: true,
       );

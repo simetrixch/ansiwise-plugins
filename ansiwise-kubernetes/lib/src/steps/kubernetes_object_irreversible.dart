@@ -1,15 +1,15 @@
 import 'package:ansiwise_core/ansiwise_core.dart';
 
 import 'kubectl.dart';
-import 'kubernetes_object.dart';
+import 'kubernetes_object_reversible.dart';
 
 /// Applies one manifest of the checkout and announces that its objects are not taken away again.
 ///
-/// **Why this is not [KubernetesObject] with the undo left out.** That step's undo is `kubectl
-/// delete --filename`, which removes exactly what the file names — correct for as long as the
-/// file's own objects are the whole of what the apply produced. It stops being correct the moment
-/// one of them is read by a controller that creates further objects from it: deleting the object
-/// the controller watches takes everything the controller made with it, and none of that was
+/// **Why this is not [KubernetesObjectReversible] with the undo left out.** That step's undo is
+/// `kubectl delete --filename`, which removes exactly what the file names — correct for as long as
+/// the file's own objects are the whole of what the apply produced. It stops being correct the
+/// moment one of them is read by a controller that creates further objects from it: deleting the
+/// object the controller watches takes everything the controller made with it, and none of that was
 /// applied by this run. An undo that removed more than the step put there is worse than no undo, so
 /// this kind announces the point of no return instead — which is what a dry run shows an operator
 /// before they reach it.

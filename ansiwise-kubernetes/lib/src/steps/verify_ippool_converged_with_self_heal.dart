@@ -1,6 +1,6 @@
 import 'package:ansiwise_core/ansiwise_core.dart';
 import 'kubectl.dart';
-import 'delete_default_ipv4_ippool.dart';
+import 'remove_default_ipv4_ippool.dart';
 import 'reapply_calico_manifest.dart';
 
 /// Waits for the address pool to come back on the new range, and puts it right once when it does not.
@@ -92,16 +92,16 @@ final class VerifyIppoolConvergedWithSelfHeal extends IrreversibleStep {
 
   @override
   Future<CheckResult> check(StepContext context) async {
-    final String? live = await DeleteDefaultIpv4Ippool.liveCidr(context, kubectl);
+    final String? live = await RemoveDefaultIpv4Ippool.liveCidr(context, kubectl);
     if (live == podCidr) {
-      return CheckResult.satisfied('${DeleteDefaultIpv4Ippool.poolName} covers $podCidr');
+      return CheckResult.satisfied('${RemoveDefaultIpv4Ippool.poolName} covers $podCidr');
     }
     return const CheckResult.ready();
   }
 
   @override
   Future<StepPlan> plan(StepContext context) async => StepPlan.nothing(
-    'would watch ${DeleteDefaultIpv4Ippool.poolName} for up to ${timeoutSeconds}s and, on a pool '
+    'would watch ${RemoveDefaultIpv4Ippool.poolName} for up to ${timeoutSeconds}s and, on a pool '
     'that came back covering another range, delete it once more and replace the network agent',
   );
 
@@ -111,24 +111,24 @@ final class VerifyIppoolConvergedWithSelfHeal extends IrreversibleStep {
     bool healed = false;
 
     while (true) {
-      final String? live = await DeleteDefaultIpv4Ippool.liveCidr(context, kubectl);
+      final String? live = await RemoveDefaultIpv4Ippool.liveCidr(context, kubectl);
       if (live == podCidr) {
         return;
       }
       if (live != null && !healed) {
         healed = true;
         context.log.warn(
-          '${DeleteDefaultIpv4Ippool.poolName} came back covering $live rather than $podCidr — the '
+          '${RemoveDefaultIpv4Ippool.poolName} came back covering $live rather than $podCidr — the '
           'agent created it before the restart handed it the new range. Deleting it once more and '
           'replacing the agent, which now carries the stamped range.',
         );
-        await DeleteDefaultIpv4Ippool.delete(context, kubectl);
+        await RemoveDefaultIpv4Ippool.delete(context, kubectl);
         await _rollNetworkAgent(context);
       }
       if (!context.clock.now().isBefore(giveUp)) {
         throw WaitedTooLong(
           waitingFor:
-              '${DeleteDefaultIpv4Ippool.poolName} to cover $podCidr — it '
+              '${RemoveDefaultIpv4Ippool.poolName} to cover $podCidr — it '
               '${live == null ? 'does not exist' : 'covers $live'}',
           deadline: Duration(seconds: timeoutSeconds),
         );

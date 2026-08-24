@@ -12,8 +12,8 @@ import 'support/machine.dart';
 /// exactly, and it would be wrong in the cases nobody thinks of: a default the server fills in, a
 /// field it normalises, a list it reorders.
 void main() {
-  const StepName under = StepName('kubernetes_object');
-  const KubernetesObject step = KubernetesObject(
+  const StepName under = StepName('kubernetes_object_reversible');
+  const KubernetesObjectReversible step = KubernetesObjectReversible(
     repository: '/srv/checkout',
     manifest: 'manifests/certificate.yaml',
   );
@@ -112,7 +112,7 @@ void main() {
   test('a wrapped client is invoked word for word, in front of every subcommand', () async {
     // The invocation is an argument: a row that names a wrapped client changes one row, not the
     // step. This is the seam an installation whose kubectl sits behind another command uses.
-    final KubernetesObject wrapped = KubernetesObject.fromArguments(
+    final KubernetesObjectReversible wrapped = KubernetesObjectReversible.fromArguments(
       const Arguments(<String, Object>{
         'repository': '/srv/checkout',
         'manifest': 'manifests/certificate.yaml',
@@ -132,7 +132,7 @@ void main() {
   });
 
   group('the ownership label', () {
-    const KubernetesObject guarded = KubernetesObject(
+    const KubernetesObjectReversible guarded = KubernetesObjectReversible(
       repository: '/srv/checkout',
       manifest: 'manifests/certificate.yaml',
       ownerLabel: 'example.com/managed',
@@ -167,7 +167,7 @@ void main() {
     });
 
     test('a key with no value to hold it against is refused rather than guessed', () async {
-      const KubernetesObject halfALabel = KubernetesObject(
+      const KubernetesObjectReversible halfALabel = KubernetesObjectReversible(
         repository: '/srv/checkout',
         manifest: 'manifests/certificate.yaml',
         ownerLabel: 'example.com/managed',

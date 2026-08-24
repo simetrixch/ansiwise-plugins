@@ -1,6 +1,6 @@
 import 'package:ansiwise_core/ansiwise_core.dart';
 import 'kubectl.dart';
-import 'guard_populated_cluster_pod_cidr_migration.dart';
+import 'require_unpopulated_cluster_for_pod_cidr_migration.dart';
 
 /// Gives the system pods that came up before the conversion an address out of the new pool.
 ///
@@ -61,15 +61,15 @@ final class RecycleKubeSystemPodIps extends IrreversibleStep {
     final List<_Pod>? pods = await _pods(context);
     if (pods == null) {
       return const CheckResult.blocked(
-        'the pods of ${GuardPopulatedClusterPodCidrMigration.systemNamespace} could not be read, and '
-        'their addresses are what says whether the conversion reached them',
+        'the pods of ${RequireUnpopulatedClusterForPodCidrMigration.systemNamespace} could not be '
+        'read, and their addresses are what says whether the conversion reached them',
       );
     }
     final List<_Pod> stale = _stale(pods);
     if (stale.isEmpty) {
       return CheckResult.satisfied(
-        'every pod of ${GuardPopulatedClusterPodCidrMigration.systemNamespace} on the pod network '
-        'holds an address inside $podCidr',
+        'every pod of ${RequireUnpopulatedClusterForPodCidrMigration.systemNamespace} on the pod '
+        'network holds an address inside $podCidr',
       );
     }
     return const CheckResult.ready();
@@ -116,7 +116,7 @@ final class RecycleKubeSystemPodIps extends IrreversibleStep {
     final CommandResult pods = await context.shell.run(
       kubectl.observing(<String>[
         '-n',
-        GuardPopulatedClusterPodCidrMigration.systemNamespace,
+        RequireUnpopulatedClusterForPodCidrMigration.systemNamespace,
         'get',
         'pods',
         '-o',
@@ -135,7 +135,7 @@ final class RecycleKubeSystemPodIps extends IrreversibleStep {
 
   static const List<String> _delete = <String>[
     '-n',
-    GuardPopulatedClusterPodCidrMigration.systemNamespace,
+    RequireUnpopulatedClusterForPodCidrMigration.systemNamespace,
     'delete',
     'pod',
   ];

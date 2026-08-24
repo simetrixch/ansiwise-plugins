@@ -7,17 +7,17 @@ import 'kubectl.dart';
 /// Only when the operator asks for it. An issuer that is there and working is what every certificate
 /// on the cluster depends on, and rebuilding it for no reason is a change with a real risk and no
 /// gain.
-final class DeleteExistingClusterIssuer extends IrreversibleStep {
+final class RemoveExistingClusterIssuer extends IrreversibleStep {
   /// Deletes the issuer [name] when [force] is set.
-  const DeleteExistingClusterIssuer({
+  const RemoveExistingClusterIssuer({
     required this.name,
     required this.force,
     this.kubectl = const Kubectl(),
   });
 
   /// Builds the step from what the program gave it.
-  factory DeleteExistingClusterIssuer.fromArguments(Arguments arguments) =>
-      DeleteExistingClusterIssuer(
+  factory RemoveExistingClusterIssuer.fromArguments(Arguments arguments) =>
+      RemoveExistingClusterIssuer(
         name: arguments.text('name'),
         force: arguments.flag('force'),
         kubectl: Kubectl.fromArguments(arguments),

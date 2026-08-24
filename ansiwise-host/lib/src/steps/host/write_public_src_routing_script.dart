@@ -1,5 +1,5 @@
 import 'package:ansiwise_core/ansiwise_core.dart';
-import 'detect_public_nic.dart';
+import 'measure_public_nic.dart';
 
 /// Writes the script that loads the marking rules and installs the rule keyed on the mark.
 ///
@@ -127,7 +127,7 @@ final class WritePublicSrcRoutingScript extends ReversibleStep<String?>
   /// installs it.
   @override
   Future<FileContent> contentFor(StepContext context) async =>
-      await DetectPublicNic.detect(context) == null
+      await MeasurePublicNic.measure(context) == null
       ? const FileContent.nothing(
           'nothing is steered on this machine, so there is no rule to install',
         )

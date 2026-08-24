@@ -15,12 +15,12 @@ import 'package:ansiwise_core/ansiwise_core.dart';
 /// public address at all has no problem to solve. So does one whose winning default route already
 /// leaves by the public interface, which is every machine with a single interface. Either way this
 /// answers that there is nothing to do, and every step of the phase asks it before doing anything.
-final class DetectPublicNic extends ObservingStep {
+final class MeasurePublicNic extends ObservingStep {
   /// Measures the machine's public interface.
-  const DetectPublicNic();
+  const MeasurePublicNic();
 
   /// Builds the step from what the program gave it.
-  factory DetectPublicNic.fromArguments(Arguments arguments) => const DetectPublicNic();
+  factory MeasurePublicNic.fromArguments(Arguments arguments) => const MeasurePublicNic();
 
   /// What this step accepts.
   static const List<ArgumentSpec> arguments = <ArgumentSpec>[];
@@ -52,7 +52,7 @@ final class DetectPublicNic extends ObservingStep {
   ///
   /// Shared with every step of this phase, so the machine is measured in one place and the seven
   /// files cannot come to disagree about which interface they are for.
-  static Future<PublicNic?> detect(StepContext context) async {
+  static Future<PublicNic?> measure(StepContext context) async {
     final List<_DefaultRoute> routes = await _defaultRoutes(context);
     if (routes.isEmpty) {
       return null;
@@ -85,7 +85,7 @@ final class DetectPublicNic extends ObservingStep {
 
   @override
   Future<CheckResult> check(StepContext context) async {
-    final PublicNic? nic = await detect(context);
+    final PublicNic? nic = await measure(context);
     if (nic == null) {
       return const CheckResult.satisfied(
         'the default route already leaves by the interface carrying the public address, or there is '

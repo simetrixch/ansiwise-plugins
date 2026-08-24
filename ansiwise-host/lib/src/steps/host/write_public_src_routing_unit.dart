@@ -1,5 +1,5 @@
 import 'package:ansiwise_core/ansiwise_core.dart';
-import 'detect_public_nic.dart';
+import 'measure_public_nic.dart';
 
 /// Writes the service that runs the steering script, and takes it away again when it is stopped.
 ///
@@ -140,7 +140,7 @@ final class WritePublicSrcRoutingUnit extends ReversibleStep<String?> with FileS
   /// to run the script that installs it.
   @override
   Future<FileContent> contentFor(StepContext context) async =>
-      await DetectPublicNic.detect(context) == null
+      await MeasurePublicNic.measure(context) == null
       ? const FileContent.nothing(
           'nothing is steered on this machine, so there is no service to install',
         )

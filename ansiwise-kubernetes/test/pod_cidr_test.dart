@@ -118,11 +118,12 @@ void main() {
 
     test('one pod outside the system namespace refuses the swap and names the override', () async {
       final ClusterMachine machine = populated(liveCidr: '10.1.0.0/16');
-      const GuardPopulatedClusterPodCidrMigration guard = GuardPopulatedClusterPodCidrMigration(
-        podCidr: podCidr,
-        argsPath: argsPath,
-        allowPopulatedMigration: false,
-      );
+      const RequireUnpopulatedClusterForPodCidrMigration guard =
+          RequireUnpopulatedClusterForPodCidrMigration(
+            podCidr: podCidr,
+            argsPath: argsPath,
+            allowPopulatedMigration: false,
+          );
 
       final CheckResult answer = await guard.check(machine.contextFor(under));
       final String reason = (answer as Blocked).reason;
@@ -139,21 +140,23 @@ void main() {
         ..answers(podsEverywhere, 'monitoring node-exporter-9 true\n');
       machine.files.contents[argsPath] = kubeProxyArgs(cidr: '10.1.0.0/16');
 
-      const GuardPopulatedClusterPodCidrMigration guard = GuardPopulatedClusterPodCidrMigration(
-        podCidr: podCidr,
-        argsPath: argsPath,
-        allowPopulatedMigration: false,
-      );
+      const RequireUnpopulatedClusterForPodCidrMigration guard =
+          RequireUnpopulatedClusterForPodCidrMigration(
+            podCidr: podCidr,
+            argsPath: argsPath,
+            allowPopulatedMigration: false,
+          );
       expect(await guard.check(machine.contextFor(under)), isA<Satisfied>());
     });
 
     test('the override lets it through and says every pod has to be restarted', () async {
       final ClusterMachine machine = populated(liveCidr: '10.1.0.0/16');
-      const GuardPopulatedClusterPodCidrMigration guard = GuardPopulatedClusterPodCidrMigration(
-        podCidr: podCidr,
-        argsPath: argsPath,
-        allowPopulatedMigration: true,
-      );
+      const RequireUnpopulatedClusterForPodCidrMigration guard =
+          RequireUnpopulatedClusterForPodCidrMigration(
+            podCidr: podCidr,
+            argsPath: argsPath,
+            allowPopulatedMigration: true,
+          );
 
       expect(await guard.check(machine.contextFor(under)), isA<Satisfied>());
       expect(machine.said.join('\n'), contains('restarted by hand'));
@@ -161,11 +164,12 @@ void main() {
 
     test('a cluster that already runs on the range is not guarded, there being no swap', () async {
       final ClusterMachine machine = populated(liveCidr: podCidr, converged: true);
-      const GuardPopulatedClusterPodCidrMigration guard = GuardPopulatedClusterPodCidrMigration(
-        podCidr: podCidr,
-        argsPath: argsPath,
-        allowPopulatedMigration: false,
-      );
+      const RequireUnpopulatedClusterForPodCidrMigration guard =
+          RequireUnpopulatedClusterForPodCidrMigration(
+            podCidr: podCidr,
+            argsPath: argsPath,
+            allowPopulatedMigration: false,
+          );
       expect(await guard.check(machine.contextFor(under)), isA<Satisfied>());
     });
 
@@ -180,11 +184,12 @@ void main() {
         ..[argsPath] = kubeProxyArgs()
         ..[manifestPath] = cniManifest();
 
-      const GuardPopulatedClusterPodCidrMigration guard = GuardPopulatedClusterPodCidrMigration(
-        podCidr: podCidr,
-        argsPath: argsPath,
-        allowPopulatedMigration: false,
-      );
+      const RequireUnpopulatedClusterForPodCidrMigration guard =
+          RequireUnpopulatedClusterForPodCidrMigration(
+            podCidr: podCidr,
+            argsPath: argsPath,
+            allowPopulatedMigration: false,
+          );
       expect(
         await guard.check(machine.contextFor(under)),
         isA<Blocked>(),
@@ -206,7 +211,7 @@ void main() {
         });
       machine.files.contents[manifestPath] = cniManifest();
 
-      const DeleteDefaultIpv4Ippool step = DeleteDefaultIpv4Ippool(
+      const RemoveDefaultIpv4Ippool step = RemoveDefaultIpv4Ippool(
         podCidr: podCidr,
         manifestPath: manifestPath,
       );
@@ -224,7 +229,7 @@ void main() {
       machine.shell.answers(livePool, '10.1.0.0/16');
       machine.files.contents[manifestPath] = cniManifest(cidr: '10.1.0.0/16');
 
-      const DeleteDefaultIpv4Ippool step = DeleteDefaultIpv4Ippool(
+      const RemoveDefaultIpv4Ippool step = RemoveDefaultIpv4Ippool(
         podCidr: podCidr,
         manifestPath: manifestPath,
       );
@@ -235,7 +240,7 @@ void main() {
 
     test('a pool already on the range is left alone', () async {
       final ClusterMachine machine = ClusterMachine()..shell.answers(livePool, podCidr);
-      const DeleteDefaultIpv4Ippool step = DeleteDefaultIpv4Ippool(
+      const RemoveDefaultIpv4Ippool step = RemoveDefaultIpv4Ippool(
         podCidr: podCidr,
         manifestPath: manifestPath,
       );

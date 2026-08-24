@@ -36,13 +36,13 @@ void main() {
       machine.files.directories.add(storagePath);
       machine.shell.fails('mountpoint -q $storagePath');
 
-      const CheckStorageMount step = CheckStorageMount();
+      const RequireStorageMount step = RequireStorageMount();
       final CheckResult answer = await step.check(withStorage(machine));
       expect((answer as Blocked).reason, contains('ordinary directory'));
     });
 
     test('a machine with no separate filesystem keeps the default and is not refused', () async {
-      const CheckStorageMount step = CheckStorageMount();
+      const RequireStorageMount step = RequireStorageMount();
       expect(
         await step.check(withStorage(HostMachine(), path: '', directory: '')),
         isA<Satisfied>(),
@@ -52,7 +52,7 @@ void main() {
     test('a mounted path passes', () async {
       final HostMachine machine = HostMachine();
       machine.files.directories.add(storagePath);
-      const CheckStorageMount step = CheckStorageMount();
+      const RequireStorageMount step = RequireStorageMount();
       expect(await step.check(withStorage(machine)), isA<Satisfied>());
     });
   });

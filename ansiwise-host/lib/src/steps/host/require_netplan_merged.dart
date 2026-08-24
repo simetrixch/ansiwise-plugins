@@ -1,5 +1,5 @@
 import 'package:ansiwise_core/ansiwise_core.dart';
-import 'detect_public_nic.dart';
+import 'measure_public_nic.dart';
 
 /// Proves the drop-in folded into the installer's declaration before anything is applied.
 ///
@@ -12,13 +12,13 @@ import 'detect_public_nic.dart';
 /// So the merged configuration is read back and both halves must be in it: the address configuration
 /// the installer wrote, and the steering this program wrote. One declaration carrying both is the
 /// proof; two declarations show up as one of them missing.
-final class AssertNetplanMerged extends ObservingStep {
+final class RequireNetplanMerged extends ObservingStep {
   /// Reads the merged declaration of the public interface back, and looks for [installerKey] and
   /// [dropInKey] in it.
-  const AssertNetplanMerged({required this.installerKey, required this.dropInKey});
+  const RequireNetplanMerged({required this.installerKey, required this.dropInKey});
 
   /// Builds the step from what the program gave it.
-  factory AssertNetplanMerged.fromArguments(Arguments arguments) => AssertNetplanMerged(
+  factory RequireNetplanMerged.fromArguments(Arguments arguments) => RequireNetplanMerged(
     installerKey: arguments.text('installer_key'),
     dropInKey: arguments.text('drop_in_key'),
   );
@@ -57,7 +57,7 @@ final class AssertNetplanMerged extends ObservingStep {
 
   @override
   Future<CheckResult> check(StepContext context) async {
-    final PublicNic? nic = await DetectPublicNic.detect(context);
+    final PublicNic? nic = await MeasurePublicNic.measure(context);
     if (nic == null) {
       return const CheckResult.satisfied(
         'nothing is steered on this machine, so there is no drop-in that had to fold in',

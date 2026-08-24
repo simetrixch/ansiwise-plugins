@@ -9,12 +9,12 @@ import 'support/machine.dart';
 
 /// Waiting until a command answers: which answer counts, and what a reached deadline says.
 void main() {
-  const StepName under = StepName('wait_for_answer');
+  const StepName under = StepName('wait_for_command_output');
   const String issuerReady =
       'kubectl get clusterissuer my-issuer -o '
       'jsonpath={.status.conditions[?(@.type=="Ready")].status}';
 
-  WaitForAnswer waitingFor(String answer, {int timeoutSeconds = 60}) => WaitForAnswer(
+  WaitForCommandOutput waitingFor(String answer, {int timeoutSeconds = 60}) => WaitForCommandOutput(
     waitingFor: 'my-issuer to report that its account is registered',
     command: 'kubectl',
     commandArguments: const <String>[
@@ -172,7 +172,7 @@ void main() {
     test('a row that names no arguments asks the bare command', () async {
       final ClusterMachine machine = ClusterMachine()..shell.answers('clusterstatus', 'anything\n');
 
-      const WaitForAnswer bare = WaitForAnswer(
+      const WaitForCommandOutput bare = WaitForCommandOutput(
         waitingFor: 'the command to answer at all',
         command: 'clusterstatus',
         commandArguments: <String>[],
@@ -185,7 +185,7 @@ void main() {
     });
 
     test('every argument the program writes is read by the step', () {
-      final WaitForAnswer built = WaitForAnswer.fromArguments(
+      final WaitForCommandOutput built = WaitForCommandOutput.fromArguments(
         const Arguments(<String, Object>{
           'waiting_for': 'the node to report that it is running',
           'command': 'clusterstatus',

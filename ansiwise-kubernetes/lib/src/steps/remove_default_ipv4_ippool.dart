@@ -13,9 +13,9 @@ import 'kubectl.dart';
 /// the range take effect, and it is why the manifest has to carry the new range BEFORE this runs —
 /// otherwise the pool comes straight back on the old one. That order is a precondition here rather
 /// than a comment somewhere: this refuses to delete against an unstamped manifest.
-final class DeleteDefaultIpv4Ippool extends IrreversibleStep {
+final class RemoveDefaultIpv4Ippool extends IrreversibleStep {
   /// Deletes the pool unless it already carries [podCidr], with [manifestPath] as the proof of order.
-  const DeleteDefaultIpv4Ippool({
+  const RemoveDefaultIpv4Ippool({
     required this.podCidr,
     required this.manifestPath,
     this.kubectl = const Kubectl(),
@@ -23,7 +23,7 @@ final class DeleteDefaultIpv4Ippool extends IrreversibleStep {
   });
 
   /// Builds the step from what the program gave it.
-  factory DeleteDefaultIpv4Ippool.fromArguments(Arguments arguments) => DeleteDefaultIpv4Ippool(
+  factory RemoveDefaultIpv4Ippool.fromArguments(Arguments arguments) => RemoveDefaultIpv4Ippool(
     podCidr: arguments.text('pod_cidr'),
     manifestPath: arguments.text('manifest_path'),
     kubectl: Kubectl.fromArguments(arguments),

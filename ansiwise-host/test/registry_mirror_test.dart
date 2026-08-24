@@ -45,7 +45,7 @@ void main() {
     runAnswer: tierAnswer,
   );
 
-  const PreflightRegistryPullCredential preflight = PreflightRegistryPullCredential(layout: layout);
+  const RequireRegistryPullCredential step = RequireRegistryPullCredential(layout: layout);
 
   const WriteContainerdRegistryMirror mirror = WriteContainerdRegistryMirror(
     layout: layout,
@@ -109,7 +109,7 @@ void main() {
       final StepContext context = machine.contextFor(under, Arguments.none, hostAnswers);
 
       for (final Future<CheckResult> answer in <Future<CheckResult>>[
-        preflight.check(context),
+        step.check(context),
         mirror.check(context),
       ]) {
         expect(
@@ -123,7 +123,7 @@ void main() {
       // At this point in its own install that mirror does not exist, so this is a genuine no-op
       // rather than something that failed.
       expect(
-        await preflight.check(
+        await step.check(
           machineWith().contextFor(under, Arguments.none, answeredAs(machine: mirrorMachine)),
         ),
         isA<Satisfied>(),
@@ -150,7 +150,7 @@ void main() {
       final HostMachine machine = HostMachine();
       machine.files.contents[profilePath] = 'global:\n  someOtherUrl: https://elsewhere\n';
       expect(
-        await preflight.check(machine.contextFor(under, Arguments.none, answeredAs())),
+        await step.check(machine.contextFor(under, Arguments.none, answeredAs())),
         isA<Satisfied>(),
       );
     });
@@ -160,7 +160,7 @@ void main() {
       // here would kill every one of them.
       final HostMachine machine = machineWith();
       expect(
-        await preflight.check(machine.contextFor(under, Arguments.none, answeredAs())),
+        await step.check(machine.contextFor(under, Arguments.none, answeredAs())),
         isA<Satisfied>(),
       );
       expect(machine.said.join('\n'), contains(secretsPath));
@@ -178,7 +178,7 @@ void main() {
       // The character prints as nothing, so the failure surfaces far away as a rejected credential
       // for a value that looks perfectly correct.
       final HostMachine machine = machineWith(secretsFile: secrets(newline: '\r\n'));
-      final CheckResult answer = await preflight.check(
+      final CheckResult answer = await step.check(
         machine.contextFor(under, Arguments.none, answeredAs()),
       );
       expect((answer as Blocked).reason, contains('line endings'));
@@ -186,7 +186,7 @@ void main() {
 
     test('a blank credential is refused by name', () async {
       final HostMachine machine = machineWith(secretsFile: secrets(value: ''));
-      final CheckResult answer = await preflight.check(
+      final CheckResult answer = await step.check(
         machine.contextFor(under, Arguments.none, answeredAs()),
       );
       expect((answer as Blocked).reason, contains('REGISTRY_PULL_DOCKERCONFIGJSON'));
@@ -195,7 +195,7 @@ void main() {
 
     test('the placeholder an example file ships is refused by name', () async {
       final HostMachine machine = machineWith(secretsFile: secrets(value: 'BASE64_OF_/dev/null'));
-      final CheckResult answer = await preflight.check(
+      final CheckResult answer = await step.check(
         machine.contextFor(under, Arguments.none, answeredAs()),
       );
       expect((answer as Blocked).reason, contains('placeholder'));
@@ -204,7 +204,7 @@ void main() {
     test('a usable credential passes', () async {
       final HostMachine machine = machineWith(secretsFile: secrets());
       expect(
-        await preflight.check(machine.contextFor(under, Arguments.none, answeredAs())),
+        await step.check(machine.contextFor(under, Arguments.none, answeredAs())),
         isA<Satisfied>(),
       );
     });

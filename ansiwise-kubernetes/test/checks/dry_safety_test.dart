@@ -8,4 +8,4 @@ import 'package:ansiwise_kubernetes/ansiwise_kubernetes.dart';
 /// it only looks, and nothing here chose or verified it. The assertion is exact, so a second step
 /// that takes the row's word has to be named here before this audit passes.
 Future<void> main() =>
-    auditDrySafety(kubernetesRegistry, answeringOnTrust: const <String>['wait_for_answer']);
+    auditDrySafety(kubernetesRegistry, answeringOnTrust: const <String>['wait_for_command_output']);

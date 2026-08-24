@@ -24,8 +24,8 @@ Future<void> main() => auditIdempotence(
 const Set<String> notCoveredByAFakeMachine = <String>{
   'align_calico_backend',
   'apply_cluster_issuer',
-  'delete_default_ipv4_ippool',
-  'delete_existing_cluster_issuer',
+  'remove_default_ipv4_ippool',
+  'remove_existing_cluster_issuer',
   // NOT a machine the fake cannot arrange — a probe that hands one placeholder to a PAIR argument:
   // its `tokens` list takes <field>=<secret name> pairs and the probe plants the bare placeholder,
   // so the check is blocked on the malformed pair before any machine is asked. A fixture cannot

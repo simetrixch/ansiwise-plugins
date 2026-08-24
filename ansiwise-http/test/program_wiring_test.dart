@@ -25,7 +25,7 @@ void main() {
   test('a later row takes its address from the field an earlier row read', () {
     final ResolvedProgram resolved = const ProgramResolver(httpRegistry).resolve(
       programOf(<ProgramStep>[
-        row('read_http_field', <String, Object>{
+        row('measure_http_field', <String, Object>{
           'url': 'https://one.example/api/things/a1',
           'field': 'links.watch',
         }),
@@ -79,8 +79,14 @@ void main() {
       expect(
         () => const ProgramResolver(httpRegistry).resolve(
           programOf(<ProgramStep>[
-            row('read_http_field', <String, Object>{'url': 'https://one.example/a', 'field': 'x'}),
-            row('read_http_field', <String, Object>{'url': 'https://one.example/b', 'field': 'y'}),
+            row('measure_http_field', <String, Object>{
+              'url': 'https://one.example/a',
+              'field': 'x',
+            }),
+            row('measure_http_field', <String, Object>{
+              'url': 'https://one.example/b',
+              'field': 'y',
+            }),
           ]),
         ),
         throwsA(
@@ -139,7 +145,11 @@ void main() {
 
     /// One row of each kind, each naming [socket] or leaving it off.
     Map<String, Map<String, Object>> rowsNaming(String? socket) => <String, Map<String, Object>>{
-      'read_http_field': <String, Object>{'url': address, 'field': 'state', 'socket_path': ?socket},
+      'measure_http_field': <String, Object>{
+        'url': address,
+        'field': 'state',
+        'socket_path': ?socket,
+      },
       'send_http_request': <String, Object>{
         'method': 'POST',
         'url': address,
@@ -185,7 +195,7 @@ void main() {
         expect(
           () => const ProgramResolver(httpRegistry).resolve(
             programOf(<ProgramStep>[
-              row('read_http_field', <String, Object>{
+              row('measure_http_field', <String, Object>{
                 'url': address,
                 'field': 'state',
                 'socket_paths': socketFile,
@@ -253,7 +263,7 @@ void main() {
     }
 
     test('a slot of the socket file is filled from the answer the row names', () async {
-      final List<HttpRequest> sent = await requestsOf('read_http_field', <String, Object>{
+      final List<HttpRequest> sent = await requestsOf('measure_http_field', <String, Object>{
         'url': 'https://one.example/api/things/a1',
         'field': 'state',
         'socket_path': '<admin-socket>',
@@ -269,7 +279,7 @@ void main() {
     test(
       'a socket file still carrying a slot is refused rather than opened by that name',
       () async {
-        final List<HttpRequest> sent = await requestsOf('read_http_field', <String, Object>{
+        final List<HttpRequest> sent = await requestsOf('measure_http_field', <String, Object>{
           'url': 'https://one.example/api/things/a1',
           'field': 'state',
           'socket_path': '<admin-socket>',
@@ -349,7 +359,7 @@ void main() {
     test('a slot of the address is filled from what an earlier row published', () async {
       final ResolvedProgram resolved = const ProgramResolver(httpRegistry).resolve(
         programOf(<ProgramStep>[
-          row('read_http_field', <String, Object>{
+          row('measure_http_field', <String, Object>{
             'url': 'https://one.example/api/things',
             'field': 'id',
           }),

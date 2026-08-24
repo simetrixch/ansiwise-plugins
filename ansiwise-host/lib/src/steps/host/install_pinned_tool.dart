@@ -1,5 +1,5 @@
 import 'package:ansiwise_core/ansiwise_core.dart';
-import 'assert_cli_tool_versions.dart';
+import 'require_cli_tool_versions.dart';
 
 /// Fetches one tool's released binary at exactly the version the program pins, and puts it where
 /// the machine looks for commands.
@@ -170,7 +170,7 @@ final class InstallPinnedTool extends IrreversibleStep {
   /// Where it is fetched from, with the pin in it.
   String get fetchedFrom => filledSlots(url, <String, String>{
     'version': version,
-    'bare-version': AssertCliToolVersions.bare(version, pinPrefixes),
+    'bare-version': RequireCliToolVersions.bare(version, pinPrefixes),
   });
 
   /// Why this cannot be taken back, written for the machine where it costs something.
@@ -218,12 +218,12 @@ final class InstallPinnedTool extends IrreversibleStep {
         'version — so it would fetch the release again on every run',
       );
     }
-    final String? installed = (await AssertCliToolVersions.installedVersion(
+    final String? installed = (await RequireCliToolVersions.installedVersion(
       context,
       tool,
       versionCommand,
     )).version;
-    if (installed == AssertCliToolVersions.bare(version, pinPrefixes)) {
+    if (installed == RequireCliToolVersions.bare(version, pinPrefixes)) {
       return CheckResult.satisfied('$tool is at $installed');
     }
     return const CheckResult.ready();

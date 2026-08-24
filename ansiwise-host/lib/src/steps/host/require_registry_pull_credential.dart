@@ -25,13 +25,13 @@ import 'registry_mirror.dart';
 /// **These two states are refused rather than warned for one measured reason.** A machine without
 /// the mirror sends every pull to the rate-limited public path with no further sign of it, and
 /// nothing later comes back to write the mirror on its own.
-final class PreflightRegistryPullCredential extends ObservingStep {
+final class RequireRegistryPullCredential extends ObservingStep {
   /// Decides whether the machine can pull through the mirror [layout] describes.
-  const PreflightRegistryPullCredential({required this.layout, this.elevated = false});
+  const RequireRegistryPullCredential({required this.layout, this.elevated = false});
 
   /// Builds the step from what the program gave it.
-  factory PreflightRegistryPullCredential.fromArguments(Arguments arguments) =>
-      PreflightRegistryPullCredential(
+  factory RequireRegistryPullCredential.fromArguments(Arguments arguments) =>
+      RequireRegistryPullCredential(
         layout: RegistryMirror.fromArguments(arguments),
         elevated: arguments.has('elevated') && arguments.flag('elevated'),
       );

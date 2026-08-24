@@ -68,29 +68,29 @@ void main() {
   group('what counts as a public address', () {
     test('the private ranges are not public', () {
       for (final String address in <String>['10.1.1.11', '172.16.4.2', '192.168.1.1']) {
-        expect(DetectPublicNic.isPublicIpv4(address), isFalse, reason: address);
+        expect(MeasurePublicNic.isPublicIpv4(address), isFalse, reason: address);
       }
     });
 
     test('an address of a private overlay is not public either', () {
       // It comes out of the carrier-grade range, which a shorter list forgets — and a machine on one
       // would have its overlay address mistaken for its public one.
-      expect(DetectPublicNic.isPublicIpv4('100.100.7.3'), isFalse);
+      expect(MeasurePublicNic.isPublicIpv4('100.100.7.3'), isFalse);
     });
 
     test('an address a machine gave itself is not public', () {
-      expect(DetectPublicNic.isPublicIpv4('169.254.169.254'), isFalse);
-      expect(DetectPublicNic.isPublicIpv4('127.0.0.1'), isFalse);
+      expect(MeasurePublicNic.isPublicIpv4('169.254.169.254'), isFalse);
+      expect(MeasurePublicNic.isPublicIpv4('127.0.0.1'), isFalse);
     });
 
     test('an address on the public internet is', () {
-      expect(DetectPublicNic.isPublicIpv4(publicAddress), isTrue);
+      expect(MeasurePublicNic.isPublicIpv4(publicAddress), isTrue);
     });
   });
 
   group('the two conditions under which the whole phase does nothing', () {
     test('a machine whose default route already leaves by the public interface', () async {
-      expect(await DetectPublicNic.detect(singleNic().contextFor(under)), isNull);
+      expect(await MeasurePublicNic.measure(singleNic().contextFor(under)), isNull);
     });
 
     test('a machine with no public address on a default-route interface', () async {
@@ -104,7 +104,7 @@ void main() {
           'ip -4 -o addr show dev eth1',
           '3: eth1    inet 10.1.1.11/24 brd 10.1.1.255 scope global eth1\n',
         );
-      expect(await DetectPublicNic.detect(machine.contextFor(under)), isNull);
+      expect(await MeasurePublicNic.measure(machine.contextFor(under)), isNull);
     });
 
     test('a machine whose interface has no hardware address to key the drop-in on', () async {
@@ -112,7 +112,7 @@ void main() {
       // rather than writing one that would take the interface's address configuration away.
       final HostMachine machine = dualNic();
       machine.files.contents.remove('/sys/class/net/$publicDevice/address');
-      expect(await DetectPublicNic.detect(machine.contextFor(under)), isNull);
+      expect(await MeasurePublicNic.measure(machine.contextFor(under)), isNull);
     });
 
     test('every step of the phase does nothing on such a machine', () async {
@@ -123,7 +123,7 @@ void main() {
           path: dropInPath,
           table: publicTable,
         ),
-        const AssertNetplanMerged(installerKey: installerKey, dropInKey: dropInKey),
+        const RequireNetplanMerged(installerKey: installerKey, dropInKey: dropInKey),
         const ApplyNetplan(table: publicTable),
         const WriteConnmarkNftTable(
           templatePath: connmarkNftTableTemplate,
@@ -235,7 +235,7 @@ void main() {
   });
 
   group('the proof that the drop-in folded in', () {
-    const AssertNetplanMerged step = AssertNetplanMerged(
+    const RequireNetplanMerged step = RequireNetplanMerged(
       installerKey: installerKey,
       dropInKey: dropInKey,
     );

@@ -26,9 +26,9 @@ import 'vault_profile.dart';
 /// named repair: a review that reached the cluster and then could not READ there — the reviewing
 /// account is missing its read grants — is reported as exactly that, because as a secret reader's
 /// failure it says nothing about its cause.
-final class VaultLoginProbe extends ObservingStep {
+final class RequireVaultLogin extends ObservingStep {
   /// Probes the mount at [mount] with the credential the answer [jwtAnswer] names.
-  const VaultLoginProbe({
+  const RequireVaultLogin({
     required this.repository,
     required this.mount,
     required this.role,
@@ -37,7 +37,7 @@ final class VaultLoginProbe extends ObservingStep {
   });
 
   /// Builds the step from what the program gave it.
-  factory VaultLoginProbe.fromArguments(Arguments arguments) => VaultLoginProbe(
+  factory RequireVaultLogin.fromArguments(Arguments arguments) => RequireVaultLogin(
     repository: arguments.text('repository'),
     mount: arguments.text('mount'),
     role: arguments.text('role'),

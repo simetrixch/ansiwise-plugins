@@ -1,5 +1,5 @@
 import 'package:ansiwise_core/ansiwise_core.dart';
-import 'ensure_tool_prerequisites.dart';
+import 'install_tool_prerequisites.dart';
 
 /// Holds every tool on the machine against the version the program pins for it.
 ///
@@ -25,10 +25,10 @@ import 'ensure_tool_prerequisites.dart';
 ///
 /// **Everything wrong is reported at once.** An operator told about one tool, who fixes it, runs
 /// again and is then told about the next has paid for four runs to learn what one could have said.
-final class AssertCliToolVersions extends ObservingStep {
+final class RequireCliToolVersions extends ObservingStep {
   /// Holds each of [tools] — each written as its name, an equals sign and its pin — against the
   /// machine, asking each one its version the way [versionCommands] states.
-  const AssertCliToolVersions({
+  const RequireCliToolVersions({
     required this.tools,
     required this.unpinnable,
     required this.versionCommands,
@@ -36,7 +36,7 @@ final class AssertCliToolVersions extends ObservingStep {
   });
 
   /// Builds the step from what the program gave it.
-  factory AssertCliToolVersions.fromArguments(Arguments arguments) => AssertCliToolVersions(
+  factory RequireCliToolVersions.fromArguments(Arguments arguments) => RequireCliToolVersions(
     tools: arguments.textList('tools'),
     unpinnable: arguments.textList('unpinnable'),
     versionCommands: arguments.textList('version_commands'),
@@ -162,7 +162,7 @@ final class AssertCliToolVersions extends ObservingStep {
     String tool,
     List<String> versionCommand,
   ) async {
-    if (!await EnsureToolPrerequisites.onPath(context, tool)) {
+    if (!await InstallToolPrerequisites.onPath(context, tool)) {
       return (version: null, problem: '$tool is not on this machine');
     }
     final CommandResult answer = await context.shell.run(

@@ -2,7 +2,7 @@ import 'package:ansiwise_core/ansiwise_core.dart';
 
 import 'steps/exchange_http_field.dart';
 import 'steps/exchange_http_secret.dart';
-import 'steps/read_http_field.dart';
+import 'steps/measure_http_field.dart';
 import 'steps/send_http_request.dart';
 import 'steps/wait_for_http_field.dart';
 
@@ -39,11 +39,11 @@ const Map<StepName, RegisteredStep> httpSteps = <StepName, RegisteredStep>{
       ),
     ],
   ),
-  StepName('read_http_field'): RegisteredStep(
-    name: StepName('read_http_field'),
-    source: 'lib/src/steps/read_http_field.dart:21',
-    create: ReadHttpField.fromArguments,
-    arguments: ReadHttpField.arguments,
+  StepName('measure_http_field'): RegisteredStep(
+    name: StepName('measure_http_field'),
+    source: 'lib/src/steps/measure_http_field.dart:21',
+    create: MeasureHttpField.fromArguments,
+    arguments: MeasureHttpField.arguments,
     publishes: <MeasurementSpec>[
       MeasurementSpec(
         name: MeasurementName('http_field'),

@@ -9,13 +9,13 @@ import 'package:ansiwise_core/ansiwise_core.dart';
 ///
 /// A machine with no separate filesystem configured keeps the cluster's own default, which is not a
 /// failure and not a warning.
-final class CheckStorageMount extends ObservingStep {
+final class RequireStorageMount extends ObservingStep {
   /// Refuses a machine where the answered storage path is not a mount.
-  const CheckStorageMount({this.elevated = false});
+  const RequireStorageMount({this.elevated = false});
 
   /// Builds the step from what the program gave it.
-  factory CheckStorageMount.fromArguments(Arguments arguments) =>
-      CheckStorageMount(elevated: arguments.has('elevated') && arguments.flag('elevated'));
+  factory RequireStorageMount.fromArguments(Arguments arguments) =>
+      RequireStorageMount(elevated: arguments.has('elevated') && arguments.flag('elevated'));
 
   /// What this step accepts.
   static const List<ArgumentSpec> arguments = <ArgumentSpec>[elevationArgument];

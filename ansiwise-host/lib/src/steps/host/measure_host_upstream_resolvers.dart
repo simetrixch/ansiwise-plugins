@@ -18,13 +18,13 @@ import 'package:ansiwise_core/ansiwise_core.dart';
 /// translation, outbound name lookups to a public resolver are simply blocked, and only the
 /// machine's own provider answers — while on an ordinary machine that same provider answers too. So
 /// the machine's own is the robust choice, and an explicitly configured list beats both.
-final class DetectHostUpstreamResolvers extends ObservingStep {
+final class MeasureHostUpstreamResolvers extends ObservingStep {
   /// Measures the machine's real name servers, reading [resolvConf] only as the second source.
-  const DetectHostUpstreamResolvers({required this.resolvConf, this.elevated = false});
+  const MeasureHostUpstreamResolvers({required this.resolvConf, this.elevated = false});
 
   /// Builds the step from what the program gave it.
-  factory DetectHostUpstreamResolvers.fromArguments(Arguments arguments) =>
-      DetectHostUpstreamResolvers(
+  factory MeasureHostUpstreamResolvers.fromArguments(Arguments arguments) =>
+      MeasureHostUpstreamResolvers(
         resolvConf: arguments.text('resolv_conf'),
         elevated: arguments.has('elevated') && arguments.flag('elevated'),
       );
@@ -52,7 +52,7 @@ final class DetectHostUpstreamResolvers extends ObservingStep {
   /// carries no channel by which one step hands a VALUE to a later one — a predicate answers yes or
   /// no, and an answer comes from the operator. So the reading is done twice, once on each side of
   /// that line, and what stands here is that fact rather than a claim of one implementation.
-  static Future<List<String>> detect(
+  static Future<List<String>> measure(
     StepContext context, {
     String resolvConf = defaultResolvConf,
     bool elevated = false,
@@ -73,7 +73,7 @@ final class DetectHostUpstreamResolvers extends ObservingStep {
 
   @override
   Future<CheckResult> check(StepContext context) async {
-    final List<String> found = await detect(context, resolvConf: resolvConf, elevated: elevated);
+    final List<String> found = await measure(context, resolvConf: resolvConf, elevated: elevated);
     if (found.isEmpty) {
       return CheckResult.blocked(
         'this machine names no name server a pod could reach — the system resolver reported none and '

@@ -26,9 +26,9 @@ import 'kubectl.dart';
 /// manifest holding several objects, where a delete by kind and name would need the step to parse
 /// the file and would drift from it the moment somebody added a document. It removes them only where
 /// [capture] found the cluster holding none of them.
-final class KubernetesObject extends ReversibleStep<bool> {
+final class KubernetesObjectReversible extends ReversibleStep<bool> {
   /// Applies the manifest at [manifest], under [repository].
-  const KubernetesObject({
+  const KubernetesObjectReversible({
     required this.repository,
     required this.manifest,
     this.ownerLabel,
@@ -38,14 +38,15 @@ final class KubernetesObject extends ReversibleStep<bool> {
   });
 
   /// Builds the step from what the program gave it.
-  factory KubernetesObject.fromArguments(Arguments arguments) => KubernetesObject(
-    repository: arguments.text('repository'),
-    manifest: arguments.text('manifest'),
-    ownerLabel: arguments.optionalText('owner_label'),
-    ownerLabelValue: arguments.optionalText('owner_label_value'),
-    kubectl: Kubectl.fromArguments(arguments),
-    elevated: arguments.has('elevated') && arguments.flag('elevated'),
-  );
+  factory KubernetesObjectReversible.fromArguments(Arguments arguments) =>
+      KubernetesObjectReversible(
+        repository: arguments.text('repository'),
+        manifest: arguments.text('manifest'),
+        ownerLabel: arguments.optionalText('owner_label'),
+        ownerLabelValue: arguments.optionalText('owner_label_value'),
+        kubectl: Kubectl.fromArguments(arguments),
+        elevated: arguments.has('elevated') && arguments.flag('elevated'),
+      );
 
   /// What this step accepts.
   static const List<ArgumentSpec> arguments = <ArgumentSpec>[

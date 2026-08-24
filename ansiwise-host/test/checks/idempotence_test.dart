@@ -58,7 +58,7 @@ const Set<String> notCoveredByAFakeMachine = <String>{
   // status it answered before, and nothing about the second run would be measured.
   'disable_addons',
   'enable_addons',
-  'ensure_tool_prerequisites',
+  'install_tool_prerequisites',
   'export_kubeconfig',
   // It has a fixture, and it is still not covered: its apply ends in a `chown` of the key file and
   // its directory, and a fake shell records that command rather than carrying it out. The fixture

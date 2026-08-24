@@ -22,7 +22,7 @@ void main() {
     clusterAnswer: 'sibling',
   );
 
-  const VaultLoginProbe step = VaultLoginProbe(
+  const RequireVaultLogin step = RequireVaultLogin(
     repository: repository,
     mount: 'kubernetes-<sibling>',
     role: 'secret-readers',
@@ -41,7 +41,7 @@ void main() {
     clock: FakeClock(),
     entropy: FakeEntropy(),
     log: const _NothingSaid(),
-    step: const StepName('vault_login_probe'),
+    step: const StepName('require_vault_login'),
     arguments: Arguments.none,
     answers: Arguments(
       answers ?? const <String, Object>{'stage': 'dev', 'sibling': 's1', 'reviewer_jwt': jwt},

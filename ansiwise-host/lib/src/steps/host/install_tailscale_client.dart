@@ -1,5 +1,5 @@
 import 'package:ansiwise_core/ansiwise_core.dart';
-import 'ensure_tool_prerequisites.dart';
+import 'install_tool_prerequisites.dart';
 
 /// Puts the private-network client on the machine, using the installer its makers publish.
 ///
@@ -57,7 +57,7 @@ final class InstallTailscaleClient extends ReversibleStep<bool> {
 
   @override
   Future<CheckResult> check(StepContext context) async =>
-      await EnsureToolPrerequisites.onPath(context, tool)
+      await InstallToolPrerequisites.onPath(context, tool)
       ? const CheckResult.satisfied('$tool is on the path')
       : const CheckResult.ready();
 
@@ -90,7 +90,7 @@ final class InstallTailscaleClient extends ReversibleStep<bool> {
   /// network when this ran would be taken off it — the credential it joined with is not on the
   /// machine to join again.
   @override
-  Future<bool> capture(StepContext context) => EnsureToolPrerequisites.onPath(context, tool);
+  Future<bool> capture(StepContext context) => InstallToolPrerequisites.onPath(context, tool);
 
   @override
   Future<void> undo(StepContext context, bool captured) async {
@@ -108,7 +108,7 @@ final class InstallTailscaleClient extends ReversibleStep<bool> {
       const Command.detailed(
         'apt-get',
         arguments: <String>['remove', '--yes', tool],
-        environment: EnsureToolPrerequisites.quiet,
+        environment: InstallToolPrerequisites.quiet,
         elevated: true,
       ),
     );

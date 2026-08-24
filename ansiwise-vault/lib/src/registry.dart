@@ -6,12 +6,12 @@ import 'steps/remove_vault_auth_method.dart';
 import 'steps/remove_vault_kv_entry.dart';
 import 'steps/remove_vault_policy.dart';
 import 'steps/remove_vault_role_member.dart';
+import 'steps/require_vault_login.dart';
 import 'steps/vault_auth_method.dart';
 import 'steps/vault_auth_role.dart';
 import 'steps/vault_init.dart';
 import 'steps/vault_kv_entry.dart';
 import 'steps/vault_kv_mount.dart';
-import 'steps/vault_login_probe.dart';
 import 'steps/vault_policy.dart';
 import 'steps/vault_unsealed.dart';
 
@@ -98,11 +98,11 @@ const Map<StepName, RegisteredStep> vaultSteps = <StepName, RegisteredStep>{
   ),
   // The gate that proves a mount's connection to its cluster with a real login attempt. Which
   // answer holds the credential it presents is the row's to say, so no answer is declared here.
-  StepName('vault_login_probe'): RegisteredStep(
-    name: StepName('vault_login_probe'),
-    source: 'lib/src/steps/vault_login_probe.dart:29',
-    create: VaultLoginProbe.fromArguments,
-    arguments: VaultLoginProbe.arguments,
+  StepName('require_vault_login'): RegisteredStep(
+    name: StepName('require_vault_login'),
+    source: 'lib/src/steps/require_vault_login.dart:29',
+    create: RequireVaultLogin.fromArguments,
+    arguments: RequireVaultLogin.arguments,
   ),
   // The four removal steps, for taking one cluster's surface off a Vault that serves several. Each
   // proves absence rather than assuming it, and each spells its target with the same slots the

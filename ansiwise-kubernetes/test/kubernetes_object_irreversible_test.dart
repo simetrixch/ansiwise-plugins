@@ -6,10 +6,10 @@ import 'support/machine.dart';
 
 /// The apply that is not taken back, and the three things the ROW says about it.
 ///
-/// Why it exists beside [KubernetesObject] is one property: the objects of this manifest are read
-/// by a controller that creates further objects, so `kubectl delete --filename` would take away
-/// what this run never applied. The step therefore announces the point of no return instead — and
-/// the reason, the repair, and which answer fills the path's one slot are all the row's, because
+/// Why it exists beside [KubernetesObjectReversible] is one property: the objects of this manifest
+/// are read by a controller that creates further objects, so `kubectl delete --filename` would take
+/// away what this run never applied. The step therefore announces the point of no return instead —
+/// and the reason, the repair, and which answer fills the path's one slot are all the row's, because
 /// this package knows how a manifest is applied and nothing about the tree it stands in.
 void main() {
   const StepName under = StepName('kubernetes_object_irreversible');
