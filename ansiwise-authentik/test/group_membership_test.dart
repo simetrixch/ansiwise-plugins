@@ -126,6 +126,24 @@ void main() {
     );
   });
 
+  test('a provider that refuses the question does not become a provider that has nothing', () async {
+    // THE SHAPE THIS CATCHES, and it cost a real diagnosis. A run whose credential had not reached
+    // the provider yet reported that the provider carried no group of that name — a true-sounding
+    // sentence about something the step had never been allowed to look at. Whoever read it went
+    // looking for the group, which was there all along.
+    final _Provider provider = _Provider(members: <String>[], refusesWith: 403);
+
+    final CheckResult answer = await step.check(contextOn(provider));
+
+    expect(answer, isA<Blocked>());
+    expect((answer as Blocked).reason, contains(tokenPath));
+    expect(
+      answer.reason,
+      isNot(contains('carries no group')),
+      reason: 'nothing here has looked at what the provider holds, so it may not say what it holds',
+    );
+  });
+
   test('a token file that is there and empty is refused too', () async {
     // The half that a "does the file exist" check misses: an empty file is a request the provider
     // answers as an anonymous one, which says nothing about this row.
@@ -162,8 +180,15 @@ void main() {
 
 /// A provider that keeps what it is told, so a second question sees the first answer's effect.
 final class _Provider implements Http {
-  _Provider({required List<String> members, this.hasGroup = true, this.hasUser = true})
-    : members = <String>[...members];
+  _Provider({
+    required List<String> members,
+    this.hasGroup = true,
+    this.hasUser = true,
+    this.refusesWith,
+  }) : members = <String>[...members];
+
+  /// A status the provider answers every question with, where it refuses to answer any.
+  final int? refusesWith;
 
   /// Who is in the group right now.
   final List<String> members;
@@ -179,6 +204,14 @@ final class _Provider implements Http {
   @override
   Future<HttpAnswer> send(HttpRequest request) async {
     asked.add(request.url);
+    if (refusesWith case final int status) {
+      return HttpAnswer(
+        status: status,
+        body: '{"detail":"Authentication credentials were not provided."}',
+        headers: const <String, String>{},
+        elapsed: Duration.zero,
+      );
+    }
     if (request.method == 'GET' && request.url.contains('/core/groups/?name=')) {
       return _page(
         hasGroup

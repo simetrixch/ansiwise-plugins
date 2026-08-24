@@ -252,11 +252,15 @@ final class GroupMembership extends ReversibleStep<bool> {
   /// and says which one, because both are put there by something else and the answer an operator
   /// needs is which of those two did not run.
   Future<_Membership> _membership(StepContext context, _Reach reach) async {
-    final Object? held = await _one(
+    final _Answer groups = await _one(
       context,
       reach,
       'core/groups/?name=${Uri.encodeQueryComponent(group)}',
     );
+    if (groups.refusal case final String refusal) {
+      return _Membership.refused(refusal);
+    }
+    final Object? held = groups.found;
     if (held is! Map<String, Object?>) {
       return _Membership.refused(
         'the provider at ${reach.url} carries no group called "$group", and this row puts an '
@@ -264,11 +268,15 @@ final class GroupMembership extends ReversibleStep<bool> {
         'reaching here without it has that configuration still to apply',
       );
     }
-    final Object? account = await _one(
+    final _Answer users = await _one(
       context,
       reach,
       'core/users/?username=${Uri.encodeQueryComponent(user)}',
     );
+    if (users.refusal case final String refusal) {
+      return _Membership.refused(refusal);
+    }
+    final Object? account = users.found;
     if (account is! Map<String, Object?>) {
       return _Membership.refused(
         'the provider at ${reach.url} carries no account called "$user", and this row puts it into '
@@ -291,33 +299,60 @@ final class GroupMembership extends ReversibleStep<bool> {
     );
   }
 
-  /// The single object the provider answers a name query with, or null where it answers none.
+  /// The single object the provider answers a name query with, or why there is no answer to read.
   ///
   /// **A LIST WITH ONE ENTRY, and a list with none is not an error to this provider.** It answers a
   /// query that matched nothing with an empty page and status 200, so a step that only checked the
   /// status would go on to read a member list out of nothing.
-  Future<Object?> _one(StepContext context, _Reach reach, String query) async {
+  ///
+  /// **"IT REFUSED THE QUESTION" AND "IT HAS NO SUCH THING" ARE DIFFERENT ANSWERS.** They were one
+  /// here, and it cost a real diagnosis: a run whose credential had not reached the provider yet
+  /// reported that the provider carried no group of that name — a true-sounding sentence about
+  /// something the step had never been allowed to look at. Whoever read it went looking for the
+  /// group, which was there all along.
+  Future<_Answer> _one(StepContext context, _Reach reach, String query) async {
+    final String url = '${reach.url}/api/v3/$query';
     final HttpAnswer answer = await context.http.send(
       HttpRequest(
         'GET',
-        '${reach.url}/api/v3/$query',
+        url,
         headers: <String, String>{'authorization': 'Bearer ${reach.token}'},
         timeout: timeout,
       ),
     );
     if (!answer.ok) {
-      return null;
+      return _Answer.refused(
+        answer.status == 401 || answer.status == 403
+            ? 'the provider at ${reach.url} refused the question with $url — the credential in '
+                  '$tokenPath is not one it accepts, so nothing here has looked at what it holds'
+            : 'the provider at ${reach.url} answered ${answer.status} to $url, so nothing here has '
+                  'looked at what it holds',
+      );
     }
     final Object? decoded = jsonDecode(answer.body);
     if (decoded is! Map<String, Object?>) {
-      return null;
+      return _Answer.refused(
+        'the provider at ${reach.url} answered $url with something that is not a page of results',
+      );
     }
     final Object? results = decoded['results'];
     if (results is! List<Object?> || results.length != 1) {
-      return null;
+      return const _Answer.none();
     }
-    return results.first;
+    return _Answer.of(results.first);
   }
+}
+
+/// What one name query came back with: the object, nothing, or why there is nothing to read.
+final class _Answer {
+  const _Answer.of(this.found) : refusal = null;
+
+  const _Answer.none() : found = null, refusal = null;
+
+  const _Answer.refused(String this.refusal) : found = null;
+
+  final Object? found;
+  final String? refusal;
 }
 
 /// Where the provider is and what this run may ask it with.
