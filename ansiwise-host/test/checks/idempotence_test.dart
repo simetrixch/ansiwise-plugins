@@ -47,7 +47,7 @@ const Set<String> notCoveredByAFakeMachine = <String>{
   // write_file_from_template_test.
   'write_file_from_template',
   // Nothing about the fake machine keeps it from being exercised: the answer does. Every program
-  // that runs it declares `storage_directory` with an empty default, so a run that says nothing
+  // that runs it declares `storage_subdirectory` with an empty default, so a run that says nothing
   // about it takes the early return — the machine has no separate data filesystem and there is no
   // directory to make — and the step is satisfied before it ever has work. It was reported as
   // exercised while the probe handed it a placeholder path no installation gives, which measured a

@@ -71,8 +71,8 @@ Arguments hostAnswering(Map<String, Object> changed) =>
 /// The values [hostAnswers] and [hostAnswering] are both built from.
 const Map<String, Object> hostAnswerValues = <String, Object>{
   'operator_user': operatorUser,
-  'storage_path': '',
-  'storage_directory': '',
+  'storage_mount': '',
+  'storage_subdirectory': '',
 };
 
 /// Where each template fixture stands, as a program row would name it.

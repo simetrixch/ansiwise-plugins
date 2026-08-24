@@ -7,7 +7,7 @@ import 'package:ansiwise_core/ansiwise_core.dart';
 /// cluster runs as, and reaching in to change permissions after that is a change nobody asked for
 /// with data behind it.
 final class CreateStorageDirectory extends IrreversibleStep {
-  /// Makes the answered storage directory with the permissions [mode].
+  /// Makes the answered storage subdirectory with the permissions [mode].
   const CreateStorageDirectory({required this.mode, this.elevated = false});
 
   /// Builds the step from what the program gave it.
@@ -32,8 +32,10 @@ final class CreateStorageDirectory extends IrreversibleStep {
   /// The answers this step reads, which is what its registry entry declares.
   ///
   /// Where this installation keeps the data its volumes are backed by, or empty when the machine
-  /// keeps it where the snap puts it. One machine's disks, so it is answered.
-  static const List<String> answers = <String>['storage_directory'];
+  /// keeps it where the snap puts it. One machine's disks, so it is answered. It is the WHOLE path
+  /// of a directory under the storage mount, not a name relative to it: nothing here joins the two,
+  /// the directory is made at exactly this path and the link is pointed at exactly it.
+  static const List<String> answers = <String>['storage_subdirectory'];
 
   /// The permission bits it is made with.
   final int mode;
@@ -50,25 +52,28 @@ final class CreateStorageDirectory extends IrreversibleStep {
 
   @override
   Future<CheckResult> check(StepContext context) async {
-    if (context.answers.text('storage_directory').isEmpty) {
+    if (context.answers.text('storage_subdirectory').isEmpty) {
       return const CheckResult.satisfied(
         'this machine has no separate data filesystem, so there is no directory to make',
       );
     }
-    if (await context.files.exists(context.answers.text('storage_directory'), elevated: elevated)) {
-      return CheckResult.satisfied('${context.answers.text('storage_directory')} is there');
+    if (await context.files.exists(
+      context.answers.text('storage_subdirectory'),
+      elevated: elevated,
+    )) {
+      return CheckResult.satisfied('${context.answers.text('storage_subdirectory')} is there');
     }
     return const CheckResult.ready();
   }
 
   @override
   Future<StepPlan> plan(StepContext context) async =>
-      StepPlan.argv(<String>['mkdir', '-p', context.answers.text('storage_directory')]);
+      StepPlan.argv(<String>['mkdir', '-p', context.answers.text('storage_subdirectory')]);
 
   @override
   Future<void> apply(StepContext context) async {
     await context.files.createDirectory(
-      context.answers.text('storage_directory'),
+      context.answers.text('storage_subdirectory'),
       mode: mode,
       elevated: elevated,
     );

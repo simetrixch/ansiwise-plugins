@@ -10,7 +10,7 @@ import 'package:ansiwise_core/ansiwise_core.dart';
 /// A machine with no separate filesystem configured keeps the cluster's own default, which is not a
 /// failure and not a warning.
 final class RequireStorageMount extends ObservingStep {
-  /// Refuses a machine where the answered storage path is not a mount.
+  /// Refuses a machine where the answered storage mount is not a mount.
   const RequireStorageMount({this.elevated = false});
 
   /// Builds the step from what the program gave it.
@@ -24,7 +24,7 @@ final class RequireStorageMount extends ObservingStep {
   ///
   /// Where this machine's storage is mounted, or empty when nothing is. That is a fact about one
   /// machine's disks, so it is answered rather than written into a program file.
-  static const List<String> answers = <String>['storage_path'];
+  static const List<String> answers = <String>['storage_mount'];
 
   /// Whether the file this row points at belongs to root, so every read and write of it is
   /// elevated.
@@ -32,31 +32,31 @@ final class RequireStorageMount extends ObservingStep {
 
   @override
   Future<CheckResult> check(StepContext context) async {
-    if (context.answers.text('storage_path').isEmpty) {
+    if (context.answers.text('storage_mount').isEmpty) {
       return const CheckResult.satisfied(
         'this machine has no separate data filesystem, so the cluster keeps its own default',
       );
     }
-    if (!await context.files.exists(context.answers.text('storage_path'), elevated: elevated)) {
+    if (!await context.files.exists(context.answers.text('storage_mount'), elevated: elevated)) {
       return CheckResult.blocked(
-        '${context.answers.text('storage_path')} is not there, so nothing is mounted at it',
+        '${context.answers.text('storage_mount')} is not there, so nothing is mounted at it',
       );
     }
     final CommandResult mounted = await context.shell.run(
       Command.observing(
         'mountpoint',
-        arguments: <String>['-q', context.answers.text('storage_path')],
+        arguments: <String>['-q', context.answers.text('storage_mount')],
       ),
     );
     if (!mounted.ok) {
       return CheckResult.blocked(
-        '${context.answers.text('storage_path')} is an ordinary directory rather than a mount — everything the cluster writes '
+        '${context.answers.text('storage_mount')} is an ordinary directory rather than a mount — everything the cluster writes '
         "through it would land on this machine's own filesystem, fill it, and be missing from "
         'whatever the data filesystem is backed up by',
       );
     }
     return CheckResult.satisfied(
-      'the data filesystem is mounted at ${context.answers.text('storage_path')}',
+      'the data filesystem is mounted at ${context.answers.text('storage_mount')}',
     );
   }
 }

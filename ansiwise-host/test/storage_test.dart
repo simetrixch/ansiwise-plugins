@@ -8,8 +8,8 @@ import 'host_fixture.dart';
 /// through.
 void main() {
   const StepName under = StepName('under_test');
-  const String storagePath = '/mnt/data';
-  const String storageDirectory = '$storagePath/volumes';
+  const String storageMount = '/mnt/data';
+  const String storageSubdirectory = '$storageMount/volumes';
 
   /// The path the cluster's volume provider really writes through, as a program row would state it.
   const String linkPath = '/var/lib/cluster/default-storage';
@@ -20,12 +20,12 @@ void main() {
   /// separate filesystem, and where, is one machine's fact.
   StepContext withStorage(
     HostMachine machine, {
-    String path = storagePath,
-    String directory = storageDirectory,
+    String mount = storageMount,
+    String subdirectory = storageSubdirectory,
   }) => machine.contextFor(
     under,
     Arguments.none,
-    hostAnswering(<String, Object>{'storage_path': path, 'storage_directory': directory}),
+    hostAnswering(<String, Object>{'storage_mount': mount, 'storage_subdirectory': subdirectory}),
   );
 
   group('the data filesystem', () {
@@ -33,8 +33,8 @@ void main() {
       // Everything the cluster writes through it would land on the machine's own filesystem, fill
       // it, and be missing from whatever the data filesystem is backed up by.
       final HostMachine machine = HostMachine();
-      machine.files.directories.add(storagePath);
-      machine.shell.fails('mountpoint -q $storagePath');
+      machine.files.directories.add(storageMount);
+      machine.shell.fails('mountpoint -q $storageMount');
 
       const RequireStorageMount step = RequireStorageMount();
       final CheckResult answer = await step.check(withStorage(machine));
@@ -44,14 +44,14 @@ void main() {
     test('a machine with no separate filesystem keeps the default and is not refused', () async {
       const RequireStorageMount step = RequireStorageMount();
       expect(
-        await step.check(withStorage(HostMachine(), path: '', directory: '')),
+        await step.check(withStorage(HostMachine(), mount: '', subdirectory: '')),
         isA<Satisfied>(),
       );
     });
 
     test('a mounted path passes', () async {
       final HostMachine machine = HostMachine();
-      machine.files.directories.add(storagePath);
+      machine.files.directories.add(storageMount);
       const RequireStorageMount step = RequireStorageMount();
       expect(await step.check(withStorage(machine)), isA<Satisfied>());
     });
@@ -66,7 +66,7 @@ void main() {
       expect(await step.check(context), isA<Ready>());
       await step.apply(context);
       expect(await step.check(context), isA<Satisfied>());
-      expect(machine.files.modes[storageDirectory], 493);
+      expect(machine.files.modes[storageSubdirectory], 493);
     });
 
     test('it says what is lost, because removing it destroys every volume under it', () {
@@ -88,7 +88,7 @@ void main() {
 
       await link().apply(withStorage(machine));
       expect(machine.changing.first, startsWith('mv $linkPath $linkPath.orig.'));
-      expect(machine.changing.last, 'ln -s $storageDirectory $linkPath');
+      expect(machine.changing.last, 'ln -s $storageSubdirectory $linkPath');
       expect(machine.said.join('\n'), contains('is at $linkPath.orig.'));
     });
 
@@ -96,7 +96,7 @@ void main() {
       final HostMachine machine = HostMachine();
       machine.shell
         ..answers('test -L $linkPath', '')
-        ..answers('readlink -f $linkPath', '$storageDirectory\n');
+        ..answers('readlink -f $linkPath', '$storageSubdirectory\n');
 
       expect(await link().check(withStorage(machine)), isA<Satisfied>());
       expect(machine.changing, isEmpty);
@@ -126,13 +126,13 @@ void main() {
 
       expect(await link(force: true).check(withStorage(machine)), isA<Ready>());
       await link(force: true).apply(withStorage(machine));
-      expect(machine.changing, <String>['rm $linkPath', 'ln -s $storageDirectory $linkPath']);
+      expect(machine.changing, <String>['rm $linkPath', 'ln -s $storageSubdirectory $linkPath']);
     });
 
     test('a machine with no separate filesystem is not linked at all', () async {
       const LinkStoragePath none = LinkStoragePath(linkPath: linkPath, force: false);
       final HostMachine machine = HostMachine();
-      expect(await none.check(withStorage(machine, path: '', directory: '')), isA<Satisfied>());
+      expect(await none.check(withStorage(machine, mount: '', subdirectory: '')), isA<Satisfied>());
       expect(machine.changing, isEmpty);
     });
   });

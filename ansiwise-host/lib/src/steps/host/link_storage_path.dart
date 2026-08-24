@@ -11,7 +11,7 @@ import 'package:ansiwise_core/ansiwise_core.dart';
 /// thing saying where this cluster's volumes are, and repointing it silently would strand every one
 /// of them. Asking for it by name is what says the operator knows.
 final class LinkStoragePath extends IrreversibleStep {
-  /// Points [linkPath] at the answered storage directory, replacing a wrong link only under
+  /// Points [linkPath] at the answered storage subdirectory, replacing a wrong link only under
   /// [force].
   const LinkStoragePath({required this.linkPath, required this.force});
 
@@ -28,7 +28,7 @@ final class LinkStoragePath extends IrreversibleStep {
       kind: ArgumentKind.text,
       describes:
           "the path the cluster's volume provider writes through, which becomes a link to the "
-          'storage directory',
+          'storage subdirectory',
     ),
     ArgumentSpec(
       name: 'force',
@@ -45,7 +45,7 @@ final class LinkStoragePath extends IrreversibleStep {
   ///
   /// The same directory the step before it made, under the same name, or the link would point at
   /// somewhere nothing was created.
-  static const List<String> answers = <String>['storage_directory'];
+  static const List<String> answers = <String>['storage_subdirectory'];
 
   /// The path the volume provider writes through.
   final String linkPath;
@@ -61,7 +61,7 @@ final class LinkStoragePath extends IrreversibleStep {
 
   @override
   Future<CheckResult> check(StepContext context) async {
-    if (context.answers.text('storage_directory').isEmpty) {
+    if (context.answers.text('storage_subdirectory').isEmpty) {
       return const CheckResult.satisfied(
         'this machine has no separate data filesystem, so the volume provider keeps its own '
         'directory',
@@ -69,14 +69,14 @@ final class LinkStoragePath extends IrreversibleStep {
     }
 
     final String? target = await _linkTarget(context);
-    if (target == context.answers.text('storage_directory')) {
+    if (target == context.answers.text('storage_subdirectory')) {
       return CheckResult.satisfied(
-        '$linkPath points at ${context.answers.text('storage_directory')}',
+        '$linkPath points at ${context.answers.text('storage_subdirectory')}',
       );
     }
     if (target != null && !force) {
       context.log.warn(
-        '$linkPath points at $target rather than at ${context.answers.text('storage_directory')}. '
+        '$linkPath points at $target rather than at ${context.answers.text('storage_subdirectory')}. '
         'It is left where it is: every volume this cluster has already handed out lives under '
         '$target, and repointing the link strands all of them. Set force to repoint it.',
       );
@@ -87,7 +87,7 @@ final class LinkStoragePath extends IrreversibleStep {
 
   @override
   Future<StepPlan> plan(StepContext context) async =>
-      StepPlan.argv(<String>['ln', '-s', context.answers.text('storage_directory'), linkPath]);
+      StepPlan.argv(<String>['ln', '-s', context.answers.text('storage_subdirectory'), linkPath]);
 
   @override
   Future<void> apply(StepContext context) async {
@@ -107,7 +107,7 @@ final class LinkStoragePath extends IrreversibleStep {
     await _mustRun(context, <String>[
       'ln',
       '-s',
-      context.answers.text('storage_directory'),
+      context.answers.text('storage_subdirectory'),
       linkPath,
     ]);
   }
