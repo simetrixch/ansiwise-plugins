@@ -36,12 +36,12 @@ dependencies:
   ansiwise_vault:
     git:
       url: https://github.com/simetrixch/ansiwise-plugins.git
-      ref: 0.1.0-alpha-20260824124530
+      ref: 0.1.0-alpha-20260824130915
       path: ansiwise-vault
   ansiwise_kubernetes:
     git:
       url: https://github.com/simetrixch/ansiwise-plugins.git
-      ref: 0.1.0-alpha-20260824124530
+      ref: 0.1.0-alpha-20260824130915
       path: ansiwise-kubernetes
 
 dev_dependencies:
