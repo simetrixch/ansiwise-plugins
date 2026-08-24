@@ -35,7 +35,7 @@ final class GitTag extends ReversibleStep<bool> {
   factory GitTag.fromArguments(Arguments arguments) => GitTag(
     repository: arguments.optionalText('repository'),
     repositoryAnswer: arguments.optionalText('repository_answer'),
-    tag: arguments.text('tag'),
+    tag: arguments.optionalText('tag') ?? '',
     ref: arguments.text('ref'),
     message: arguments.text('message'),
     remote: arguments.optionalText('remote') ?? 'origin',
@@ -61,9 +61,14 @@ final class GitTag extends ReversibleStep<bool> {
       describes:
           "the name of the answer holding that path, where it is the running machine's to know",
     ),
+    // READ AS AN OPTIONAL ONE, and it is not optional. Everything that examines a program before it
+    // runs has to build the step, and a row taking this from a measurement has no value to give it
+    // yet — so a required read would refuse the program itself rather than the run. The check below
+    // refuses an empty one, which is where the demand actually belongs.
     ArgumentSpec(
       name: 'tag',
       kind: ArgumentKind.text,
+      required: false,
       describes:
           'the tag, as text git accepts. Whether it follows a product\'s release grammar is that '
           'product\'s question, asked by whatever composed the text — this step asks git and '
@@ -145,6 +150,12 @@ final class GitTag extends ReversibleStep<bool> {
   Future<CheckResult> check(StepContext context) async {
     if (_unreadable(context) case final String refusal) {
       return CheckResult.blocked(refusal);
+    }
+    if (tag.isEmpty) {
+      return const CheckResult.blocked(
+        'this row states no tag: the row before it publishes one and this row takes it from there, '
+        'so a run reaching here with nothing has that row still to pass',
+      );
     }
     final String repository = _repositoryOf(context);
     final CommandResult legal = await context.shell.run(

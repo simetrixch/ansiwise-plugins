@@ -146,6 +146,17 @@ void main() {
     expect((answer as Blocked).reason, contains('not a tag'));
   });
 
+  test('a row that got no tag from the row before it is refused', () async {
+    // The row takes the tag from a measurement, so it is READ as optional and the demand lives
+    // here. A step built without one would otherwise put a tag called "" on a commit.
+    const GitTag empty = GitTag(repository: repository, tag: '', ref: base, message: 'm');
+
+    final CheckResult answer = await empty.check(contextOn(shell: tagging()));
+
+    expect(answer, isA<Blocked>());
+    expect((answer as Blocked).reason, contains('states no tag'));
+  });
+
   group('where the checkout is named', () {
     // ONE ROW POINTS AT ONE CHECKOUT. A row stating both sources is not a preference to resolve
     // silently — it is two statements, and picking one of them makes the other a lie nobody sees.
