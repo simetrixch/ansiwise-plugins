@@ -1,5 +1,6 @@
 import 'package:ansiwise_core/ansiwise_core.dart';
 
+import 'steps/group_membership.dart';
 import 'steps/measure_issuer_url.dart';
 
 /// Every step this plugin contributes, keyed by the name a program file writes.
@@ -7,6 +8,12 @@ import 'steps/measure_issuer_url.dart';
 /// The composition root of a binary spreads this map into its own registry, beside the maps of the
 /// other plugins it compiles in.
 const Map<StepName, RegisteredStep> authentikSteps = <StepName, RegisteredStep>{
+  StepName('authentik_group_membership'): RegisteredStep(
+    name: StepName('authentik_group_membership'),
+    source: 'lib/src/steps/group_membership.dart:26',
+    create: GroupMembership.fromArguments,
+    arguments: GroupMembership.arguments,
+  ),
   StepName('measure_issuer_url'): RegisteredStep(
     name: StepName('measure_issuer_url'),
     source: 'lib/src/steps/measure_issuer_url.dart:22',
