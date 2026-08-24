@@ -126,6 +126,61 @@ void main() {
     });
   });
 
+  group('a restart command the machine refuses', () {
+    // THE SHAPE THIS CATCHES, taken from the machine it was found on. The row named a service the
+    // snap in front of it does not carry — a neighbouring name, off by one word — so the manager
+    // answered `has no service of that name` and exited non-zero. The result was thrown away, and
+    // then the wait found the process answering at the FIRST ask, because it had never gone down.
+    // Six flags stood written in the file, the running process carried none of them, and the step
+    // reported that the machine now runs on them. What an operator saw was a console that returned
+    // them to the sign-in dialog and a run record saying there was nothing to do.
+    const SetProcessFlag flag = SetProcessFlag(
+      argsPath: argsPath,
+      flag: '--cluster-cidr',
+      value: '10.244.0.0/16',
+      fileMode: 384,
+      restart: <String>['snap', 'restart', 'proxy-daemon'],
+      ready: <String>['proxy', 'status'],
+      readyTimeout: Duration(seconds: 30),
+    );
+
+    test('a restart that failed is a failed step, not a waited-for one', () async {
+      final HostMachine machine = HostMachine();
+      machine.files.contents[argsPath] = '';
+      machine.shell
+        ..fails('snap restart proxy-daemon')
+        // The trap in one line: what the wait asks answers perfectly, because nothing restarted.
+        ..answers('proxy status', 'running\n');
+
+      await expectLater(
+        flag.apply(machine.contextFor(under)),
+        throwsA(
+          isA<CommandFailed>().having(
+            (CommandFailed e) => e.message,
+            'names the command the machine refused',
+            contains('snap restart proxy-daemon'),
+          ),
+        ),
+        reason:
+            'the file now carries a flag nothing has read, and only the failure says so — the '
+            'wait cannot, because a process that never went down answers at once',
+      );
+    });
+
+    test('a restart the machine accepts is waited for and finishes', () async {
+      // The innocent case. Without it a green run might mean the refusal above is reported for
+      // every restart rather than for a refused one.
+      final HostMachine machine = HostMachine();
+      machine.files.contents[argsPath] = '';
+      machine.shell.answers('proxy status', 'running\n');
+
+      await flag.apply(machine.contextFor(under));
+
+      expect(machine.changing, contains('snap restart proxy-daemon'));
+      expect(machine.files.contents[argsPath], contains('--cluster-cidr=10.244.0.0/16'));
+    });
+  });
+
   group('a flag whose value only a run holds', () {
     // ONE NOTATION, and the reason it matters. What stood here was a private pattern inside this
     // step: any characters between angle brackets, the name looked up verbatim, and nothing said

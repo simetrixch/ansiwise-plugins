@@ -255,9 +255,26 @@ final class SetProcessFlag extends ReversibleStep<String?> {
     Duration timeout = const Duration(seconds: 120),
     Duration interval = const Duration(seconds: 2),
   }) async {
-    await context.shell.run(
-      Command.detailed(command.first, arguments: command.skip(1).toList(), elevated: true),
+    final Command asked = Command.detailed(
+      command.first,
+      arguments: command.skip(1).toList(),
+      elevated: true,
     );
+    // THE RESTART IS THE ACT, and until this was read the result of it was thrown away. A row that
+    // names a service the machine does not carry gets `has no service of that name` and a non-zero
+    // exit — and the wait below then finds the process answering at the FIRST ask, because it never
+    // went down. So nothing was restarted, the flag written above was read by nothing, and the step
+    // reported that the machine now runs on it. Measured that way on a live machine: six flags
+    // stood in the file and the running process carried none of them.
+    final CommandResult restarted = await context.shell.run(asked);
+    if (!restarted.ok) {
+      throw CommandFailed(
+        argv: asked.argv,
+        exitCode: restarted.exitCode,
+        stdout: '',
+        stderr: restarted.stderr,
+      );
+    }
 
     if (ready.isEmpty) {
       context.log.warn(
