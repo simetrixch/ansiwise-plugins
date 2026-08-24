@@ -2,6 +2,7 @@ import 'package:ansiwise_core/ansiwise_core.dart';
 
 import 'steps/group_membership.dart';
 import 'steps/measure_issuer_url.dart';
+import 'steps/report_out_of_box_flow.dart';
 
 /// Every step this plugin contributes, keyed by the name a program file writes.
 ///
@@ -25,6 +26,12 @@ const Map<StepName, RegisteredStep> authentikSteps = <StepName, RegisteredStep>{
         describes: 'the address the named application\'s tokens are issued at',
       ),
     ],
+  ),
+  StepName('report_out_of_box_flow'): RegisteredStep(
+    name: StepName('report_out_of_box_flow'),
+    source: 'lib/src/steps/report_out_of_box_flow.dart:36',
+    create: ReportOutOfBoxFlow.fromArguments,
+    arguments: ReportOutOfBoxFlow.arguments,
   ),
 };
 

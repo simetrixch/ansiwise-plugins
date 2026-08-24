@@ -9,9 +9,10 @@ import 'package:ansiwise_authentik/ansiwise_authentik.dart';
 /// something was posted to it, so the second check reads exactly what the first one did and a run
 /// over a step that talks to the provider proves nothing at all.
 ///
-/// The other step needs no excuse. It changes nothing on a machine — it reads a value the run
-/// already holds, composes an address from it and publishes that — so a second run over the same
-/// answers composes the same address, and the prober can arrange everything it needs.
+/// The other two need no excuse. Neither changes anything on a machine — one composes an address
+/// out of a value the run already holds, the other asks the provider one read-only question — so a
+/// second run over the same machine answers exactly what the first one answered, which is the whole
+/// of what this audit asks of a step that only measures.
 ///
 /// A name appears below only when a fake machine genuinely cannot exercise a step, and then only
 /// with the reason and with what measures it instead.
