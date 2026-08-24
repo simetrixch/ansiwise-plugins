@@ -146,6 +146,69 @@ void main() {
     expect((answer as Blocked).reason, contains('not a tag'));
   });
 
+  group('where the checkout is named', () {
+    // ONE ROW POINTS AT ONE CHECKOUT. A row stating both sources is not a preference to resolve
+    // silently — it is two statements, and picking one of them makes the other a lie nobody sees.
+    test('a row naming both the path and an answer is refused', () async {
+      const GitTag both = GitTag(
+        repository: repository,
+        repositoryAnswer: 'platform_checkout',
+        tag: tag,
+        ref: base,
+        message: 'm',
+      );
+
+      final CheckResult answer = await both.check(contextOn(shell: tagging()));
+
+      expect(answer, isA<Blocked>());
+      expect((answer as Blocked).reason, contains('one row points at one checkout'));
+    });
+
+    test('a row naming neither is refused', () async {
+      const GitTag none = GitTag(tag: tag, ref: base, message: 'm');
+
+      final CheckResult answer = await none.check(contextOn(shell: tagging()));
+
+      expect(answer, isA<Blocked>());
+      expect((answer as Blocked).reason, contains('states no checkout'));
+    });
+
+    test("a run holding no such answer is refused by that answer's name", () async {
+      const GitTag named = GitTag(
+        repositoryAnswer: 'platform_checkout',
+        tag: tag,
+        ref: base,
+        message: 'm',
+      );
+
+      final CheckResult answer = await named.check(contextOn(shell: tagging(), name: null));
+
+      expect(answer, isA<Blocked>());
+      expect((answer as Blocked).reason, contains('platform_checkout'));
+    });
+
+    test('THE ANSWER FORM REACHES THE SAME CHECKOUT as the written one', () async {
+      // The innocent case: without it, a step that refused every answered path would satisfy the
+      // three refusals above and never work at all.
+      const GitTag named = GitTag(
+        repositoryAnswer: 'platform_checkout',
+        tag: tag,
+        ref: base,
+        message: 'what this run released',
+      );
+
+      final CheckResult answer = await named.check(
+        contextOn(
+          shell: tagging(here: tip, onRemote: tip),
+          name: repository,
+          answerName: 'platform_checkout',
+        ),
+      );
+
+      expect(answer, isA<Satisfied>());
+    });
+  });
+
   group('undoing', () {
     test('a tag this run made is taken back off both sides', () async {
       final bool before = await step.capture(contextOn(shell: tagging()));

@@ -23,16 +23,18 @@ final class GitTag extends ReversibleStep<bool> {
   /// Puts [tag] on what [ref] resolves to, in the checkout at [repository], and pushes it to
   /// [remote].
   const GitTag({
-    required this.repository,
     required this.tag,
     required this.ref,
     required this.message,
+    this.repository,
+    this.repositoryAnswer,
     this.remote = 'origin',
   });
 
   /// Builds the step from what the program gave it.
   factory GitTag.fromArguments(Arguments arguments) => GitTag(
-    repository: arguments.text('repository'),
+    repository: arguments.optionalText('repository'),
+    repositoryAnswer: arguments.optionalText('repository_answer'),
     tag: arguments.text('tag'),
     ref: arguments.text('ref'),
     message: arguments.text('message'),
@@ -41,10 +43,23 @@ final class GitTag extends ReversibleStep<bool> {
 
   /// What this step accepts.
   static const List<ArgumentSpec> arguments = <ArgumentSpec>[
+    // ONE OF THE TWO, and the row says which. A checkout on a machine this program installs stands
+    // at a path the program knows and writes here. A checkout on the workstation somebody cuts a
+    // release from stands wherever that person keeps it, which is a fact of that workstation and of
+    // nothing else — so the row names the ANSWER instead, and the path never reaches a file that
+    // ships to everybody.
     ArgumentSpec(
       name: 'repository',
       kind: ArgumentKind.text,
-      describes: 'the checkout the tag is put in',
+      required: false,
+      describes: "the checkout the tag is put in, where the path is the program's to know",
+    ),
+    ArgumentSpec(
+      name: 'repository_answer',
+      kind: ArgumentKind.answerName,
+      required: false,
+      describes:
+          "the name of the answer holding that path, where it is the running machine's to know",
     ),
     ArgumentSpec(
       name: 'tag',
@@ -77,8 +92,11 @@ final class GitTag extends ReversibleStep<bool> {
     ),
   ];
 
-  /// The checkout the tag is put in.
-  final String repository;
+  /// The checkout the tag is put in, where the program knows the path.
+  final String? repository;
+
+  /// The name of the answer holding it, where the run knows the path.
+  final String? repositoryAnswer;
 
   /// The tag.
   final String tag;
@@ -92,8 +110,43 @@ final class GitTag extends ReversibleStep<bool> {
   /// The remote it is pushed to.
   final String remote;
 
+  /// The checkout this row points at, or the empty text where the row points at none.
+  ///
+  /// Resolved in ONE place because six commands name it: a row stating both sources, or neither, is
+  /// a row nobody can read, and finding that out separately in each of them is how two of them come
+  /// to disagree.
+  String _repositoryOf(StepContext context) {
+    if (repository case final String written) {
+      return written;
+    }
+    if (repositoryAnswer case final String named) {
+      return context.answers.has(named) ? context.answers.text(named).trim() : '';
+    }
+    return '';
+  }
+
+  /// Why this row cannot be read at all, or null where it can.
+  String? _unreadable(StepContext context) {
+    if (repository != null && repositoryAnswer != null) {
+      return 'this row states the checkout as text AND names an answer holding it, and one row '
+          'points at one checkout';
+    }
+    if (repository == null && repositoryAnswer == null) {
+      return 'this row states no checkout: it writes the path, or it names the answer holding it';
+    }
+    if (_repositoryOf(context).isEmpty) {
+      return 'this run holds no answer called "$repositoryAnswer", and that is where this row says '
+          'the checkout is named';
+    }
+    return null;
+  }
+
   @override
   Future<CheckResult> check(StepContext context) async {
+    if (_unreadable(context) case final String refusal) {
+      return CheckResult.blocked(refusal);
+    }
+    final String repository = _repositoryOf(context);
     final CommandResult legal = await context.shell.run(
       Command.observing('git', arguments: <String>['check-ref-format', 'refs/tags/$tag']),
     );
@@ -128,11 +181,26 @@ final class GitTag extends ReversibleStep<bool> {
   }
 
   @override
-  Future<StepPlan> plan(StepContext context) async =>
-      StepPlan.argv(<String>['git', '-C', repository, 'push', remote, 'refs/tags/$tag']);
+  Future<StepPlan> plan(StepContext context) async {
+    if (_unreadable(context) case final String refusal) {
+      return StepPlan.nothing(refusal);
+    }
+    return StepPlan.argv(<String>[
+      'git',
+      '-C',
+      _repositoryOf(context),
+      'push',
+      remote,
+      'refs/tags/$tag',
+    ]);
+  }
 
   @override
   Future<void> apply(StepContext context) async {
+    if (_unreadable(context) case final String refusal) {
+      throw StateError(refusal);
+    }
+    final String repository = _repositoryOf(context);
     if (await _commitOf(context, 'refs/tags/$tag') == null) {
       final Command tagging = Command.detailed(
         'git',
@@ -172,13 +240,16 @@ final class GitTag extends ReversibleStep<bool> {
   /// and taking it away would break whatever did.
   @override
   Future<bool> capture(StepContext context) async =>
-      await _commitOf(context, 'refs/tags/$tag') != null || await _onRemote(context) != null;
+      _unreadable(context) != null ||
+      await _commitOf(context, 'refs/tags/$tag') != null ||
+      await _onRemote(context) != null;
 
   @override
   Future<void> undo(StepContext context, bool captured) async {
     if (captured) {
       return;
     }
+    final String repository = _repositoryOf(context);
     await context.shell.run(
       Command.detailed(
         'git',
@@ -192,6 +263,7 @@ final class GitTag extends ReversibleStep<bool> {
 
   /// The commit [what] resolves to in this checkout, or null where it resolves to nothing.
   Future<String?> _commitOf(StepContext context, String what) async {
+    final String repository = _repositoryOf(context);
     final CommandResult resolved = await context.shell.run(
       Command.observing(
         'git',
@@ -209,6 +281,7 @@ final class GitTag extends ReversibleStep<bool> {
   /// it points at. Reading the first would compare a tag object against a commit, which never match,
   /// and every run would report a tag that has moved.
   Future<String?> _onRemote(StepContext context) async {
+    final String repository = _repositoryOf(context);
     final CommandResult listed = await context.shell.run(
       Command.observing(
         'git',
