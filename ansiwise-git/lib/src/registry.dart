@@ -3,6 +3,7 @@ import 'package:ansiwise_core/ansiwise_core.dart';
 import 'steps/copy_branch_file.dart';
 import 'steps/git_branch.dart';
 import 'steps/git_clone.dart';
+import 'steps/git_fetch.dart';
 import 'steps/git_identity.dart';
 import 'steps/git_commit.dart';
 import 'steps/git_merge_ref.dart';
@@ -91,6 +92,14 @@ const Map<StepName, RegisteredStep> gitSteps = <StepName, RegisteredStep>{
   ),
   // Beside the push, because a tag is pushed the moment it is made: a tag that exists in one
   // checkout and nowhere else is a statement nothing else can resolve.
+  // Before either of them, in a program that means it: a checkout resolves a remote name to
+  // whatever it last saw, and both the tag and the merge below read such a name.
+  StepName('git_fetch'): RegisteredStep(
+    name: StepName('git_fetch'),
+    source: 'lib/src/steps/git_fetch.dart:25',
+    create: GitFetch.fromArguments,
+    arguments: GitFetch.arguments,
+  ),
   StepName('git_tag'): RegisteredStep(
     name: StepName('git_tag'),
     source: 'lib/src/steps/git_tag.dart:22',

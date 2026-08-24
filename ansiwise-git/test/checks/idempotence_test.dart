@@ -55,6 +55,12 @@ const Set<String> notCoveredByAFakeMachine = <String>{
   // test/git_clone_test.dart: a checkout standing on the published tip is satisfied without a
   // command that changes anything, and one that fell behind is fetched and placed.
   'git_clone',
+  // Its whole question is what a REMOTE publishes, and a probe's fake machine answers a command out
+  // of a fixed table — so the remote and the checkout would answer the same thing whatever the step
+  // did, and running it twice would prove nothing. What measures it instead is test/git_fetch_test.dart,
+  // where the checkout answers differently once the fetch has run: a second run finds the ref level
+  // with what the remote publishes and asks for nothing.
+  'git_fetch',
   // Both for the reason git_branch is here: each reads a name out of an answer its row chooses —
   // the branch being brought forward, the commit measured for it — and a probe holds no answers, so
   // each refuses before it merges or copies anything. What measures them instead is named:

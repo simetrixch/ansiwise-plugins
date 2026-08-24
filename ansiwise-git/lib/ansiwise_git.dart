@@ -10,6 +10,7 @@ export 'src/registry.dart';
 export 'src/steps/copy_branch_file.dart';
 export 'src/steps/git_branch.dart';
 export 'src/steps/git_clone.dart';
+export 'src/steps/git_fetch.dart';
 export 'src/steps/git_identity.dart';
 export 'src/steps/git_commit.dart';
 export 'src/steps/git_merge_ref.dart';
