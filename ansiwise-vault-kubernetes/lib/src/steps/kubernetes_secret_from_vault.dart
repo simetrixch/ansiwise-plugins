@@ -43,6 +43,7 @@ final class KubernetesSecretFromVault extends ReversibleStep<bool> {
     required this.path,
     required this.name,
     required this.namespace,
+    this.labels = const <String>[],
     required this.fields,
     required this.staging,
     this.kubectl = const Kubectl(),
@@ -57,6 +58,7 @@ final class KubernetesSecretFromVault extends ReversibleStep<bool> {
     path: arguments.text('path'),
     name: arguments.text('name'),
     namespace: arguments.text('namespace'),
+    labels: arguments.has('labels') ? arguments.textList('labels') : const <String>[],
     fields: arguments.textList('fields'),
     staging: arguments.text('staging'),
     kubectl: Kubectl.fromArguments(arguments),
@@ -94,6 +96,18 @@ final class KubernetesSecretFromVault extends ReversibleStep<bool> {
       describes: 'the namespace it is written in',
     ),
     ArgumentSpec(
+      name: 'labels',
+      kind: ArgumentKind.textList,
+      required: false,
+      defaultValue: <String>[],
+      describes:
+          'the labels the Secret carries, each as <key>=<value>. A Secret is data and needs none to '
+          'be read BY NAME — what needs one is a reader that finds its secrets by SELECTOR and '
+          'therefore never sees an unlabelled object at all. Naming the wrong one, or none, is a '
+          'reference that stays unresolved and is sent onward as an empty value, which the far side '
+          'reports as a credential that is wrong rather than as one that is missing',
+    ),
+    ArgumentSpec(
       name: 'fields',
       kind: ArgumentKind.textList,
       describes:
@@ -124,6 +138,13 @@ final class KubernetesSecretFromVault extends ReversibleStep<bool> {
 
   /// Where it goes.
   final String namespace;
+
+  /// The labels it carries, each as `<key>=<value>`.
+  ///
+  /// Empty for a Secret nothing selects on, which is most of them. What needs one is a reader that
+  /// finds its secrets by SELECTOR rather than by name: to such a reader an unlabelled Secret does
+  /// not exist, and the reference to it stays unresolved and travels onward as an empty value.
+  final List<String> labels;
 
   /// Which field becomes which key, each written `key=field`.
   final List<String> fields;
@@ -269,6 +290,10 @@ final class KubernetesSecretFromVault extends ReversibleStep<bool> {
     'metadata:',
     '  name: $name',
     '  namespace: $namespace',
+    if (labels.isNotEmpty) '  labels:',
+    for (final String label in labels)
+      '    ${label.substring(0, label.indexOf('='))}: '
+          '"${label.substring(label.indexOf('=') + 1)}"',
     'type: Opaque',
     'stringData:',
     // Quoted, because a value that is all digits reads as a number and the API server then refuses

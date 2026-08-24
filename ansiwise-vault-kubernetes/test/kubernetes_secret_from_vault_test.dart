@@ -221,6 +221,35 @@ void main() {
       );
     });
 
+    // A SECRET NOTHING SELECTS ON CARRIES NO LABELS, and one that is selected on carries exactly the
+    // ones the row names. The pair fails in opposite directions: drop the labels from the manifest
+    // and the second goes red; write a labels block for a row that named none and the first does.
+    // Measured on apps1 before this existed: the reconciler resolves `$secret:key` only against
+    // Secrets labelled app.kubernetes.io/part-of, so an unlabelled one left the reference
+    // unresolved, and an unresolved reference travels as an EMPTY secret — which the provider
+    // reports as `invalid_client`, a credential that is wrong rather than one that is missing.
+    test('a row that names no label writes none', () {
+      expect(step.manifestOf(const <String, String>{'k': 'v'}), isNot(contains('labels')));
+    });
+
+    test('a row that names labels writes them under metadata', () {
+      const KubernetesSecretFromVault selected = KubernetesSecretFromVault(
+        repository: '/srv/tree',
+        layout: layout,
+        mount: 'secret',
+        path: 'dev/idp/bootstrap',
+        name: 'argocd-oidc',
+        namespace: 'argocd',
+        labels: <String>['app.kubernetes.io/part-of=argocd'],
+        fields: <String>['clientSecret=argocd-client-secret'],
+        staging: '/run/ansiwise',
+      );
+
+      final String manifest = selected.manifestOf(const <String, String>{'clientSecret': 'x'});
+      expect(manifest, contains('  labels:'));
+      expect(manifest, contains('    app.kubernetes.io/part-of: "argocd"'));
+    });
+
     test('every value is quoted, so one that is all digits is not read as a number', () {
       // The API server refuses the object for a type nobody gave it, and the message is about the
       // type rather than about the quoting.
