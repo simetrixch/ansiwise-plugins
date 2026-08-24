@@ -16,7 +16,7 @@ void main() {
   const HelmRepository repository = HelmRepository(
     name: 'example-charts',
     url: 'https://charts.example.test',
-    helm: <String>['helm'],
+    helm: Helm(),
   );
 
   test('a name helm held nothing under stands after the undo', () async {

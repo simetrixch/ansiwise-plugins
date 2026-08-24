@@ -29,7 +29,7 @@ void main() {
     chartVersion: '0.34.0',
     namespace: 'ledger',
     values: path,
-    helm: <String>['helm'],
+    helm: Helm(),
   );
 
   /// A machine where helm holds the release, answering [held] for its values.

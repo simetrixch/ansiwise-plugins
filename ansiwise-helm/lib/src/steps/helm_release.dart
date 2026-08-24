@@ -5,7 +5,7 @@ import 'package:yaml/yaml.dart';
 import 'package:ansiwise_core/ansiwise_core.dart';
 
 import 'ambiguous_scalar.dart';
-import 'helm_command.dart';
+import 'helm.dart';
 
 /// Installs or converges one helm release, pinned to a chart version.
 ///
@@ -26,7 +26,7 @@ final class HelmRelease extends IrreversibleStep {
     required this.chartVersion,
     required this.namespace,
     this.values,
-    this.helm = const <String>['helm'],
+    this.helm = const Helm(),
     this.elevated = false,
   });
 
@@ -37,13 +37,14 @@ final class HelmRelease extends IrreversibleStep {
     chartVersion: arguments.text('chart_version'),
     namespace: arguments.text('namespace'),
     values: arguments.optionalText('values'),
-    helm: arguments.textList('helm_command'),
+    helm: Helm.fromArguments(arguments),
     elevated: arguments.has('elevated') && arguments.flag('elevated'),
   );
 
   /// What this step accepts.
   static const List<ArgumentSpec> arguments = <ArgumentSpec>[
-    helmCommandArgument,
+    Helm.argument,
+    Helm.elevationArgument,
     ArgumentSpec(
       name: 'release',
       kind: ArgumentKind.text,
@@ -90,8 +91,8 @@ final class HelmRelease extends IrreversibleStep {
   /// The values file, or null when the chart's own defaults are what is wanted.
   final String? values;
 
-  /// How helm is reached on this machine, as the program and any arguments before helm's own.
-  final List<String> helm;
+  /// How helm is reached on this machine: the words it is started with, and whether they need root.
+  final Helm helm;
 
   /// The chart's own name, without the repository in front of it.
   ///
@@ -99,9 +100,13 @@ final class HelmRelease extends IrreversibleStep {
   /// can be compared.
   String get chartName => chart.contains('/') ? chart.split('/').last : chart;
 
-  /// Whether the file this row points at belongs to root, so every read and write of it is
-  /// elevated.
+  /// Whether the VALUES FILE this row points at belongs to root, so every read of it is elevated.
+  ///
+  /// Only the file. Whether helm itself has to be started as root is a property of how helm is
+  /// reached and is answered on [helm], because a machine where the values file is the operator's
+  /// and helm is admitted only to root is one row and two different answers.
   final bool elevated;
+
   @override
   String get irreversibleReason =>
       'helm removes what it installed and nothing else: the volume claims this chart\'s stateful '
@@ -184,11 +189,8 @@ final class HelmRelease extends IrreversibleStep {
   @override
   Future<void> apply(StepContext context) async {
     final CommandResult done = await context.shell.run(
-      helmCommand(
-        helm,
-        // `_upgrade` is the whole invocation including how helm is reached, because that is what a
-        // plan shows the operator. What is handed on here is helm's own half of it.
-        _upgrade.sublist(helm.length),
+      helm.command(
+        _upgradeArguments,
         // A chart that pulls its own dependencies and a cluster that is slow to admit them make this
         // the longest single call of the whole program. Explicit, because waiting forever is the
         // default and a hung upgrade is indistinguishable from one that is working.
@@ -276,8 +278,8 @@ final class HelmRelease extends IrreversibleStep {
     return 'it wrote "${lines.skip(dropped).join(' / ')}" after $dropped line(s) more';
   }
 
-  List<String> get _upgrade => <String>[
-    ...helm,
+  /// helm's own half of the upgrade, which is what a step writes and hands over.
+  List<String> get _upgradeArguments => <String>[
     'upgrade',
     '--install',
     release,
@@ -289,6 +291,10 @@ final class HelmRelease extends IrreversibleStep {
     if (values case final String path) ...<String>['--values', path],
   ];
 
+  /// The whole command line, including how helm is reached, which is what a plan shows the operator
+  /// and what a failure names.
+  List<String> get _upgrade => helm.argv(_upgradeArguments);
+
   /// Every release helm lists in [namespace], or null when the listing itself did not answer.
   ///
   /// The whole listing and not only the entry this step is after, because the listing is what the
@@ -296,7 +302,7 @@ final class HelmRelease extends IrreversibleStep {
   /// say the difference between "the release is not among these" and "helm answered nothing".
   Future<List<Map<String, Object?>>?> _releases(StepContext context) async {
     final CommandResult listed = await context.shell.run(
-      helmCommand(helm, <String>['list', '--namespace', namespace, '-o', 'json'], observes: true),
+      helm.observing(<String>['list', '--namespace', namespace, '-o', 'json']),
     );
     if (!listed.ok || listed.trimmed.isEmpty) {
       return null;
@@ -344,15 +350,7 @@ final class HelmRelease extends IrreversibleStep {
   /// and what made it findable was `keep_output: true` on the row putting the refusal in the record.
   Future<Object?> _currentValues(StepContext context) async {
     final CommandResult got = await context.shell.run(
-      helmCommand(helm, <String>[
-        'get',
-        'values',
-        release,
-        '--namespace',
-        namespace,
-        '-o',
-        'json',
-      ], observes: true),
+      helm.observing(<String>['get', 'values', release, '--namespace', namespace, '-o', 'json']),
     );
     return got.ok ? _decoded(got.trimmed) : null;
   }

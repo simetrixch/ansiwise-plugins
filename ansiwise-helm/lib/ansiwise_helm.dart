@@ -6,6 +6,7 @@
 library;
 
 export 'src/registry.dart';
+export 'src/steps/helm.dart';
 export 'src/steps/helm_release.dart';
 export 'src/steps/helm_repository.dart';
 export 'src/plugin.dart';
