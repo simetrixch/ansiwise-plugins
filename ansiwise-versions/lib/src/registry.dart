@@ -1,5 +1,6 @@
 import 'package:ansiwise_core/ansiwise_core.dart';
 
+import 'steps/measure_release_tag.dart';
 import 'steps/report_version_pins_against_upstream.dart';
 import 'steps/stamp_version_pins.dart';
 
@@ -14,6 +15,20 @@ import 'steps/stamp_version_pins.dart';
 /// an answer a program never declared therefore cannot reach these steps, and each refuses the
 /// same case itself, naming the answer its row pointed at.
 const Map<StepName, RegisteredStep> versionsSteps = <StepName, RegisteredStep>{
+  // The tag a release is cut under, composed from what the run was told. It stands with the pins
+  // because both are about the same thing: which version of something this installation runs.
+  StepName('measure_release_tag'): RegisteredStep(
+    name: StepName('measure_release_tag'),
+    source: 'lib/src/steps/measure_release_tag.dart:25',
+    create: MeasureReleaseTag.fromArguments,
+    arguments: MeasureReleaseTag.arguments,
+    publishes: <MeasurementSpec>[
+      MeasurementSpec(
+        name: MeasurementName('release_tag'),
+        describes: 'the tag this run cuts, as major.minor.patch-channel-stamp',
+      ),
+    ],
+  ),
   StepName('stamp_version_pins'): RegisteredStep(
     name: StepName('stamp_version_pins'),
     source: 'lib/src/steps/stamp_version_pins.dart:31',

@@ -12,6 +12,7 @@ export 'src/declaration.dart';
 export 'src/plugin.dart';
 export 'src/registry.dart';
 export 'src/stamping.dart';
+export 'src/steps/measure_release_tag.dart';
 export 'src/steps/report_version_pins_against_upstream.dart';
 export 'src/steps/stamp_version_pins.dart';
 export 'src/trees.dart';
