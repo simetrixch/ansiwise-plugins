@@ -78,6 +78,14 @@ const Set<String> notCoveredByAFakeMachine = <String>{
   // the same commit is satisfied before it sends.
   'git_commit',
   'git_push',
+  // The same shape once more, and the reason is the checkout rather than the answers: a probe hands
+  // every text argument one identical value, so the tag, the ref and the remote would all be that
+  // one character — and a checkout that is not there refuses before anything is tagged. What
+  // measures it instead is test/git_tag_test.dart, over a fake checkout that answers the way a real
+  // one does: a second run finds the tag already on the same commit here AND on the remote and asks
+  // for nothing, a tag standing on another commit is refused rather than moved, and the undo takes
+  // back only a tag this run made.
+  'git_tag',
   // The credential it writes comes from an answer or from a file whose NAME its row chooses, and a
   // probe holds no answers and hands every text argument the same one-character value — so it is
   // handed BOTH sources at once, which the row's own shape refusal rightly rejects before this

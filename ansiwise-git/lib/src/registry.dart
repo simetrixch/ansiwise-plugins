@@ -7,6 +7,7 @@ import 'steps/git_identity.dart';
 import 'steps/git_commit.dart';
 import 'steps/git_merge_ref.dart';
 import 'steps/git_push.dart';
+import 'steps/git_tag.dart';
 import 'steps/git_push_credential.dart';
 import 'steps/measure_value_in_branch_file.dart';
 import 'steps/require_git_identity.dart';
@@ -86,6 +87,14 @@ const Map<StepName, RegisteredStep> gitSteps = <StepName, RegisteredStep>{
     source: 'lib/src/steps/git_push.dart:25',
     create: GitPush.fromArguments,
     arguments: GitPush.arguments,
+  ),
+  // Beside the push, because a tag is pushed the moment it is made: a tag that exists in one
+  // checkout and nowhere else is a statement nothing else can resolve.
+  StepName('git_tag'): RegisteredStep(
+    name: StepName('git_tag'),
+    source: 'lib/src/steps/git_tag.dart:22',
+    create: GitTag.fromArguments,
+    arguments: GitTag.arguments,
   ),
   // Directly after the push, because the two are written together in a program: this is what the
   // push's own doc means by the helper it says is arranged before any program runs.
