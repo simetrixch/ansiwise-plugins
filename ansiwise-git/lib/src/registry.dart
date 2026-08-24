@@ -8,6 +8,7 @@ import 'steps/git_commit.dart';
 import 'steps/git_merge_ref.dart';
 import 'steps/git_push.dart';
 import 'steps/git_tag.dart';
+import 'steps/write_value_in_branch_file.dart';
 import 'steps/git_push_credential.dart';
 import 'steps/measure_value_in_branch_file.dart';
 import 'steps/require_git_identity.dart';
@@ -95,6 +96,15 @@ const Map<StepName, RegisteredStep> gitSteps = <StepName, RegisteredStep>{
     source: 'lib/src/steps/git_tag.dart:22',
     create: GitTag.fromArguments,
     arguments: GitTag.arguments,
+  ),
+  // The writing half of measure_value_in_branch_file, and registered as its mirror: what one reads,
+  // the other writes, so a value recorded by one operation and read by the next cannot come to be
+  // two different ideas of where it lives.
+  StepName('write_value_in_branch_file'): RegisteredStep(
+    name: StepName('write_value_in_branch_file'),
+    source: 'lib/src/steps/write_value_in_branch_file.dart:24',
+    create: WriteValueInBranchFile.fromArguments,
+    arguments: WriteValueInBranchFile.arguments,
   ),
   // Directly after the push, because the two are written together in a program: this is what the
   // push's own doc means by the helper it says is arranged before any program runs.

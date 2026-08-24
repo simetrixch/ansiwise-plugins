@@ -93,6 +93,13 @@ const Set<String> notCoveredByAFakeMachine = <String>{
   // test/git_push_credential_test.dart applies it over a fake checkout and asserts that the check
   // afterwards answers satisfied, so the second run has nothing to do.
   'git_push_credential',
+  // It reads the branch a checkout stands on, and a probe hands every text argument one identical
+  // value — so the path, the key and the answer's name would be that one character, and a checkout
+  // that is not there refuses before anything is written. What measures it instead is
+  // test/write_value_in_branch_file_test.dart, over a fake checkout: a second run finds the value
+  // already recorded and has nothing to do, a file already carrying the key is edited where the line
+  // stands rather than gaining a second one, and the undo puts back exactly what was there.
+  'write_value_in_branch_file',
   'replace_regex_in_tracked_file',
   'replace_text_in_tracked_files',
   'stamp_placeholder_in_tracked_files',
