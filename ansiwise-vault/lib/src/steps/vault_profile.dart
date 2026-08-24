@@ -41,6 +41,7 @@ final class VaultLayout {
     this.idpUrlKey,
     this.runAnswer,
     this.clusterAnswer,
+    this.domainAnswer,
   });
 
   /// Builds the layout from what the program gave the step carrying it.
@@ -53,6 +54,7 @@ final class VaultLayout {
     idpUrlKey: arguments.optionalText('idp_url_key'),
     runAnswer: arguments.optionalText('run_answer'),
     clusterAnswer: arguments.optionalText('cluster_answer'),
+    domainAnswer: arguments.optionalText('domain_answer'),
   );
 
   /// The arguments every step of the vault family declares.
@@ -129,6 +131,19 @@ final class VaultLayout {
     //
     // Absent is a first-class case: with nothing here, no sibling slot is filled, and a text still
     // carrying angle brackets is refused rather than sent.
+    // The THIRD filling answer, and the one that makes the profile path a per-installation name. A
+    // file one installation declares itself in is named for that installation, so the path a row
+    // states carries a slot — and a path taken literally creates a file whose name is the slot,
+    // angle brackets and all, which the next reader spelling it the same way then finds.
+    ArgumentSpec(
+      name: 'domain_answer',
+      kind: ArgumentKind.answerName,
+      describes:
+          "the name of the answer holding this installation's own domain — its value fills the "
+          'slot spelled with that same name, which is how the profile path names one installation. '
+          'Leave it off where the profile stands at a path that is the same on every installation',
+      required: false,
+    ),
     ArgumentSpec(
       name: 'cluster_answer',
       kind: ArgumentKind.answerName,
@@ -170,6 +185,14 @@ final class VaultLayout {
   /// about the cluster the profile itself describes.
   final String? clusterAnswer;
 
+  /// WHICH answer's value fills the slot spelled with its own name in the profile path, or null
+  /// where the layout names none.
+  ///
+  /// A file one installation declares itself in is named for that installation, so the path a row
+  /// states carries a slot. Named rather than assumed, for the same reason the two above are: which
+  /// answer holds a domain is a fact of a program and never of this package.
+  final String? domainAnswer;
+
   /// The text that stands where this run's own value for [runAnswer] belongs, or null where there
   /// is no such answer.
   ///
@@ -179,7 +202,7 @@ final class VaultLayout {
 
   /// The two answers whose values fill the slot spelled with their own name, in the order they are
   /// filled. A null entry is a layout that does not name that one.
-  List<String?> get _fillingAnswers => <String?>[runAnswer, clusterAnswer];
+  List<String?> get _fillingAnswers => <String?>[runAnswer, clusterAnswer, domainAnswer];
 
   /// [text] with this run's own value for [runAnswer] and [clusterAnswer] where their slots mark
   /// it.
@@ -263,7 +286,12 @@ Future<VaultProfile> vaultProfileFrom(
   String repository, {
   required VaultLayout layout,
 }) async {
-  final String path = '$repository/${layout.profile}';
+  // FILLED, and until it was the path was taken as written. What one installation declares about
+  // itself stands in a file named for that installation, so the path a row states carries a slot —
+  // and a path taken literally creates a file whose name is the slot, angle brackets and all, which
+  // the next reader spelling it the same way then finds. Two readers agreeing on a wrong name is
+  // green on both sides and right on neither.
+  final String path = '$repository/${layout.runAnswerFilled(context, layout.profile)}';
   if (!await context.files.exists(path)) {
     return VaultProfile.unknown(
       layout: layout,
