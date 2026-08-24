@@ -287,16 +287,29 @@ final class GitTag extends ReversibleStep<bool> {
 
   /// The commit the remote carries this tag on, or null where it carries none.
   ///
-  /// **THE DEREFERENCED LINE IS THE ONE THAT COUNTS.** An annotated tag is an object of its own, so
-  /// the remote answers twice: once with the tag object's own id and once with `^{}` and the commit
-  /// it points at. Reading the first would compare a tag object against a commit, which never match,
-  /// and every run would report a tag that has moved.
+  /// **THE DEREFERENCED LINE IS THE ONE THAT COUNTS, AND THE PATTERN DECIDES WHETHER IT COMES.** An
+  /// annotated tag is an object of its own, so a remote can answer twice: once with the tag object's
+  /// own id and once with `^{}` and the commit it points at. Reading the first would compare a tag
+  /// object against a commit, which never match, and every run would report a tag that has moved.
+  ///
+  /// Asking for the EXACT ref returns only the first line — the peeled ref is a different name and
+  /// an exact pattern does not match it. Measured against a real remote:
+  ///
+  ///     refs/tags/X    ->  0f9fef51  refs/tags/X
+  ///     refs/tags/X*   ->  0f9fef51  refs/tags/X
+  ///                        388d2cca  refs/tags/X^{}
+  ///
+  /// So the pattern carries the star, and the two names are compared exactly afterwards, which is
+  /// what keeps a longer tag beginning with this one out of the answer.
+  ///
+  /// A lightweight tag has no second line anywhere, and there the first id IS the commit — which is
+  /// why the plain line is still read where no dereferenced one came.
   Future<String?> _onRemote(StepContext context) async {
     final String repository = _repositoryOf(context);
     final CommandResult listed = await context.shell.run(
       Command.observing(
         'git',
-        arguments: <String>['-C', repository, 'ls-remote', '--tags', remote, 'refs/tags/$tag'],
+        arguments: <String>['-C', repository, 'ls-remote', '--tags', remote, 'refs/tags/$tag*'],
       ),
     );
     if (!listed.ok) {

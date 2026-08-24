@@ -36,11 +36,15 @@ void main() {
         '$here\n',
       );
     }
-    // An annotated tag is an object of its own, so a remote answers twice: its own id, and the
-    // commit it dereferences to. Both lines stand here because reading the wrong one is the defect
-    // this arrangement exists to catch.
+    // WHAT THE REAL COMMAND ANSWERS, and the arrangement here was wrong in a way that let a real
+    // defect through. An annotated tag is an object of its own, and a remote answers with BOTH its
+    // id and the commit it dereferences to — but only where the pattern matches the peeled ref too.
+    // Asked for the exact name it answers with the object id alone, and a step reading that
+    // compares a tag object against a commit and reports a tag that has moved. This fixture used to
+    // supply both lines for the exact pattern, which no remote does, so the step passed here and
+    // failed on the first real tag it ever cut.
     shell.answers(
-      'git -C $repository ls-remote --tags $remote refs/tags/$tag',
+      'git -C $repository ls-remote --tags $remote refs/tags/$tag*',
       onRemote == null ? '' : 'ffffffffffff\trefs/tags/$tag\n$onRemote\trefs/tags/$tag^{}\n',
     );
     return shell;
@@ -109,6 +113,27 @@ void main() {
 
     expect(answer, isA<Blocked>());
     expect((answer as Blocked).reason, contains('in this checkout'));
+  });
+
+  test('a LIGHTWEIGHT tag on the remote is read from its only line', () async {
+    // The other half the pattern has to cover: such a tag has no dereferenced line anywhere, and
+    // there the one id IS the commit. A step that only ever read the peeled line would report every
+    // lightweight tag as absent and try to make it again.
+    final FakeShell shell = tagging()
+      ..answers(
+        'git -C $repository ls-remote --tags $remote refs/tags/$tag*',
+        '$tip\trefs/tags/$tag\n',
+      );
+
+    final CheckResult answer = await step.check(contextOn(shell: shell));
+
+    expect(
+      answer,
+      isA<Ready>(),
+      reason:
+          'the remote has it on the right commit and this checkout has none, so only the push is '
+          'left',
+    );
   });
 
   test('a tag the REMOTE already carries on another commit is refused too', () async {
