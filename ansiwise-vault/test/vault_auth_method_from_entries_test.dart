@@ -168,6 +168,52 @@ void main() {
 
     expect(await step.check(contextOn(http)), isA<Ready>());
   });
+
+  test('nothing is enabled when the configuration cannot be composed', () async {
+    // THE STATE THIS ROW EXISTS TO PREVENT, reached by the row itself: enable first and the entry
+    // read then refuses, and what is left standing is an enabled mount that was told nothing —
+    // which answers every login with a message about a backend. Composed first, the refusal is
+    // raised before the store has been touched at all.
+    final _CapturingHttp http = _CapturingHttp(<String, HttpAnswer>{
+      listKey: _json('{"data":{}}'),
+      entryKey: _json('{"data":{"data":{"another-client-secret":"$clientSecret"}}}'),
+    });
+
+    await expectLater(
+      step.apply(contextOn(http)),
+      throwsA(
+        isA<StateError>().having(
+          (StateError failure) => failure.message,
+          'message',
+          contains('vault-client-secret'),
+        ),
+      ),
+    );
+    expect(
+      http.bodies.keys,
+      isNot(contains('POST $url/v1/sys/auth/oidc')),
+      reason: 'a mount enabled here is a mount nothing then tells anything',
+    );
+  });
+
+  test('a read that failed is not reported as a row somebody skipped', () async {
+    // A refused read, a 500 and a body that will not decode all say nothing about what the entry
+    // holds. Reported as "the entry does not carry the field", each of them sends an operator to an
+    // earlier row that ran correctly.
+    final FakeHttp http = FakeHttp()
+      ..answers(listKey, body: '{"data":{"oidc/":{"type":"oidc"}}}')
+      ..answers(entryKey, status: 403, body: '{"errors":["permission denied"]}');
+
+    final CheckResult answer = await step.check(contextOn(http));
+
+    expect(answer, isA<Blocked>());
+    expect((answer as Blocked).reason, contains('403'));
+    expect(
+      answer.reason,
+      isNot(contains('skipped that row')),
+      reason: 'nothing here measured whether an earlier row ran',
+    );
+  });
 }
 
 HttpAnswer _json(String body) =>

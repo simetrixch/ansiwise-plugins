@@ -276,6 +276,18 @@ final class VaultAuthMethod extends ReversibleStep<bool> {
       vaultCredentialsPath(context, repository, layout: layout),
     );
     final String held = token.value ?? '';
+
+    // COMPOSED BEFORE THE MOUNT IS ENABLED, and that order is the whole point. A configuration that
+    // cannot be composed — an entry an earlier row has not written, a key written twice, a
+    // reference that is not one — is what this step refuses on, and a step that had enabled the
+    // mount first would leave behind exactly the state this row exists to prevent: a mount that is
+    // there, is told nothing, and answers every login with a message about a backend. Composing
+    // first, nothing on the store has been touched when the refusal is raised.
+    final _Configuration wanted = await _wantedConfiguration(context, vault, url, held);
+    if (wanted.refusal case final String refusal) {
+      throw StateError(refusal);
+    }
+
     final HttpAnswer answer = await context.http.send(
       vaultWrite(url, 'sys/auth/$at', token: held, body: <String, Object?>{'type': type}),
     );
@@ -291,10 +303,6 @@ final class VaultAuthMethod extends ReversibleStep<bool> {
       );
     }
 
-    final _Configuration wanted = await _wantedConfiguration(context, vault, url, held);
-    if (wanted.refusal case final String refusal) {
-      throw StateError(refusal);
-    }
     if (wanted.body case final Map<String, Object?> body) {
       final HttpAnswer told = await context.http.send(
         vaultWrite(url, 'auth/$at/config', token: held, body: body),
@@ -402,10 +410,19 @@ final class VaultAuthMethod extends ReversibleStep<bool> {
         return _Configuration.unwritable(refusal);
       }
       final String at = entry.value ?? '';
-      final HttpAnswer held = await context.http.send(
-        vaultRead(url, '$mount/data/$at', token: token),
-      );
-      final Object? data = decodedData(held.body)?['data'];
+      final String reference = '$mount/data/$at';
+      final HttpAnswer held = await context.http.send(vaultRead(url, reference, token: token));
+      // TOLD APART FROM AN ENTRY THAT IS SIMPLY NOT THERE. A read refused, a read that answered 500
+      // and a read whose body will not decode all say nothing about what the entry holds — and the
+      // refusal below asserts that an earlier row was skipped, which for any of those three is a
+      // sentence that sends an operator to a row that ran correctly.
+      final VaultReading reading = readingOf(held, path: reference);
+      if (reading case final VaultUnreadable refused) {
+        return _Configuration.unwritable(
+          '${refused.because}, and $key of the mount configuration is written from $field of it',
+        );
+      }
+      final Object? data = reading is VaultHeld ? reading.data['data'] : null;
       final Object? value = data is Map<String, Object?> ? data[field] : null;
       if (value is! String || value.isEmpty) {
         return _Configuration.unwritable(

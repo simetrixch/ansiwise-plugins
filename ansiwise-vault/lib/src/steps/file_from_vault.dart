@@ -75,7 +75,10 @@ final class FileFromVault extends ReversibleStep<bool> {
     ArgumentSpec(
       name: 'file_path',
       kind: ArgumentKind.text,
-      describes: 'the file the value is written to, on this machine',
+      describes:
+          'the file the value is written to, on this machine, with the marked slots this run fills '
+          '— the same slots the entry path takes, because two installations at different points of '
+          'the axis the layout names write two different files',
     ),
     ArgumentSpec(
       name: 'file_mode',
@@ -106,7 +109,7 @@ final class FileFromVault extends ReversibleStep<bool> {
   /// The field whose value becomes the file.
   final String field;
 
-  /// The file the value is written to.
+  /// The file the value is written to, before its marked slots are filled.
   final String filePath;
 
   /// The permissions the file is written with.
@@ -124,14 +127,33 @@ final class FileFromVault extends ReversibleStep<bool> {
   /// around a credential file still says which secret lives where.
   static const int directoryMode = 448;
 
+  /// Where the value is written on this machine, with the slots of this run filled in.
+  ///
+  /// **The same filling the entry path gets, and the same the credential file gets.** A machine can
+  /// carry one installation per point of the axis the layout names, so a row writing `<stage>` in a
+  /// file name means one file per stage — and without this the name was taken literally, which
+  /// creates a file whose name carries the angle brackets and which the next reader spelling the
+  /// slot the same way then finds. Two readers agreeing on a wrong name is green on both sides and
+  /// right on neither.
+  ///
+  /// Filled from the ANSWERS and not from the profile, because this is a path on this machine: the
+  /// profile's own values are an address, a cluster name and a mount, and none of them names a file
+  /// here. A slot nothing fills is left standing and refused by name where the path is used.
+  String fileFor(StepContext context) => layout.runAnswerFilled(context, filePath);
+
   @override
-  Future<CheckResult> check(StepContext context) async =>
-      // Whether the file is there, and never what it holds. Comparing would mean reading the
-      // credential out of the store on every converge run, and the store is the truth either way —
-      // a file to be replaced is a file somebody deletes.
-      await context.files.exists(filePath, elevated: elevated)
-      ? CheckResult.satisfied('$filePath is on this machine, holding what $path held')
-      : const CheckResult.ready();
+  Future<CheckResult> check(StepContext context) async {
+    final String file = fileFor(context);
+    if (unfilledSlotRefusal(file) case final String refusal) {
+      return CheckResult.blocked(refusal);
+    }
+    // Whether the file is there, and never what it holds. Comparing would mean reading the
+    // credential out of the store on every converge run, and the store is the truth either way —
+    // a file to be replaced is a file somebody deletes.
+    return await context.files.exists(file, elevated: elevated)
+        ? CheckResult.satisfied('$file is on this machine, holding what $path held')
+        : const CheckResult.ready();
+  }
 
   @override
   Future<StepPlan> plan(StepContext context) async {
@@ -148,12 +170,16 @@ final class FileFromVault extends ReversibleStep<bool> {
     return StepPlan.request(
       'GET',
       '${vault.url}/v1/${_dataPath(entry.value ?? '')}',
-      body: 'the field $field, written to $filePath and nowhere else',
+      body: 'the field $field, written to ${fileFor(context)} and nowhere else',
     );
   }
 
   @override
   Future<void> apply(StepContext context) async {
+    final String file = fileFor(context);
+    if (unfilledSlotRefusal(file) case final String refusal) {
+      throw StateError(refusal);
+    }
     final VaultProfile vault = await vaultProfileFrom(context, repository, layout: layout);
     if (vault.refusal case final String refusal) {
       throw StateError(refusal);
@@ -182,18 +208,18 @@ final class FileFromVault extends ReversibleStep<bool> {
     final Object? value = data is Map<String, Object?> ? data[field] : null;
     if (value is! String || value.isEmpty) {
       throw StateError(
-        '$field of $dataPath is what $filePath is written from, and it is not there. The entry is '
+        '$field of $dataPath is what $file is written from, and it is not there. The entry is '
         'written by an earlier row, so a run that reaches this one without it has skipped that row '
         'rather than failed it',
       );
     }
 
     await context.files.createDirectory(
-      _directoryOf(filePath),
+      _directoryOf(file),
       mode: directoryMode,
       elevated: elevated,
     );
-    await context.files.write(filePath, value, mode: fileMode, elevated: elevated);
+    await context.files.write(file, value, mode: fileMode, elevated: elevated);
   }
 
   /// Whether the file was already there, read before the apply.
@@ -201,14 +227,15 @@ final class FileFromVault extends ReversibleStep<bool> {
   /// A file that was there stays through an undo: this run did not put it there, and taking it
   /// away would take a credential from whatever was already presenting it.
   @override
-  Future<bool> capture(StepContext context) => context.files.exists(filePath, elevated: elevated);
+  Future<bool> capture(StepContext context) =>
+      context.files.exists(fileFor(context), elevated: elevated);
 
   @override
   Future<void> undo(StepContext context, bool captured) async {
     if (captured) {
       return;
     }
-    await context.files.delete(filePath, elevated: elevated);
+    await context.files.delete(fileFor(context), elevated: elevated);
   }
 
   /// Where the entry [at] has its data, under Vault's version one API.

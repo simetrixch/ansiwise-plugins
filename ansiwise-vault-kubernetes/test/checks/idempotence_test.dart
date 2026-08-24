@@ -30,8 +30,9 @@ const Map<String, Fixture> stepFixtures = <String, Fixture>{};
 /// Neither of those is a defect in the step, and neither is evidence that the step is idempotent —
 /// so it stands here, and this package's idempotence rests on the test beside this directory rather
 /// than on this audit. That test applies the step against a fake machine holding a real
-/// `key=field` list, and asserts what the second run would find: the check answers satisfied once
-/// the Secret stands, so nothing is written again.
+/// `key=field` list, and asserts what the second run finds: the fake cluster answers with what the
+/// apply wrote, the check compares every field this row writes against it and answers satisfied, so
+/// nothing is written again.
 ///
 /// A name leaves this list on the day the audit hands a step values a program row would give it,
 /// and a fake network can be arranged to answer differently after a request that changed something

@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:ansiwise_core/ansiwise_core.dart';
 
 import 'package:ansiwise_kubernetes/ansiwise_kubernetes.dart';
@@ -30,6 +32,16 @@ import 'package:ansiwise_vault/ansiwise_vault.dart';
 /// **Applied and not created.** The store holds the truth. If an entry gains a field, this puts it
 /// on the cluster; if the Secret was deleted by hand, this puts it back. What it never does is write
 /// something the store does not say.
+///
+/// **The check compares the FIELDS and not the existence of the object.** A Secret that stands and
+/// is missing a field the store gained, or carries a value the store has since rotated, is work this
+/// step has to do — and a check that stopped at "an object of that name is there" reported it as
+/// done. Measured on a live installation: the entry carried six fields, the Secret five, and five
+/// consecutive runs called the row satisfied. What makes the comparison affordable is that this step
+/// reads the entry anyway in order to write it, so the values are already in its hands; what keeps
+/// it from spending them is that the wanted value is ENCODED to compare against the cluster's
+/// answer rather than the cluster's answer being decoded, and only the KEY of a field that differs
+/// is ever named.
 ///
 /// **The values reach the cluster through a file and never through an argument.** An argument is
 /// visible in a process listing to every process on the host. The file is readable by its owner
@@ -177,12 +189,37 @@ final class KubernetesSecretFromVault extends ReversibleStep<bool> {
   final bool elevated;
   @override
   Future<CheckResult> check(StepContext context) async {
-    // Whether the Secret is there, and never what it holds. Comparing would mean reading a
-    // credential off the cluster to decide whether to write it again, and the store is the truth
-    // either way — a Secret that disagrees with it is put right by applying, not by measuring.
-    return await _isThere(context)
-        ? CheckResult.satisfied('$name is in $namespace, carrying what $path holds')
-        : const CheckResult.ready();
+    final _Secret onCluster = await _held(context);
+    if (onCluster.refusal case final String refusal) {
+      return CheckResult.blocked(refusal);
+    }
+    final Map<String, String>? held = onCluster.values;
+    if (held == null) {
+      return const CheckResult.ready();
+    }
+    // READ ONLY ONCE THE OBJECT IS THERE. An absent Secret is work to do whatever the store holds,
+    // so a dry run on a machine whose entry an earlier row has not written yet never reaches the
+    // store at all.
+    final _Entry entry = await _read(context);
+    if (entry.refusal case final String refusal) {
+      // Neither satisfied nor ready: with the entry unreadable there is nothing to compare the
+      // standing Secret against, and a run that answered either would be answering about the store
+      // without having read it.
+      return CheckResult.blocked(refusal);
+    }
+    final List<String> differing = <String>[
+      for (final MapEntry<String, String> field in entry.values.entries)
+        if (held[field.key] != _asTheClusterKeepsIt(field.value)) field.key,
+    ];
+    if (differing.isEmpty) {
+      // What was actually compared, and not a claim about the entry as a whole: a field the row
+      // does not write is not looked at, so the Secret may hold more than this sentence covers.
+      return CheckResult.satisfied('$name in $namespace carries every field this row writes');
+    }
+    // The KEYS and never the values, and all of them at once — an operator told about one field per
+    // run is an operator running the whole thing once per field.
+    context.log.info('$name in $namespace differs from this run in ${differing.join(', ')}');
+    return const CheckResult.ready();
   }
 
   @override
@@ -247,10 +284,11 @@ final class KubernetesSecretFromVault extends ReversibleStep<bool> {
   /// Read before the apply, because the delete in the undo removes the Secret whether or not this
   /// run wrote it, and every pod that mounts it is then a pod that cannot start.
   ///
-  /// Whether it is there, and never what it holds — the same reading the check makes, for the same
-  /// reason: taking the values off the cluster would carry a credential through this run and into
-  /// the record. So nothing captured here is secret material, and a Secret that was already there
-  /// stands, carrying what the store says.
+  /// Whether it is there, and never what it holds. What a capture returns is handed to the undo and
+  /// is kept for as long as the run is, so a capture holding the values would carry every credential
+  /// of this Secret through the whole run. The check reads the fields because it has to decide
+  /// whether they are right; the undo only has to decide whether this run created the object, and
+  /// that is one boolean.
   @override
   Future<bool> capture(StepContext context) => _isThere(context);
 
@@ -278,6 +316,47 @@ final class KubernetesSecretFromVault extends ReversibleStep<bool> {
     );
     return found.ok;
   }
+
+  /// What the Secret holds, keyed as the cluster keeps it — or that there is none, or why it cannot
+  /// be read.
+  ///
+  /// Three answers and not two, for the reason the client's own elevation argument is there: a
+  /// client that cannot reach the cluster can write its refusal on its output and still exit ZERO,
+  /// and a step that read that as "the object holds nothing" would rewrite a Secret on every run
+  /// while reporting the run finished.
+  Future<_Secret> _held(StepContext context) async {
+    final CommandResult read = await context.shell.run(
+      kubectl.observing(<String>['get', 'secret', name, '--namespace', namespace, '-o', 'json']),
+    );
+    if (!read.ok) {
+      return const _Secret.absent();
+    }
+    final Map<String, Object?>? object = decodedObject(read.stdout);
+    if (object == null) {
+      return _Secret.unreadable(
+        'reading $name in $namespace succeeded and answered with something that is not an object, '
+        'so what the Secret holds is unknown — a client that cannot reach the cluster writes its '
+        'refusal on its output and exits zero',
+      );
+    }
+    final Object? data = object['data'];
+    // A Secret carrying no data at all is an object that holds none of the fields this row writes,
+    // which is work to do rather than something that cannot be read.
+    return _Secret.holding(<String, String>{
+      if (data is Map<String, Object?>)
+        for (final MapEntry<String, Object?> field in data.entries)
+          if (field.value case final String kept) field.key: kept,
+    });
+  }
+
+  /// [value] written the way the cluster keeps it, so a comparison never decodes a credential out of
+  /// the cluster's answer.
+  ///
+  /// The manifest is written with `stringData`, and the API server stores what it is given under
+  /// `data`, base64 of the same bytes — so encoding what this run would write is the same comparison
+  /// as decoding what the cluster answered, with one fewer place a credential is turned back into
+  /// text.
+  static String _asTheClusterKeepsIt(String value) => base64Encode(utf8.encode(value));
 
   /// The Secret as the cluster client reads it.
   ///
@@ -358,6 +437,24 @@ final class KubernetesSecretFromVault extends ReversibleStep<bool> {
     // running the whole thing once per field.
     return missing.isEmpty ? _Entry.values(values) : _Entry.unreadable(missing.join('; '));
   }
+}
+
+/// What the Secret on the cluster carries, or that there is none, or why it cannot be read.
+final class _Secret {
+  /// Records that no Secret of that name stands in that namespace.
+  const _Secret.absent() : values = null, refusal = null;
+
+  /// Records that it stands and holds [values], each exactly as the cluster keeps it.
+  const _Secret.holding(Map<String, String> this.values) : refusal = null;
+
+  /// Records that it could not be read, because [refusal].
+  const _Secret.unreadable(String this.refusal) : values = null;
+
+  /// What it holds, or null where there is no such Secret or none could be read.
+  final Map<String, String>? values;
+
+  /// Why nothing can be read, or null when it can.
+  final String? refusal;
 }
 
 /// What one Secret would carry, or why it cannot be read.

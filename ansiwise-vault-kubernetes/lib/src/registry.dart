@@ -22,7 +22,7 @@ const Map<StepName, RegisteredStep> vaultKubernetesSteps = <StepName, Registered
   // name.
   StepName('kubernetes_secret_from_vault'): RegisteredStep(
     name: StepName('kubernetes_secret_from_vault'),
-    source: 'lib/src/steps/kubernetes_secret_from_vault.dart:38',
+    source: 'lib/src/steps/kubernetes_secret_from_vault.dart:50',
     create: KubernetesSecretFromVault.fromArguments,
     arguments: KubernetesSecretFromVault.arguments,
   ),

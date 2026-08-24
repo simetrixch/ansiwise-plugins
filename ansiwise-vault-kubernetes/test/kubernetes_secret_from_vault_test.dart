@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:ansiwise_core/ansiwise_core.dart';
 import 'package:ansiwise_core/testing.dart';
 import 'package:ansiwise_vault/ansiwise_vault.dart';
@@ -52,6 +54,25 @@ void main() {
 
   const StepName under = StepName('kubernetes_secret_from_vault');
   const String reading = 'kubectl get secret app-credentials --namespace apps -o name';
+
+  // What the check reads: the whole object, because the fields are what it compares. The `-o name`
+  // read above stays what the CAPTURE asks, which only has to know whether this run created it.
+  const String readingFields = 'kubectl get secret app-credentials --namespace apps -o json';
+
+  /// The Secret as the cluster answers it, holding [values] the way the cluster keeps them.
+  ///
+  /// The manifest is written with `stringData` and the API server stores base64 of the same bytes
+  /// under `data`, which is what a comparison against this fixture has to meet.
+  String clusterHolding(Map<String, String> values) => jsonEncode(<String, Object?>{
+    'apiVersion': 'v1',
+    'kind': 'Secret',
+    'metadata': <String, Object?>{'name': 'app-credentials', 'namespace': 'apps'},
+    'type': 'Opaque',
+    'data': <String, String>{
+      for (final MapEntry<String, String> value in values.entries)
+        value.key: base64Encode(utf8.encode(value.value)),
+    },
+  });
 
   /// The machine as it stands before this step runs, with the Secret there or not.
   FakeFiles machineFiles() => FakeFiles(<String, String>{
@@ -344,16 +365,155 @@ void main() {
     });
   });
 
-  test('the check asks whether it stands and never what it holds', () async {
-    final FakeShell shell = FakeShell()..answers(reading, 'secret/app-credentials\n');
-    final ({StepContext context, MemoryRecorder recorder}) it = contextOf(
-      shell: shell,
-      files: machineFiles(),
-      http: storeHolding(entryHolding(secretValue)),
+  /// What the check measures, which is the FIELDS and not the existence of an object.
+  ///
+  /// The defect this replaces: the check ran `-o name` and reported satisfied on anything that came
+  /// back, saying the Secret carried what the entry held while never having looked. Measured on a
+  /// live installation as an entry of six fields against a Secret of five, satisfied five runs in a
+  /// row — so the innocent case below and the two red ones are the same measurement written as
+  /// tests.
+  group('what the check compares', () {
+    test('a Secret carrying every field this row writes is satisfied', () async {
+      final FakeShell shell = FakeShell()
+        ..answers(
+          readingFields,
+          clusterHolding(<String, String>{'PASSWORD': secretValue, 'password': secretValue}),
+        );
+      final ({StepContext context, MemoryRecorder recorder}) it = contextOf(
+        shell: shell,
+        files: machineFiles(),
+        http: storeHolding(entryHolding(secretValue)),
+      );
+
+      final CheckResult answer = await step.check(it.context);
+      expect(answer, isA<Satisfied>());
+      expect(
+        (answer as Satisfied).because,
+        'app-credentials in apps carries every field this row writes',
+        reason: 'the sentence says what was compared, not what the entry as a whole holds',
+      );
+      expect(shell.commands.single.observes, isTrue);
+    });
+
+    test('a Secret missing a field the entry gained is work to do', () async {
+      // The measured case: the entry gained a field, the Secret never did, and every run reported
+      // the row satisfied until somebody deleted the Secret by hand.
+      final FakeShell shell = FakeShell()
+        ..answers(readingFields, clusterHolding(<String, String>{'PASSWORD': secretValue}));
+      final ({StepContext context, MemoryRecorder recorder}) it = contextOf(
+        shell: shell,
+        files: machineFiles(),
+        http: storeHolding(entryHolding(secretValue)),
+      );
+
+      expect(await step.check(it.context), isA<Ready>());
+      expect(it.recorder.logLines.single, contains('password'));
+      expect(
+        it.recorder.logLines.single,
+        isNot(contains(secretValue)),
+        reason: 'the key of a field that differs is named, and never what it should have held',
+      );
+    });
+
+    test('a Secret holding a value the entry has since rotated is work to do', () async {
+      // Existence has not changed, so the defect this replaces could not see this one either.
+      final FakeShell shell = FakeShell()
+        ..answers(
+          readingFields,
+          clusterHolding(<String, String>{
+            'PASSWORD': 'the-value-before-it-was-rotated',
+            'password': secretValue,
+          }),
+        );
+      final ({StepContext context, MemoryRecorder recorder}) it = contextOf(
+        shell: shell,
+        files: machineFiles(),
+        http: storeHolding(entryHolding(secretValue)),
+      );
+
+      expect(await step.check(it.context), isA<Ready>());
+      expect(it.recorder.logLines.single, contains('PASSWORD'));
+    });
+
+    test(
+      'a Secret that is not there at all is work to do, and the store is not read for it',
+      () async {
+        // An absent Secret is work to do whatever the entry holds, so a dry run on a machine whose
+        // entry an earlier row has not written yet never reaches the store.
+        final FakeShell shell = FakeShell()..fails(readingFields);
+        final FakeHttp http = storeHolding(entryHolding(secretValue));
+        final ({StepContext context, MemoryRecorder recorder}) it = contextOf(
+          shell: shell,
+          files: machineFiles(),
+          http: http,
+        );
+
+        expect(await step.check(it.context), isA<Ready>());
+        expect(http.sent, isEmpty);
+      },
     );
 
-    expect(await step.check(it.context), isA<Satisfied>());
-    expect(shell.commands.single.observes, isTrue);
+    test(
+      'a client that exits zero without answering an object blocks rather than deciding',
+      () async {
+        // A wrapped client that cannot reach the cluster writes its refusal on its output and exits
+        // zero. Read as "the object holds nothing", that is a Secret rewritten on every run; read as
+        // "the object is fine", it is a Secret nobody ever repairs.
+        final FakeShell shell = FakeShell()..answers(readingFields, 'insufficient permissions\n');
+        final ({StepContext context, MemoryRecorder recorder}) it = contextOf(
+          shell: shell,
+          files: machineFiles(),
+          http: storeHolding(entryHolding(secretValue)),
+        );
+
+        final CheckResult answer = await step.check(it.context);
+        expect(answer, isA<Blocked>());
+        expect((answer as Blocked).reason, contains('app-credentials in apps'));
+      },
+    );
+
+    test('a Secret that stands while the entry cannot be read blocks', () async {
+      // Nothing to compare it against. Satisfied would be a claim about the store nothing measured,
+      // and ready would send an apply that is going to refuse for the same reason.
+      final FakeShell shell = FakeShell()
+        ..answers(
+          readingFields,
+          clusterHolding(<String, String>{'PASSWORD': secretValue, 'password': secretValue}),
+        );
+      final ({StepContext context, MemoryRecorder recorder}) it = contextOf(
+        shell: shell,
+        files: machineFiles(),
+        http: FakeHttp()..answers(entryRead, status: 404),
+      );
+
+      final CheckResult answer = await step.check(it.context);
+      expect(answer, isA<Blocked>());
+      expect((answer as Blocked).reason, contains('secret/data/dev/app/database'));
+    });
+
+    test('a second run of the whole step finds nothing to do', () async {
+      // The double run this package's idempotence rests on: the apply writes the Secret, the fake
+      // cluster answers with what was written, and the check that follows is the postcondition.
+      final FakeShell shell = FakeShell()..fails(readingFields);
+      final FakeFiles files = machineFiles();
+      final ({StepContext context, MemoryRecorder recorder}) it = contextOf(
+        shell: shell,
+        files: files,
+        http: storeHolding(entryHolding(secretValue)),
+      );
+      shell.changes(
+        'kubectl apply --filename $manifest',
+        () => shell.answers(
+          readingFields,
+          clusterHolding(<String, String>{'PASSWORD': secretValue, 'password': secretValue}),
+        ),
+      );
+
+      expect(await step.check(it.context), isA<Ready>());
+      await step.apply(it.context);
+      expect(await step.check(it.context), isA<Satisfied>());
+      expect(files.written, <String>[manifest], reason: 'the second run writes nothing again');
+    });
   });
 
   test('a wrapped client is invoked word for word, in front of every subcommand', () async {
