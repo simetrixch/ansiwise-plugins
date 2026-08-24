@@ -1,4 +1,5 @@
 import 'package:ansiwise_core/ansiwise_core.dart';
+import 'package:ansiwise_core/testing.dart';
 import 'package:ansiwise_host/ansiwise_host.dart';
 import 'package:test/test.dart';
 
@@ -821,5 +822,134 @@ void main() {
       expect(result, isA<Blocked>());
       expect((result as Blocked).reason, contains('answered nothing at all'));
     });
+
+    // WHAT ADMITS THE CALLER IS A PROPERTY OF THE SESSION, so a table of commands measures nothing
+    // here: it answers the same however the command was run. The machine below is the one every
+    // first bring-up produces — the account IS in the group, and the session this run happens in
+    // was started before it was put there — and in that machine the only caller the distribution
+    // admits is root.
+    test('a session started before the group still gets the credentials', () async {
+      final _SessionBoundCluster cluster = _SessionBoundCluster(sessionCarriesTheGroup: false);
+      final FakeFiles files = FakeFiles();
+      final Step row = _rowFor(<String, Object>{
+        'credentials_command': credentialsCommand,
+        'elevated': true,
+      });
+
+      final StepContext context = _sessionContext(cluster, files);
+      expect(await row.check(context), isA<Ready>());
+      await row.apply(context);
+
+      expect(files.contents['$operatorHome/.kube/config'], _SessionBoundCluster.credentials);
+    });
+
+    // THE INNOCENT NEIGHBOUR: the session of a second run, or of a first one after a fresh login,
+    // carries the group already, and a row that says nothing about root is served exactly as the
+    // operator. Without it this pair would also be passed by a step that raised every call to root
+    // whatever its row said, which is a different step from the one being measured.
+    test('a session that carries the group is served as the account it started as', () async {
+      final _SessionBoundCluster cluster = _SessionBoundCluster(sessionCarriesTheGroup: true);
+      final FakeFiles files = FakeFiles();
+      final Step row = _rowFor(<String, Object>{'credentials_command': credentialsCommand});
+
+      final StepContext context = _sessionContext(cluster, files);
+      expect(await row.check(context), isA<Ready>());
+      await row.apply(context);
+
+      expect(files.contents['$operatorHome/.kube/config'], _SessionBoundCluster.credentials);
+      expect(
+        cluster.asked.map((Command each) => each.elevated),
+        everyElement(isFalse),
+        reason: 'a row that did not ask for root is not given it, in the check or in the act',
+      );
+    });
   });
+}
+
+/// The step a program row carrying [arguments] builds, taken out of the registry a program reaches.
+///
+/// Built through the registry rather than by calling the constructor, because what is measured is
+/// the whole path a row travels: an argument a row states and the factory drops never reaches the
+/// command, and a step constructed by hand in a test is handed the value the row could not deliver.
+Step _rowFor(Map<String, Object> arguments) {
+  final RegisteredStep? entry = hostRegistry.step(const StepName('export_kubeconfig'));
+  if (entry == null) {
+    throw StateError('export_kubeconfig is not registered, so nothing here measures anything');
+  }
+  return entry.create(Arguments(arguments));
+}
+
+/// A context whose shell is [shell] and whose files are [files], for the machine below.
+StepContext _sessionContext(Shell shell, FakeFiles files) => StepContext(
+  shell: shell,
+  files: files,
+  http: FakeHttp(),
+  clock: FakeClock(),
+  entropy: FakeEntropy(),
+  log: const _SilentLog(),
+  step: const StepName('under_test'),
+  arguments: Arguments.none,
+  answers: hostAnswers,
+  facts: Facts.none,
+);
+
+/// A machine whose session read its supplementary groups when it started, which is the whole of the
+/// failure this pair is about.
+///
+/// The account is in the group and the group database says so — the row that grants it ran earlier
+/// in this same program — but a session carries the groups it was started with, and this one was
+/// started before that row. The distribution admits root whatever a session carries, and admits
+/// anybody else only through the group, which is exactly the pair of remedies its own refusal
+/// names.
+final class _SessionBoundCluster implements Shell {
+  /// A machine whose session was started after the group was granted where [sessionCarriesTheGroup].
+  _SessionBoundCluster({required this.sessionCarriesTheGroup});
+
+  /// Whether the session this run happens in was started after the account joined the group.
+  final bool sessionCarriesTheGroup;
+
+  /// What the distribution hands a caller it admits.
+  static const String credentials = 'apiVersion: v1\nkind: Config\nclusters: []\n';
+
+  /// What it says to one it does not, in its own words.
+  static const String refusal =
+      'Insufficient permissions to access the cluster. You can either try again with sudo or add '
+      'the user $operatorUser to the cluster group';
+
+  /// Every time the credentials were asked for, so a test can say how they were asked.
+  final List<Command> asked = <Command>[];
+
+  @override
+  Future<CommandResult> run(Command command) async {
+    final String argv = command.argv.join(' ');
+    if (argv == 'getent passwd $operatorUser') {
+      return _printed('$operatorUser:x:1000:1000::$operatorHome:/bin/bash\n');
+    }
+    if (argv != 'cluster config') {
+      return _printed('');
+    }
+    asked.add(command);
+    return command.elevated || sessionCarriesTheGroup
+        ? _printed(credentials)
+        : const CommandResult(exitCode: 1, stdout: '', stderr: refusal, elapsed: Duration.zero);
+  }
+
+  static CommandResult _printed(String stdout) =>
+      CommandResult(exitCode: 0, stdout: stdout, stderr: '', elapsed: Duration.zero);
+}
+
+final class _SilentLog implements Logger {
+  const _SilentLog();
+
+  @override
+  void debug(String message) {}
+
+  @override
+  void info(String message) {}
+
+  @override
+  void warn(String message) {}
+
+  @override
+  void error(String message) {}
 }

@@ -36,7 +36,10 @@ final class ExportKubeconfig extends IrreversibleStep {
         'names no word at all, so there is nothing to ask the cluster for its credentials with',
       );
     }
-    return ExportKubeconfig(credentialsCommand: command);
+    return ExportKubeconfig(
+      credentialsCommand: command,
+      elevated: arguments.has('elevated') && arguments.flag('elevated'),
+    );
   }
 
   /// What this step accepts.
@@ -73,8 +76,13 @@ final class ExportKubeconfig extends IrreversibleStep {
   /// The command that prints this cluster's credentials, word by word.
   final List<String> credentialsCommand;
 
-  /// Whether the file this row points at belongs to root, so every read and write of it is
-  /// elevated.
+  /// Whether this row is reached as root rather than as the account the run started as.
+  ///
+  /// It covers both ports, and here the two point at different things: the command that hands the
+  /// credentials over, and the file they are written into. A distribution that admits only root to
+  /// its credentials is asked as root, and the file is then written as root into an account's home
+  /// and handed to that account by the chown that closes [apply] — which is what lets one answer
+  /// serve both.
   final bool elevated;
 
   @override
@@ -166,16 +174,22 @@ final class ExportKubeconfig extends IrreversibleStep {
   /// admission — all three come back as a command that failed, and only one of them is about the
   /// cluster at all.
   ///
-  /// The third costs the most and is the easiest to misread. A machine's first bring-up puts the
-  /// operating account into the group the distribution grants access through, and supplementary
-  /// groups are read once, when a session starts — so the session doing the granting does not have
-  /// it, and this command fails in a run where everything else succeeded. Told only that "the
-  /// cluster would not hand out its credentials", an operator goes and looks at a cluster that is
-  /// perfectly healthy. Told what the command said, they read the distribution's own sentence about
-  /// the group and log in again.
+  /// The third costs the most and is the easiest to misread, and it is what [elevated] answers. A
+  /// machine's first bring-up puts the operating account into the group the distribution grants
+  /// access through, and supplementary groups are read once, when a session starts — so the session
+  /// doing the granting does not carry it, and this command fails in a run where everything else
+  /// succeeded. A row that says the distribution admits root reaches the credentials in that same
+  /// session; a row that leaves it off still meets the refusal. Told only that "the cluster would
+  /// not hand out its credentials", an operator goes and looks at a cluster that is perfectly
+  /// healthy. Told what the command said, they read the distribution's own sentence about the group
+  /// and log in again.
   Future<({String? credentials, String said})> _credentials(StepContext context) async {
     final CommandResult config = await context.shell.run(
-      Command.observing(credentialsCommand.first, arguments: credentialsCommand.sublist(1)),
+      Command.observing(
+        credentialsCommand.first,
+        arguments: credentialsCommand.sublist(1),
+        elevated: elevated,
+      ),
     );
     if (config.ok && config.stdout.trim().isNotEmpty) {
       return (credentials: config.stdout, said: '');
