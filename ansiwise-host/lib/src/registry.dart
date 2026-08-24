@@ -162,7 +162,7 @@ const Map<StepName, RegisteredStep> hostSteps = <StepName, RegisteredStep>{
   // fills which key is what the row says, so a list here would name one product's questions.
   StepName('fill_key_value_file'): RegisteredStep(
     name: StepName('fill_key_value_file'),
-    source: 'lib/src/steps/host/fill_key_value_file.dart:29',
+    source: 'lib/src/steps/host/fill_key_value_file.dart:31',
     create: FillKeyValueFile.fromArguments,
     arguments: FillKeyValueFile.arguments,
   ),
