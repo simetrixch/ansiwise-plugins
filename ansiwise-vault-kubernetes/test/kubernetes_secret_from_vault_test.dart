@@ -55,6 +55,11 @@ void main() {
   const StepName under = StepName('kubernetes_secret_from_vault');
   const String reading = 'kubectl get secret app-credentials --namespace apps -o name';
 
+  // What the capture asks where the get of the named object did not answer: a LIST of the kind,
+  // which answers empty at exit zero for a namespace holding none and fails only where the cluster
+  // itself did not answer.
+  const String listing = 'kubectl get secret --namespace apps -o name';
+
   // What the check reads: the whole object, because the fields are what it compares. The `-o name`
   // read above stays what the CAPTURE asks, which only has to know whether this run created it.
   const String readingFields = 'kubectl get secret app-credentials --namespace apps -o json';
@@ -162,6 +167,57 @@ void main() {
         '-o',
         'name',
       ], reason: 'it asks whether the object is there, and reads nothing out of it');
+    });
+
+    test('THE PLANTED DEFECT: an undo leaves a Secret it could not read alone', () async {
+      // The capture's FALSE half is what deletes the Secret, and `kubectl get <name>` exits one for
+      // a cluster that never answered as well as for a namespace holding no such object. Read as
+      // the second, a clean-up after some OTHER step failed took away a credential every workload
+      // reading it depends on. The LIST of the kind is what tells the two apart: it answers empty
+      // at exit zero for a namespace holding none.
+      final FakeShell shell = FakeShell()
+        ..fails(reading, stderr: 'Unable to connect to the server')
+        ..fails(listing, stderr: 'Unable to connect to the server');
+      final ({StepContext context, MemoryRecorder recorder}) it = contextOf(
+        shell: shell,
+        files: machineFiles(),
+        http: storeHolding(entryHolding(secretValue)),
+      );
+
+      final bool captured = await step.capture(it.context);
+      await step.undo(it.context, captured);
+
+      expect(captured, isTrue, reason: 'a reading nobody took is not an absent Secret');
+      expect(
+        shell.commands.where((Command each) => !each.observes),
+        isEmpty,
+        reason: 'the undo deleted a Secret it never measured',
+      );
+    });
+
+    test('THE INNOCENT CASE: a Secret this run really created is deleted again', () async {
+      // The state the refusal above must not swallow: the cluster ANSWERED, and the namespace holds
+      // no such Secret.
+      final FakeShell shell = FakeShell()
+        ..fails(
+          reading,
+          stderr: 'Error from server (NotFound): secrets "app-credentials" not found',
+        )
+        ..answers(listing, '');
+      final ({StepContext context, MemoryRecorder recorder}) it = contextOf(
+        shell: shell,
+        files: machineFiles(),
+        http: storeHolding(entryHolding(secretValue)),
+      );
+
+      final bool captured = await step.capture(it.context);
+      await step.undo(it.context, captured);
+
+      expect(captured, isFalse);
+      expect(
+        shell.ran,
+        contains('kubectl delete secret app-credentials --namespace apps --ignore-not-found'),
+      );
     });
 
     test('a refusal names the field that is missing and never what it should have held', () async {

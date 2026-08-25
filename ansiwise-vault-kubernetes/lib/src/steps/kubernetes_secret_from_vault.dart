@@ -314,7 +314,27 @@ final class KubernetesSecretFromVault extends ReversibleStep<bool> {
     final CommandResult found = await context.shell.run(
       kubectl.observing(<String>['get', 'secret', name, '--namespace', namespace, '-o', 'name']),
     );
-    return found.ok;
+    if (found.ok) {
+      return true;
+    }
+    // A GET OF A NAMED OBJECT EXITS ONE FOR TWO DIFFERENT CLUSTERS, and this is a capture: its
+    // false half is what deletes the Secret, so a cluster that could not be asked read as one this
+    // run created and the clean-up after some OTHER step failed took away a credential every
+    // workload reading it depends on. A LIST of the kind answers empty at exit zero for a namespace
+    // holding none, and exits non-zero only where the cluster itself did not answer.
+    final CommandResult listed = await context.shell.run(
+      kubectl.observing(<String>['get', 'secret', '--namespace', namespace, '-o', 'name']),
+    );
+    if (listed.ok) {
+      return false;
+    }
+    context.log.warn(
+      'whether $namespace already held a Secret called $name could not be read, so an undo will '
+      'leave it alone rather than delete one this run may not have created: the cluster answered '
+      '${listed.exitCode}'
+      '${listed.stderr.trim().isEmpty ? '' : ' — ${listed.stderr.trim()}'}',
+    );
+    return true;
   }
 
   /// What the Secret holds, keyed as the cluster keeps it — or that there is none, or why it cannot

@@ -22,8 +22,11 @@ final class RemoveUnusedPackages extends IrreversibleStep {
 
   @override
   Future<CheckResult> check(StepContext context) async {
-    final int count = await _wouldRemove(context);
-    if (count == 0) {
+    final ({int? count, String? refusal}) asked = await _wouldRemove(context);
+    if (asked.refusal case final String refusal) {
+      return CheckResult.blocked(refusal);
+    }
+    if (asked.count == 0) {
       return const CheckResult.satisfied('nothing on this machine is unused');
     }
     return const CheckResult.ready();
@@ -31,12 +34,15 @@ final class RemoveUnusedPackages extends IrreversibleStep {
 
   @override
   Future<StepPlan> plan(StepContext context) async {
-    final int count = await _wouldRemove(context);
+    final ({int? count, String? refusal}) asked = await _wouldRemove(context);
+    if (asked.refusal case final String refusal) {
+      return StepPlan.nothing(refusal);
+    }
     // The count goes into the record as this step's own note rather than into the plan. A plan says
     // what would run; how much it would touch is what the operator wants beside it, and a note is
     // already attributed to this step and already in the right place in the record.
     context.log.info(
-      count == 1 ? '1 package would be removed' : '$count packages would be removed',
+      asked.count == 1 ? '1 package would be removed' : '${asked.count} packages would be removed',
     );
     return const StepPlan.argv(<String>['apt-get', 'autoremove', '--yes'], serverVerified: true);
   }
@@ -61,17 +67,33 @@ final class RemoveUnusedPackages extends IrreversibleStep {
     }
   }
 
-  /// How many packages apt says it would remove.
+  /// How many packages apt says it would remove, or why it could not be asked.
   ///
   /// Asked with `--dry-run`, so the plan a dry run shows is what apt answered rather than what we
   /// predicted. The line to read is the one that begins `Remv `.
-  Future<int> _wouldRemove(StepContext context) async {
+  ///
+  /// **ZERO IS AN ANSWER AND A NON-ZERO EXIT IS NOT.** apt exits zero and names no `Remv ` line on a
+  /// machine that carries nothing unused, so a count of zero really is that machine. It exits
+  /// non-zero when the question could not be put at all — another process holding the lock, package
+  /// lists that are broken, no apt on the machine — and folded into the same zero that became
+  /// "nothing on this machine is unused": a statement about the machine composed out of a reading
+  /// nobody took.
+  Future<({int? count, String? refusal})> _wouldRemove(StepContext context) async {
     final CommandResult asked = await context.shell.run(
       const Command.observing('apt-get', arguments: <String>['--dry-run', 'autoremove']),
     );
     if (!asked.ok) {
-      return 0;
+      return (
+        count: null,
+        refusal:
+            'apt could not be asked what is unused on this machine: apt-get --dry-run autoremove '
+            'exited ${asked.exitCode}'
+            '${asked.stderr.trim().isEmpty ? ' and wrote nothing' : ' — ${asked.stderr.trim()}'}',
+      );
     }
-    return asked.stdout.split('\n').where((String line) => line.startsWith('Remv ')).length;
+    return (
+      count: asked.stdout.split('\n').where((String line) => line.startsWith('Remv ')).length,
+      refusal: null,
+    );
   }
 }
