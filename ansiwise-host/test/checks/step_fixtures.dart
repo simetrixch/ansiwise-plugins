@@ -85,6 +85,44 @@ final Map<String, Fixture> stepFixtures = <String, Fixture>{
       });
   },
 
+  // The manager answers about a unit whose file is on disk, is not wanted at boot, has never run,
+  // and has moved on since the manager last read the directory. Each of the three commands the step
+  // runs takes one of those away, and a fake shell that only recorded them would answer the same
+  // four properties on the second run.
+  'enable_service': (FakeShell shell, FakeFiles files, FakeHttp http) {
+    final Map<String, String> manager = <String, String>{
+      'LoadState': 'loaded',
+      'UnitFileState': 'disabled',
+      'ActiveState': 'inactive',
+      'NeedDaemonReload': 'yes',
+    };
+    final String asked = <String>[
+      'systemctl',
+      'show',
+      for (final String property in EnableService.properties) ...<String>['-p', property],
+      _plausibleText,
+    ].join(' ');
+    void saying() => shell.answers(
+      asked,
+      '${manager.entries.map((MapEntry<String, String> each) => '${each.key}=${each.value}').join('\n')}\n',
+    );
+
+    saying();
+    shell
+      ..changes('systemctl daemon-reload', () {
+        manager['NeedDaemonReload'] = 'no';
+        saying();
+      })
+      ..changes('systemctl enable $_plausibleText', () {
+        manager['UnitFileState'] = 'enabled';
+        saying();
+      })
+      ..changes('systemctl restart $_plausibleText', () {
+        manager['ActiveState'] = 'active';
+        saying();
+      });
+  },
+
   // The archive holds two files until `apt-get clean` empties it.
   'clean_package_cache': (FakeShell shell, FakeFiles files, FakeHttp http) {
     files.contents['${CleanPackageCache.archives}/one.deb'] = '';

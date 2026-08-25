@@ -13,6 +13,7 @@ import 'steps/host/create_storage_directory.dart';
 import 'steps/host/disable_addons.dart';
 import 'steps/host/disable_password_login.dart';
 import 'steps/host/enable_addons.dart';
+import 'steps/host/enable_service.dart';
 import 'steps/host/export_kubeconfig.dart';
 import 'steps/host/fill_key_value_file.dart';
 import 'steps/host/install_authorized_key.dart';
@@ -248,6 +249,12 @@ const Map<StepName, RegisteredStep> hostSteps = <StepName, RegisteredStep>{
     source: 'lib/src/steps/host/restart_stale_service.dart:27',
     create: RestartStaleService.fromArguments,
     arguments: RestartStaleService.arguments,
+  ),
+  StepName('enable_service'): RegisteredStep(
+    name: StepName('enable_service'),
+    source: 'lib/src/steps/host/enable_service.dart:32',
+    create: EnableService.fromArguments,
+    arguments: EnableService.arguments,
   ),
   StepName('add_shell_alias'): RegisteredStep(
     name: StepName('add_shell_alias'),

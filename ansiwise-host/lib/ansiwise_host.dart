@@ -22,6 +22,7 @@ export 'src/steps/host/create_storage_directory.dart';
 export 'src/steps/host/disable_addons.dart';
 export 'src/steps/host/disable_password_login.dart';
 export 'src/steps/host/enable_addons.dart';
+export 'src/steps/host/enable_service.dart';
 export 'src/steps/host/export_kubeconfig.dart';
 export 'src/steps/host/fill_key_value_file.dart';
 export 'src/steps/host/install_authorized_key.dart';
