@@ -53,3 +53,10 @@ declared-arguments: test/checks/declared_arguments_test.dart
 # declare, and a file carrying the elevation field passes it to every files-port call. Ten
 # undeclared reads and four dropped calls each cost a real machine run to find on one day.
 carried-arguments: test/checks/carried_arguments_test.dart
+
+# A reading that could not be taken never becomes a satisfied answer. A refused command comes back
+# looking exactly like "there is nothing there", and the refusal is followed from the branch it
+# opens, through every bare value it is folded into, to the claim it reaches. One measurement folded
+# three refused readings into the null that means "this machine steers nothing", and eight steps
+# then answered Satisfied over a machine nobody had measured.
+refused-reading: test/checks/refused_reading_test.dart
