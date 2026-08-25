@@ -6,6 +6,6 @@
 /// false half was the half the undo deleted on.
 library;
 
-import 'package:ansiwise_checks_tree/audits.dart';
+import 'package:ansiwise_checks/audits.dart';
 
 void main() => auditCapturedRefusal(scannedPaths: <String>['lib']);
