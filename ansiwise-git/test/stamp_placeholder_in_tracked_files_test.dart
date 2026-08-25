@@ -652,6 +652,82 @@ void main() {
       expect((answer as Blocked).reason, contains('first_dns_label_of'));
     });
   });
+
+  group('a tree that is not there is not a tree with nothing in it', () {
+    /// A checkout that was restructured: it carries the same files one level deeper, so the tree
+    /// the row still names is nowhere in it.
+    FakeFiles restructured() => tree(<String, String>{
+      'clusters/rendered/dev/apps/root-app.yaml': 'targetRevision: master\n',
+    });
+
+    /// The content search of a checkout that holds nothing under the tree the row named.
+    ///
+    /// It answers exit code one, which is the same thing it answers for a tree that is there and
+    /// carries no occurrence — which is why the step reads the checkout instead of the search.
+    FakeShell searchingNothing() =>
+        searching(carrying: <String>[], literal: sourceBranch, within: 'rendered');
+
+    test('the row is refused, naming the tree and the checkout', () async {
+      final FakeFiles files = restructured();
+
+      final CheckResult answer = await retarget.check(
+        contextOn(shell: searchingNothing(), files: files),
+      );
+      expect(answer, isA<Blocked>());
+      expect((answer as Blocked).reason, contains('rendered'));
+      expect(answer.reason, contains(repository));
+      expect(files.written, isEmpty);
+    });
+
+    test('the dry run says the same, rather than planning an empty difference', () async {
+      final StepPlan planned = await retarget.plan(
+        contextOn(shell: searchingNothing(), files: restructured()),
+      );
+      expect(planned, isA<NothingPlan>());
+      expect((planned as NothingPlan).because, contains('rendered'));
+      expect(planned.because, contains(repository));
+    });
+
+    test('a tree that IS there and carries no occurrence is still nothing to do', () async {
+      // The ordinary state this refusal must not swallow: the tree stands where the row says, and
+      // every line in it was stamped already.
+      final FakeFiles files = tree(<String, String>{
+        'rendered/dev/apps/root-app.yaml': 'targetRevision: $fqdn\n',
+      });
+
+      expect(
+        await retarget.check(contextOn(shell: searchingNothing(), files: files)),
+        isA<Satisfied>(),
+      );
+    });
+
+    test('a tree that IS there and carries the placeholder is stamped', () async {
+      final FakeFiles files = tree(<String, String>{
+        'rendered/dev/apps/root-app.yaml': 'targetRevision: master\n',
+      });
+      final FakeShell shell = searching(
+        carrying: <String>['rendered/dev/apps/root-app.yaml'],
+        literal: sourceBranch,
+        within: 'rendered',
+      );
+      final StepContext context = contextOn(shell: shell, files: files);
+
+      expect(await retarget.check(context), isA<Ready>());
+      await retarget.apply(context);
+      expect(read(files, 'rendered/dev/apps/root-app.yaml'), contains('targetRevision: $fqdn'));
+    });
+
+    test('a row naming no tree searches the whole checkout and is never refused', () async {
+      // The off state of the key: the row leaves it out, so there is no tree to be missing and the
+      // guard has nothing to say about the shape of the checkout.
+      final FakeFiles files = tree(<String, String>{
+        'platform/values-dev.yaml': 'domain: example.invalid\n',
+      });
+      final FakeShell shell = searching(carrying: <String>['platform/values-dev.yaml']);
+
+      expect(await stamp.check(contextOn(shell: shell, files: files)), isA<Ready>());
+    });
+  });
 }
 
 /// A file system that answers every read and drops every write.

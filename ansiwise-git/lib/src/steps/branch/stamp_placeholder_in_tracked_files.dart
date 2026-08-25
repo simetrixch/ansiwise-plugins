@@ -75,6 +75,14 @@ import 'stamp_selection.dart';
 /// exits zero whether or not its expression matched, and every failure of that shape reported success
 /// while the file kept what it always held. A rewrite that silently matched nothing cannot report
 /// itself as done here, and a second run finds nothing left to do.
+///
+/// **A [tree] the checkout does not carry is REFUSED, and never read as a tree with nothing in it.**
+/// The content search answers exit code one for both, so nothing below it can tell the two apart,
+/// and this step is the only place that can. Measured: a tree was renamed, the rows kept the old
+/// name, and a first installation ran every stamping row to "nothing to do" and reported success —
+/// the files went out still carrying the stand-in, and what read them afterwards refused every name
+/// it was handed. "Nothing to do" keeps its meaning for the tree that IS there and holds no
+/// [placeholder], which is an ordinary state.
 final class StampPlaceholderInTrackedFiles extends ReversibleStep<List<String>> {
   /// Replaces [placeholder] with what this run answers, everywhere in [repository] that holds it.
   const StampPlaceholderInTrackedFiles({
@@ -311,6 +319,10 @@ final class StampPlaceholderInTrackedFiles extends ReversibleStep<List<String>> 
       );
     }
 
+    if (await _whyUnsearchable(context) case final String wrong) {
+      return CheckResult.blocked(wrong);
+    }
+
     final Map<String, String> left = await _stampable(context, replacement);
     if (left.isEmpty) {
       return CheckResult.satisfied(
@@ -327,6 +339,12 @@ final class StampPlaceholderInTrackedFiles extends ReversibleStep<List<String>> 
     // happen, and a plan that failed to be produced tells them nothing about what would be done.
     if (replacement == null) {
       return StepPlan.nothing(await _whyValueless(context));
+    }
+    // The same refusal, said as a plan rather than answered as a verdict. Left out, the row plans an
+    // empty difference over a tree nobody could look at, which is the one thing a dry run exists to
+    // prevent an operator from believing.
+    if (await _whyUnsearchable(context) case final String wrong) {
+      return StepPlan.nothing(wrong);
     }
 
     final Map<String, String> left = await _stampable(context, replacement);
@@ -589,6 +607,21 @@ final class StampPlaceholderInTrackedFiles extends ReversibleStep<List<String>> 
     }
     return '$valueFile records no value under "$valueKey", and that is where this row says the '
         'value every "$placeholder" is replaced by comes from';
+  }
+
+  /// Why the search this row limits to [tree] cannot be carried out, or null where it can.
+  ///
+  /// A property of the CHECKOUT rather than of the row, so the machine is asked. The content search
+  /// answers exit code one for a tree that is not there and for a tree carrying no [placeholder]
+  /// alike, and this reading is the only thing that tells the two apart. A row naming no tree
+  /// searches the whole checkout, and a checkout that is not there makes the search itself fail.
+  Future<String?> _whyUnsearchable(StepContext context) async {
+    if (tree.isEmpty || await context.files.exists('$repository/$tree', elevated: elevated)) {
+      return null;
+    }
+    return '$repository holds nothing at $tree, and that is the tree this row limits its search to '
+        '— so nothing here looked for "$placeholder" at all. Name the tree this checkout really '
+        'carries';
   }
 
   /// One of [keys] at the start of the line, the anchor some lines carry, and then the value itself.

@@ -130,7 +130,7 @@ const Map<StepName, RegisteredStep> gitSteps = <StepName, RegisteredStep>{
   ),
   StepName('stamp_placeholder_in_tracked_files'): RegisteredStep(
     name: StepName('stamp_placeholder_in_tracked_files'),
-    source: 'lib/src/steps/branch/stamp_placeholder_in_tracked_files.dart:78',
+    source: 'lib/src/steps/branch/stamp_placeholder_in_tracked_files.dart:86',
     create: StampPlaceholderInTrackedFiles.fromArguments,
     arguments: StampPlaceholderInTrackedFiles.arguments,
   ),
