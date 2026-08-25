@@ -721,7 +721,7 @@ void main() {
         '$operatorUser:x:1000:1000::/srv/$operatorUser:/bin/bash\n',
       );
       expect(
-        await AddShellAlias.homeOf(machine.contextFor(under), operatorUser),
+        (await InstallAuthorizedKey.homeOf(machine.contextFor(under))).home,
         '/srv/$operatorUser',
       );
     });

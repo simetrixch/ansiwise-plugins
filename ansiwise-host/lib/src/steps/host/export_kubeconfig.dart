@@ -1,6 +1,5 @@
 import 'package:ansiwise_core/ansiwise_core.dart';
 
-import 'add_shell_alias.dart';
 import 'install_authorized_key.dart';
 
 /// Writes the credentials for this cluster where the operator's own tools look for them.
@@ -92,13 +91,11 @@ final class ExportKubeconfig extends IrreversibleStep {
 
   @override
   Future<CheckResult> check(StepContext context) async {
-    final String? home = await AddShellAlias.homeOf(context, InstallAuthorizedKey.userIn(context));
-    if (home == null) {
-      return CheckResult.blocked(
-        'there is no account called ${InstallAuthorizedKey.userIn(context)} on this machine',
-      );
+    final ({String? home, String? refusal}) account = await InstallAuthorizedKey.homeOf(context);
+    if (account.refusal case final String refusal) {
+      return CheckResult.blocked(refusal);
     }
-    final String path = '$home/$directoryName/config';
+    final String path = '${account.home!}/$directoryName/config';
     final ({String? credentials, String said}) asked = await _credentials(context);
     final String? wanted = asked.credentials;
     if (wanted == null) {
@@ -117,8 +114,11 @@ final class ExportKubeconfig extends IrreversibleStep {
 
   @override
   Future<StepPlan> plan(StepContext context) async {
-    final String? home = await AddShellAlias.homeOf(context, InstallAuthorizedKey.userIn(context));
-    final String path = '${home ?? ''}/$directoryName/config';
+    final ({String? home, String? refusal}) account = await InstallAuthorizedKey.homeOf(context);
+    if (account.refusal case final String refusal) {
+      return StepPlan.nothing(refusal);
+    }
+    final String path = '${account.home!}/$directoryName/config';
     final String before = await context.files.exists(path, elevated: elevated)
         ? await context.files.read(path, elevated: elevated)
         : '';
@@ -133,10 +133,11 @@ final class ExportKubeconfig extends IrreversibleStep {
 
   @override
   Future<void> apply(StepContext context) async {
-    final String? home = await AddShellAlias.homeOf(context, InstallAuthorizedKey.userIn(context));
-    if (home == null) {
-      return;
+    final ({String? home, String? refusal}) account = await InstallAuthorizedKey.homeOf(context);
+    if (account.refusal case final String refusal) {
+      throw StateError(refusal);
     }
+    final String home = account.home!;
     final ({String? credentials, String said}) asked = await _credentials(context);
     final String? credentials = asked.credentials;
     if (credentials == null) {

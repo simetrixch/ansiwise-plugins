@@ -88,21 +88,25 @@ final class RequireKeyLoginPossible extends ObservingStep {
       wrong.add('sshd has public key authentication switched off');
     }
 
-    final String? home = await _home(context);
-    if (home == null) {
-      return CheckResult.blocked(
-        'there is no account called "${InstallAuthorizedKey.userIn(context)}" on this machine',
-      );
+    final ({String? home, String? refusal}) account = await InstallAuthorizedKey.homeOf(context);
+    if (account.refusal case final String refusal) {
+      return CheckResult.blocked(refusal);
     }
+    final String home = account.home!;
     final String directory = '$home/.ssh';
     final String path = '$directory/authorized_keys';
 
     // THE DIRECTORY IS READ BEFORE THE FILE IS LOOKED FOR, and that order is the whole of it.
-    // `.ssh` is 0700, so to a run that is neither its account nor root every question asked under it
-    // answers exactly as it would about a path that is not there: `stat` writes nothing, and the
-    // files port answers false because the operating system refused the lookup rather than because
-    // the file is absent. Asked first, the file test put "$path is not there" among the findings —
-    // an absence nobody measured, standing in the sentence that says whether a key login would work.
+    //
+    // WHAT THE ORDER ALONE DOES NOT SETTLE, and it is the reason the key directory is LISTED rather
+    // than stat'ed: reading the metadata of `.ssh` itself needs the traverse bit on the HOME, which
+    // is 0755, so `stat -c %a` on the directory answers to anybody and proves nothing about whether
+    // this run may look INSIDE it. Reading anything under `.ssh` needs the traverse bit on `.ssh`,
+    // which is 0700 — so the file test is refused in the one way that looks like an answer, and
+    // asked on the strength of a directory reading that succeeded it still put "$path is not there"
+    // among the findings: an absence nobody measured, standing in the sentence that says whether a
+    // key login would work. A LISTING of `.ssh` needs exactly the bit the file test needs, and a
+    // listing that could not be taken fails instead of answering false.
     //
     // A home directory anybody else can write to is refused by sshd as well, and this is the one
     // people are most surprised by: the key file's own permissions look right, and the login still
@@ -112,19 +116,26 @@ final class RequireKeyLoginPossible extends ObservingStep {
           await _tooOpen(context, directory, _sshDirectory),
           await _groupOrWorldWritable(context, home),
         ];
-    if (_unreadIn(permissions).isEmpty) {
-      if (!await context.files.exists(path, elevated: elevated)) {
-        wrong.add('$path is not there');
-      } else {
-        final List<String> lines = (await context.files.read(
-          path,
-          elevated: elevated,
-        )).split('\n').map((String l) => l.trim()).toList();
-        if (!lines.contains(proving.line)) {
-          wrong.add('$path does not carry this key');
-        }
-        permissions.add(await _tooOpen(context, path, _keyFile));
+    final ({List<String>? names, String? refusal}) held = await InstallAuthorizedKey.namesIn(
+      context,
+      directory,
+      elevated: elevated,
+    );
+    if (held.refusal case final String refusal) {
+      permissions.add((tooOpen: null, unread: refusal));
+    } else if (held.names == null) {
+      wrong.add('there is no $directory, so sshd has nowhere to look for a key');
+    } else if (!held.names!.contains('authorized_keys')) {
+      wrong.add('$path is not there');
+    } else if (_unreadIn(permissions).isEmpty) {
+      final List<String> lines = (await context.files.read(
+        path,
+        elevated: elevated,
+      )).split('\n').map((String l) => l.trim()).toList();
+      if (!lines.contains(proving.line)) {
+        wrong.add('$path does not carry this key');
       }
+      permissions.add(await _tooOpen(context, path, _keyFile));
     }
 
     wrong.addAll(<String>[
@@ -169,27 +180,6 @@ final class RequireKeyLoginPossible extends ObservingStep {
       settings[line.substring(0, space).toLowerCase()] = line.substring(space + 1).trim();
     }
     return settings;
-  }
-
-  /// Where the account this run names lives, or null where there is no such account.
-  ///
-  /// NOT ELEVATED, and that is an answer rather than a silence: `getent passwd` reads the account
-  /// database every account on the machine may read, so root sees exactly what the operator sees.
-  /// Raising it would ask for the elevation password on a machine that never needed one, and turn a
-  /// run whose installation configured none into a refusal over a lookup anybody may make.
-  Future<String?> _home(StepContext context) async {
-    final CommandResult entry = await context.shell.run(
-      Command.observing(
-        'getent',
-        arguments: <String>['passwd', InstallAuthorizedKey.userIn(context)],
-        elevated: false,
-      ),
-    );
-    if (!entry.ok) {
-      return null;
-    }
-    final List<String> fields = entry.trimmed.split(':');
-    return fields.length < 6 || fields[5].isEmpty ? null : fields[5];
   }
 
   /// What is too open about [path], or that its permissions could not be read at all.

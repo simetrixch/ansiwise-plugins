@@ -54,6 +54,14 @@ void main() {
         refusal: "stat: cannot statx '$keyFile': Permission denied",
         refusedExitCode: 1,
       ),
+      // The gate reads the key directory by LISTING it, which needs the same traverse bit any
+      // reading under it needs — so this is refused to the operator exactly as the key file's own
+      // permissions are.
+      'ls -A -- $home/.ssh': const _RootOnly(
+        answersRoot: 'authorized_keys\n',
+        refusal: "ls: cannot open directory '$home/.ssh': Permission denied",
+        refusedExitCode: 2,
+      ),
       'stat -c %a $home/.ssh': const _RootOnly(
         answersRoot: '700\n',
         refusal: "stat: cannot statx '$home/.ssh': Permission denied",
@@ -180,7 +188,15 @@ void main() {
       await rowFor('require_key_login_possible', <String, Object>{
         'public_key_answer': 'operator_public_key',
         'elevated': true,
-      }).check(contextFor('require_key_login_possible', session, FakeFiles()));
+      }).check(
+        contextFor(
+          'require_key_login_possible',
+          session,
+          // The machine's listing names this file, so the file system it is read out of holds it.
+          // A fixture where the two disagree measures a machine nobody has.
+          FakeFiles(<String, String>{keyFile: '$key\n'}),
+        ),
+      );
 
       expect(session.groupsAtLogin, contains(everybody));
       expect(session.carriedOut, contains(readPasswdEntry));

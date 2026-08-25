@@ -64,12 +64,11 @@ final class AddShellAlias extends ReversibleStep<List<String>> {
 
   @override
   Future<CheckResult> check(StepContext context) async {
-    final String? home = await homeOf(context, InstallAuthorizedKey.userIn(context));
-    if (home == null) {
-      return CheckResult.blocked(
-        'there is no account called ${InstallAuthorizedKey.userIn(context)} on this machine',
-      );
+    final ({String? home, String? refusal}) account = await InstallAuthorizedKey.homeOf(context);
+    if (account.refusal case final String refusal) {
+      return CheckResult.blocked(refusal);
     }
+    final String home = account.home!;
     final List<String> present = await _present(context, home);
     if (present.isEmpty) {
       return CheckResult.satisfied(
@@ -85,12 +84,14 @@ final class AddShellAlias extends ReversibleStep<List<String>> {
 
   @override
   Future<StepPlan> plan(StepContext context) async {
-    final String? home = await homeOf(context, InstallAuthorizedKey.userIn(context));
-    final List<String> missing = home == null
-        ? const <String>[]
-        : await _missing(context, await _present(context, home));
+    final ({String? home, String? refusal}) account = await InstallAuthorizedKey.homeOf(context);
+    if (account.refusal case final String refusal) {
+      return StepPlan.nothing(refusal);
+    }
+    final String home = account.home!;
+    final List<String> missing = await _missing(context, await _present(context, home));
     return StepPlan.diff(
-      missing.isEmpty ? '${home ?? ''}/${rcFiles.first}' : missing.first,
+      missing.isEmpty ? '$home/${rcFiles.first}' : missing.first,
       before: missing.isEmpty ? line : await context.files.read(missing.first, elevated: elevated),
       after: missing.isEmpty
           ? line
@@ -100,11 +101,11 @@ final class AddShellAlias extends ReversibleStep<List<String>> {
 
   @override
   Future<void> apply(StepContext context) async {
-    final String? home = await homeOf(context, InstallAuthorizedKey.userIn(context));
-    if (home == null) {
-      return;
+    final ({String? home, String? refusal}) account = await InstallAuthorizedKey.homeOf(context);
+    if (account.refusal case final String refusal) {
+      throw StateError(refusal);
     }
-    for (final String path in await _missing(context, await _present(context, home))) {
+    for (final String path in await _missing(context, await _present(context, account.home!))) {
       final String current = await context.files.read(path, elevated: elevated);
       final String body = current.isEmpty || current.endsWith('\n') ? current : '$current\n';
       await context.files.write(path, '$body$line\n', mode: _rcFileMode, elevated: elevated);
@@ -117,11 +118,18 @@ final class AddShellAlias extends ReversibleStep<List<String>> {
   /// something else, and stripping the line there would take away an alias this run never added.
   @override
   Future<List<String>> capture(StepContext context) async {
-    final String? home = await homeOf(context, InstallAuthorizedKey.userIn(context));
-    if (home == null) {
+    final ({String? home, String? refusal}) account = await InstallAuthorizedKey.homeOf(context);
+    if (account.refusal case final String refusal) {
+      // The undo takes the line out of exactly what this names, so an empty list leaves every
+      // startup file alone — which is what a reading nobody could take has to produce. Said out
+      // loud, because an empty list otherwise reads as a machine that already carried the alias.
+      context.log.warn(
+        'which startup files of ${InstallAuthorizedKey.userIn(context)} lack the alias could not '
+        'be read, so an undo will leave all of them alone: $refusal',
+      );
       return const <String>[];
     }
-    return _missing(context, await _present(context, home));
+    return _missing(context, await _present(context, account.home!));
   }
 
   @override
@@ -141,31 +149,6 @@ final class AddShellAlias extends ReversibleStep<List<String>> {
         elevated: elevated,
       );
     }
-  }
-
-  /// Where [user] lives, or null when there is no such account.
-  ///
-  /// Read out of the account itself rather than composed from the name: an account's home is not
-  /// always under the directory the name would suggest, and writing into the one it is not is
-  /// writing into somebody else's.
-  ///
-  /// NOT ELEVATED, and that is an answer rather than a silence: `getent passwd` reads the account
-  /// database every account on the machine may read, so root sees exactly what the operator sees.
-  /// The row's elevation is about the rc files under the home this returns, and it is passed to
-  /// every read and write of those.
-  static Future<String?> homeOf(StepContext context, String user) async {
-    final CommandResult account = await context.shell.run(
-      Command.observing(
-        'getent',
-        arguments: <String>['passwd', InstallAuthorizedKey.userIn(context)],
-        elevated: false,
-      ),
-    );
-    if (!account.ok) {
-      return null;
-    }
-    final List<String> fields = account.trimmed.split(':');
-    return fields.length >= 6 && fields[5].isNotEmpty ? fields[5] : null;
   }
 
   Future<List<String>> _present(StepContext context, String home) async => <String>[

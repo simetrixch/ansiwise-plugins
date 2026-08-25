@@ -265,7 +265,7 @@ const Map<StepName, RegisteredStep> hostSteps = <StepName, RegisteredStep>{
   ),
   StepName('export_kubeconfig'): RegisteredStep(
     name: StepName('export_kubeconfig'),
-    source: 'lib/src/steps/host/export_kubeconfig.dart:21',
+    source: 'lib/src/steps/host/export_kubeconfig.dart:20',
     create: ExportKubeconfig.fromArguments,
     arguments: ExportKubeconfig.arguments,
     answers: ExportKubeconfig.answers,

@@ -35,7 +35,7 @@ final class HostMachine {
     Arguments arguments = Arguments.none,
     Arguments answers = hostAnswers,
   ]) => StepContext(
-    shell: shell,
+    shell: _OneMachine(shell, files),
     files: files,
     http: FakeHttp(),
     clock: clock,
@@ -53,6 +53,49 @@ final class HostMachine {
     for (final Command command in shell.commands)
       if (!command.observes) command.argv.join(' '),
   ];
+}
+
+/// The shell and the file system of ONE machine, so a step reading a directory through one and its
+/// files through the other cannot be measured against two.
+///
+/// **What it fixes.** A step that lists a directory to find out what is in it asks the shell, and it
+/// reads what it found through the files port. A fake shell that answers every unregistered command
+/// with an empty success reports every directory as empty, whatever the file system beside it holds
+/// — so a test seeding a file gets a step that cannot see it, and the step looks broken while the
+/// fixture is what is wrong.
+///
+/// A command the [FakeShell] was TOLD what to answer keeps its answer; a listing it was told nothing
+/// about is answered out of the file system this machine actually has.
+final class _OneMachine implements Shell {
+  const _OneMachine(this._shell, this._files);
+
+  final FakeShell _shell;
+  final FakeFiles _files;
+
+  @override
+  Future<CommandResult> run(Command command) async {
+    // Run it either way, so the command is recorded and any effect it carries is applied.
+    final CommandResult answer = await _shell.run(command);
+    if (_directoryListed(command) case final String path when _unanswered(answer)) {
+      return CommandResult(
+        exitCode: 0,
+        stdout: (await _files.list(path)).map((String name) => '$name\n').join(),
+        stderr: '',
+        elapsed: Duration.zero,
+      );
+    }
+    return answer;
+  }
+
+  /// The directory [command] lists, or null where it lists none.
+  static String? _directoryListed(Command command) =>
+      command.executable == 'ls' && command.arguments.length == 3 && command.arguments[1] == '--'
+      ? command.arguments[2]
+      : null;
+
+  /// Whether this is the fake shell's own answer for a command nobody described.
+  static bool _unanswered(CommandResult answer) =>
+      answer.exitCode == 0 && answer.stdout.isEmpty && answer.stderr.isEmpty;
 }
 
 /// The account that operates the machine in these fixtures.

@@ -3,20 +3,28 @@ import 'package:ansiwise_core/testing.dart';
 import 'package:ansiwise_host/ansiwise_host.dart';
 import 'package:test/test.dart';
 
-/// A reading that was REFUSED is not an answer, measured on the gate that stands between installing
-/// a key and taking the password away.
+/// A reading that was REFUSED is not an answer, measured on the two steps that stand between a
+/// machine reached with a password and one reached with a key: the step that installs the key, and
+/// the gate that proves sshd would accept it.
 ///
 /// **What the gate decides on.** sshd refuses a key file, a key directory or a home directory it
 /// considers too open, and it says nothing at all about why — the login falls back to a password,
 /// which still works, so nothing looks wrong until the password is gone. The permission bits are
 /// therefore the whole of what this gate measures, and `stat -c %a` is what reads them.
 ///
-/// **What can happen to those readings.** They are all inside the home of the account the run is
-/// about to hand the machine to, and `.ssh` is `0700`. To a run that is neither that account nor
-/// root, the operating system refuses every lookup under it — and refuses it in the one way that
-/// looks exactly like an answer: `stat` writes nothing, and a file test answers false because the
-/// lookup was refused rather than because the file is absent. Two different states of the machine
-/// come back as the same bytes, and only the step can keep them apart.
+/// **What can happen to those readings.** The key file sits inside `.ssh`, which is `0700`, so to a
+/// run that is neither that account nor root the operating system refuses every lookup under it —
+/// and refuses it in the one way that looks exactly like an answer: `stat` writes nothing, and a
+/// file test answers false because the lookup was refused rather than because the file is absent.
+/// Two different states of the machine come back as the same bytes, and only the step can keep them
+/// apart.
+///
+/// **Which readings are refused is a property of the PATH, and that is what the machine below
+/// models.** Reading the metadata of `.ssh` needs the traverse bit on the HOME, which is `0755`, so
+/// it answers to everybody and says nothing about whether this run may look inside. Only the
+/// readings UNDER `.ssh` are refused. A listing of `.ssh` needs the same bit the file test needs and
+/// fails where the file test answers false, which is what makes it the reading these steps decide
+/// on.
 ///
 /// **The row is built through [hostRegistry] from the KEYS the shipped programs write.** Both
 /// programs that carry this step name one argument and leave `elevated` out, so that absence is what
@@ -35,11 +43,29 @@ void main() {
   const String keyFile = '$directory/authorized_keys';
   const String key = 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIExampleKeyForThisTest operator';
 
+  /// A key somebody else already depends on, standing in the same file.
+  const String colleague = 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAnotherPersonsKey colleague';
+
   /// What sshd reports once it is allowed to resolve its configuration.
   const String sshdReports =
       'port 22\n'
       'pubkeyauthentication yes\n'
       'passwordauthentication yes';
+
+  /// The row deploy-host writes one line above the gate: the same answer, and no `elevated` either.
+  Step shippedInstallRow() => hostRegistry
+      .step(const StepName('install_authorized_key'))!
+      .create(const Arguments(<String, Object>{'public_key_answer': 'operator_public_key'}));
+
+  /// The same step under a row that says the paths it writes are root's to read and write.
+  Step installRowGrantingRoot() => hostRegistry
+      .step(const StepName('install_authorized_key'))!
+      .create(
+        const Arguments(<String, Object>{
+          'public_key_answer': 'operator_public_key',
+          'elevated': true,
+        }),
+      );
 
   /// The row both shipped programs write: the answer holding the key, and nothing else.
   Step shippedRow() => hostRegistry
@@ -56,7 +82,14 @@ void main() {
         }),
       );
 
-  /// A machine where everything under [home] belongs to [user] and to nobody else.
+  /// A machine where everything INSIDE [directory] belongs to [user] and to nobody else.
+  ///
+  /// **WHICH READINGS ARE REFUSED IS A PROPERTY OF THE PATH, and getting it wrong measures a machine
+  /// nobody has.** Reading the metadata of a path needs the traverse bit on every directory ABOVE
+  /// it and nothing on the path itself. The home is `0755`, so `stat -c %a` on the home and on
+  /// `.ssh` is answered to every account — it is the readings UNDER `.ssh` that are refused, because
+  /// `.ssh` is `0700`. So the key file's own permissions and the listing of the directory holding it
+  /// stand under [onlyTheOwnerMay], and the two readings above them do not.
   ///
   /// [modes] is what `stat` answers to a command that is allowed to ask, and [startedAs] is the
   /// account the run itself is. `sshd -T` is root's for a reason of its own — it reads every file
@@ -65,39 +98,54 @@ void main() {
   _Session machine({
     Map<String, String> modes = const <String, String>{},
     String startedAs = somebodyElse,
+    List<String> keyDirectoryHolds = const <String>['authorized_keys'],
   }) => _Session(
     startedAs: startedAs,
     owner: user,
     onlyTheOwnerMay: <String, String>{
-      'stat -c %a $home': modes[home] ?? '755',
-      'stat -c %a $directory': modes[directory] ?? '700',
       'stat -c %a $keyFile': modes[keyFile] ?? '600',
+      'ls -A -- $directory': keyDirectoryHolds.join('\n'),
     },
     onlyRootMay: const <String, String>{'sshd -T': sshdReports},
-    answeredToAnybody: const <String, String>{
+    answeredToAnybody: <String, String>{
       'getent passwd $user': '$user:x:1000:1000::$home:/bin/bash',
+      'stat -c %a $home': modes[home] ?? '755',
+      'stat -c %a $directory': modes[directory] ?? '700',
     },
   );
 
-  StepContext contextOn(_Session session, _Lookups files) => StepContext(
+  StepContext contextOn(
+    _Session session,
+    _Lookups files, {
+    StepName step = const StepName('require_key_login_possible'),
+    Logger log = const _SilentLog(),
+  }) => StepContext(
     shell: session,
     files: files,
     http: FakeHttp(),
     clock: FakeClock(),
     entropy: FakeEntropy(),
-    log: const _SilentLog(),
-    step: const StepName('require_key_login_possible'),
+    log: log,
+    step: step,
     arguments: Arguments.none,
     answers: const Arguments(<String, Object>{'operator_user': user, 'operator_public_key': key}),
     facts: Facts.none,
     measurements: const _DiscardedMeasurements(),
   );
 
+  StepContext installingOn(_Session session, _Lookups files, {Logger log = const _SilentLog()}) =>
+      contextOn(session, files, step: const StepName('install_authorized_key'), log: log);
+
   /// A file system holding the key file, with everything under [directory] refused to a run that is
   /// neither its owner nor root.
-  _Lookups holdingTheKey({String startedAs = somebodyElse}) => _Lookups(<String, String>{
-    keyFile: '$key\n',
-  }, refusedUnder: startedAs == user ? null : directory);
+  ///
+  /// The home and the key directory are in it as paths of their own. A file system that held only
+  /// the key file would answer "there is no .ssh" to a lookup of the directory, which is the state
+  /// a first installation is in and not the one these cases are about.
+  _Lookups holdingTheKey({String startedAs = somebodyElse, String content = '$key\n'}) => _Lookups(
+    <String, String>{home: '', directory: '', keyFile: content},
+    refusedUnder: startedAs == user ? null : directory,
+  );
 
   test('THE PLANTED DEFECT: readings that were refused are not a verdict about the login', () async {
     // The row ships without `elevated`, so every `stat` arrives as the account the run was started
@@ -111,8 +159,15 @@ void main() {
 
     expect(answer, isA<Blocked>(), reason: answer is Blocked ? answer.reason : '$answer');
     expect(
+      (answer as Blocked).reason,
+      isNot(contains('$keyFile is not there')),
+      reason:
+          'the key file is really there, and a gate that could not look at it must not state its '
+          'absence as a finding about the machine',
+    );
+    expect(
       files.lookedFor,
-      isEmpty,
+      isNot(contains(keyFile)),
       reason:
           'the files port was asked about a path under a directory this run could not read, and '
           'its answer would have been an absence nobody measured',
@@ -154,17 +209,18 @@ void main() {
     // The state this refusal must not swallow. The readings answer, the directory is there and is
     // 0700, and the file simply is not in it — which is a measurement of the machine and is reported
     // as one.
-    final _Session session = machine();
-    final _Lookups files = _Lookups(const <String, String>{}, refusedUnder: null);
+    final _Session session = machine(keyDirectoryHolds: const <String>[]);
+    final _Lookups files = _Lookups(const <String, String>{directory: ''}, refusedUnder: null);
 
     final CheckResult answer = await rowGrantingRoot().check(contextOn(session, files));
 
     expect(answer, isA<Blocked>());
     expect(
-      files.lookedFor,
-      contains(keyFile),
-      reason: 'the readings answered, so the file test is worth making and its answer is believed',
+      (answer as Blocked).reason,
+      contains('$keyFile is not there'),
+      reason: 'the listing answered and named nothing, which IS a measurement of the machine',
     );
+    expect(session.carriedOut, contains('ls -A -- $directory'));
     expect(session.refused, isEmpty);
   });
 
@@ -178,6 +234,134 @@ void main() {
     expect(answer, isA<Blocked>());
     expect(session.refused, isEmpty);
   });
+
+  test('THE PLANTED DEFECT: a key file that could not be looked at is not an absent one', () async {
+    // The row one line above the gate, on the same machine, under the same missing elevation. The
+    // file test is refused in the one way that looks like an answer, and the step read that as "the
+    // account has no authorized_keys yet" - so it answered ready over a file it never saw.
+    final _Session session = machine();
+    final _Lookups files = holdingTheKey();
+
+    final CheckResult answer = await shippedInstallRow().check(installingOn(session, files));
+
+    expect(answer, isA<Blocked>(), reason: answer is Blocked ? answer.reason : '$answer');
+    expect(
+      files.lookedFor,
+      isNot(contains(keyFile)),
+      reason:
+          'the key file was looked for under a directory this run could not read, and its answer '
+          'would have been an absence nobody measured',
+    );
+  });
+
+  test('THE PLANTED DEFECT: a dry run shows no file it could not read', () async {
+    // The half that goes wrong with no elevation involved and nothing thrown to correct it. A plan
+    // is what an operator reads to decide, and `before` used to be the empty text for a file
+    // holding a colleague's key - the one sentence in the mode whose whole purpose is to say what
+    // is there.
+    final _Session session = machine();
+    final _Lookups files = holdingTheKey(content: '$key\n$colleague\n');
+
+    final StepPlan plan = await shippedInstallRow().plan(installingOn(session, files));
+
+    expect(plan, isA<NothingPlan>(), reason: '$plan');
+  });
+
+  test('THE PLANTED DEFECT: an undo leaves a key file it could not read alone', () async {
+    // capture answers the question "did the file already carry this key", and its false half is
+    // what tells undo to strip the line. Answered false out of a refused lookup, the clean-up after
+    // an unrelated failure takes away an access this run never granted.
+    final _Session session = machine();
+    final _Lookups files = holdingTheKey(content: '$key\n$colleague\n');
+    final _NotedLog log = _NotedLog();
+    final ReversibleStep<Object?> step = shippedInstallRow() as ReversibleStep<Object?>;
+
+    final Object? captured = await step.capture(installingOn(session, files, log: log));
+    await step.undo(installingOn(session, files, log: log), captured);
+
+    expect(captured, isTrue, reason: 'a reading nobody took must not read as "it was not there"');
+    expect(
+      files.written,
+      isEmpty,
+      reason:
+          'the file really carries two keys, and an undo over a reading it could not take would '
+          'write one of them away',
+    );
+    expect(log.warned, isNotEmpty, reason: 'a capture that is not a measurement says so');
+  });
+
+  test('THE INNOCENT CASE: the same machine under a row that grants root reads the key', () async {
+    // Every reading answers, the file really carries the key, and the step says so rather than
+    // appending it a second time.
+    final _Session session = machine();
+    final _Lookups files = holdingTheKey();
+
+    final CheckResult answer = await installRowGrantingRoot().check(installingOn(session, files));
+
+    expect(answer, isA<Satisfied>(), reason: answer is Blocked ? answer.reason : '$answer');
+    expect(files.lookedFor, contains(keyFile));
+  });
+
+  test('THE INNOCENT CASE: an account with no .ssh yet is ready to have one made', () async {
+    // The first installation of a bare machine, which is the primary path of this step and the
+    // state a refusal must never swallow: the home is there, `.ssh` is not, and there is nothing
+    // to read.
+    final _Session session = machine();
+    final _Lookups files = _Lookups(const <String, String>{home: ''}, refusedUnder: directory);
+
+    final CheckResult answer = await shippedInstallRow().check(installingOn(session, files));
+
+    expect(answer, isA<Ready>(), reason: answer is Blocked ? answer.reason : '$answer');
+  });
+
+  test('THE INNOCENT CASE: a run that IS the account reads its own key file', () async {
+    // The shipped row is right here, so a red result above says the reading was refused rather
+    // than that this row can never work.
+    final _Session session = machine(startedAs: user);
+
+    final CheckResult answer = await shippedInstallRow().check(
+      installingOn(session, holdingTheKey(startedAs: user)),
+    );
+
+    expect(answer, isA<Satisfied>(), reason: answer is Blocked ? answer.reason : '$answer');
+  });
+
+  test(
+    'THE PLANTED DEFECT: an account database that could not be asked is not an absent account',
+    () async {
+      // `getent` exits 2 for a name it does not carry and something else for a question it could
+      // not answer - a name service that is not running, a directory server that did not reply.
+      // Read as the first, the second became "there is no account called operator on this
+      // machine": a statement about the machine composed out of a reading nobody took.
+      final _Session session = machine()..exits('getent passwd $user', 3);
+
+      final CheckResult answer = await shippedInstallRow().check(
+        installingOn(session, holdingTheKey()),
+      );
+
+      expect(answer, isA<Blocked>());
+      expect(
+        (answer as Blocked).reason,
+        isNot(contains('there is no account')),
+        reason: 'a database that would not answer is not a machine without the account',
+      );
+    },
+  );
+
+  test(
+    'THE INNOCENT CASE: an account the database really does not carry is still reported absent',
+    () async {
+      // The state the refusal above must not swallow, in getent's own documented exit code for it.
+      final _Session session = machine()..exits('getent passwd $user', 2);
+
+      final CheckResult answer = await shippedInstallRow().check(
+        installingOn(session, holdingTheKey()),
+      );
+
+      expect(answer, isA<Blocked>());
+      expect((answer as Blocked).reason, contains('there is no account'));
+    },
+  );
 
   test('THE INNOCENT NEIGHBOUR: what any account may read is read under either row', () async {
     // `getent passwd` reads the account database every account on the machine may read, so it comes
@@ -214,6 +398,9 @@ final class _Lookups implements Files {
   /// Every path this port was asked about, in the order it was asked.
   final List<String> lookedFor = <String>[];
 
+  /// Every path this port was asked to write, in the order it was asked.
+  final List<String> written = <String>[];
+
   /// Whether the operating system would refuse this run the lookup of [path].
   bool _refuses(String path, {required bool elevated}) =>
       !elevated && refusedUnder != null && path.startsWith('$refusedUnder/');
@@ -243,7 +430,10 @@ final class _Lookups implements Files {
     String content, {
     required int mode,
     bool elevated = false,
-  }) async => _contents[path] = content;
+  }) async {
+    written.add(path);
+    _contents[path] = content;
+  }
 
   @override
   Future<void> delete(String path, {bool elevated = false}) async => _contents.remove(path);
@@ -287,9 +477,19 @@ final class _Session implements Shell {
   /// The commands it refused, in the order it refused them.
   final List<String> refused = <String>[];
 
+  /// The commands whose exit code this machine is made to answer with, whoever asks.
+  final Map<String, int> _exits = <String, int>{};
+
+  /// Makes [argv] answer [exitCode], for a tool whose exit code is what tells its states apart.
+  void exits(String argv, int exitCode) => _exits[argv] = exitCode;
+
   @override
   Future<CommandResult> run(Command command) async {
     final String argv = command.argv.join(' ');
+    if (_exits[argv] case final int exitCode) {
+      refused.add(argv);
+      return CommandResult(exitCode: exitCode, stdout: '', stderr: '', elapsed: Duration.zero);
+    }
     if (_onlyTheOwnerMay[argv] case final String answer) {
       return command.elevated || startedAs == owner
           ? _answering(argv, answer)
@@ -317,6 +517,24 @@ final class _Session implements Shell {
     refused.add(argv);
     return CommandResult(exitCode: 1, stdout: '', stderr: '$said\n', elapsed: Duration.zero);
   }
+}
+
+/// A log that keeps what it was warned about, for the case where saying so IS the behaviour.
+final class _NotedLog implements Logger {
+  /// Every warning this log was given, in order.
+  final List<String> warned = <String>[];
+
+  @override
+  void debug(String message) {}
+
+  @override
+  void info(String message) {}
+
+  @override
+  void warn(String message) => warned.add(message);
+
+  @override
+  void error(String message) {}
 }
 
 /// A log that keeps nothing, so a step's own notes do not land in the middle of a test run.
