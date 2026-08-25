@@ -148,11 +148,17 @@ final class AddShellAlias extends ReversibleStep<List<String>> {
   /// Read out of the account itself rather than composed from the name: an account's home is not
   /// always under the directory the name would suggest, and writing into the one it is not is
   /// writing into somebody else's.
+  ///
+  /// NOT ELEVATED, and that is an answer rather than a silence: `getent passwd` reads the account
+  /// database every account on the machine may read, so root sees exactly what the operator sees.
+  /// The row's elevation is about the rc files under the home this returns, and it is passed to
+  /// every read and write of those.
   static Future<String?> homeOf(StepContext context, String user) async {
     final CommandResult account = await context.shell.run(
       Command.observing(
         'getent',
         arguments: <String>['passwd', InstallAuthorizedKey.userIn(context)],
+        elevated: false,
       ),
     );
     if (!account.ok) {

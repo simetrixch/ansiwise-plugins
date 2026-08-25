@@ -95,7 +95,16 @@ final class ReplaceRegexInTrackedFile extends ReversibleStep<void> {
 
   @override
   Future<void> apply(StepContext context) async {
-    final Command sed = Command('sed', <String>['-i', '-E', 's/$pattern/$replacement/g', path]);
+    // ELEVATED WITH THE READS ABOVE. `sed -i` writes a new file beside the old one and renames it
+    // over it, so it needs the same reach into the directory that the check's read of this path
+    // needed. Unelevated against a path root owns it fails after the check said ready, which is the
+    // one shape a row's answer exists to prevent. The plain constructor cannot carry the answer at
+    // all, so the composition says how it runs.
+    final Command sed = Command.detailed(
+      'sed',
+      arguments: <String>['-i', '-E', 's/$pattern/$replacement/g', path],
+      elevated: elevated,
+    );
     final CommandResult result = await context.shell.run(sed);
     if (!result.ok) {
       throw CommandFailed(
@@ -109,7 +118,14 @@ final class ReplaceRegexInTrackedFile extends ReversibleStep<void> {
 
   @override
   Future<void> undo(StepContext context, void captured) async {
-    final Command git = Command('git', <String>['checkout', '--', path]);
+    // The take-back writes the same file the apply wrote, so it reaches for it the same way. An undo
+    // that cannot write what its step wrote leaves the record saying the change was taken back while
+    // the file still carries it.
+    final Command git = Command.detailed(
+      'git',
+      arguments: <String>['checkout', '--', path],
+      elevated: elevated,
+    );
     final CommandResult result = await context.shell.run(git);
     if (!result.ok) {
       throw CommandFailed(

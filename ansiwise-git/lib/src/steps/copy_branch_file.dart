@@ -110,7 +110,14 @@ final class CopyBranchFile extends ReversibleStep<String?> {
   /// WHICH answer fills the slot spelled the same way in both paths, or null where they carry none.
   final String? runAnswer;
 
-  /// Whether the destination belongs to root, so every read and write of it is elevated.
+  /// Whether what this row points at belongs to root, so every read and write of it is elevated.
+  ///
+  /// ONE answer covering both paths, because both are reached and either can be root's: the source
+  /// checkout, which git is asked for the committed byte, and the destination, which the files port
+  /// reads and writes. A step that asked git as the operator and wrote as root would get an answer
+  /// that is not the one it waits for — git reports a checkout it may not read as a branch that
+  /// carries no such file, and the copy would be blocked for a reason about the file rather than
+  /// about the account.
   final bool elevated;
 
   @override
@@ -183,7 +190,11 @@ final class CopyBranchFile extends ReversibleStep<String?> {
       return null;
     }
     final CommandResult shown = await context.shell.run(
-      Command.observing('git', arguments: <String>['-C', repository, 'show', 'HEAD:$named']),
+      Command.observing(
+        'git',
+        arguments: <String>['-C', repository, 'show', 'HEAD:$named'],
+        elevated: elevated,
+      ),
     );
     return shown.ok ? shown.stdout : null;
   }
@@ -252,6 +263,7 @@ final class CopyBranchFile extends ReversibleStep<String?> {
       Command.observing(
         'git',
         arguments: <String>['-C', repository, 'rev-parse', '--abbrev-ref', 'HEAD'],
+        elevated: elevated,
       ),
     );
     if (!head.ok || head.trimmed.isEmpty || head.trimmed == 'HEAD') {

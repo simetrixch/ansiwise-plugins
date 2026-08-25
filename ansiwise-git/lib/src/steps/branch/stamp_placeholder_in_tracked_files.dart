@@ -392,7 +392,12 @@ final class StampPlaceholderInTrackedFiles extends ReversibleStep<List<String>> 
       return;
     }
     final List<String> argv = <String>['-C', repository, 'checkout', '--', ...captured];
-    final CommandResult restored = await context.shell.run(Command('git', argv));
+    // The take-back writes the same files the apply wrote through the files port, so it reaches for
+    // them the same way. The plain constructor fixes the elevation to false and cannot carry the
+    // row's answer at all.
+    final CommandResult restored = await context.shell.run(
+      Command.detailed('git', arguments: argv, elevated: elevated),
+    );
     if (!restored.ok) {
       throw CommandFailed(
         argv: <String>['git', ...argv],
@@ -451,7 +456,12 @@ final class StampPlaceholderInTrackedFiles extends ReversibleStep<List<String>> 
       placeholder,
       if (tree.isNotEmpty) ...<String>['--', tree],
     ];
-    final CommandResult found = await context.shell.run(Command.observing('git', arguments: argv));
+    // The search reads the same working tree the loop below reads through the files port. Asked as
+    // the operator over a checkout root owns, git answers "Permission denied" at exit code above
+    // one, which the throw below turns into a failure rather than into an empty answer.
+    final CommandResult found = await context.shell.run(
+      Command.observing('git', arguments: argv, elevated: elevated),
+    );
     // A content search answers one when it found nothing, which is an answer and not a failure.
     // Anything above that is a search that could not be carried out, and treating it as "no files"
     // would report a tree as stamped because nobody could look at it.
@@ -596,11 +606,17 @@ final class StampPlaceholderInTrackedFiles extends ReversibleStep<List<String>> 
   /// How a message names the part of the checkout this row is about.
   String get _under => tree.isEmpty ? 'in the checkout' : 'under $tree/';
 
+  /// Which branch the checkout stands on, or null where git could not say.
+  ///
+  /// Read at this row's own elevation, like everything else this step reads out of the checkout.
+  /// Null is what the guard above compares against `refuseOnBranch`, so a reading refused for want
+  /// of root would not refuse the stamp — it would let it run on the branch the row named.
   Future<String?> _head(StepContext context) async {
     final CommandResult answer = await context.shell.run(
       Command.observing(
         'git',
         arguments: <String>['-C', repository, 'rev-parse', '--abbrev-ref', 'HEAD'],
+        elevated: elevated,
       ),
     );
     return answer.ok && answer.trimmed.isNotEmpty ? answer.trimmed : null;

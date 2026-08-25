@@ -122,11 +122,18 @@ final class RequireKeyLoginPossible extends ObservingStep {
     return settings;
   }
 
+  /// Where the account this run names lives, or null where there is no such account.
+  ///
+  /// NOT ELEVATED, and that is an answer rather than a silence: `getent passwd` reads the account
+  /// database every account on the machine may read, so root sees exactly what the operator sees.
+  /// Raising it would ask for the elevation password on a machine that never needed one, and turn a
+  /// run whose installation configured none into a refusal over a lookup anybody may make.
   Future<String?> _home(StepContext context) async {
     final CommandResult entry = await context.shell.run(
       Command.observing(
         'getent',
         arguments: <String>['passwd', InstallAuthorizedKey.userIn(context)],
+        elevated: false,
       ),
     );
     if (!entry.ok) {
@@ -156,9 +163,16 @@ final class RequireKeyLoginPossible extends ObservingStep {
         : <String>['$path is ${_octal(mode)}, and sshd refuses a home anybody else can write to'];
   }
 
+  /// The permission bits of [path] as a number, or null where they could not be read.
+  ///
+  /// AT THIS ROW'S ELEVATION, like the reads of the same path through the files port above. The
+  /// paths asked about are inside another account's home, and `.ssh` is `0700` — so as the operator
+  /// `stat` answers "Permission denied", null comes back, and the two callers below report that the
+  /// permissions could not be read. That is a sentence about this check rather than about the
+  /// machine, and it stands where the step is meant to say whether a key login would work.
   Future<int?> _mode(StepContext context, String path) async {
     final CommandResult stat = await context.shell.run(
-      Command.observing('stat', arguments: <String>['-c', '%a', path]),
+      Command.observing('stat', arguments: <String>['-c', '%a', path], elevated: elevated),
     );
     return stat.ok ? int.tryParse(stat.trimmed, radix: 8) : null;
   }

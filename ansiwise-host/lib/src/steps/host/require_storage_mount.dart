@@ -42,10 +42,15 @@ final class RequireStorageMount extends ObservingStep {
         '${context.answers.text('storage_mount')} is not there, so nothing is mounted at it',
       );
     }
+    // AT THIS ROW'S ELEVATION, like the `exists` above it on the same path. `mountpoint` compares
+    // the path against its parent and needs to reach both, and a non-zero exit is read below as
+    // "an ordinary directory rather than a mount" — so asked as the operator about a path only root
+    // may enter, this step states something about the machine's disks that it never measured.
     final CommandResult mounted = await context.shell.run(
       Command.observing(
         'mountpoint',
         arguments: <String>['-q', context.answers.text('storage_mount')],
+        elevated: elevated,
       ),
     );
     if (!mounted.ok) {

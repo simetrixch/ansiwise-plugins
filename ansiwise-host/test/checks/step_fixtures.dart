@@ -193,13 +193,21 @@ final Map<String, Fixture> stepFixtures = <String, Fixture>{
   // The join is handed the answers the installation's programs declare — the coordinator address
   // and the credential — and the fake client comes up logged in to exactly that address, which is
   // what the second run's check compares against.
+  //
+  // BOTH SPELLINGS OF `--accept-dns`, because `accept_dns` is a flag the step declares with no
+  // value of its own and the audit drives such a flag under both. The join writes the value into
+  // the command line, so one arrangement matches one of the two runs and the fake records the
+  // other without carrying it out — under which the client never comes up logged in and the step
+  // is only as covered as its worst setting.
   'tailnet_join': (FakeShell shell, FakeFiles files, FakeHttp http) {
     shell.answers('tailscale status --json', '{"BackendState":"NeedsLogin"}');
-    shell.changes('tailscale up --login-server $_plausibleText '
-        '--auth-key file:/tmp/ansiwise-tailnet-authkey --accept-dns=false', () {
-      shell.answers('tailscale status --json', '{"BackendState":"Running"}');
-      shell.answers('tailscale debug prefs', '{"ControlURL":"$_plausibleText"}');
-    });
+    for (final bool acceptDns in <bool>[false, true]) {
+      shell.changes('tailscale up --login-server $_plausibleText '
+          '--auth-key file:/tmp/ansiwise-tailnet-authkey --accept-dns=$acceptDns', () {
+        shell.answers('tailscale status --json', '{"BackendState":"Running"}');
+        shell.answers('tailscale debug prefs', '{"ControlURL":"$_plausibleText"}');
+      });
+    }
   },
 
   // The template, at the one path the probe hands both file arguments, carrying the marker line the

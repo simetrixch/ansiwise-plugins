@@ -330,9 +330,13 @@ final class PatchConfigmapKey extends ReversibleStep<String?> {
   static const String _resolvConf = '/etc/resolv.conf';
 
   /// What the system resolver says it forwards to.
+  ///
+  /// NOT ELEVATED, and that is an answer rather than a silence: `resolvectl status` reports the
+  /// resolver's own configuration to any account on the machine. The row's elevation is about the
+  /// resolver file the fallback reads and the backup this step writes, and it is passed to both.
   static Future<List<String>> _fromSystemResolver(StepContext context) async {
     final CommandResult status = await context.shell.run(
-      const Command.observing('resolvectl', arguments: <String>['status']),
+      const Command.observing('resolvectl', arguments: <String>['status'], elevated: false),
     );
     if (!status.ok) {
       return const <String>[];

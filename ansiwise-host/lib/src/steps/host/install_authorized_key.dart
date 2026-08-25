@@ -173,9 +173,14 @@ final class InstallAuthorizedKey extends ReversibleStep<bool> {
   /// `~` is not a path, it is something a shell expands, and this framework never goes through a
   /// shell. The sixth field of a passwd entry is where the account actually lives, which is also
   /// where it lives when it is not under `/home`.
+  ///
+  /// NOT ELEVATED, and that is an answer rather than a silence: `getent passwd` reads the account
+  /// database every account on the machine may read, so root sees exactly what the operator sees.
+  /// The row's elevation is about the key file under the home this returns, and it is passed to
+  /// every read and write of that.
   static Future<String?> _home(StepContext context) async {
     final CommandResult entry = await context.shell.run(
-      Command.observing('getent', arguments: <String>['passwd', userIn(context)]),
+      Command.observing('getent', arguments: <String>['passwd', userIn(context)], elevated: false),
     );
     if (!entry.ok) {
       return null;

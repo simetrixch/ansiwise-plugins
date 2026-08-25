@@ -137,9 +137,17 @@ final class DisablePasswordLogin extends ReversibleStep<String?> {
   }
 
   /// The lines of `sshd -T`, which are `keyword value` in lower case.
+  ///
+  /// ELEVATED, and not from the row: resolving the configuration means reading the host keys and
+  /// every file an Include names, and sshd refuses the whole answer to anybody but root. That is a
+  /// property of sshd and not of the drop-in this row points at, so it is answered here the way the
+  /// reload below is, and the same way `require_key_login_possible` asks the same question.
+  ///
+  /// Observing at the same time, which the two flags being independent is for: running as root does
+  /// not make a command change anything, so a dry run still performs this.
   Future<Map<String, String>?> _effective(StepContext context) async {
     final CommandResult reported = await context.shell.run(
-      const Command.observing('sshd', arguments: <String>['-T']),
+      const Command.observing('sshd', arguments: <String>['-T'], elevated: true),
     );
     if (!reported.ok) {
       return null;

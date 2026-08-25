@@ -95,9 +95,14 @@ final class MeasureHostUpstreamResolvers extends ObservingStep {
   }
 
   /// What the system resolver says it forwards to.
+  ///
+  /// NOT ELEVATED, and that is an answer rather than a silence: `resolvectl status` reports the
+  /// resolver's own configuration to any account on the machine. The row's elevation is about the
+  /// resolver FILE the second source reads, which is a path an installation may keep where only
+  /// root reaches it, and it is passed to that read.
   static Future<List<String>> _fromSystemResolver(StepContext context) async {
     final CommandResult status = await context.shell.run(
-      const Command.observing('resolvectl', arguments: <String>['status']),
+      const Command.observing('resolvectl', arguments: <String>['status'], elevated: false),
     );
     if (!status.ok) {
       return const <String>[];

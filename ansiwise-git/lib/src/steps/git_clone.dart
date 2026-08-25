@@ -588,11 +588,20 @@ final class GitClone extends IrreversibleStep {
   ///
   /// A path that is not there yet, and a machine whose `stat` answers nothing, are both "no other
   /// owner" — there is nothing to hand over, and the clone below makes it.
+  ///
+  /// Asked at this row's own elevation, like `_observe` and `_mustRun`. A checkout inside a
+  /// directory only root may enter answers `stat` with "Permission denied" as the operator, and
+  /// that empty answer reads here as "no other owner" — the one reading that makes this step skip
+  /// the hand-over it exists to perform.
   Future<String?> _ownedByAnother(StepContext context) async {
     if (ownerAnswer case final String name) {
       if (context.answers.optionalText(name) case final String account) {
         final CommandResult owner = await context.shell.run(
-          Command.observing('stat', arguments: <String>['-c', '%U', repository]),
+          Command.observing(
+            'stat',
+            arguments: <String>['-c', '%U', repository],
+            elevated: elevated,
+          ),
         );
         if (owner.ok && owner.trimmed.isNotEmpty && owner.trimmed != account) {
           return owner.trimmed;
