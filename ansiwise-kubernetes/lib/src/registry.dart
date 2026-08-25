@@ -128,7 +128,7 @@ const Map<StepName, RegisteredStep> kubernetesSteps = <StepName, RegisteredStep>
   ),
   StepName('apply_cluster_issuer'): RegisteredStep(
     name: StepName('apply_cluster_issuer'),
-    source: 'lib/src/steps/apply_cluster_issuer.dart:24',
+    source: 'lib/src/steps/apply_cluster_issuer.dart:26',
     create: ApplyClusterIssuer.fromArguments,
     arguments: ApplyClusterIssuer.arguments,
   ),

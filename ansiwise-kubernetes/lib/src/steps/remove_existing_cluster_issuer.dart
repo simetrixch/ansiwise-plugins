@@ -66,7 +66,14 @@ final class RemoveExistingClusterIssuer extends IrreversibleStep {
         'a rebuild was not asked for, so an issuer that is already there is left alone',
       );
     }
-    if (!await exists(context, kubectl, name)) {
+    final ({bool? there, String? refusal}) live = await exists(context, kubectl, name);
+    if (live.refusal case final String refusal) {
+      return CheckResult.blocked(
+        '$refusal - and this row was told to rebuild it, which is a rebuild reported as done over '
+        'an issuer that may still be standing',
+      );
+    }
+    if (!live.there!) {
       return CheckResult.satisfied('there is no $name to take away');
     }
     return const CheckResult.ready();
@@ -89,14 +96,29 @@ final class RemoveExistingClusterIssuer extends IrreversibleStep {
     }
   }
 
-  /// Whether the issuer [name] is in the cluster, asked through [kubectl].
+  /// Whether the issuer [name] is in the cluster, or why that could not be read.
   ///
   /// Shared with the step that applies it, so both ask the same question of the cluster.
-  static Future<bool> exists(StepContext context, Kubectl kubectl, String name) async {
-    final CommandResult issuer = await context.shell.run(
-      kubectl.observing(<String>['get', 'clusterissuer', name, '-o', 'jsonpath={.metadata.name}']),
+  ///
+  /// A cluster that could not be asked used to come back as the same false a cluster without the
+  /// issuer does, and the check above answered "there is no $name to take away" over it - on a row
+  /// an operator reaches by asking for a rebuild, so what they were told is that the rebuild
+  /// happened. See [Kubectl.readOne].
+  static Future<({bool? there, String? refusal})> exists(
+    StepContext context,
+    Kubectl kubectl,
+    String name,
+  ) async {
+    final ({String? answer, String? refusal}) issuer = await kubectl.readOne(
+      context,
+      kind: 'clusterissuer',
+      name: name,
+      output: 'jsonpath={.metadata.name}',
     );
-    return issuer.ok && issuer.trimmed == name;
+    if (issuer.refusal case final String refusal) {
+      return (there: null, refusal: refusal);
+    }
+    return (there: issuer.answer?.trim() == name, refusal: null);
   }
 
   List<String> get _delete => <String>['delete', 'clusterissuer', name];

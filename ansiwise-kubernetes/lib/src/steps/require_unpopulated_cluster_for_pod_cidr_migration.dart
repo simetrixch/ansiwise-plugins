@@ -109,7 +109,11 @@ final class RequireUnpopulatedClusterForPodCidrMigration extends ObservingStep {
 
   @override
   Future<CheckResult> check(StepContext context) async {
-    if (await _converged(context)) {
+    final ({bool converged, String? refusal}) already = await _converged(context);
+    if (already.refusal case final String refusal) {
+      return CheckResult.blocked(refusal);
+    }
+    if (already.converged) {
       return CheckResult.satisfied(
         'the pod network already runs on $podCidr and kube-proxy carries it, so no pool is going to '
         'be swapped',
@@ -148,16 +152,23 @@ final class RequireUnpopulatedClusterForPodCidrMigration extends ObservingStep {
     );
   }
 
-  /// Whether both halves of the conversion are already done.
-  Future<bool> _converged(StepContext context) async {
-    if (await RemoveDefaultIpv4Ippool.liveCidr(context, kubectl) != podCidr) {
-      return false;
+  /// Whether both halves of the conversion are already done, or why that could not be read.
+  Future<({bool converged, String? refusal})> _converged(StepContext context) async {
+    final ({String? cidr, String? refusal}) pool = await RemoveDefaultIpv4Ippool.liveCidr(
+      context,
+      kubectl,
+    );
+    if (pool.refusal case final String refusal) {
+      return (converged: false, refusal: refusal);
+    }
+    if (pool.cidr != podCidr) {
+      return (converged: false, refusal: null);
     }
     if (!await context.files.exists(argsPath, elevated: elevated)) {
-      return false;
+      return (converged: false, refusal: null);
     }
     final String args = await context.files.read(argsPath, elevated: elevated);
-    return _carries(args, '$clusterCidrFlag=$podCidr');
+    return (converged: _carries(args, '$clusterCidrFlag=$podCidr'), refusal: null);
   }
 
   /// Whether [args] carries [line] exactly, as its own line.

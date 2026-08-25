@@ -92,8 +92,14 @@ final class VerifyIppoolConvergedWithSelfHeal extends IrreversibleStep {
 
   @override
   Future<CheckResult> check(StepContext context) async {
-    final String? live = await RemoveDefaultIpv4Ippool.liveCidr(context, kubectl);
-    if (live == podCidr) {
+    final ({String? cidr, String? refusal}) reading = await RemoveDefaultIpv4Ippool.liveCidr(
+      context,
+      kubectl,
+    );
+    if (reading.refusal case final String refusal) {
+      return CheckResult.blocked(refusal);
+    }
+    if (reading.cidr == podCidr) {
       return CheckResult.satisfied('${RemoveDefaultIpv4Ippool.poolName} covers $podCidr');
     }
     return const CheckResult.ready();
@@ -111,7 +117,17 @@ final class VerifyIppoolConvergedWithSelfHeal extends IrreversibleStep {
     bool healed = false;
 
     while (true) {
-      final String? live = await RemoveDefaultIpv4Ippool.liveCidr(context, kubectl);
+      final ({String? cidr, String? refusal}) reading = await RemoveDefaultIpv4Ippool.liveCidr(
+        context,
+        kubectl,
+      );
+      // WAITING OUT A CLUSTER THAT WOULD NOT ANSWER IS NOT WATCHING A POOL. Read as "there is no
+      // pool", a cluster that could not be asked left this loop healing nothing and then reporting
+      // that the pool never came back covering the range - a deadline blamed on the pool.
+      if (reading.refusal case final String refusal) {
+        throw StateError(refusal);
+      }
+      final String? live = reading.cidr;
       if (live == podCidr) {
         return;
       }

@@ -52,19 +52,33 @@ final class RemoveDefaultIpv4Ippool extends IrreversibleStep {
   /// The pool Calico creates from the shipped manifest, and the only one this program touches.
   static const String poolName = 'default-ipv4-ippool';
 
-  /// The range the pool the cluster is running on covers, or null when there is no pool.
+  /// The range the pool the cluster is running on covers, null when there is no pool, or why
+  /// neither could be read.
   ///
   /// **This is the live source of truth for the whole conversion, and the manifest is not.** The
   /// manifest's value is consumed once at creation, so a machine can carry a correctly stamped
   /// manifest and still run on the old pool. Every convergence question in this phase is asked here.
-  static Future<String?> liveCidr(StepContext context, Kubectl kubectl) async {
-    final CommandResult pool = await context.shell.run(
-      kubectl.observing(<String>['get', 'ippool', poolName, '-o', 'jsonpath={.spec.cidr}']),
+  ///
+  /// A cluster that could not be asked used to come back as the same null a cluster with no pool
+  /// does, and the check below answered "there is no $poolName, so there is none to delete" over it
+  /// — a row that ships immediately after the cluster comes up, which is exactly when an API server
+  /// does not answer. The pod-network conversion then silently did not happen and the row stood
+  /// proven. See [Kubectl.readOne] for how the two are told apart.
+  static Future<({String? cidr, String? refusal})> liveCidr(
+    StepContext context,
+    Kubectl kubectl,
+  ) async {
+    final ({String? answer, String? refusal}) pool = await kubectl.readOne(
+      context,
+      kind: 'ippool',
+      name: poolName,
+      output: 'jsonpath={.spec.cidr}',
     );
-    if (!pool.ok || pool.trimmed.isEmpty) {
-      return null;
+    if (pool.refusal case final String refusal) {
+      return (cidr: null, refusal: refusal);
     }
-    return pool.trimmed;
+    final String? cidr = pool.answer?.trim();
+    return (cidr: cidr == null || cidr.isEmpty ? null : cidr, refusal: null);
   }
 
   /// The range every pod gets an address out of.
@@ -87,7 +101,11 @@ final class RemoveDefaultIpv4Ippool extends IrreversibleStep {
 
   @override
   Future<CheckResult> check(StepContext context) async {
-    final String? live = await liveCidr(context, kubectl);
+    final ({String? cidr, String? refusal}) reading = await liveCidr(context, kubectl);
+    if (reading.refusal case final String refusal) {
+      return CheckResult.blocked(refusal);
+    }
+    final String? live = reading.cidr;
     if (live == null) {
       return const CheckResult.satisfied('there is no $poolName, so there is none to delete');
     }

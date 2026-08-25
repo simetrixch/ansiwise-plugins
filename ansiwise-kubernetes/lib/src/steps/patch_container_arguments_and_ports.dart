@@ -169,7 +169,11 @@ final class PatchContainerArgumentsAndPorts extends ReversibleStep<ContainerAddi
       return const CheckResult.satisfied('nothing is asked of this container');
     }
 
-    final _Workload? workloadNow = await _read(context);
+    final ({_Workload? workload, String? refusal}) reading = await _read(context);
+    if (reading.refusal case final String refusal) {
+      return CheckResult.blocked(refusal);
+    }
+    final _Workload? workloadNow = reading.workload;
     if (workloadNow == null) {
       return CheckResult.satisfied(
         'there is no $kind $name in $namespace, so what installs it is not up and there is nothing '
@@ -215,7 +219,11 @@ final class PatchContainerArgumentsAndPorts extends ReversibleStep<ContainerAddi
 
   @override
   Future<StepPlan> plan(StepContext context) async {
-    final _Workload? workloadNow = await _read(context);
+    final ({_Workload? workload, String? refusal}) reading = await _read(context);
+    if (reading.refusal case final String refusal) {
+      return StepPlan.nothing(refusal);
+    }
+    final _Workload? workloadNow = reading.workload;
     final int at = workloadNow?.positionOf(container) ?? -1;
     if (workloadNow == null || at < 0) {
       return const StepPlan.nothing('there is no such container to patch');
@@ -255,7 +263,11 @@ final class PatchContainerArgumentsAndPorts extends ReversibleStep<ContainerAddi
 
   @override
   Future<void> apply(StepContext context) async {
-    final _Workload? workloadNow = await _read(context);
+    final ({_Workload? workload, String? refusal}) reading = await _read(context);
+    if (reading.refusal case final String refusal) {
+      throw StateError(refusal);
+    }
+    final _Workload? workloadNow = reading.workload;
     final int at = workloadNow?.positionOf(container) ?? -1;
     if (workloadNow == null || at < 0) {
       return;
@@ -278,7 +290,19 @@ final class PatchContainerArgumentsAndPorts extends ReversibleStep<ContainerAddi
   /// running and simply stops doing one of the things it did.
   @override
   Future<ContainerAdditions> capture(StepContext context) async {
-    final _Workload? workloadNow = await _read(context);
+    final ({_Workload? workload, String? refusal}) reading = await _read(context);
+    if (reading.refusal case final String refusal) {
+      // What the undo takes out is exactly what this names, so an empty list leaves the container
+      // as it stands - which is what a reading nobody could take has to produce. Said out loud,
+      // because an empty list otherwise reads as a container that already carried everything.
+      context.log.warn(
+        'what $kind $name in $namespace carried before this ran could not be read, so an undo will '
+        'leave its arguments and ports alone rather than remove ones this run may not have added: '
+        '$refusal',
+      );
+      return const ContainerAdditions(arguments: <String>[], ports: <int>[]);
+    }
+    final _Workload? workloadNow = reading.workload;
     final int at = workloadNow?.positionOf(container) ?? -1;
     if (workloadNow == null || at < 0) {
       return const ContainerAdditions(arguments: <String>[], ports: <int>[]);
@@ -294,7 +318,11 @@ final class PatchContainerArgumentsAndPorts extends ReversibleStep<ContainerAddi
 
   @override
   Future<void> undo(StepContext context, ContainerAdditions captured) async {
-    final _Workload? workloadNow = await _read(context);
+    final ({_Workload? workload, String? refusal}) reading = await _read(context);
+    if (reading.refusal != null) {
+      return;
+    }
+    final _Workload? workloadNow = reading.workload;
     final int at = workloadNow?.positionOf(container) ?? -1;
     if (workloadNow == null || at < 0) {
       return;
@@ -438,12 +466,27 @@ final class PatchContainerArgumentsAndPorts extends ReversibleStep<ContainerAddi
     ]);
   }
 
-  /// The workload as the cluster holds it, or null when it cannot be read.
-  Future<_Workload?> _read(StepContext context) async {
-    final CommandResult read = await context.shell.run(
-      kubectl.observing(<String>['-n', namespace, 'get', kind, name, '-o', 'json']),
+  /// The workload as the cluster holds it, null when the cluster holds no such workload, or why
+  /// neither could be read.
+  ///
+  /// A cluster that could not be asked used to come back as the same null a cluster without the
+  /// workload does, and the check answered "there is no $kind $name in $namespace, so what installs
+  /// it is not up and there is nothing to patch" over it. See [Kubectl.readOne].
+  Future<({_Workload? workload, String? refusal})> _read(StepContext context) async {
+    final ({String? answer, String? refusal}) read = await kubectl.readOne(
+      context,
+      kind: kind,
+      name: name,
+      output: 'json',
+      namespace: namespace,
     );
-    return read.ok ? _Workload.read(_decoded(read.stdout)) : null;
+    if (read.refusal case final String refusal) {
+      return (workload: null, refusal: refusal);
+    }
+    if (read.answer case final String json) {
+      return (workload: _Workload.read(_decoded(json)), refusal: null);
+    }
+    return (workload: null, refusal: null);
   }
 
   /// The pods of this workload, or null when they cannot be read.

@@ -117,7 +117,7 @@ void main() {
 
     test('the undo removes an issuer this run created', () async {
       final ClusterMachine machine = ClusterMachine();
-      await step.undo(machine.contextFor(under), null);
+      await step.undo(machine.contextFor(under), const ClusterIssuerBefore.none());
       expect(machine.changing.single, contains('delete clusterissuer my-issuer'));
     });
 
@@ -126,10 +126,13 @@ void main() {
     // cluster registered with the authority this run moved it to and call that restored.
     test('the undo puts back the registration it wrote over', () async {
       final ClusterMachine machine = ClusterMachine();
-      await step.undo(machine.contextFor(under), (
-        server: 'https://acme-staging-v02.api.letsencrypt.org/directory',
-        email: 'someone@example.test',
-      ));
+      await step.undo(
+        machine.contextFor(under),
+        const ClusterIssuerBefore.of((
+          server: 'https://acme-staging-v02.api.letsencrypt.org/directory',
+          email: 'someone@example.test',
+        )),
+      );
 
       final String patched = machine.changing.single;
       expect(patched, contains('patch clusterissuer my-issuer'));

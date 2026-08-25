@@ -21,7 +21,9 @@ import 'kubectl.dart';
 /// It is the second sighting of one shape: a step that reads "something of this name is here" as
 /// "the right thing is here" cannot converge, and what an operator is left with is hand surgery on
 /// a live cluster — which is the one thing a declared program exists to make unnecessary.
-final class ApplyClusterIssuer extends ReversibleStep<({String server, String email})?> {
+///
+/// The whole of what a run does to the issuer is undone through [ClusterIssuerBefore].
+final class ApplyClusterIssuer extends ReversibleStep<ClusterIssuerBefore> {
   /// Applies the issuer [name] out of the file at [manifestPath].
   const ApplyClusterIssuer({
     required this.name,
@@ -85,7 +87,13 @@ final class ApplyClusterIssuer extends ReversibleStep<({String server, String em
     final ({String server, String email}) wanted = _issuerIn(
       await context.files.read(manifestPath, elevated: elevated),
     );
-    final ({String server, String email})? live = await _live(context);
+    final ({({String server, String email})? issuer, String? refusal}) reading = await _live(
+      context,
+    );
+    if (reading.refusal case final String refusal) {
+      return CheckResult.blocked(refusal);
+    }
+    final ({String server, String email})? live = reading.issuer;
     if (live == null) {
       return const CheckResult.ready();
     }
@@ -104,25 +112,30 @@ final class ApplyClusterIssuer extends ReversibleStep<({String server, String em
     return const CheckResult.ready();
   }
 
-  /// The authority and the mailbox the issuer in the cluster carries, or null where there is none.
-  Future<({String server, String email})?> _live(StepContext context) async {
-    final CommandResult issuer = await context.shell.run(
-      kubectl.observing(<String>[
-        'get',
-        'clusterissuer',
-        name,
-        '-o',
-        r'jsonpath={.spec.acme.server}{"\n"}{.spec.acme.email}',
-      ]),
+  /// The authority and the mailbox the issuer in the cluster carries, null where there is no such
+  /// issuer, or why neither could be read.
+  ///
+  /// A cluster that could not be asked used to come back as the same null a cluster without the
+  /// issuer does, and [capture] reads that null as "this run created it" — which sends the undo to
+  /// DELETE an issuer that was already there, and every certificate on the cluster is issued by it.
+  /// See [Kubectl.readOne].
+  Future<({({String server, String email})? issuer, String? refusal})> _live(
+    StepContext context,
+  ) async {
+    final ({String? answer, String? refusal}) read = await kubectl.readOne(
+      context,
+      kind: 'clusterissuer',
+      name: name,
+      output: r'jsonpath={.spec.acme.server}{"\n"}{.spec.acme.email}',
     );
-    if (!issuer.ok) {
-      return null;
+    if (read.refusal case final String refusal) {
+      return (issuer: null, refusal: refusal);
     }
-    final List<String> lines = issuer.trimmed.split('\n');
+    final List<String> lines = (read.answer ?? '').trim().split('\n');
     if (lines.length != 2 || lines.first.isEmpty) {
-      return null;
+      return (issuer: null, refusal: null);
     }
-    return (server: lines.first.trim(), email: lines.last.trim());
+    return (issuer: (server: lines.first.trim(), email: lines.last.trim()), refusal: null);
   }
 
   /// The authority and the mailbox [manifest] names.
@@ -170,7 +183,22 @@ final class ApplyClusterIssuer extends ReversibleStep<({String server, String em
   /// only knew whether the object existed would leave the new registration in place and call the
   /// cluster restored.
   @override
-  Future<({String server, String email})?> capture(StepContext context) => _live(context);
+  Future<ClusterIssuerBefore> capture(StepContext context) async {
+    final ({({String server, String email})? issuer, String? refusal}) reading = await _live(
+      context,
+    );
+    if (reading.refusal case final String refusal) {
+      context.log.warn(
+        'what $name carried before this ran could not be read, so an undo will leave the issuer as '
+        'it stands rather than delete one this run may not have created: $refusal',
+      );
+      return const ClusterIssuerBefore.unmeasured();
+    }
+    if (reading.issuer case final ({String server, String email}) registration) {
+      return ClusterIssuerBefore.of(registration);
+    }
+    return const ClusterIssuerBefore.none();
+  }
 
   /// Deletes an issuer that this step created, and puts back the two values it overwrote.
   ///
@@ -178,8 +206,11 @@ final class ApplyClusterIssuer extends ReversibleStep<({String server, String em
   /// so it is never deleted while cleaning up after something else — what is undone is the change,
   /// which is the pair of values.
   @override
-  Future<void> undo(StepContext context, ({String server, String email})? captured) async {
-    if (captured == null) {
+  Future<void> undo(StepContext context, ClusterIssuerBefore captured) async {
+    if (captured.unmeasured) {
+      return;
+    }
+    if (captured.registration == null) {
       await context.shell.run(kubectl.command(<String>['delete', 'clusterissuer', name]));
       return;
     }
@@ -190,10 +221,37 @@ final class ApplyClusterIssuer extends ReversibleStep<({String server, String em
         name,
         '--type=merge',
         '-p',
-        '{"spec":{"acme":{"server":"${captured.server}","email":"${captured.email}"}}}',
+        '{"spec":{"acme":{"server":"${captured.registration!.server}",'
+            '"email":"${captured.registration!.email}"}}}',
       ]),
     );
   }
 
   List<String> get _apply => <String>['apply', '-f', manifestPath];
+}
+
+/// What the issuer in the cluster carried before a run applied over it, as far as it could be read.
+///
+/// **Three states, because the undo does three different things.** An issuer that was not there is
+/// one this run created and the undo deletes it; an issuer that was there is one every certificate
+/// on the cluster is issued by, so what the undo puts back is the pair of values this run wrote
+/// over. The third is neither, and it is the one that used to be missing: a cluster that could not
+/// be asked came back as the same null a cluster without the issuer does, and the undo deleted a
+/// live issuer over it while cleaning up after some other step failed.
+final class ClusterIssuerBefore {
+  /// Records that the cluster held no such issuer, so this run created it.
+  const ClusterIssuerBefore.none() : registration = null, unmeasured = false;
+
+  /// Records the authority and the mailbox the issuer carried.
+  const ClusterIssuerBefore.of(({String server, String email}) this.registration)
+    : unmeasured = false;
+
+  /// Records that neither could be read, so an undo has nothing it may act on.
+  const ClusterIssuerBefore.unmeasured() : registration = null, unmeasured = true;
+
+  /// What the issuer was registered with, or null where there was no issuer or no reading.
+  final ({String server, String email})? registration;
+
+  /// Whether the cluster could not be asked at all, which is not the same as holding no issuer.
+  final bool unmeasured;
 }

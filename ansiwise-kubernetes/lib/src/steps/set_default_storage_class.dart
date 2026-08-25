@@ -21,7 +21,7 @@ import 'kubectl.dart';
 /// shortly after it is switched on, so a step that looked once and moved on would leave a first
 /// install with no default at all — correct only if somebody comes back and runs the program a
 /// second time, which nothing arranges. Waiting is the deliberate departure from what this replaces.
-final class SetDefaultStorageClass extends ReversibleStep<String?> {
+final class SetDefaultStorageClass extends ReversibleStep<DefaultStorageClassBefore> {
   /// Waits up to [timeoutSeconds] for a class and marks the first one as the default.
   const SetDefaultStorageClass({
     required this.timeoutSeconds,
@@ -117,18 +117,30 @@ final class SetDefaultStorageClass extends ReversibleStep<String?> {
     }
   }
 
-  /// The class that carries the mark already, or null when no class is the default.
+  /// Which class carried the mark before this ran, that none did, or that neither could be read.
   ///
   /// Which class this step will mark cannot be read yet — the apply waits for the volume addon to
   /// produce one — so what is kept is whether the cluster had a default at all. A cluster that
   /// arrived with one keeps it, and a mark read at undo time cannot say who put it there.
   @override
-  Future<String?> capture(StepContext context) async =>
-      _default(await _classes(context) ?? const <String, bool>{});
+  Future<DefaultStorageClassBefore> capture(StepContext context) async {
+    final Map<String, bool>? classes = await _classes(context);
+    if (classes == null) {
+      context.log.warn(
+        'the storage classes could not be read, so an undo will leave the default mark alone '
+        'rather than take it off a class this run may not have marked',
+      );
+      return const DefaultStorageClassBefore.unmeasured();
+    }
+    if (_default(classes) case final String marked) {
+      return DefaultStorageClassBefore.of(marked);
+    }
+    return const DefaultStorageClassBefore.none();
+  }
 
   @override
-  Future<void> undo(StepContext context, String? captured) async {
-    if (captured != null) {
+  Future<void> undo(StepContext context, DefaultStorageClassBefore captured) async {
+    if (captured.unmeasured || captured.marked != null) {
       return;
     }
     final Map<String, bool> classes = await _classes(context) ?? const <String, bool>{};
@@ -211,4 +223,29 @@ final class SetDefaultStorageClass extends ReversibleStep<String?> {
 
   /// The mark's name with the dots escaped, because a reading path splits on them.
   static final String _escapedAnnotation = annotation.replaceAll('.', r'\.');
+}
+
+/// Which storage class carried the default mark before a run marked one, as far as it could be read.
+///
+/// **Three states, because the undo acts on exactly one of them.** A cluster that arrived WITH a
+/// default keeps it, whichever class it is; a cluster that arrived without one has the mark this run
+/// made taken off again. The third is neither, and it is the one that used to be missing: a cluster
+/// whose classes could not be read came back as the same empty map a cluster with no default does,
+/// so the undo took the mark off a class this run may never have marked, while cleaning up after
+/// some other step failed.
+final class DefaultStorageClassBefore {
+  /// Records that no class of this cluster carried the mark, so this run made the one that does.
+  const DefaultStorageClassBefore.none() : marked = null, unmeasured = false;
+
+  /// Records the class that already carried the mark.
+  const DefaultStorageClassBefore.of(String this.marked) : unmeasured = false;
+
+  /// Records that the classes could not be read, so an undo has nothing it may act on.
+  const DefaultStorageClassBefore.unmeasured() : marked = null, unmeasured = true;
+
+  /// The class that carried the mark, or null where none did or nothing could be read.
+  final String? marked;
+
+  /// Whether the classes could not be read, which is not the same as a cluster with no default.
+  final bool unmeasured;
 }

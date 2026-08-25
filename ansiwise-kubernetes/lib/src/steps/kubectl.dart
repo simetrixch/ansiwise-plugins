@@ -103,4 +103,60 @@ final class Kubectl {
     arguments: <String>[...invocation.sublist(1), ...arguments],
     elevated: elevated,
   );
+
+  /// What the cluster answers about the one object [kind]/[name], as [output] asks for it.
+  ///
+  /// Three states, and the client gives two of them the same exit code:
+  ///
+  /// | `answer` | `refusal` | what it means |
+  /// |---|---|---|
+  /// | the output | null | the object is there, and this is what it holds |
+  /// | null | null | the cluster answered, and it holds no such object |
+  /// | null | why | the cluster could not be asked, so neither of the above was measured |
+  ///
+  /// **A GET OF A NAMED OBJECT EXITS ONE FOR AN OBJECT THAT IS NOT THERE AND FOR A CLUSTER THAT
+  /// NEVER ANSWERED**, and folded into the second the first is what several steps of this package
+  /// reported: "there is no such thing, so there is nothing to delete", "there is nothing to patch",
+  /// and a capture reading "this run created it" that sends an undo to delete an object somebody
+  /// else's cluster was already running on. The rows this matters most for are the ones that run
+  /// straight after a cluster comes up, which is precisely the moment an API server does not answer.
+  ///
+  /// **A LIST tells them apart, and it does it on the exit code alone.** `get <kind>` over a cluster
+  /// holding none of them writes nothing and exits ZERO — absence is not an error for a list — while
+  /// a cluster that cannot be reached, a client with no credentials, and a kind the cluster does not
+  /// serve at all each exit non-zero. So the list is asked only where the get failed, and what it
+  /// answers is the whole distinction. Nothing here reads a message: the words a client writes are
+  /// its own to change, and a check built on them goes quietly green when they do.
+  Future<({String? answer, String? refusal})> readOne(
+    StepContext context, {
+    required String kind,
+    required String name,
+    required String output,
+    String? namespace,
+  }) async {
+    final List<String> within = <String>[
+      if (namespace case final String each) ...<String>['-n', each],
+    ];
+    final CommandResult asked = await context.shell.run(
+      observing(<String>[...within, 'get', kind, name, '-o', output]),
+    );
+    if (asked.ok) {
+      return (answer: asked.stdout, refusal: null);
+    }
+    final CommandResult listed = await context.shell.run(
+      observing(<String>[...within, 'get', kind, '-o', 'name']),
+    );
+    if (listed.ok) {
+      return (answer: null, refusal: null);
+    }
+    return (
+      answer: null,
+      refusal:
+          'the cluster would not say whether $kind "$name" is there, so nothing here knows whether '
+          'it is: ${argv(<String>[...within, 'get', kind, name]).join(' ')} answered '
+          '${asked.exitCode} and ${argv(<String>[...within, 'get', kind]).join(' ')} answered '
+          '${listed.exitCode}'
+          '${listed.stderr.trim().isEmpty ? '' : ' — ${listed.stderr.trim()}'}',
+    );
+  }
 }

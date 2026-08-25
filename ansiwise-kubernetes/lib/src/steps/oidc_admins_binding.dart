@@ -88,14 +88,20 @@ final class OidcAdminsBinding extends ReversibleStep<bool> {
 
   @override
   Future<CheckResult> check(StepContext context) async {
-    final CommandResult read = await context.shell.run(
-      kubectl.observing(<String>['get', 'clusterrolebinding', name, '-o', 'json']),
+    final ({String? answer, String? refusal}) read = await kubectl.readOne(
+      context,
+      kind: 'clusterrolebinding',
+      name: name,
+      output: 'json',
     );
-    if (!read.ok) {
+    if (read.refusal case final String refusal) {
+      return CheckResult.blocked(refusal);
+    }
+    if (read.answer == null) {
       return const CheckResult.ready();
     }
 
-    final Object? decoded = _decoded(read.trimmed);
+    final Object? decoded = _decoded(read.answer!.trim());
     if (decoded is! Map<String, Object?>) {
       return const CheckResult.ready();
     }
@@ -150,10 +156,26 @@ final class OidcAdminsBinding extends ReversibleStep<bool> {
   /// `kubectl create`. So the undo removes a binding this run created, and leaves one it replaced.
   @override
   Future<bool> capture(StepContext context) async {
-    final CommandResult read = await context.shell.run(
-      kubectl.observing(<String>['get', 'clusterrolebinding', name, '-o', 'name']),
+    final ({String? answer, String? refusal}) read = await kubectl.readOne(
+      context,
+      kind: 'clusterrolebinding',
+      name: name,
+      output: 'name',
     );
-    return read.ok;
+    if (read.refusal case final String refusal) {
+      // A capture is a yes-or-no and a reading that could not be taken is neither. The false half
+      // is what deletes the binding, so a refusal answered as false takes away a cluster-wide grant
+      // that was standing before this run started - and it does that while cleaning up after some
+      // other step failed. The other half leaves the cluster as it stands, and this note keeps it
+      // from being read as proof that the binding was there.
+      context.log.warn(
+        'whether the cluster already held a ClusterRoleBinding called $name could not be read, so '
+        'an undo will leave it alone rather than delete a grant this run may not have made: '
+        '$refusal',
+      );
+      return true;
+    }
+    return read.answer != null;
   }
 
   @override
