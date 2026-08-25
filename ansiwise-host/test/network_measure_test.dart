@@ -4,8 +4,9 @@ import 'package:test/test.dart';
 
 import 'host_fixture.dart';
 
-/// One flag in a process's argument file, and the two measurements the network work asks of a
-/// machine: its real name servers, and its packet-filtering backend.
+/// One flag in a process's argument file, and the three measurements the network work asks of a
+/// machine: its real name servers, its packet-filtering backend, and the source ports it opens its
+/// own outgoing connections from.
 void main() {
   const StepName under = StepName('under_test');
   const String argsPath = '/etc/proxy/args';
@@ -182,5 +183,73 @@ void main() {
         MeasureHostIptablesBackend.legacy,
       );
     });
+  });
+
+  group('the ports the machine opens its own connections from', () {
+    // What the kernel writes into this file: the low and the high port with a tab between them and a
+    // newline after. The two numbers are what something masquerading another address range behind
+    // this machine has to be held to, because the network the machine hangs on may carry the answer
+    // back for these ports and for no others.
+    const String kernelSays = '32768\t60999\n';
+
+    test(
+      'the two numbers the kernel names are what is published, separated by one space',
+      () async {
+        final HostMachine machine = HostMachine();
+        machine.files.contents[MeasureHostLocalPortRange.path] = kernelSays;
+
+        expect(
+          await const MeasureHostLocalPortRange().check(machine.contextFor(under)),
+          isA<Satisfied>(),
+        );
+        expect(machine.published[const MeasurementName('local_port_range')], '32768 60999');
+      },
+    );
+
+    test(
+      'a machine tuned to other ports publishes those, so no range is written down here',
+      () async {
+        final HostMachine machine = HostMachine();
+        machine.files.contents[MeasureHostLocalPortRange.path] = '1024 65535\n';
+
+        expect(await MeasureHostLocalPortRange.measure(machine.contextFor(under)), '1024 65535');
+      },
+    );
+
+    test('a machine this cannot be read from answers nothing, not a range', () async {
+      // Answering with the whole port space here would make "this machine opens its own connections
+      // from every port" and "nothing here could be read" the same sentence, and whatever is held to
+      // the value cannot tell them apart afterwards.
+      expect(await MeasureHostLocalPortRange.measure(HostMachine().contextFor(under)), isNull);
+    });
+
+    test('and the step blocks on it rather than publishing a range it did not read', () async {
+      // An observing step that answers Satisfied is stamped PROVEN by the engine.
+      final HostMachine machine = HostMachine();
+
+      final CheckResult answer = await const MeasureHostLocalPortRange().check(
+        machine.contextFor(under),
+      );
+
+      expect((answer as Blocked).reason, contains('no pair of port numbers'));
+      expect(machine.published, isEmpty);
+    });
+
+    // Five shapes the file could hold that are not a pair of ports: nothing, one number, three
+    // numbers, two words, and a number that is no port.
+    for (final String unusable in <String>[
+      '',
+      '32768',
+      '32768 60999 61000',
+      'low high',
+      '0 60999',
+    ]) {
+      test('a file reading "$unusable" names no pair of ports', () async {
+        final HostMachine machine = HostMachine();
+        machine.files.contents[MeasureHostLocalPortRange.path] = '$unusable\n';
+
+        expect(await MeasureHostLocalPortRange.measure(machine.contextFor(under)), isNull);
+      });
+    }
   });
 }

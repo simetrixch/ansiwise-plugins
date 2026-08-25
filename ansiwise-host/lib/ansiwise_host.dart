@@ -33,6 +33,7 @@ export 'src/steps/host/install_tool_prerequisites.dart';
 export 'src/steps/host/key_value_file.dart';
 export 'src/steps/host/link_storage_path.dart';
 export 'src/steps/host/measure_host_iptables_backend.dart';
+export 'src/steps/host/measure_host_local_port_range.dart';
 export 'src/steps/host/measure_host_upstream_resolvers.dart';
 export 'src/steps/host/measure_public_nic.dart';
 export 'src/steps/host/on_the_path.dart';

@@ -1,5 +1,6 @@
 import 'package:ansiwise_core/ansiwise_core.dart';
 import 'steps/align_calico_backend.dart';
+import 'steps/align_calico_nat_port_range.dart';
 import 'steps/apply_cluster_issuer.dart';
 import 'steps/export_cluster_credentials.dart';
 import 'steps/kubernetes_configmap_from_directory.dart';
@@ -92,6 +93,12 @@ const Map<StepName, RegisteredStep> kubernetesSteps = <StepName, RegisteredStep>
     source: 'lib/src/steps/align_calico_backend.dart:51',
     create: AlignCalicoBackend.fromArguments,
     arguments: AlignCalicoBackend.arguments,
+  ),
+  StepName('align_calico_nat_port_range'): RegisteredStep(
+    name: StepName('align_calico_nat_port_range'),
+    source: 'lib/src/steps/align_calico_nat_port_range.dart:53',
+    create: AlignCalicoNatPortRange.fromArguments,
+    arguments: AlignCalicoNatPortRange.arguments,
   ),
   StepName('patch_container_arguments_and_ports'): RegisteredStep(
     name: StepName('patch_container_arguments_and_ports'),

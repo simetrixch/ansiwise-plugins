@@ -23,6 +23,7 @@ import 'steps/host/install_tailscale_client.dart';
 import 'steps/host/install_tool_prerequisites.dart';
 import 'steps/host/link_storage_path.dart';
 import 'steps/host/measure_host_iptables_backend.dart';
+import 'steps/host/measure_host_local_port_range.dart';
 import 'steps/host/measure_host_upstream_resolvers.dart';
 import 'steps/host/measure_public_nic.dart';
 import 'steps/host/remove_snap.dart';
@@ -381,6 +382,18 @@ const Map<StepName, RegisteredStep> hostSteps = <StepName, RegisteredStep>{
       MeasurementSpec(
         name: MeasurementName('backend'),
         describes: 'the packet-filtering backend this machine is on',
+      ),
+    ],
+  ),
+  StepName('measure_host_local_port_range'): RegisteredStep(
+    name: StepName('measure_host_local_port_range'),
+    source: 'lib/src/steps/host/measure_host_local_port_range.dart:31',
+    create: MeasureHostLocalPortRange.fromArguments,
+    arguments: MeasureHostLocalPortRange.arguments,
+    publishes: <MeasurementSpec>[
+      MeasurementSpec(
+        name: MeasurementName('local_port_range'),
+        describes: 'the ports this machine opens its own outgoing connections from',
       ),
     ],
   ),

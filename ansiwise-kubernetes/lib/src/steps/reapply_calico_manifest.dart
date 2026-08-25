@@ -64,6 +64,13 @@ final class ReapplyCalicoManifest extends ReversibleStep<String?> {
   /// backend, and patching the settings object does not.
   static const String backendVariable = 'FELIX_IPTABLESBACKEND';
 
+  /// The environment variable whose value is the source-port range the agent masquerades out of.
+  ///
+  /// Nothing here writes it either. It stands beside [backendVariable] for the same reason that one
+  /// stands beside [variable] — all three are read off this set — and it is read for the same
+  /// reason: a set declaring it decides the range, and patching the settings object does not.
+  static const String natPortRangeVariable = 'FELIX_NATPORTRANGE';
+
   /// The range every pod gets an address out of.
   final String podCidr;
 

@@ -23,6 +23,14 @@ Future<void> main() => auditIdempotence(
 /// tomorrow either brings its fixture or is written down as unproven.
 const Set<String> notCoveredByAFakeMachine = <String>{
   'align_calico_backend',
+  // NOT a machine the fake cannot arrange — a probe that hands one placeholder to an argument that
+  // takes a MEASUREMENT. The audit gives every optional text argument the same placeholder, and
+  // neither of these two reads it as the thing a row fills them from: one names a packet-filtering
+  // backend, the other two port numbers. Both are blocked on that before any machine is asked, and
+  // a fixture cannot close it, because a fixture arranges the machine and not the arguments. What
+  // each of them does on a second run against real values is driven directly in
+  // align_calico_backend_test.dart and align_calico_nat_port_range_test.dart.
+  'align_calico_nat_port_range',
   'apply_cluster_issuer',
   'remove_default_ipv4_ippool',
   'remove_existing_cluster_issuer',
