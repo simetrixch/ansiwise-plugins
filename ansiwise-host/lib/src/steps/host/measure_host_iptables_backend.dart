@@ -40,12 +40,12 @@ final class MeasureHostIptablesBackend extends ObservingStep {
 
   /// Which backend this machine is set to.
   ///
-  /// **This measurement is not shared with the step that pins the network agent, and cannot be.**
-  /// That step lives in the package that owns the cluster client; that package and this one do not
-  /// depend on each other, and the framework carries no channel by which one step hands a VALUE to
-  /// a later one — a predicate answers yes or no, and an answer comes from the operator. So the
-  /// link is read twice, once on each side of that line, and what stands here is that fact rather
-  /// than a claim of one implementation.
+  /// **This is the ONE reading of this machine's backend, and the step that pins the network agent
+  /// takes it from here.** That step lives in the package that owns the cluster client, and that
+  /// package and this one do not depend on each other; what carries the value across the line is
+  /// the measurement this step publishes and the row below it reads. A second reading over there
+  /// would be a second answer to one question, and two answers can come to disagree with nothing to
+  /// report it.
   /// **Null is not a value, it is the absence of a reading.** Answering with a backend when neither
   /// link could be read would make "the machine filters with nft" and "nothing here could be read"
   /// the same sentence, and the caller cannot tell them apart afterwards.

@@ -89,7 +89,7 @@ const Map<StepName, RegisteredStep> kubernetesSteps = <StepName, RegisteredStep>
   ),
   StepName('align_calico_backend'): RegisteredStep(
     name: StepName('align_calico_backend'),
-    source: 'lib/src/steps/align_calico_backend.dart:23',
+    source: 'lib/src/steps/align_calico_backend.dart:51',
     create: AlignCalicoBackend.fromArguments,
     arguments: AlignCalicoBackend.arguments,
   ),

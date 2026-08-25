@@ -56,6 +56,14 @@ final class ReapplyCalicoManifest extends ReversibleStep<String?> {
   /// The environment variable whose value is the pool's range, as Calico names it.
   static const String variable = 'CALICO_IPV4POOL_CIDR';
 
+  /// The environment variable whose value is the packet-filtering backend the agent programs with.
+  ///
+  /// Nothing here writes it. It stands beside [variable] because both are read off the same set,
+  /// and it is read at all because the agent takes its configuration from its environment BEFORE it
+  /// takes it from the settings objects in the cluster — so a set declaring this decides the
+  /// backend, and patching the settings object does not.
+  static const String backendVariable = 'FELIX_IPTABLESBACKEND';
+
   /// The range every pod gets an address out of.
   final String podCidr;
 
@@ -114,6 +122,17 @@ final class ReapplyCalicoManifest extends ReversibleStep<String?> {
 
   /// The range the network agent is declared with in the cluster, or null when it cannot be read.
   static Future<String?> declaredPoolCidr(StepContext context, Kubectl kubectl) async {
+    final String? declared = await declaredEnv(context, kubectl, variable);
+    return declared == null || declared.isEmpty ? null : declared;
+  }
+
+  /// The value [named] is declared with on the agent's own container in the cluster.
+  ///
+  /// The empty string is the set carrying no such variable, and null is the set being unreadable.
+  /// A caller that cannot act on the difference collapses the two itself; one that reports what the
+  /// agent will do cannot, because "the agent is started with nothing here" and "nothing could be
+  /// asked" are different facts about the machine.
+  static Future<String?> declaredEnv(StepContext context, Kubectl kubectl, String named) async {
     final CommandResult declared = await context.shell.run(
       kubectl.observing(<String>[
         '-n',
@@ -122,10 +141,10 @@ final class ReapplyCalicoManifest extends ReversibleStep<String?> {
         'daemonset',
         daemonSet,
         '-o',
-        'jsonpath={.spec.template.spec.containers[0].env[?(@.name=="$variable")].value}',
+        'jsonpath={.spec.template.spec.containers[0].env[?(@.name=="$named")].value}',
       ]),
     );
-    return declared.ok && declared.trimmed.isNotEmpty ? declared.trimmed : null;
+    return declared.ok ? declared.trimmed : null;
   }
 
   /// The newest timestamped backup of [path], or null when there is none.
