@@ -159,11 +159,33 @@ final class KubernetesObjectReversible extends ReversibleStep<bool> {
   /// has changed the object since — which the apply of this step does. So an object that was already
   /// there is left carrying what this run applied.
   @override
-  Future<bool> capture(StepContext context) async {
+  Future<bool> capture(StepContext context) => _allThere(context);
+
+  /// Whether the cluster holds every object [manifest] names.
+  Future<bool> _allThere(StepContext context) async {
     final CommandResult found = await context.shell.run(
       kubectl.observing(<String>['get', '--filename', path, '-o', 'name']),
     );
-    return found.ok;
+    if (found.ok) {
+      return true;
+    }
+    // A GET OF NAMED OBJECTS EXITS ONE FOR TWO DIFFERENT CLUSTERS: one that does not hold them,
+    // and one that could not be asked at all. The false half of this capture is what deletes
+    // everything the manifest names. The same GET with --ignore-not-found exits ZERO for a
+    // cluster that answered and holds none, and non-zero only where the cluster did not answer.
+    final CommandResult asked = await context.shell.run(
+      kubectl.observing(<String>['get', '--filename', path, '-o', 'name', '--ignore-not-found']),
+    );
+    if (asked.ok) {
+      return false;
+    }
+    context.log.warn(
+      'whether the cluster already held every object $path names could not be read, so an undo '
+      'will leave them standing rather than delete objects this run may not have applied: the '
+      'cluster answered ${asked.exitCode}'
+      '${asked.stderr.trim().isEmpty ? '' : ' — ${asked.stderr.trim()}'}',
+    );
+    return true;
   }
 
   @override

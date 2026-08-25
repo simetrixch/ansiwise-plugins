@@ -250,11 +250,32 @@ final class KubernetesConfigmapFromDirectory extends ReversibleStep<bool> {
   /// has changed the object since — which the apply of this step does. So a ConfigMap that was
   /// already there keeps the keys this run composed out of [directory].
   @override
-  Future<bool> capture(StepContext context) async {
+  Future<bool> capture(StepContext context) => _isThere(context);
+
+  /// Whether [namespace] already holds a ConfigMap called [name].
+  Future<bool> _isThere(StepContext context) async {
     final CommandResult found = await context.shell.run(
       kubectl.observing(<String>['get', 'configmap', name, '--namespace', namespace, '-o', 'name']),
     );
-    return found.ok;
+    if (found.ok) {
+      return true;
+    }
+    // A GET OF A NAMED OBJECT EXITS ONE FOR TWO DIFFERENT CLUSTERS, and the false half of this
+    // capture is what deletes the ConfigMap every release in the namespace mounts. A LIST of the
+    // kind answers empty at exit zero for a namespace holding none.
+    final CommandResult listed = await context.shell.run(
+      kubectl.observing(<String>['get', 'configmap', '--namespace', namespace, '-o', 'name']),
+    );
+    if (listed.ok) {
+      return false;
+    }
+    context.log.warn(
+      'whether $namespace already held a ConfigMap called $name could not be read, so an undo '
+      'will leave it alone rather than delete one this run may not have created: the cluster '
+      'answered ${listed.exitCode}'
+      '${listed.stderr.trim().isEmpty ? '' : ' — ${listed.stderr.trim()}'}',
+    );
+    return true;
   }
 
   @override

@@ -86,6 +86,26 @@ final class KubernetesNamespace extends ReversibleStep<bool> {
     final CommandResult found = await context.shell.run(
       kubectl.observing(<String>['get', 'namespace', namespace, '-o', 'name']),
     );
-    return found.ok;
+    if (found.ok) {
+      return true;
+    }
+    // A GET OF A NAMED OBJECT EXITS ONE FOR TWO DIFFERENT CLUSTERS, and this is a capture: its
+    // false half is what deletes the namespace, so a cluster that could not be asked read as one
+    // this run created and the clean-up after some OTHER step failed took a namespace away with
+    // every volume claim in it. A LIST of the kind answers empty at exit zero for a cluster
+    // holding none, and exits non-zero only where the cluster itself did not answer.
+    final CommandResult listed = await context.shell.run(
+      kubectl.observing(<String>['get', 'namespace', '-o', 'name']),
+    );
+    if (listed.ok) {
+      return false;
+    }
+    context.log.warn(
+      'whether this cluster already held the namespace $namespace could not be read, so an undo '
+      'will leave it alone rather than delete one this run may not have created: the cluster '
+      'answered ${listed.exitCode}'
+      '${listed.stderr.trim().isEmpty ? '' : ' — ${listed.stderr.trim()}'}',
+    );
+    return true;
   }
 }
