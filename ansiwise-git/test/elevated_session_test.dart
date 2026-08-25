@@ -128,6 +128,76 @@ void main() {
     },
   );
 
+  group('the reading a row cannot grant, because the row is about something else', () {
+    /// Where the first checkout of an installation stands, under a directory only root may enter.
+    const String checkout = '/srv/programs-checkout';
+
+    /// The account that checkout is handed to, which is not the account this run is.
+    const String account = 'operator';
+
+    const String readOwner = 'stat -c %U $checkout';
+
+    /// The cloning row as a program writes it, which says nothing about elevation.
+    ///
+    /// It cannot: the flag says whether the checkout and the settings files are root's to read, and
+    /// every git command of this row runs at it — a checkout just handed to another account is one
+    /// git refuses to root. So the ownership reading is the one command of this row that is asked as
+    /// root on its own, like the two that perform the hand-over.
+    Step cloningRow() => gitRegistry
+        .step(const StepName('git_clone'))!
+        .create(
+          const Arguments(<String, Object>{
+            'repository': checkout,
+            'host': 'code.example.com',
+            'branch': base,
+            'origin_answer': 'platform_repo',
+            'owner_answer': 'operator_user',
+          }),
+        );
+
+    /// A machine where the directory the checkout stands in may only be entered by root.
+    _Session machineHiding() => _Session(const <String, _RootOnly>{
+      readOwner: _RootOnly(
+        answersRoot: 'root\n',
+        refusal: "stat: cannot statx '$checkout': Permission denied",
+        refusedExitCode: 1,
+        orTheGroup: 'root',
+      ),
+    });
+
+    StepContext cloning(_Session session, FakeFiles files) => StepContext(
+      shell: session,
+      files: files,
+      http: FakeHttp(),
+      clock: FakeClock(),
+      entropy: FakeEntropy(),
+      log: const SilentLog(),
+      step: const StepName('git_clone'),
+      arguments: Arguments.none,
+      answers: const Arguments(<String, Object>{
+        'platform_repo': 'acme/acme-platform',
+        'operator_user': account,
+      }),
+      facts: Facts.none,
+    );
+
+    test('the ownership reading arrives as root, whatever the row said about the files', () async {
+      // Asked as the account the run started as, this is the reading that comes back empty and is
+      // then read as "belongs to nobody else" — so the hand-over is skipped and every git command
+      // after it meets a repository git refuses outright. No row can fix that by granting more,
+      // which is why the elevation of this one command is not the row's to state.
+      final _Session session = machineHiding();
+
+      final CheckResult answer = await cloningRow().check(
+        cloning(session, FakeFiles()..directories.add(checkout)),
+      );
+
+      expect(session.refused, isEmpty, reason: 'a refused command is one that ran as the operator');
+      expect(session.carriedOut, contains(readOwner));
+      expect(answer, isA<Ready>(), reason: '$answer');
+    });
+  });
+
   test('THE SESSION AND NOT THE FLAG: a session already in the group needs no elevation', () async {
     // What makes this machine a session rather than a reading of `Command.elevated`. The same
     // unelevated rewrite goes through here, because the account this session began as was already
