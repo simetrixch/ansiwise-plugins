@@ -142,8 +142,8 @@ final class KeysAgree implements Predicate {
     // the surface the FILLING question is asked against, and none of that is asked here.
     final KeyValueFile file = KeyValueFile(template: '', current: await context.files.read(path));
 
-    final String left = _valueOf(file, first);
-    final String right = _valueOf(file, second);
+    final String left = _valueOf(path, file, first);
+    final String right = _valueOf(path, file, second);
     final bool same = left == right;
 
     if (same == holdsWhenEqual) {
@@ -160,8 +160,16 @@ final class KeysAgree implements Predicate {
     );
   }
 
-  /// The value of [key], or a refusal naming what the file said instead.
-  String _valueOf(KeyValueFile file, String key) {
+  /// The value of [key] in the file this run read, or a refusal naming what stood there instead.
+  ///
+  /// **THE PATH ARRIVES AS AN ARGUMENT AND IS NEVER TAKEN OFF THE FIELD.** The field holds the path
+  /// as the installation configuration wrote it, slot and all — `configs/config.<stage>` — and the
+  /// file this run opened is that path with the slot filled from the answers. Only the second one
+  /// exists on a machine. A refusal built from the field tells the operator to write a key into a
+  /// file nobody has, so the key never gets written and the next run is refused the same way; the
+  /// argument is spelled like the field on purpose, which puts the unfilled one out of reach in
+  /// here.
+  String _valueOf(String path, KeyValueFile file, String key) {
     final String? value = file.valueOf(key);
     if (value == null) {
       throw ConditionUnanswerable(
