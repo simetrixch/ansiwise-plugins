@@ -626,13 +626,34 @@ final class StampPlaceholderInTrackedFiles extends ReversibleStep<List<String>> 
   /// answers exit code one for a tree that is not there and for a tree carrying no [placeholder]
   /// alike, and this reading is the only thing that tells the two apart. A row naming no tree
   /// searches the whole checkout, and a checkout that is not there makes the search itself fail.
+  ///
+  /// **IT ASKS THE INDEX, BECAUSE THE SEARCH ASKS THE INDEX.** `git grep -- <tree>` matches against
+  /// what the checkout TRACKS, and a guard that measured the disk instead was a second oracle
+  /// answering a different question: a directory that is on disk and carries nothing tracked, and
+  /// one `.gitignore` covers, both pass a file test and both make the search answer exit one —
+  /// indistinguishable from a tracked tree holding no occurrence, which is the false green this
+  /// guard exists to stop. `git ls-files` matches the same pathspec against the same index, so the
+  /// guard and the search cannot come to disagree about what "this tree" is.
   Future<String?> _whyUnsearchable(StepContext context) async {
-    if (tree.isEmpty || await context.files.exists('$repository/$tree', elevated: elevated)) {
+    if (tree.isEmpty) {
       return null;
     }
-    return '$repository holds nothing at $tree, and that is the tree this row limits its search to '
-        '— so nothing here looked for "$placeholder" at all. Name the tree this checkout really '
-        'carries';
+    final List<String> argv = <String>['-C', repository, 'ls-files', '--', tree];
+    final CommandResult tracked = await context.shell.run(
+      Command.observing('git', arguments: argv, elevated: elevated),
+    );
+    if (!tracked.ok) {
+      return 'the checkout at $repository could not be asked what it tracks under $tree, and that '
+          'is the tree this row limits its search to — so nothing here can tell a tree carrying no '
+          '"$placeholder" from one nobody looked at${_said(tracked)}';
+    }
+    if (tracked.trimmed.isEmpty) {
+      return '$repository tracks nothing at $tree, and that is the tree this row limits its search '
+          'to — so nothing here looked for "$placeholder" at all. Name the tree this checkout '
+          'really carries, and one it TRACKS: a directory that is on disk with nothing committed '
+          'under it, and one .gitignore covers, are both searched by the same empty answer';
+    }
+    return null;
   }
 
   /// One of [keys] at the start of the line, the anchor some lines carry, and then the value itself.

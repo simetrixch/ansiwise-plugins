@@ -5,13 +5,20 @@ import 'package:test/test.dart';
 
 import 'git_checkout.dart';
 
-/// A reading that was REFUSED is not an answer, and these two steps decide on readings that can be.
+/// A reading that was REFUSED is not an answer, and these steps decide on readings that can be.
 ///
-/// **The shape.** Both steps ask a tool a question and act on what comes back. `git rev-parse
+/// **The shape.** Each step asks a tool a question and acts on what comes back. `git rev-parse
 /// --abbrev-ref HEAD` names the branch a checkout stands on; `stat -c %U` names the account a
-/// directory belongs to. Each of them can also answer nothing at all — the checkout is not one, the
-/// tool is missing, a directory above the path may not be entered — and a step that turns that
-/// silence into a value decides on a measurement nobody took.
+/// directory belongs to; `git ls-remote` names what a remote publishes; `git ls-files` names what a
+/// checkout tracks. Every one of them can also answer nothing at all — the checkout is not one, the
+/// tool is missing, a directory above the path may not be entered, the remote was never reached —
+/// and a step that turns that silence into a value decides on a measurement nobody took.
+///
+/// **AN EMPTY ANSWER AND A NON-ZERO EXIT ARE DIFFERENT THINGS, and the git plumbing here is careful
+/// about which is which.** `ls-remote` writes nothing at exit zero for a name the remote does not
+/// publish, and `ls-files` writes nothing at exit zero for a pathspec the index matches nothing
+/// against. Those empty answers keep their meaning throughout; what changed is that a non-zero exit
+/// no longer joins them.
 ///
 /// **Why it is measured here rather than in each step's own file.** Both steps carry the property,
 /// the property is one sentence, and a case written twice in two files is a case that stops agreeing
@@ -71,9 +78,14 @@ void main() {
   FakeFiles carryingTheLiteral() =>
       FakeFiles(<String, String>{'$repository/$stamped': 'targetRevision: $standIn\n'});
 
+  /// What the checkout tracks under the tree the row names, which is what the guard before the
+  /// search asks and the same index the search itself is matched against.
+  const String listTracked = 'git -C $repository ls-files -- $searched';
+
   /// A machine that answers the search and answers [readHead] with [head].
   FakeShell answeringHead(String head) => FakeShell()
     ..answers(readHead, '$head\n')
+    ..answers(listTracked, '$stamped\n')
     ..answers(search, '$stamped\n');
 
   /// A machine that answers the search and REFUSES [readHead], the way git refuses it.
@@ -144,10 +156,12 @@ void main() {
     test(
       'THE INNOCENT CASE: a HEAD that answers, over a tree already stamped, is nothing to do',
       () async {
-        // The other green answer this refusal must not swallow: the reading answered, the search found
-        // nothing left, and that is a measurement rather than a silence.
+        // The other green answer this refusal must not swallow: the reading answered, the checkout
+        // really tracks the tree, the search found nothing left in it, and that is a measurement
+        // rather than a silence.
         final FakeShell shell = FakeShell()
           ..answers(readHead, '$fqdn\n')
+          ..answers(listTracked, '$stamped\n')
           ..fails(search);
 
         expect(
@@ -262,5 +276,210 @@ void main() {
         expect(shell.ran, contains('git -C $checkout rev-parse --is-inside-work-tree'));
       },
     );
+  });
+
+  group('a remote that could not be reached is not a remote that publishes nothing', () {
+    const String tag = 'v1.2.3';
+    const String commit = '0f9fef51a0e1e0b6c9e21c1f0a0b0c0d0e0f0a0b';
+
+    /// The tagging row of a release program: the checkout as text, the tag, and the remote.
+    Step taggingRow() => gitRegistry
+        .step(const StepName('git_tag'))!
+        .create(
+          const Arguments(<String, Object>{
+            'repository': repository,
+            'tag': tag,
+            'ref': 'HEAD',
+            'message': 'what this run released',
+            'remote': remote,
+          }),
+        );
+
+    /// What the remote is asked about the tag, as the step composes it.
+    const String askRemote = 'git -C $repository ls-remote --tags $remote refs/tags/$tag*';
+
+    /// A checkout that carries the commit and answers every local question about the tag.
+    FakeShell taggableCheckout() => FakeShell()
+      ..answers('git check-ref-format refs/tags/$tag', '')
+      ..answers('git -C $repository rev-parse --quiet --verify HEAD^{commit}', '$commit\n')
+      ..fails('git -C $repository rev-parse --quiet --verify refs/tags/$tag^{commit}');
+
+    test('THE PLANTED DEFECT: an undo leaves a tag it could not read alone', () async {
+      // capture answers "the tag was already there, here or on the remote", and its false half is
+      // what runs `push --delete`. Answered false out of a refused ls-remote, an undo deletes a tag
+      // somebody else published - against the doc that says exactly that is not this run's to do.
+      final FakeShell shell = taggableCheckout()
+        ..fails(askRemote, exitCode: 128, stderr: 'fatal: Could not read from remote repository.');
+      final ReversibleStep<Object?> step = taggingRow() as ReversibleStep<Object?>;
+      final StepContext context = contextOn(shell: shell, files: FakeFiles());
+
+      final Object? captured = await step.capture(context);
+      await step.undo(context, captured);
+
+      expect(captured, isTrue, reason: 'a reading nobody took must not read as "it was not there"');
+      expect(
+        shell.ran,
+        isNot(contains('git -C $repository push --delete $remote $tag')),
+        reason: 'the undo deleted a tag it never measured',
+      );
+    });
+
+    test('THE PLANTED DEFECT: the check refuses rather than pushing over it', () async {
+      final CheckResult answer = await taggingRow().check(
+        contextOn(
+          shell: taggableCheckout()
+            ..fails(
+              askRemote,
+              exitCode: 128,
+              stderr: 'fatal: Could not read from remote repository.',
+            ),
+          files: FakeFiles(),
+        ),
+      );
+
+      expect(answer, isA<Blocked>(), reason: '$answer');
+    });
+
+    test('THE INNOCENT CASE: a remote that answers and carries no such tag is tagged', () async {
+      // `ls-remote` writes nothing at exit zero for a pattern it matches nothing against, and that
+      // empty answer keeps meaning a remote without the tag.
+      final CheckResult answer = await taggingRow().check(
+        contextOn(shell: taggableCheckout()..answers(askRemote, ''), files: FakeFiles()),
+      );
+
+      expect(answer, isA<Ready>(), reason: answer is Blocked ? answer.reason : '$answer');
+    });
+
+    test('THE PLANTED DEFECT: a push proves nothing over two readings nobody took', () async {
+      // The postcondition of git_push compares what this checkout stands on with what the remote
+      // carries. Both answered null where the command failed, null equals null, and the assertion
+      // passed - a green verdict from a check that cannot go red, in the one place the step proves
+      // it did its work.
+      final Step step = gitRegistry
+          .step(const StepName('git_push'))!
+          .create(const Arguments(<String, Object>{'repository': repository, 'remote': remote}));
+      final FakeShell shell = FakeShell()
+        ..answers('git -C $repository rev-parse --abbrev-ref HEAD', 'm1.example.com\n')
+        ..answers('git -C $repository push $remote m1.example.com', '')
+        ..fails('git -C $repository rev-parse m1.example.com', exitCode: 128)
+        ..fails(
+          'git -C $repository ls-remote --heads $remote m1.example.com',
+          exitCode: 128,
+          stderr: 'fatal: Could not read from remote repository.',
+        );
+
+      await expectLater(
+        step.apply(contextOn(shell: shell, files: FakeFiles())),
+        throwsA(isA<CommandFailed>()),
+        reason: 'the push reported success over a remote nobody could ask about',
+      );
+    });
+
+    test('THE INNOCENT CASE: a push whose readings agree is proven', () async {
+      final Step step = gitRegistry
+          .step(const StepName('git_push'))!
+          .create(const Arguments(<String, Object>{'repository': repository, 'remote': remote}));
+      final FakeShell shell = FakeShell()
+        ..answers('git -C $repository rev-parse --abbrev-ref HEAD', 'm1.example.com\n')
+        ..answers('git -C $repository push $remote m1.example.com', '')
+        ..answers('git -C $repository rev-parse m1.example.com', '$commit\n')
+        ..answers(
+          'git -C $repository ls-remote --heads $remote m1.example.com',
+          '$commit\trefs/heads/m1.example.com\n',
+        );
+
+      await step.apply(contextOn(shell: shell, files: FakeFiles()));
+    });
+
+    test(
+      'THE PLANTED DEFECT: a remote that would not answer is not a remote without the ref',
+      () async {
+        // git_fetch stated a verdict ABOUT THE REMOTE - "the name is wrong, or whatever writes it has
+        // not run" - out of a question nobody managed to put to it.
+        final Step step = gitRegistry
+            .step(const StepName('git_fetch'))!
+            .create(
+              const Arguments(<String, Object>{
+                'repository': repository,
+                'remote': remote,
+                'branch': 'm1.example.com',
+              }),
+            );
+        final FakeShell shell = FakeShell()
+          ..fails(
+            'git -C $repository ls-remote $remote refs/heads/m1.example.com',
+            exitCode: 128,
+            stderr: 'fatal: Could not read from remote repository.',
+          );
+
+        final CheckResult answer = await step.check(contextOn(shell: shell, files: FakeFiles()));
+
+        expect(answer, isA<Blocked>());
+        expect(
+          (answer as Blocked).reason,
+          isNot(contains('publishes no branch')),
+          reason: 'a remote that would not answer is not a remote without the branch',
+        );
+      },
+    );
+
+    test('THE INNOCENT CASE: a remote that answers and publishes no such branch says so', () async {
+      final Step step = gitRegistry
+          .step(const StepName('git_fetch'))!
+          .create(
+            const Arguments(<String, Object>{
+              'repository': repository,
+              'remote': remote,
+              'branch': 'm1.example.com',
+            }),
+          );
+      final FakeShell shell = FakeShell()
+        ..answers('git -C $repository ls-remote $remote refs/heads/m1.example.com', '');
+
+      final CheckResult answer = await step.check(contextOn(shell: shell, files: FakeFiles()));
+
+      expect(answer, isA<Blocked>());
+      expect((answer as Blocked).reason, contains('publishes no branch'));
+    });
+  });
+
+  group('a tree the checkout does not TRACK is not a tree with nothing in it', () {
+    /// The row's search is limited to a tree, and `git grep -- <tree>` matches against the INDEX.
+    /// A guard that measured the disk instead asked a different question from the search it
+    /// protects: a directory that is on disk and carries nothing tracked, and one .gitignore
+    /// covers, both pass a file test and both make the search answer exit one - indistinguishable
+    /// from a tracked tree holding no occurrence.
+    test('THE PLANTED DEFECT: a tree on disk that carries nothing tracked is refused', () async {
+      final FakeShell shell = FakeShell()
+        ..answers(readHead, '$fqdn\n')
+        ..answers(listTracked, '')
+        ..fails(search);
+      // The tree IS on disk - the files port finds a file under it - and the index tracks nothing
+      // there, which is the state a file test cannot tell from a tracked tree with no occurrence.
+      final FakeFiles files = FakeFiles(<String, String>{
+        '$repository/$searched/untracked.yaml': 'targetRevision: $standIn\n',
+      });
+
+      final CheckResult answer = await stampingRow().check(stamping(shell, files));
+
+      expect(answer, isA<Blocked>(), reason: '$answer');
+      expect(
+        shell.ran,
+        isNot(contains(search)),
+        reason: 'it stopped at the guard rather than reading an exit code that says two things',
+      );
+    });
+
+    test('THE INNOCENT CASE: a tree the checkout TRACKS and that carries no occurrence', () async {
+      final FakeShell shell = FakeShell()
+        ..answers(readHead, '$fqdn\n')
+        ..answers(listTracked, '$stamped\n')
+        ..fails(search);
+      final FakeFiles files = FakeFiles(<String, String>{
+        '$repository/$stamped': 'targetRevision: $fqdn\n',
+      });
+
+      expect(await stampingRow().check(stamping(shell, files)), isA<Satisfied>());
+    });
   });
 }

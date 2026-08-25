@@ -79,11 +79,16 @@ void main() {
   );
 
   /// A checkout on the installation branch whose content search answers with [carrying].
+  ///
+  /// [tracking] is what the checkout TRACKS under [within], which is the question the guard asks and
+  /// the same question the search asks. Left out it follows [carrying], so the fixture describes one
+  /// checkout rather than two; a checkout that tracks nothing there passes an empty list.
   FakeShell searching({
     required List<String> carrying,
     String head = fqdn,
     String literal = 'example.invalid',
     String? within,
+    List<String>? tracking,
   }) {
     final List<String> argv = <String>[
       'git',
@@ -103,6 +108,18 @@ void main() {
       shell.fails(argv.join(' '));
     } else {
       shell.answers(argv.join(' '), '${carrying.join('\n')}\n');
+    }
+    // WHAT THE CHECKOUT TRACKS UNDER THE TREE, which is the question the guard asks and the same
+    // question the search asks. Answered out of the same arrangement, so the fixture describes one
+    // checkout: the files the search named, or one tracked file where it named none — a tree that
+    // is tracked and simply carries no occurrence, which is the ordinary state.
+    if (within != null) {
+      shell.answers(
+        'git -C $repository ls-files -- $within',
+        tracking == null
+            ? '${(carrying.isEmpty ? <String>['$within/tracked.yaml'] : carrying).join('\n')}\n'
+            : '${tracking.join('\n')}\n',
+      );
     }
     return shell;
   }
@@ -664,7 +681,15 @@ void main() {
     ///
     /// It answers exit code one, which is the same thing it answers for a tree that is there and
     /// carries no occurrence — which is why the step reads the checkout instead of the search.
-    FakeShell searchingNothing() =>
+    FakeShell searchingNothing() => searching(
+      carrying: <String>[],
+      literal: sourceBranch,
+      within: 'rendered',
+      tracking: const <String>[],
+    );
+
+    /// The same search over a checkout that DOES track the tree and simply carries no occurrence.
+    FakeShell searchingATrackedTree() =>
         searching(carrying: <String>[], literal: sourceBranch, within: 'rendered');
 
     test('the row is refused, naming the tree and the checkout', () async {
@@ -696,7 +721,7 @@ void main() {
       });
 
       expect(
-        await retarget.check(contextOn(shell: searchingNothing(), files: files)),
+        await retarget.check(contextOn(shell: searchingATrackedTree(), files: files)),
         isA<Satisfied>(),
       );
     });

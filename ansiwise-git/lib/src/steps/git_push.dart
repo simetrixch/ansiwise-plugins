@@ -68,11 +68,24 @@ final class GitPush extends IrreversibleStep {
     if (branch == null) {
       return CheckResult.blocked('$repository stands on no branch, so there is none to send');
     }
-    final String? local = await _localTip(context, branch);
-    if (local == null) {
+    final ({String? commit, String? refusal}) local = await _localTip(context, branch);
+    if (local.refusal case final String refusal) {
+      return CheckResult.blocked(
+        'what $branch stands on in $repository could not be read, so there is nothing to compare '
+        'against what $remote carries: $refusal',
+      );
+    }
+    if (local.commit == null) {
       return CheckResult.blocked('$repository has no commit on $branch to send');
     }
-    return await _remoteTip(context, branch) == local
+    final ({String? commit, String? refusal}) published = await _remoteTip(context, branch);
+    if (published.refusal case final String refusal) {
+      return CheckResult.blocked(
+        '$remote could not be asked what it carries $branch at, so nothing here says whether the '
+        'branch this run produced is already there: $refusal',
+      );
+    }
+    return published.commit == local.commit
         ? CheckResult.satisfied('$remote already carries $branch at the commit this checkout is on')
         : const CheckResult.ready();
   }
@@ -108,17 +121,43 @@ final class GitPush extends IrreversibleStep {
     // THE POSTCONDITION, READ FROM THE REMOTE. git answers 0 for a push that sent nothing, and this
     // step exists to make the branch reachable — so what is asserted is that it IS reachable, at the
     // commit this checkout stands on, rather than that a command was content.
-    final String? local = await _localTip(context, branch);
-    final String? remoteTip = await _remoteTip(context, branch);
-    if (remoteTip != local) {
+    //
+    // TWO READINGS THAT COULD NOT BE TAKEN USED TO SATISFY IT. Both answered null where the command
+    // failed, null equals null, and the assertion passed over two questions nobody managed to put —
+    // which is a green verdict from a check that cannot go red, in the one place this step proves it
+    // did its work. A reading that did not answer is now a failure of its own, naming which of the
+    // two it was and what git said.
+    final ({String? commit, String? refusal}) local = await _localTip(context, branch);
+    if (local.refusal case final String refusal) {
+      throw CommandFailed(
+        argv: <String>['git', '-C', repository, 'rev-parse', branch],
+        exitCode: 1,
+        stdout: '',
+        stderr:
+            'the push reported success and this checkout could not then be asked what $branch '
+            'stands on, so nothing proves $remote carries it: $refusal',
+      );
+    }
+    final ({String? commit, String? refusal}) published = await _remoteTip(context, branch);
+    if (published.refusal case final String refusal) {
       throw CommandFailed(
         argv: <String>['git', '-C', repository, 'ls-remote', '--heads', remote, branch],
         exitCode: 1,
         stdout: '',
         stderr:
-            'the push reported success and $remote does not carry $branch at $local — it answers '
-            '${remoteTip ?? 'nothing under that name'}. Whatever this run wrote is on this machine '
-            'and nowhere else',
+            'the push reported success and $remote could not then be asked what it carries '
+            '$branch at, so nothing proves what this run wrote left this machine: $refusal',
+      );
+    }
+    if (published.commit != local.commit) {
+      throw CommandFailed(
+        argv: <String>['git', '-C', repository, 'ls-remote', '--heads', remote, branch],
+        exitCode: 1,
+        stdout: '',
+        stderr:
+            'the push reported success and $remote does not carry $branch at ${local.commit} — it '
+            'answers ${published.commit ?? 'nothing under that name'}. Whatever this run wrote is '
+            'on this machine and nowhere else',
       );
     }
   }
@@ -137,16 +176,25 @@ final class GitPush extends IrreversibleStep {
     return answer.trimmed;
   }
 
-  /// The commit [branch] points at here, or null where it points at none.
-  Future<String?> _localTip(StepContext context, String branch) async {
+  /// The commit [branch] points at here, null where it points at none, or why neither was read.
+  Future<({String? commit, String? refusal})> _localTip(StepContext context, String branch) async {
     final CommandResult answer = await context.shell.run(
       Command.observing('git', arguments: <String>['-C', repository, 'rev-parse', branch]),
     );
-    return answer.ok && answer.trimmed.isNotEmpty ? answer.trimmed : null;
+    if (!answer.ok) {
+      return (commit: null, refusal: _said(answer));
+    }
+    return (commit: answer.trimmed.isEmpty ? null : answer.trimmed, refusal: null);
   }
 
-  /// The commit [remote] carries [branch] at, or null where it carries no such branch.
-  Future<String?> _remoteTip(StepContext context, String branch) async {
+  /// The commit [remote] carries [branch] at, null where it carries no such branch, or why neither
+  /// was read.
+  ///
+  /// **AN EMPTY ANSWER IS AN ANSWER HERE AND A NON-ZERO EXIT IS NOT.** `ls-remote` writes nothing at
+  /// exit zero for a name the remote does not publish, so the empty answer keeps meaning that. A
+  /// non-zero exit is the remote not having been reached — no credential, no network, a host key it
+  /// would not accept — and it used to come back as the same null the empty answer does.
+  Future<({String? commit, String? refusal})> _remoteTip(StepContext context, String branch) async {
     final CommandResult answer = await context.shell.run(
       Command.detailed(
         'git',
@@ -155,11 +203,19 @@ final class GitPush extends IrreversibleStep {
         observes: true,
       ),
     );
-    if (!answer.ok || answer.trimmed.isEmpty) {
-      return null;
+    if (!answer.ok) {
+      return (commit: null, refusal: _said(answer));
     }
-    return answer.trimmed.split(RegExp(r'\s+')).first;
+    if (answer.trimmed.isEmpty) {
+      return (commit: null, refusal: null);
+    }
+    return (commit: answer.trimmed.split(RegExp(r'\s+')).first, refusal: null);
   }
+
+  /// What git said about a reading that could not be taken, in its own words.
+  static String _said(CommandResult answer) =>
+      'git exited ${answer.exitCode}'
+      '${answer.stderr.trim().isEmpty ? ' and wrote nothing' : ': ${answer.stderr.trim()}'}';
 
   /// What stops git asking a question nobody is there to answer.
   ///

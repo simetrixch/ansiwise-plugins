@@ -178,7 +178,15 @@ final class GitTag extends ReversibleStep<bool> {
         'refuses to move one',
       );
     }
-    final String? there = await _onRemote(context);
+    final ({String? commit, String? refusal}) remoteTag = await _onRemote(context);
+    if (remoteTag.refusal case final String refusal) {
+      return CheckResult.blocked(
+        '$remote could not be asked what it carries $tag on, so nothing here can tell a tag that '
+        'is not there from one somebody else already published on another commit - and this row '
+        'pushes the tag: $refusal',
+      );
+    }
+    final String? there = remoteTag.commit;
     if (there != null && there != wanted) {
       return CheckResult.blocked(
         '$remote already carries $tag on $there and $ref is $wanted — the same refusal as above, '
@@ -250,10 +258,24 @@ final class GitTag extends ReversibleStep<bool> {
   /// A tag somebody else pushed is not this run's to delete: something may already have resolved it,
   /// and taking it away would break whatever did.
   @override
-  Future<bool> capture(StepContext context) async =>
-      _unreadable(context) != null ||
-      await _commitOf(context, 'refs/tags/$tag') != null ||
-      await _onRemote(context) != null;
+  Future<bool> capture(StepContext context) async {
+    if (_unreadable(context) != null || await _commitOf(context, 'refs/tags/$tag') != null) {
+      return true;
+    }
+    final ({String? commit, String? refusal}) remoteTag = await _onRemote(context);
+    if (remoteTag.refusal case final String refusal) {
+      // A capture is a yes-or-no and a reading that could not be taken is neither. The false half
+      // is what runs `push --delete`, so a refusal answered as false deletes a tag somebody else
+      // published - which the doc above says is not this run's to delete. Answering the other half
+      // leaves the remote as it stands, and this note keeps it from being read as a measurement.
+      context.log.warn(
+        'whether $remote already carried $tag could not be read, so an undo will leave it alone '
+        'rather than delete a tag this run may not have pushed: $refusal',
+      );
+      return true;
+    }
+    return remoteTag.commit != null;
+  }
 
   @override
   Future<void> undo(StepContext context, bool captured) async {
@@ -304,7 +326,7 @@ final class GitTag extends ReversibleStep<bool> {
   ///
   /// A lightweight tag has no second line anywhere, and there the first id IS the commit — which is
   /// why the plain line is still read where no dereferenced one came.
-  Future<String?> _onRemote(StepContext context) async {
+  Future<({String? commit, String? refusal})> _onRemote(StepContext context) async {
     final String repository = _repositoryOf(context);
     final CommandResult listed = await context.shell.run(
       Command.observing(
@@ -312,8 +334,17 @@ final class GitTag extends ReversibleStep<bool> {
         arguments: <String>['-C', repository, 'ls-remote', '--tags', remote, 'refs/tags/$tag*'],
       ),
     );
+    // AN EMPTY ANSWER IS AN ANSWER AND A NON-ZERO EXIT IS NOT. `ls-remote` writes nothing at exit
+    // zero for a pattern the remote matches nothing against, so an empty answer really is a remote
+    // that carries no such tag. A non-zero exit is the remote not having been reached at all — no
+    // credential, no network, a host key it would not accept — and it came back as the same null.
     if (!listed.ok) {
-      return null;
+      return (
+        commit: null,
+        refusal:
+            'git exited ${listed.exitCode}'
+            '${listed.stderr.trim().isEmpty ? ' and wrote nothing' : ': ${listed.stderr.trim()}'}',
+      );
     }
     String? plain;
     for (final String line in listed.trimmed.split('\n')) {
@@ -322,12 +353,12 @@ final class GitTag extends ReversibleStep<bool> {
         continue;
       }
       if (parts[1] == 'refs/tags/$tag^{}') {
-        return parts[0];
+        return (commit: parts[0], refusal: null);
       }
       if (parts[1] == 'refs/tags/$tag') {
         plain = parts[0];
       }
     }
-    return plain;
+    return (commit: plain, refusal: null);
   }
 }

@@ -112,15 +112,23 @@ final class GitFetch extends IrreversibleStep {
     if (_unreadable(context) case final String refusal) {
       return CheckResult.blocked(refusal);
     }
-    final String published = await _published(context);
-    if (published.isEmpty) {
+    final ({String commit, String? refusal}) published = await _published(context);
+    if (published.refusal case final String refusal) {
+      return CheckResult.blocked(
+        '$remote could not be asked what it publishes, so nothing here says whether it carries a '
+        '${branch != null ? 'branch' : 'tag'} called "${branch ?? tag}": $refusal',
+      );
+    }
+    if (published.commit.isEmpty) {
       return CheckResult.blocked(
         '$remote publishes no ${branch != null ? 'branch' : 'tag'} called "${branch ?? tag}", so '
         'there is nothing to bring — the name is wrong, or whatever writes it has not run',
       );
     }
-    return await _here(context) == published
-        ? CheckResult.satisfied('${branch ?? tag} is here on $published, as $remote publishes it')
+    return await _here(context) == published.commit
+        ? CheckResult.satisfied(
+            '${branch ?? tag} is here on ${published.commit}, as $remote publishes it',
+          )
         : const CheckResult.ready();
   }
 
@@ -185,7 +193,15 @@ final class GitFetch extends IrreversibleStep {
     return resolved.ok ? resolved.trimmed : '';
   }
 
-  /// The commit the remote publishes the row's ref on, or the empty text where it publishes none.
+  /// The commit the remote publishes the row's ref on, the empty text where it publishes none, or
+  /// why neither could be read.
+  ///
+  /// **AN EMPTY ANSWER IS AN ANSWER AND A NON-ZERO EXIT IS NOT.** `ls-remote` writes nothing at exit
+  /// zero for a name the remote does not publish, so the empty answer keeps meaning that. A non-zero
+  /// exit is the remote not having been reached at all — no credential, no network, a host key it
+  /// would not accept — and folded into the same empty text it produced a verdict ABOUT THE REMOTE,
+  /// "$remote publishes no branch called X — the name is wrong, or whatever writes it has not run",
+  /// out of a question nobody managed to put to it.
   ///
   /// **THE PATTERN CARRIES A STAR FOR A TAG, and that is not decoration.** An annotated tag is an
   /// object of its own, and a remote answers with both its id and the commit it dereferences to —
@@ -193,7 +209,7 @@ final class GitFetch extends IrreversibleStep {
   /// with the object id alone, and comparing that against a commit reports a difference on every
   /// run, for ever. A lightweight tag has no dereferenced line anywhere, and there the one id IS the
   /// commit.
-  Future<String> _published(StepContext context) async {
+  Future<({String commit, String? refusal})> _published(StepContext context) async {
     final CommandResult listed = await context.shell.run(
       Command.observing(
         'git',
@@ -207,7 +223,12 @@ final class GitFetch extends IrreversibleStep {
       ),
     );
     if (!listed.ok) {
-      return '';
+      return (
+        commit: '',
+        refusal:
+            'git exited ${listed.exitCode}'
+            '${listed.stderr.trim().isEmpty ? ' and wrote nothing' : ': ${listed.stderr.trim()}'}',
+      );
     }
     final String wanted = branch != null ? 'refs/heads/$branch' : 'refs/tags/$tag';
     String plain = '';
@@ -217,13 +238,13 @@ final class GitFetch extends IrreversibleStep {
         continue;
       }
       if (parts[1] == '$wanted^{}') {
-        return parts[0];
+        return (commit: parts[0], refusal: null);
       }
       if (parts[1] == wanted) {
         plain = parts[0];
       }
     }
-    return plain;
+    return (commit: plain, refusal: null);
   }
 
   /// The checkout this row points at, or the empty text where it points at none.
