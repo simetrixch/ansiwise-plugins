@@ -88,7 +88,156 @@ void main() {
     });
   });
 
-  group('the two conditions under which the whole phase does nothing', () {
+  group('a reading that could not be taken is not a machine with nothing to steer', () {
+    // Every step of this phase reads a null measurement as "this machine steers nothing" and
+    // answers SATISFIED on it, so a refused `ip` folded into that null reported a machine that
+    // genuinely needs steering as one that does not - in eight places at once, including the gate
+    // that exists to prove the drop-in folded in.
+    //
+    // WHAT "REFUSES TO ANSWER" IS, AND WHY IT IS THE OUTCOME. A measurement that could not be taken
+    // throws, and the engine wraps every check in one catch for exactly that - see
+    // `_checked` in ansiwise-core/lib/src/engine/step_execution.dart, whose own note says it is
+    // caught "here and in no step, because every step has this problem and a fix repeated fifty
+    // times is fifty chances to get it wrong". What the operator gets is therefore a refusal naming
+    // the tool's own words. What these cases assert is the half that lives in this package: none of
+    // the eight answers over a machine nobody measured.
+    //
+    // Each case runs against dualNic(), a machine that DOES need steering, so a green result cannot
+    // come from there being nothing to do.
+
+    /// What [step] answered about [machine], or null where it refused to answer at all.
+    ///
+    /// A measurement that could not be taken throws, and the engine turns that into a refusal
+    /// naming the tool — see `_checked` in ansiwise-core/lib/src/engine/step_execution.dart. Null
+    /// is that refusal here, and a verdict is a step having answered over the machine.
+    Future<CheckResult?> verdictOf(Step step, HostMachine machine) async {
+      try {
+        return await step.check(machine.contextFor(under));
+      } on Object {
+        return null;
+      }
+    }
+
+    /// The steps of the phase that answer out of the shared measurement, as a row builds them.
+    List<Step> everyStepOfThePhase() => <Step>[
+      const MeasurePublicNic(),
+      const RequireNetplanMerged(installerKey: installerKey, dropInKey: dropInKey),
+      const ActivatePublicSrcRouting(unitName: unitName, mark: connmarkMark, table: publicTable),
+      const ApplyNetplan(table: publicTable),
+      const WriteNetplanPublicSrcRouting(
+        templatePath: netplanPublicSrcRoutingTemplate,
+        path: dropInPath,
+        table: publicTable,
+      ),
+      const WriteConnmarkNftTable(
+        templatePath: connmarkNftTableTemplate,
+        path: rulesPath,
+        tableName: tableName,
+        mark: connmarkMark,
+      ),
+      const WritePublicSrcRoutingScript(
+        templatePath: publicSrcRoutingScriptTemplate,
+        path: scriptPath,
+        rulesPath: rulesPath,
+        mark: connmarkMark,
+        table: publicTable,
+        priority: rulePriority,
+      ),
+      const WritePublicSrcRoutingUnit(
+        templatePath: publicSrcRoutingUnitTemplate,
+        path: unitPath,
+        scriptPath: scriptPath,
+        tableName: tableName,
+        mark: connmarkMark,
+        table: publicTable,
+        priority: rulePriority,
+      ),
+    ];
+
+    /// Which steps of the phase ANSWERED over a machine [breaking] made unreadable.
+    ///
+    /// Every one of them at once rather than the first: what the shape costs is eight steps
+    /// agreeing about a machine none of them measured, and a case that stops at the first shows a
+    /// reader one of the eight.
+    Future<List<String>> stepsThatAnswered(void Function(HostMachine) breaking) async {
+      final List<String> answered = <String>[];
+      for (final Step step in everyStepOfThePhase()) {
+        final HostMachine machine = dualNic();
+        breaking(machine);
+        if (await verdictOf(step, machine) case final CheckResult verdict) {
+          answered.add('${step.runtimeType} answered $verdict');
+        }
+      }
+      return answered;
+    }
+
+    test('THE PLANTED DEFECT: routes that could not be read are not "no default route"', () async {
+      // `ip route show` exits zero and writes nothing on a machine with no default route, so an
+      // empty answer really is one. This is the other case: the question was never put.
+      expect(
+        await stepsThatAnswered(
+          (HostMachine machine) => machine.shell.fails(
+            'ip -4 route show default',
+            stderr: 'Cannot open netlink socket: Permission denied',
+          ),
+        ),
+        isEmpty,
+      );
+    });
+
+    test(
+      'THE PLANTED DEFECT: addresses that could not be read are not "no public address"',
+      () async {
+        expect(
+          await stepsThatAnswered(
+            (HostMachine machine) => machine.shell.fails(
+              'ip -4 -o addr show dev $publicDevice',
+              stderr: 'Cannot open netlink socket: Permission denied',
+            ),
+          ),
+          isEmpty,
+        );
+      },
+    );
+
+    test('THE PLANTED DEFECT: a hardware address that is not there stops the phase', () async {
+      // Without it the drop-in cannot fold into the installer's declaration, so the phase stops
+      // rather than writing one that would take the interface's address configuration away. The
+      // class doc said exactly that and the code answered null, which is the value that means
+      // nothing has to be steered.
+      expect(
+        await stepsThatAnswered(
+          (HostMachine machine) =>
+              machine.files.contents.remove('/sys/class/net/$publicDevice/address'),
+        ),
+        isEmpty,
+      );
+    });
+
+    test('THE INNOCENT CASE: the same machine, every reading answering, is measured', () async {
+      // The state each refusal above must not swallow. Nothing about dualNic() changed but the
+      // readings, so a red result above is about the reading and not about the machine.
+      expect(
+        await MeasurePublicNic.measure(dualNic().contextFor(under)),
+        isA<PublicNic>()
+            .having((PublicNic n) => n.device, 'device', publicDevice)
+            .having((PublicNic n) => n.address, 'address', publicAddress)
+            .having((PublicNic n) => n.gateway, 'gateway', publicGateway)
+            .having((PublicNic n) => n.mac, 'mac', publicMac),
+      );
+    });
+
+    test('THE INNOCENT CASE: a machine that really has no default route is measured', () async {
+      // `ip route show` writing nothing at exit zero is an ANSWER, and it has to keep meaning what
+      // it means or every single-interface machine would refuse instead of doing nothing.
+      final HostMachine machine = HostMachine();
+      machine.shell.answers('ip -4 route show default', '');
+
+      expect(await MeasurePublicNic.measure(machine.contextFor(under)), isNull);
+    });
+  });
+
+  group('the conditions under which the whole phase does nothing', () {
     test('a machine whose default route already leaves by the public interface', () async {
       expect(await MeasurePublicNic.measure(singleNic().contextFor(under)), isNull);
     });
@@ -104,14 +253,6 @@ void main() {
           'ip -4 -o addr show dev eth1',
           '3: eth1    inet 10.1.1.11/24 brd 10.1.1.255 scope global eth1\n',
         );
-      expect(await MeasurePublicNic.measure(machine.contextFor(under)), isNull);
-    });
-
-    test('a machine whose interface has no hardware address to key the drop-in on', () async {
-      // Without it the drop-in cannot fold into the installer's declaration, so the phase stops
-      // rather than writing one that would take the interface's address configuration away.
-      final HostMachine machine = dualNic();
-      machine.files.contents.remove('/sys/class/net/$publicDevice/address');
       expect(await MeasurePublicNic.measure(machine.contextFor(under)), isNull);
     });
 

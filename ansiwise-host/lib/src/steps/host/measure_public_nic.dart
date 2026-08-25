@@ -11,10 +11,12 @@ import 'package:ansiwise_core/ansiwise_core.dart';
 /// address and which gateway are read from the machine's own routes, so the same steps run on a
 /// machine with one interface and on a machine with two, and do nothing on the first.
 ///
-/// **The two conditions for doing nothing.** A machine whose default-route interfaces carry no
-/// public address at all has no problem to solve. So does one whose winning default route already
-/// leaves by the public interface, which is every machine with a single interface. Either way this
-/// answers that there is nothing to do, and every step of the phase asks it before doing anything.
+/// **The conditions for doing nothing.** A machine whose default-route interfaces carry no public
+/// address at all has no problem to solve; so does one whose winning default route already leaves by
+/// the public interface, which is every machine with a single interface; and so does one whose
+/// public interface holds a default route with no gateway written on it, because there is then no
+/// address to steer replies through. Each is a MEASUREMENT, and every step of the phase asks this
+/// before doing anything — which is why a reading that could not be taken must never join them.
 final class MeasurePublicNic extends ObservingStep {
   /// Measures the machine's public interface.
   const MeasurePublicNic();
@@ -52,6 +54,15 @@ final class MeasurePublicNic extends ObservingStep {
   ///
   /// Shared with every step of this phase, so the machine is measured in one place and the seven
   /// files cannot come to disagree about which interface they are for.
+  ///
+  /// **NULL MEANS MEASURED AND NOTHING TO DO, and a reading that could not be taken THROWS.** Every
+  /// step of this phase reads null as "this machine steers nothing" and answers satisfied on it, so
+  /// a refused `ip` folded into null reported a machine that genuinely needs steering as one that
+  /// does not — and did it in eight places at once, including the gate that is supposed to prove the
+  /// drop-in folded in. The engine wraps every check in exactly one catch for this, at
+  /// `ansiwise-core/lib/src/engine/step_execution.dart`, and turns what is thrown into a refusal
+  /// naming the tool's own words; throwing is therefore how a measurement says it was not taken,
+  /// and it needs no branch in any of the eight.
   static Future<PublicNic?> measure(StepContext context) async {
     final List<_DefaultRoute> routes = await _defaultRoutes(context);
     if (routes.isEmpty) {
@@ -74,11 +85,12 @@ final class MeasurePublicNic extends ObservingStep {
       if (winner.device == route.device) {
         return null;
       }
-      final String? mac = await _macOf(context, route.device);
-      if (mac == null) {
-        return null;
-      }
-      return PublicNic(device: route.device, address: address, gateway: route.gateway, mac: mac);
+      return PublicNic(
+        device: route.device,
+        address: address,
+        gateway: route.gateway,
+        mac: await _macOf(context, route.device),
+      );
     }
     return null;
   }
@@ -99,12 +111,23 @@ final class MeasurePublicNic extends ObservingStep {
   }
 
   /// The machine's default routes, in the order it lists them.
+  ///
+  /// AN EMPTY LIST IS AN ANSWER AND A NON-ZERO EXIT IS NOT. `ip route show` writes nothing and exits
+  /// zero on a machine that carries no default route, so an empty answer really is a machine with
+  /// none. A non-zero exit is the question not having been put — no permission on the netlink
+  /// socket, no `ip` on the machine — and folded into the same empty list it read as a machine with
+  /// no default route, which every step of this phase then answers "nothing has to be steered" over.
   static Future<List<_DefaultRoute>> _defaultRoutes(StepContext context) async {
     final CommandResult routes = await context.shell.run(
       const Command.observing('ip', arguments: <String>['-4', 'route', 'show', 'default']),
     );
     if (!routes.ok) {
-      return const <_DefaultRoute>[];
+      throw CommandFailed(
+        argv: _showDefaultRoutes,
+        exitCode: routes.exitCode,
+        stdout: '',
+        stderr: routes.stderr,
+      );
     }
     return <_DefaultRoute>[
       for (final String line in routes.stdout.split('\n'))
@@ -112,13 +135,26 @@ final class MeasurePublicNic extends ObservingStep {
     ];
   }
 
+  /// What the machine's default routes are read with.
+  static const List<String> _showDefaultRoutes = <String>['ip', '-4', 'route', 'show', 'default'];
+
   /// The first public address on [device], or null when it carries none.
+  ///
+  /// The same rule as the routes above: an interface carrying no address answers with nothing at
+  /// exit zero, so a non-zero exit is the reading not having been taken and never an interface with
+  /// no public address on it.
   static Future<String?> _publicAddressOf(StepContext context, String device) async {
+    final List<String> argv = <String>['ip', '-4', '-o', 'addr', 'show', 'dev', device];
     final CommandResult addresses = await context.shell.run(
-      Command.observing('ip', arguments: <String>['-4', '-o', 'addr', 'show', 'dev', device]),
+      Command.observing(argv.first, arguments: argv.sublist(1)),
     );
     if (!addresses.ok) {
-      return null;
+      throw CommandFailed(
+        argv: argv,
+        exitCode: addresses.exitCode,
+        stdout: '',
+        stderr: addresses.stderr,
+      );
     }
     for (final String line in addresses.stdout.split('\n')) {
       final List<String> fields = line.trim().split(RegExp(r'\s+'));
@@ -134,18 +170,32 @@ final class MeasurePublicNic extends ObservingStep {
     return null;
   }
 
-  /// The hardware address of [device], or null when it cannot be read.
+  /// The hardware address of [device], read from the kernel's own listing of it.
   ///
   /// Without it the drop-in cannot be keyed the way the installer's own file is keyed, so it would
   /// become a second declaration of the interface rather than folding into the one that is there.
-  /// That is why an unreadable one stops the whole phase rather than being worked around.
-  static Future<String?> _macOf(StepContext context, String device) async {
+  /// That is why an unreadable one stops the whole phase rather than being worked around — and it
+  /// used to say so and then return null, which is the value that means nothing has to be steered.
+  ///
+  /// [device] is the name the routes above answered with, so the kernel has it. A file that is not
+  /// there, or one that is there and empty, is therefore a reading that was not taken.
+  static Future<String> _macOf(StepContext context, String device) async {
     final String path = '/sys/class/net/$device/address';
     if (!await context.files.exists(path)) {
-      return null;
+      throw StateError(
+        '$path is not there, and it is where the kernel states the hardware address of $device — '
+        'which the routes of this machine just named, so the interface is one it has',
+      );
     }
     final String mac = (await context.files.read(path)).trim();
-    return mac.isEmpty ? null : mac;
+    if (mac.isEmpty) {
+      throw StateError(
+        '$path is empty, and the drop-in that steers replies out $device is keyed on the hardware '
+        "address it states — a drop-in keyed on nothing becomes a second declaration of the "
+        "interface instead of folding into the installer's",
+      );
+    }
+    return mac;
   }
 }
 

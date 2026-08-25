@@ -321,7 +321,7 @@ const Map<StepName, RegisteredStep> hostSteps = <StepName, RegisteredStep>{
   // owns the default route. The entries stand in the order a program runs them.
   StepName('measure_public_nic'): RegisteredStep(
     name: StepName('measure_public_nic'),
-    source: 'lib/src/steps/host/measure_public_nic.dart:18',
+    source: 'lib/src/steps/host/measure_public_nic.dart:20',
     create: MeasurePublicNic.fromArguments,
     arguments: MeasurePublicNic.arguments,
   ),
