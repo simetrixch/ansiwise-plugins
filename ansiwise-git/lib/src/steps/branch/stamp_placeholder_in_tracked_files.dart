@@ -310,8 +310,19 @@ final class StampPlaceholderInTrackedFiles extends ReversibleStep<List<String>> 
       return CheckResult.blocked(await _whyValueless(context));
     }
 
-    final String? head = await _head(context);
-    if (head == refuseOnBranch) {
+    final CommandResult head = await _head(context);
+    // A READING THAT COULD NOT BE TAKEN IS NOT A BRANCH NAME. Compared against `refuseOnBranch` it
+    // is unequal to it, so a checkout git could not be asked about would pass the guard below and be
+    // stamped — the refusal failing open in exactly the case nobody can see.
+    if (!head.ok || head.trimmed.isEmpty) {
+      return CheckResult.blocked(
+        'which branch is checked out at $repository could not be read, so nothing here can tell '
+        'whether it is "$refuseOnBranch" — and that is the branch every installation is cut from, '
+        "so a stamp landing on it would hand this installation's own values to all of "
+        'them${_said(head)}',
+      );
+    }
+    if (head.trimmed == refuseOnBranch) {
       return CheckResult.blocked(
         '"$refuseOnBranch" is checked out, and this row refuses to stamp it: doing so would '
         "hand this installation's own values to every installation cut from it afterwards — "
@@ -639,21 +650,29 @@ final class StampPlaceholderInTrackedFiles extends ReversibleStep<List<String>> 
   /// How a message names the part of the checkout this row is about.
   String get _under => tree.isEmpty ? 'in the checkout' : 'under $tree/';
 
-  /// Which branch the checkout stands on, or null where git could not say.
+  /// What git answers when it is asked which branch the checkout stands on.
   ///
-  /// Read at this row's own elevation, like everything else this step reads out of the checkout.
-  /// Null is what the guard above compares against `refuseOnBranch`, so a reading refused for want
-  /// of root would not refuse the stamp — it would let it run on the branch the row named.
-  Future<String?> _head(StepContext context) async {
-    final CommandResult answer = await context.shell.run(
-      Command.observing(
-        'git',
-        arguments: <String>['-C', repository, 'rev-parse', '--abbrev-ref', 'HEAD'],
-        elevated: elevated,
-      ),
-    );
-    return answer.ok && answer.trimmed.isNotEmpty ? answer.trimmed : null;
-  }
+  /// Read at this row's own elevation, like everything else this step reads out of the checkout, and
+  /// handed to the caller AS THE ANSWER rather than as a branch name. A refused reading and a branch
+  /// called nothing are the same value once a name has been made out of them, and the guard above
+  /// compares that value against `refuseOnBranch` — so the whole refusal turned on a reading nobody
+  /// could take being unequal to a name.
+  Future<CommandResult> _head(StepContext context) => context.shell.run(
+    Command.observing(
+      'git',
+      arguments: <String>['-C', repository, 'rev-parse', '--abbrev-ref', 'HEAD'],
+      elevated: elevated,
+    ),
+  );
+
+  /// What the tool itself said about a reading that could not be taken, or nothing where it was
+  /// silent.
+  ///
+  /// The machine's own words are what an operator acts on: "Permission denied" and "not a git
+  /// repository" send them to two different places, and one sentence covering both would send them
+  /// to neither.
+  static String _said(CommandResult answer) =>
+      answer.stderr.trim().isEmpty ? '' : ': ${answer.stderr.trim()}';
 
   /// `0644` — a values, config or manifest file everything in the tree reads.
   static const int _trackedFile = 0x1a4;

@@ -94,26 +94,59 @@ final class RequireKeyLoginPossible extends ObservingStep {
         'there is no account called "${InstallAuthorizedKey.userIn(context)}" on this machine',
       );
     }
-    final String path = '$home/.ssh/authorized_keys';
+    final String directory = '$home/.ssh';
+    final String path = '$directory/authorized_keys';
 
-    if (!await context.files.exists(path, elevated: elevated)) {
-      wrong.add('$path is not there');
-    } else {
-      final List<String> lines = (await context.files.read(
-        path,
-        elevated: elevated,
-      )).split('\n').map((String l) => l.trim()).toList();
-      if (!lines.contains(proving.line)) {
-        wrong.add('$path does not carry this key');
-      }
-      wrong.addAll(await _tooOpen(context, path, _keyFile));
-    }
-
-    wrong.addAll(await _tooOpen(context, '$home/.ssh', _sshDirectory));
+    // THE DIRECTORY IS READ BEFORE THE FILE IS LOOKED FOR, and that order is the whole of it.
+    // `.ssh` is 0700, so to a run that is neither its account nor root every question asked under it
+    // answers exactly as it would about a path that is not there: `stat` writes nothing, and the
+    // files port answers false because the operating system refused the lookup rather than because
+    // the file is absent. Asked first, the file test put "$path is not there" among the findings —
+    // an absence nobody measured, standing in the sentence that says whether a key login would work.
+    //
     // A home directory anybody else can write to is refused by sshd as well, and this is the one
     // people are most surprised by: the key file's own permissions look right, and the login still
     // falls through to a password.
-    wrong.addAll(await _groupOrWorldWritable(context, home));
+    final List<({String? tooOpen, String? unread})> permissions =
+        <({String? tooOpen, String? unread})>[
+          await _tooOpen(context, directory, _sshDirectory),
+          await _groupOrWorldWritable(context, home),
+        ];
+    if (_unreadIn(permissions).isEmpty) {
+      if (!await context.files.exists(path, elevated: elevated)) {
+        wrong.add('$path is not there');
+      } else {
+        final List<String> lines = (await context.files.read(
+          path,
+          elevated: elevated,
+        )).split('\n').map((String l) => l.trim()).toList();
+        if (!lines.contains(proving.line)) {
+          wrong.add('$path does not carry this key');
+        }
+        permissions.add(await _tooOpen(context, path, _keyFile));
+      }
+    }
+
+    wrong.addAll(<String>[
+      for (final ({String? tooOpen, String? unread}) reading in permissions)
+        if (reading.tooOpen case final String said) said,
+    ]);
+    final List<String> unread = _unreadIn(permissions);
+
+    // A READING THAT COULD NOT BE TAKEN IS NOT A VERDICT ABOUT THE MACHINE. These permissions are
+    // what sshd decides a key login on, so a run that could not read them has measured nothing about
+    // the login — and this sentence used to stand inside "a key login would not work", which is a
+    // statement about the machine made out of a look nobody managed to take.
+    if (unread.isNotEmpty) {
+      return CheckResult.blocked(
+        'whether a key login would work could not be judged: ${unread.join('; ')}. sshd decides a '
+        'key login on exactly those permissions, and they are inside the home of '
+        '"${InstallAuthorizedKey.userIn(context)}" — a run that is neither that account nor root '
+        'reads none of them, and the elevated argument of this row is what says whether they are '
+        'read as root'
+        '${wrong.isEmpty ? '' : '. What could be read is already wrong: ${wrong.join('; ')}'}',
+      );
+    }
 
     if (wrong.isEmpty) {
       return CheckResult.satisfied(
@@ -159,39 +192,76 @@ final class RequireKeyLoginPossible extends ObservingStep {
     return fields.length < 6 || fields[5].isEmpty ? null : fields[5];
   }
 
-  Future<List<String>> _tooOpen(StepContext context, String path, int most) async {
-    final int? mode = await _mode(context, path);
+  /// What is too open about [path], or that its permissions could not be read at all.
+  ///
+  /// The two are kept apart all the way to the verdict: the first is a measurement of the machine
+  /// and the second is a statement about this check, and one list holding both is what let the gate
+  /// answer "a key login would not work" over a reading nobody took.
+  Future<({String? tooOpen, String? unread})> _tooOpen(
+    StepContext context,
+    String path,
+    int most,
+  ) async {
+    final CommandResult stat = await _stat(context, path);
+    final int? mode = _bitsIn(stat);
     if (mode == null) {
-      return <String>['the permissions of $path could not be read'];
+      return (tooOpen: null, unread: _unreadable(path, stat));
     }
     return mode & ~most == 0
-        ? const <String>[]
-        : <String>['$path is ${_octal(mode)} and sshd needs at most ${_octal(most)}'];
+        ? (tooOpen: null, unread: null)
+        : (
+            tooOpen: '$path is ${_octal(mode)} and sshd needs at most ${_octal(most)}',
+            unread: null,
+          );
   }
 
-  Future<List<String>> _groupOrWorldWritable(StepContext context, String path) async {
-    final int? mode = await _mode(context, path);
+  /// See [_tooOpen]: the same pair, for the one bit sshd refuses a home directory over.
+  Future<({String? tooOpen, String? unread})> _groupOrWorldWritable(
+    StepContext context,
+    String path,
+  ) async {
+    final CommandResult stat = await _stat(context, path);
+    final int? mode = _bitsIn(stat);
     if (mode == null) {
-      return <String>['the permissions of $path could not be read'];
+      return (tooOpen: null, unread: _unreadable(path, stat));
     }
     return mode & 0x12 == 0
-        ? const <String>[]
-        : <String>['$path is ${_octal(mode)}, and sshd refuses a home anybody else can write to'];
+        ? (tooOpen: null, unread: null)
+        : (
+            tooOpen: '$path is ${_octal(mode)}, and sshd refuses a home anybody else can write to',
+            unread: null,
+          );
   }
 
-  /// The permission bits of [path] as a number, or null where they could not be read.
+  /// Why any of [readings] did not answer, in the order they were taken.
+  static List<String> _unreadIn(List<({String? tooOpen, String? unread})> readings) => <String>[
+    for (final ({String? tooOpen, String? unread}) reading in readings)
+      if (reading.unread case final String why) why,
+  ];
+
+  /// What `stat` answers when it is asked for the permission bits of [path].
   ///
   /// AT THIS ROW'S ELEVATION, like the reads of the same path through the files port above. The
-  /// paths asked about are inside another account's home, and `.ssh` is `0700` — so as the operator
-  /// `stat` answers "Permission denied", null comes back, and the two callers below report that the
-  /// permissions could not be read. That is a sentence about this check rather than about the
-  /// machine, and it stands where the step is meant to say whether a key login would work.
-  Future<int?> _mode(StepContext context, String path) async {
-    final CommandResult stat = await context.shell.run(
-      Command.observing('stat', arguments: <String>['-c', '%a', path], elevated: elevated),
-    );
-    return stat.ok ? int.tryParse(stat.trimmed, radix: 8) : null;
-  }
+  /// paths asked about are inside the account's home and `.ssh` is `0700`, so a run that is neither
+  /// that account nor root is answered "Permission denied". The RESULT is handed back rather than a
+  /// number, because what the callers do with a reading that did not answer is the whole point: they
+  /// report it as a reading that was not taken, never as a permission that is wrong, and the check
+  /// refuses to answer at all rather than answer about a machine it could not look at.
+  Future<CommandResult> _stat(StepContext context, String path) => context.shell.run(
+    Command.observing('stat', arguments: <String>['-c', '%a', path], elevated: elevated),
+  );
+
+  /// The permission bits [stat] answered with, or null where it answered none.
+  static int? _bitsIn(CommandResult stat) => stat.ok ? int.tryParse(stat.trimmed, radix: 8) : null;
+
+  /// That the permissions of [path] were not read, in the tool's own words.
+  ///
+  /// The machine's own sentence is what an operator acts on: "Permission denied" sends them to the
+  /// elevation this row grants, and "No such file or directory" sends them to the step that installs
+  /// the key. One wording covering both would send them to neither.
+  static String _unreadable(String path, CommandResult stat) =>
+      'the permissions of $path were not read: '
+      '${stat.stderr.trim().isEmpty ? 'stat exited ${stat.exitCode} and wrote nothing' : stat.stderr.trim()}';
 
   static String _octal(int mode) => mode.toRadixString(8).padLeft(3, '0');
 

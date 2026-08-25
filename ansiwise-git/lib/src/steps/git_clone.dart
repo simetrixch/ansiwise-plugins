@@ -259,7 +259,11 @@ final class GitClone extends IrreversibleStep {
     // WHO OWNS IT IS ASKED FIRST, because git refuses a repository owned by another account before
     // it answers anything else — "detected dubious ownership" — so every question below would come
     // back as a failure that says nothing about the checkout.
-    if (await _ownedByAnother(context) case final String owner) {
+    final ({String? owner, String? refusal}) ownership = await _ownedByAnother(context);
+    if (ownership.refusal case final String refusal) {
+      return CheckResult.blocked(refusal);
+    }
+    if (ownership.owner case final String owner) {
       context.log.info(
         '$repository belongs to $owner and this run is not it, so git will not read it at all — '
         'the directory is handed over before anything else is asked of it',
@@ -580,35 +584,48 @@ final class GitClone extends IrreversibleStep {
     ),
   );
 
-  /// The account [repository] belongs to where it is not the one this run is, or null.
+  /// The account [repository] belongs to where it is not the one this run is, or why that could not
+  /// be read.
   ///
   /// Read with `stat` rather than by asking git, because git is the thing that refuses: a
   /// repository owned by another account makes every one of its commands fail with the same
   /// message, and a check that learned the ownership from that failure would be reading a symptom.
   ///
-  /// A path that is not there yet, and a machine whose `stat` answers nothing, are both "no other
-  /// owner" — there is nothing to hand over, and the clone below makes it.
+  /// **ASKED AS ROOT, and not at this row's elevation.** The row's flag says whether the checkout
+  /// and the two settings files are root's to read; this question is a different one, and the two
+  /// commands that answer it in [apply] — `install -d` and `chown -R` — are already elevated
+  /// whatever the row said. A checkout inside a directory only root may enter answers `stat` with
+  /// "Permission denied" to anybody else, and that empty answer used to read here as "no other
+  /// owner": the one reading that makes this step skip the hand-over it exists to perform. Nothing
+  /// new is asked of the machine by this — a row naming an owner already needs the elevation those
+  /// two commands run at.
   ///
-  /// Asked at this row's own elevation, like `_observe` and `_mustRun`. A checkout inside a
-  /// directory only root may enter answers `stat` with "Permission denied" as the operator, and
-  /// that empty answer reads here as "no other owner" — the one reading that makes this step skip
-  /// the hand-over it exists to perform.
-  Future<String?> _ownedByAnother(StepContext context) async {
+  /// A path that is not there yet is "no other owner": there is nothing to hand over, and the clone
+  /// below makes it. That is now a MEASURED answer rather than an assumed one — root can stat
+  /// anything that is there, so `stat` answering nothing over a path the files port still finds is a
+  /// reading that could not be taken, and it is refused as one.
+  Future<({String? owner, String? refusal})> _ownedByAnother(StepContext context) async {
     if (ownerAnswer case final String name) {
       if (context.answers.optionalText(name) case final String account) {
         final CommandResult owner = await context.shell.run(
-          Command.observing(
-            'stat',
-            arguments: <String>['-c', '%U', repository],
-            elevated: elevated,
-          ),
+          Command.observing('stat', arguments: <String>['-c', '%U', repository], elevated: true),
         );
-        if (owner.ok && owner.trimmed.isNotEmpty && owner.trimmed != account) {
-          return owner.trimmed;
+        if (owner.ok && owner.trimmed.isNotEmpty) {
+          return (owner: owner.trimmed == account ? null : owner.trimmed, refusal: null);
+        }
+        if (await context.files.exists(repository, elevated: true)) {
+          return (
+            owner: null,
+            refusal:
+                'who $repository belongs to could not be read, and it is there — so this row can '
+                'say neither that it has to be handed to "$account" nor that it does not, and git '
+                'refuses a repository owned by another account outright: '
+                '${owner.stderr.trim().isEmpty ? 'stat answered nothing' : owner.stderr.trim()}',
+          );
         }
       }
     }
-    return null;
+    return (owner: null, refusal: null);
   }
 
   /// One command that is NOT git, run for its effect on the machine.
