@@ -79,24 +79,50 @@ final class InstallSnap extends IrreversibleStep {
     return foundOnThePath(answer);
   }
 
-  /// The channel [snap] tracks, or null when no such snap is installed.
+  /// The channel [snap] tracks, null when no such snap is installed, or why neither could be read.
   ///
   /// Read out of the fourth column of `snap list`, which snapd fills whether the snap is enabled or
   /// disabled. A non-empty answer with nothing on the path is exactly the disabled snap.
-  static Future<String?> trackedChannel(StepContext context, String snap) async {
+  ///
+  /// **`snap list <name>` EXITS NON-ZERO FOR TWO DIFFERENT MACHINES**, and read as one of them the
+  /// other was reported as a machine carrying no such snap: a snap that is genuinely not installed,
+  /// and a snapd that could not be asked at all. The second matters most where the snap is DISABLED,
+  /// because such a snap is off the path as well, so the presence test beside this one cannot stand
+  /// in for it — and the step that TAKES A SNAP AWAY read the pair as "there is none to remove".
+  ///
+  /// `snap version` is what tells them apart, and it is asked only where the first reading failed:
+  /// it reports the daemon's own version and answers whenever snapd is reachable, so a `snap list`
+  /// that failed while `snap version` answers really is a machine without that snap.
+  static Future<({String? channel, String? refusal})> trackedChannel(
+    StepContext context,
+    String snap,
+  ) async {
     final CommandResult listed = await context.shell.run(
       Command.observing('snap', arguments: <String>['list', snap]),
     );
     if (!listed.ok) {
-      return null;
+      final CommandResult snapd = await context.shell.run(
+        const Command.observing('snap', arguments: <String>['version']),
+      );
+      if (!snapd.ok) {
+        return (
+          channel: null,
+          refusal:
+              'snapd would not say whether $snap is installed, so nothing here knows whether it is: '
+              '"snap list $snap" answered ${listed.exitCode} and "snap version" answered '
+              '${snapd.exitCode}'
+              '${snapd.stderr.trim().isEmpty ? '' : ' — ${snapd.stderr.trim()}'}',
+        );
+      }
+      return (channel: null, refusal: null);
     }
     for (final String line in listed.stdout.split('\n')) {
       final List<String> columns = line.trim().split(RegExp(r'\s+'));
       if (columns.length >= 4 && columns.first == snap) {
-        return columns[3];
+        return (channel: columns[3], refusal: null);
       }
     }
-    return null;
+    return (channel: null, refusal: null);
   }
 
   /// The snap, by the name it is published under.
@@ -117,7 +143,11 @@ final class InstallSnap extends IrreversibleStep {
 
   @override
   Future<CheckResult> check(StepContext context) async {
-    final String? tracked = await trackedChannel(context, snap);
+    final ({String? channel, String? refusal}) reading = await trackedChannel(context, snap);
+    if (reading.refusal case final String refusal) {
+      return CheckResult.blocked(refusal);
+    }
+    final String? tracked = reading.channel;
     if (tracked == null) {
       if (await onPath(context, snap)) {
         return CheckResult.blocked(
@@ -139,8 +169,11 @@ final class InstallSnap extends IrreversibleStep {
     // The command the state found calls for. A snap that is switched off AND on another channel
     // takes two, and a plan carries one — so what is shown is the one that runs first, and the
     // channel move behind it is reported when it runs.
-    final String? tracked = await trackedChannel(context, snap);
-    if (tracked == null) {
+    final ({String? channel, String? refusal}) reading = await trackedChannel(context, snap);
+    if (reading.refusal case final String refusal) {
+      return StepPlan.nothing(refusal);
+    }
+    if (reading.channel == null) {
       return StepPlan.argv(_install);
     }
     if (!await onPath(context, snap)) {
@@ -151,7 +184,11 @@ final class InstallSnap extends IrreversibleStep {
 
   @override
   Future<void> apply(StepContext context) async {
-    final String? tracked = await trackedChannel(context, snap);
+    final ({String? channel, String? refusal}) reading = await trackedChannel(context, snap);
+    if (reading.refusal case final String refusal) {
+      throw StateError(refusal);
+    }
+    final String? tracked = reading.channel;
     if (tracked == null) {
       context.log.info('installing the $snap snap from $channel');
       await _mustRun(context, _install);

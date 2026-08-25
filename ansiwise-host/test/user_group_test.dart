@@ -12,6 +12,46 @@ void main() {
   const StepName under = StepName('under_test');
   const AddUserToGroup step = AddUserToGroup(group: 'operators');
 
+  test('THE PLANTED DEFECT: an undo leaves a membership it could not read alone', () async {
+    // capture answers "the account was already in the group", and its false half is what runs
+    // `gpasswd --delete`. Answered false out of a refused `id -G`, the clean-up after some other
+    // step failed takes away a membership the account already had.
+    final HostMachine machine = HostMachine();
+    machine.shell
+      ..answers('getent passwd $operatorUser', '$operatorUser:x:1000:1000::$operatorHome:/bin/sh\n')
+      ..answers('getent group operators', 'operators:x:3000:\n')
+      ..fails('id -G $operatorUser', stderr: 'id: $operatorUser: no such user');
+
+    final StepContext context = machine.contextFor(under);
+    final bool captured = await step.capture(context);
+    await step.undo(context, captured);
+
+    expect(captured, isTrue, reason: 'a reading nobody took must not read as "not a member"');
+    expect(
+      machine.changing,
+      isEmpty,
+      reason: 'the undo ran gpasswd --delete over a membership it never measured',
+    );
+    expect(machine.said.join('\n'), contains('could not be read'));
+  });
+
+  test('THE INNOCENT CASE: a membership this run really gave is taken back', () async {
+    // The state the refusal above must not swallow: the reading answers, the account was not a
+    // member, so the undo takes out exactly what this step put in.
+    final HostMachine machine = HostMachine();
+    machine.shell
+      ..answers('getent passwd $operatorUser', '$operatorUser:x:1000:1000::$operatorHome:/bin/sh\n')
+      ..answers('getent group operators', 'operators:x:3000:\n')
+      ..answers('id -G $operatorUser', '1000 27\n');
+
+    final StepContext context = machine.contextFor(under);
+    final bool captured = await step.capture(context);
+    await step.undo(context, captured);
+
+    expect(captured, isFalse);
+    expect(machine.changing, contains('gpasswd --delete $operatorUser operators'));
+  });
+
   test('the account is appended to the group, and the run says when it takes effect', () async {
     // The membership is read again from the machine rather than assumed from the command having
     // returned zero, and what the run says about it matters as much: it takes effect at the next

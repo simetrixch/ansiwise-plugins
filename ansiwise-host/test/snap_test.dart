@@ -90,7 +90,7 @@ void main() {
     final StepContext context = machine.contextFor(under);
     return (
       onPath: await InstallSnap.onPath(context, snap),
-      tracked: await InstallSnap.trackedChannel(context, snap),
+      tracked: (await InstallSnap.trackedChannel(context, snap)).channel,
     );
   }
 
@@ -239,6 +239,40 @@ void main() {
 
   group('taking the snap away', () {
     const RemoveSnap asked = RemoveSnap(snap: snap, force: true);
+
+    test(
+      'THE PLANTED DEFECT: a snapd that would not answer is not a machine without the snap',
+      () async {
+        // `snap list <name>` exits non-zero for a snap that is not installed AND for a snapd that
+        // could not be asked at all. Read as the first, an operator's teardown was reported as done
+        // over a machine still carrying the snap - and a DISABLED snap is the state where the
+        // presence test beside it cannot stand in, because such a snap is off the path as well.
+        final HostMachine machine = HostMachine();
+        machine.shell
+          ..fails(onThePathKey(snap))
+          ..fails('snap list $snap', stderr: 'error: cannot communicate with server')
+          ..fails('snap version', stderr: 'error: cannot communicate with server');
+
+        final CheckResult answer = await asked.check(machine.contextFor(under));
+
+        expect(answer, isA<Blocked>(), reason: '$answer');
+        expect(machine.changing, isEmpty);
+      },
+    );
+
+    test('THE INNOCENT CASE: a snapd that answers and carries no such snap is satisfied', () async {
+      // The state the refusal above must not swallow. snapd answered; it simply has no such snap.
+      final HostMachine machine = HostMachine();
+      machine.shell
+        ..fails(onThePathKey(snap))
+        ..fails('snap list $snap', stderr: 'error: no matching snaps installed')
+        ..answers('snap version', 'snap    2.63\nsnapd   2.63\n');
+
+      final CheckResult answer = await asked.check(machine.contextFor(under));
+
+      expect(answer, isA<Satisfied>(), reason: answer is Blocked ? answer.reason : '$answer');
+      expect(machine.changing, isEmpty);
+    });
 
     test('is not done unless it was asked for', () async {
       const RemoveSnap notAsked = RemoveSnap(snap: snap, force: false);

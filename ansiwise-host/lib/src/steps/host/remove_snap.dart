@@ -65,8 +65,21 @@ final class RemoveSnap extends IrreversibleStep {
         'taking the snap away was not asked for, so an installed one is left where it is',
       );
     }
-    if (await InstallSnap.trackedChannel(context, snap) == null &&
-        !await InstallSnap.onPath(context, snap)) {
+    // BOTH READINGS ARE ASKED AND BOTH CAN FAIL TO ANSWER, and a removal that acts on that reports
+    // an operator's teardown as done over a machine still carrying the snap. A disabled snap is the
+    // state where the presence test cannot stand in for the other: it is installed and off the path
+    // at the same time, so a snapd that could not be asked leaves both readings saying nothing.
+    final ({String? channel, String? refusal}) tracked = await InstallSnap.trackedChannel(
+      context,
+      snap,
+    );
+    if (tracked.refusal case final String refusal) {
+      return CheckResult.blocked(
+        '$refusal — and this row was told to take it away, which is a teardown reported as done '
+        'over a machine that may still be carrying it',
+      );
+    }
+    if (tracked.channel == null && !await InstallSnap.onPath(context, snap)) {
       return CheckResult.satisfied('no $snap snap is installed, so there is none to remove');
     }
     return const CheckResult.ready();

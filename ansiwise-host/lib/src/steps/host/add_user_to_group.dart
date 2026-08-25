@@ -134,10 +134,35 @@ final class AddUserToGroup extends ReversibleStep<bool> {
   /// ran would lose one this step never gave it.
   @override
   Future<bool> capture(StepContext context) async {
-    if (await _gidOf(context) case final String gid) {
-      return await _isMember(context, gid) ?? false;
+    final String? gid = await _gidOf(context);
+    if (gid == null) {
+      return _leaveAlone(context, 'no group on this machine answered to "$group"');
     }
-    return false;
+    final bool? member = await _isMember(context, gid);
+    if (member == null) {
+      return _leaveAlone(
+        context,
+        'the groups of ${InstallAuthorizedKey.userIn(context)} could not be read',
+      );
+    }
+    return member;
+  }
+
+  /// Answers "the account was already a member", so an undo leaves it alone, and SAYS it is not a
+  /// measurement.
+  ///
+  /// A capture is a yes-or-no and a reading that could not be taken is neither. The false half is
+  /// what runs `gpasswd --delete`, so a refusal answered as false takes away a membership the
+  /// account already had — and it does that while cleaning up after some other step failed, which
+  /// is the worst moment to take an access away. The other half leaves the machine as it stands,
+  /// and this note is what keeps it from being read as proof that the account was in the group.
+  bool _leaveAlone(StepContext context, String refusal) {
+    context.log.warn(
+      'whether ${InstallAuthorizedKey.userIn(context)} was already in $group could not be read, so '
+      'an undo will leave the membership alone rather than take away one this run may not have '
+      'given: $refusal',
+    );
+    return true;
   }
 
   @override
