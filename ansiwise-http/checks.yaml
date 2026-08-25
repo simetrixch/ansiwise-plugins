@@ -59,3 +59,4 @@ carried-arguments: test/checks/carried_arguments_test.dart
 # three refused readings into the null that means "this machine steers nothing", and eight steps
 # then answered Satisfied over a machine nobody had measured.
 refused-reading: test/checks/refused_reading_test.dart
+captured-refusal: test/checks/captured_refusal_test.dart
