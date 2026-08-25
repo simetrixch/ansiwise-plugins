@@ -28,6 +28,14 @@ dependencies:
   # own files declares the parser itself rather than leaning on a transitive dependency it does
   # not control.
   yaml: ^3.1.3
+  # The digest an SSH public key fingerprint is, declared here for the same reason as the parser
+  # above: this package computes one itself and does not lean on a transitive dependency.
+  crypto: ^3.0.7
+  # Ed25519, for the one step that mints a key pair rather than a random value. The curve
+  # arithmetic that turns a seed into a public key is not something to write by hand: a subtle
+  # error yields a key pair whose halves do not match, which no test of ours would notice and
+  # which shows up as a login refused months later.
+  cryptography: ^2.9.0
 
 dev_dependencies:
   test: ^1.31.2

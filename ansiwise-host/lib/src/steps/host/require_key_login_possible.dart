@@ -18,21 +18,33 @@ import 'install_authorized_key.dart';
 /// password, which still works, so nothing looks wrong until the password is gone. Every check here
 /// is a way that silence can arise.
 final class RequireKeyLoginPossible extends ObservingStep {
-  /// Refuses unless the account this run names could be reached by key.
-  const RequireKeyLoginPossible({this.elevated = false});
+  /// Refuses unless the account this run names could be reached with the key [key] names.
+  const RequireKeyLoginPossible({required this.key, this.elevated = false});
 
   /// Builds the step from what the program gave it.
-  factory RequireKeyLoginPossible.fromArguments(Arguments arguments) =>
-      RequireKeyLoginPossible(elevated: arguments.has('elevated') && arguments.flag('elevated'));
+  factory RequireKeyLoginPossible.fromArguments(Arguments arguments) => RequireKeyLoginPossible(
+    key: AuthorizedKeySource.fromArguments(arguments),
+    elevated: arguments.has('elevated') && arguments.flag('elevated'),
+  );
 
-  /// What this step accepts, which is nothing.
-  static const List<ArgumentSpec> arguments = <ArgumentSpec>[elevationArgument];
+  /// What this step accepts.
+  ///
+  /// The same way of naming a key as the step that installs one, spread from the same list — this
+  /// step proves what that one did, so a second way of saying which key is meant would let it pass
+  /// on a key nobody installed.
+  static const List<ArgumentSpec> arguments = <ArgumentSpec>[
+    ...AuthorizedKeySource.arguments,
+    elevationArgument,
+  ];
 
   /// The answers this step reads, which is what its registry entry declares.
   ///
-  /// The same two the key was installed under, by the same names — this step proves what that one
-  /// did, so a second pair of values here would let it pass on a key nobody installed.
+  /// The account, by the same name the installing step reads it under. The key is not here for the
+  /// reason it is not there: which answer holds it is the row's to name.
   static const List<String> answers = InstallAuthorizedKey.answers;
+
+  /// Which key this row proves, and where its value comes from.
+  final AuthorizedKeySource key;
 
   /// Whether the file this row points at belongs to root, so every read and write of it is
   /// elevated.
@@ -43,6 +55,10 @@ final class RequireKeyLoginPossible extends ObservingStep {
 
   @override
   Future<CheckResult> check(StepContext context) async {
+    final AuthorizedKey proving = key.keyIn(context);
+    if (proving.refusal case final String refusal) {
+      return CheckResult.blocked(refusal);
+    }
     final List<String> wrong = <String>[];
 
     // sshd's own effective configuration, not the file — an Include, a Match block or a package
@@ -87,7 +103,7 @@ final class RequireKeyLoginPossible extends ObservingStep {
         path,
         elevated: elevated,
       )).split('\n').map((String l) => l.trim()).toList();
-      if (!lines.contains(InstallAuthorizedKey.keyIn(context))) {
+      if (!lines.contains(proving.line)) {
         wrong.add('$path does not carry this key');
       }
       wrong.addAll(await _tooOpen(context, path, _keyFile));

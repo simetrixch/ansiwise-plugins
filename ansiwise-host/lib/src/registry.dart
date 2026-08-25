@@ -119,7 +119,7 @@ const Map<StepName, RegisteredStep> hostSteps = <StepName, RegisteredStep>{
   // The key login, and the door that closes only after it is proven.
   StepName('install_authorized_key'): RegisteredStep(
     name: StepName('install_authorized_key'),
-    source: 'lib/src/steps/host/install_authorized_key.dart:12',
+    source: 'lib/src/steps/host/install_authorized_key.dart:113',
     create: InstallAuthorizedKey.fromArguments,
     arguments: InstallAuthorizedKey.arguments,
     answers: InstallAuthorizedKey.answers,

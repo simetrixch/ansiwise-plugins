@@ -127,7 +127,10 @@ void main() {
     // itself — "the permissions of ... could not be read" — rather than about the machine.
     final _Session session = machine();
     final FakeFiles files = FakeFiles(<String, String>{keyFile: '$key\n'});
-    final Step step = rowFor('require_key_login_possible', <String, Object>{'elevated': true});
+    final Step step = rowFor('require_key_login_possible', <String, Object>{
+      'public_key_answer': 'operator_public_key',
+      'elevated': true,
+    });
 
     final CheckResult answer = await step.check(
       contextFor('require_key_login_possible', session, files),
@@ -175,6 +178,7 @@ void main() {
       final _Session session = machine();
 
       await rowFor('require_key_login_possible', <String, Object>{
+        'public_key_answer': 'operator_public_key',
         'elevated': true,
       }).check(contextFor('require_key_login_possible', session, FakeFiles()));
 

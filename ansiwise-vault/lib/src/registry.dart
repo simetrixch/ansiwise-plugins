@@ -12,6 +12,7 @@ import 'steps/vault_auth_role.dart';
 import 'steps/vault_init.dart';
 import 'steps/vault_kv_entry.dart';
 import 'steps/vault_kv_mount.dart';
+import 'steps/vault_kv_ssh_key_pair.dart';
 import 'steps/vault_policy.dart';
 import 'steps/vault_unsealed.dart';
 
@@ -73,6 +74,19 @@ const Map<StepName, RegisteredStep> vaultSteps = <StepName, RegisteredStep>{
     create: VaultKvEntry.fromArguments,
     arguments: VaultKvEntry.arguments,
     answers: VaultKvEntry.answers,
+  ),
+  // The one entry a row cannot fill: a key pair, whose two halves have to match. The hand-filled
+  // input is a file of single-line assignments, so it cannot hold a private key, and the generator
+  // of the entry above makes a random value rather than a pair. It publishes the public half,
+  // because the row that places that half in an authorized_keys file must be given exactly what was
+  // written here.
+  StepName('vault_kv_ssh_key_pair'): RegisteredStep(
+    name: StepName('vault_kv_ssh_key_pair'),
+    source: 'lib/src/steps/vault_kv_ssh_key_pair.dart:49',
+    create: VaultKvSshKeyPair.fromArguments,
+    arguments: VaultKvSshKeyPair.arguments,
+    answers: VaultKvSshKeyPair.answers,
+    publishes: VaultKvSshKeyPair.publishes,
   ),
   StepName('file_from_vault'): RegisteredStep(
     name: StepName('file_from_vault'),
