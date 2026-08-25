@@ -36,5 +36,5 @@ dev_dependencies:
   ansiwise_checks_tree:
     git:
       url: https://github.com/simetrixch/ansiwise-checks.git
-      ref: 0.1.0-alpha-20260825074134
+      ref: 0.2.0-alpha-20260825164540
       path: tree
