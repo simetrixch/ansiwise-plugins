@@ -16,13 +16,16 @@ void main() {
     ownerLabelValue: 'true',
   );
   const String path = '/srv/scratch/own-project.yaml';
-  const String getKey = 'kubectl get --filename $path -o json';
+  const String getKey = 'kubectl get --filename $path --ignore-not-found -o json';
 
   ClusterMachine holding(String? liveObject) {
     final ClusterMachine machine = ClusterMachine();
     machine.files.contents[path] = 'kind: AppProject\n';
     if (liveObject == null) {
-      machine.shell.fails(getKey, stderr: 'not found');
+      // An EMPTY listing at exit zero, because `--ignore-not-found` is what the step asks with: an
+      // object the cluster does not hold is not an error there. A command that FAILED is a cluster
+      // that never answered, which is the case below.
+      machine.shell.answers(getKey, '');
     } else {
       machine.shell.answers(getKey, liveObject);
     }
@@ -31,6 +34,21 @@ void main() {
 
   test('a cluster holding none of the objects is already removed', () async {
     expect(await step.check(holding(null).contextFor(under)), isA<Satisfied>());
+  });
+
+  test('THE PLANTED DEFECT: a cluster that would not answer is not one already emptied', () async {
+    // Without `--ignore-not-found` the client exits non-zero both for an object the cluster does not
+    // hold and for a cluster that never answered, and this step read the second as the first:
+    // "already removed", said about a cluster nobody managed to ask, on a step whose whole job is
+    // to take things away.
+    final ClusterMachine machine = ClusterMachine();
+    machine.files.contents[path] = 'kind: AppProject\n';
+    machine.shell.fails(getKey, stderr: 'The connection to the server was refused');
+
+    final CheckResult answer = await step.check(machine.contextFor(under));
+
+    expect(answer, isA<Blocked>(), reason: '$answer');
+    expect(machine.changing, isEmpty);
   });
 
   test('an object WITHOUT the label is refused by name — a collision, not a target', () async {

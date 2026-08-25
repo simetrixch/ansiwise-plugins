@@ -63,14 +63,18 @@ final Map<String, Fixture> stepFixtures = <String, Fixture>{
   'remove_kubernetes_object': (FakeShell shell, FakeFiles files, FakeHttp http) {
     const String file = '$_plausibleText/$_plausibleText';
     files.contents[file] = 'kind: Namespace\n';
+    // `--ignore-not-found`, because that is what the step asks with: an object the cluster does not
+    // hold is not an error there, so the answer to "already removed" is an EMPTY listing at exit
+    // zero rather than a command that failed.
+    final String asking = '$_client get --filename $file --ignore-not-found -o json';
     shell.answers(
-      '$_client get --filename $file -o json',
+      asking,
       '{"kind":"Namespace","metadata":{"name":"$_plausibleText",'
-          '"labels":{"$_plausibleText":"$_plausibleText"}}}',
+      '"labels":{"$_plausibleText":"$_plausibleText"}}}',
     );
     shell.changes(
       '$_client delete --filename $file --ignore-not-found',
-      () => shell.fails('$_client get --filename $file -o json'),
+      () => shell.answers(asking, ''),
     );
   },
   // The same arrangement as the reversible sibling, plus the client timeout this step carries. The

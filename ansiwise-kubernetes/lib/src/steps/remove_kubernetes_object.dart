@@ -112,10 +112,26 @@ final class RemoveKubernetesObject extends IrreversibleStep {
         '$manifest is not in this checkout, so there is nothing naming what to remove',
       );
     }
+    // `--ignore-not-found` IS WHAT MAKES THE EXIT CODE MEAN ONE THING. Without it the client exits
+    // non-zero both for an object the cluster does not hold and for a cluster that never answered —
+    // no route to the API server, no credential, a client refused — and this step read the second as
+    // the first: "the cluster holds none of the objects $manifest names — already removed", said
+    // about a cluster nobody managed to ask, on a step whose whole job is to take things away. With
+    // the flag, an object that is not there is not an error, so what is left at a non-zero exit is
+    // the cluster itself not answering.
     final CommandResult found = await context.shell.run(
-      kubectl.observing(<String>['get', '--filename', path, '-o', 'json']),
+      kubectl.observing(<String>['get', '--filename', path, '--ignore-not-found', '-o', 'json']),
     );
-    if (found.exitCode != 0) {
+    if (!found.ok) {
+      return CheckResult.blocked(
+        'the cluster would not say what it holds of the objects $manifest names, so nothing here '
+        'knows whether they are still there — and this row removes them: '
+        '${kubectl.argv(<String>['get', '--filename', path, '--ignore-not-found']).join(' ')} '
+        'answered ${found.exitCode}'
+        '${found.stderr.trim().isEmpty ? '' : ' — ${found.stderr.trim()}'}',
+      );
+    }
+    if (found.trimmed.isEmpty) {
       return CheckResult.satisfied(
         'the cluster holds none of the objects $manifest names — already removed',
       );
