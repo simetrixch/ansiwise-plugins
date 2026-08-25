@@ -27,7 +27,8 @@ void main() {
   WaitForHttpField step({
     String url = address,
     String field = 'state',
-    List<String> until = const <String>['present'],
+    List<String>? until = const <String>['present'],
+    bool? untilPresent,
     List<String>? failing,
     int timeoutSeconds = 60,
     int intervalSeconds = 5,
@@ -37,7 +38,8 @@ void main() {
       'waiting_for': 'the thing to be present',
       'url': url,
       'field': field,
-      'until': until,
+      'until': ?until,
+      'until_present': ?untilPresent,
       'failing': ?failing,
       'timeout_seconds': timeoutSeconds,
       'interval_seconds': intervalSeconds,
@@ -199,6 +201,157 @@ void main() {
     ).check(contextOn(http));
     expect(answer, isA<Blocked>());
     expect((answer as Blocked).reason, contains('opposite'));
+    expect(http.sent, isEmpty);
+  });
+
+  // A WAIT FOR THE FIELD TO BE THERE AT ALL, for the row whose next step reads the document the
+  // address serves rather than asking whether the address is reachable. The measured defect these
+  // guard: a proxy with nothing behind it answers 503, a 503 IS something answering, and a wait
+  // that asked only "does anything answer" was over at the exact moment the thing it guards was
+  // not yet true. Every assertion below is on WHEN the wait returned — how many asks it made and
+  // how long it slept — never on the words it used, because a wait that returned too early and
+  // said the right sentence is the defect.
+  group('a wait for the field to be present', () {
+    test('does not return on the 503 in front of the answer', () async {
+      final ScriptedHttp http = ScriptedHttp(
+        (HttpRequest request, int nth) =>
+            nth < 2 ? answerOf(503, 'Service Unavailable') : answerOf(200, '{"state":"anything"}'),
+      );
+      final FakeClock clock = FakeClock();
+
+      await step(until: null, untilPresent: true).apply(contextOn(http, clock: clock));
+
+      // Three asks and two sleeps: both 503s were asked THROUGH, and the ask that ended the wait
+      // is the one that carried the field. Had the wait returned on the first answer it got, this
+      // would be one ask and nothing slept.
+      expect(http.sent.length, 3);
+      expect(clock.slept, const <Duration>[Duration(seconds: 5), Duration(seconds: 5)]);
+      expect(clock.elapsed, const Duration(seconds: 10));
+    });
+
+    test('does not return on a 503 whose body is JSON carrying the field either', () async {
+      // The sharper form of the same shape: something answers, the body even parses, and the field
+      // is in it — which is a gateway's own error document and not the one the address serves. The
+      // status decides before any field is read out.
+      final ScriptedHttp http = ScriptedHttp(
+        (HttpRequest request, int nth) => nth < 1
+            ? answerOf(503, '{"state":"the gateway wrote this"}')
+            : answerOf(200, '{"state":"anything"}'),
+      );
+      final FakeClock clock = FakeClock();
+
+      await step(until: null, untilPresent: true).apply(contextOn(http, clock: clock));
+
+      expect(http.sent.length, 2);
+      expect(clock.slept.length, 1);
+    });
+
+    test('returns at once where the field is already there', () async {
+      final ScriptedHttp http = ScriptedHttp(
+        (HttpRequest request, int nth) => answerOf(200, '{"state":"anything"}'),
+      );
+      final FakeClock clock = FakeClock();
+
+      await step(until: null, untilPresent: true).apply(contextOn(http, clock: clock));
+
+      expect(http.sent.length, 1);
+      expect(clock.slept, isEmpty);
+    });
+
+    test('gives up inside its bound where the field never comes', () async {
+      final ScriptedHttp http = ScriptedHttp(
+        (HttpRequest request, int nth) => answerOf(503, 'Service Unavailable'),
+      );
+      final FakeClock clock = FakeClock();
+
+      await expectLater(
+        step(
+          until: null,
+          untilPresent: true,
+          timeoutSeconds: 20,
+          intervalSeconds: 5,
+        ).apply(contextOn(http, clock: clock)),
+        throwsA(
+          isA<WaitedTooLong>().having(
+            (WaitedTooLong failure) => failure.waitingFor,
+            'waitingFor',
+            contains('503'),
+          ),
+        ),
+      );
+      expect(clock.elapsed, lessThanOrEqualTo(const Duration(seconds: 20)));
+    });
+
+    test('is satisfied by whatever value the field holds', () async {
+      final ScriptedHttp http = ScriptedHttp(
+        (HttpRequest request, int nth) => answerOf(200, '{"state":"anything"}'),
+      );
+
+      final CheckResult answer = await step(until: null, untilPresent: true).check(contextOn(http));
+
+      expect(answer, isA<Satisfied>());
+      expect((answer as Satisfied).because, contains('anything'));
+    });
+
+    test('reads a field that is not there yet as the in-between', () async {
+      final ScriptedHttp http = ScriptedHttp(
+        (HttpRequest request, int nth) =>
+            nth < 1 ? answerOf(200, '{"other":"x"}') : answerOf(200, '{"state":"anything"}'),
+      );
+      final FakeClock clock = FakeClock();
+
+      await step(until: null, untilPresent: true).apply(contextOn(http, clock: clock));
+
+      expect(http.sent.length, 2);
+      expect(clock.slept.length, 1);
+    });
+
+    test('still ends AT ONCE on a value the row names as final and wrong', () async {
+      final ScriptedHttp http = ScriptedHttp(
+        (HttpRequest request, int nth) => answerOf(200, '{"state":"broken"}'),
+      );
+      final FakeClock clock = FakeClock();
+
+      await expectLater(
+        step(
+          until: null,
+          untilPresent: true,
+          failing: <String>['broken'],
+        ).apply(contextOn(http, clock: clock)),
+        throwsA(
+          isA<StateError>().having(
+            (StateError failure) => failure.message,
+            'message',
+            allOf(contains('broken'), contains('does not come back from')),
+          ),
+        ),
+      );
+      expect(clock.slept, isEmpty);
+      expect(http.sent.length, 1);
+    });
+  });
+
+  test('a row that says neither what arrives nor that any value does is refused', () async {
+    final ScriptedHttp http = ScriptedHttp(
+      (HttpRequest request, int nth) => answerOf(200, '{"state":"present"}'),
+    );
+
+    final CheckResult answer = await step(until: null).check(contextOn(http));
+
+    expect(answer, isA<Blocked>());
+    expect((answer as Blocked).reason, contains('nothing that ends the wait'));
+    expect(http.sent, isEmpty);
+  });
+
+  test('a row that says both is refused rather than one of them quietly winning', () async {
+    final ScriptedHttp http = ScriptedHttp(
+      (HttpRequest request, int nth) => answerOf(200, '{"state":"present"}'),
+    );
+
+    final CheckResult answer = await step(untilPresent: true).check(contextOn(http));
+
+    expect(answer, isA<Blocked>());
+    expect((answer as Blocked).reason, contains('say one of them'));
     expect(http.sent, isEmpty);
   });
 }

@@ -59,7 +59,7 @@ const Map<StepName, RegisteredStep> httpSteps = <StepName, RegisteredStep>{
   ),
   StepName('wait_for_http_field'): RegisteredStep(
     name: StepName('wait_for_http_field'),
-    source: 'lib/src/steps/wait_for_http_field.dart:22',
+    source: 'lib/src/steps/wait_for_http_field.dart:31',
     create: WaitForHttpField.fromArguments,
     arguments: WaitForHttpField.arguments,
   ),

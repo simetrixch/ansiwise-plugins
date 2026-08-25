@@ -11,6 +11,15 @@ import 'http_conversation.dart';
 /// whole window in front of a state that never changes again would report a timeout where the
 /// machine had already said what happened.
 ///
+/// **A ROW SAYS WHICH VALUES ARRIVE, OR THAT ANY VALUE DOES, AND ONE OF THE TWO ALWAYS.** `until`
+/// names them. `until_present` says the field carrying a value AT ALL is the arrival, for an
+/// address whose answer proves itself by standing there: where the value is composed by the far
+/// end, a row that restated it would carry a second copy of something the run already holds, and
+/// the two agree only until one of them is edited. `failing` still decides first, so a value named
+/// there is over and wrong even under `until_present` and every other value arrives. Saying
+/// neither would leave a wait nothing can end; saying both would leave two rules deciding one
+/// question, and which of them a run obeyed would depend on the order they are read in.
+///
 /// **Everything in between is "not yet".** An address that does not answer, an answer that is not
 /// JSON, a field that is not there — while something is coming up, each of those is what the
 /// in-between looks like, so each is carried to the record and the wait keeps asking. What the
@@ -20,13 +29,15 @@ import 'http_conversation.dart';
 /// **It only measures.** Every ask is a GET, so a dry run may ask too, and nothing here changes
 /// anything at either end.
 final class WaitForHttpField extends ObservingStep {
-  /// Polls [url] until [field] holds one of [until], for at most [timeoutSeconds].
+  /// Polls [url] until [field] holds one of [until] — or any value at all, where [untilPresent] —
+  /// for at most [timeoutSeconds].
   const WaitForHttpField({
     required this.waitingFor,
     required this.url,
     required this.socketPath,
     required this.field,
     required this.until,
+    required this.untilPresent,
     required this.failing,
     required this.values,
     required this.bearerAnswer,
@@ -45,7 +56,11 @@ final class WaitForHttpField extends ObservingStep {
     url: arguments.optionalText('url') ?? '',
     socketPath: arguments.optionalText('socket_path'),
     field: arguments.text('field'),
-    until: arguments.textList('until'),
+    // OPTIONAL BECAUSE "until_present" IS THE OTHER WAY TO SAY IT, never because a row may leave
+    // both out. A row that names neither is refused by name when it is asked, rather than waiting
+    // on a condition nothing can meet.
+    until: arguments.has('until') ? arguments.textList('until') : const <String>[],
+    untilPresent: arguments.has('until_present') && arguments.flag('until_present'),
     failing: arguments.has('failing') ? arguments.textList('failing') : const <String>[],
     values: slotSources(arguments.has('values') ? arguments.raw('values') : null),
     bearerAnswer: arguments.has('bearer_answer') ? arguments.text('bearer_answer') : null,
@@ -94,8 +109,24 @@ final class WaitForHttpField extends ObservingStep {
     ArgumentSpec(
       name: 'until',
       kind: ArgumentKind.textList,
+      required: false,
       describes:
-          'the values of that field that mean the wait is over and what was waited for is so',
+          'the values of that field that mean the wait is over and what was waited for is so. Say '
+          '"until_present" instead where any value at all is the arrival — one of the two, and '
+          'never neither and never both',
+    ),
+    ArgumentSpec(
+      name: 'until_present',
+      kind: ArgumentKind.flag,
+      required: false,
+      defaultValue: false,
+      describes:
+          'whether the field carrying a value AT ALL is what ends the wait, whatever that value '
+          'is. For an address whose answer proves itself by standing there: the value is composed '
+          'by the far end, and a row that wrote it out would carry a second copy of something the '
+          'run already holds — one the far end can change without the row saying anything. A value '
+          'named under "failing" still ends the wait badly; every other value arrives. Say this or '
+          '"until", and never neither and never both',
     ),
     ArgumentSpec(
       name: 'failing',
@@ -183,6 +214,9 @@ final class WaitForHttpField extends ObservingStep {
 
   /// The values that mean the wait is over and what was waited for is so.
   final List<String> until;
+
+  /// Whether the field carrying any value at all is what ends the wait.
+  final bool untilPresent;
 
   /// The values that mean it is over and did not arrive.
   final List<String> failing;
@@ -289,6 +323,18 @@ final class WaitForHttpField extends ObservingStep {
     if (socket.refusal case final String refusal) {
       return _Stuck(refusal);
     }
+    if (untilPresent && until.isNotEmpty) {
+      return const _Stuck(
+        'this row names values under "until" and says "until_present" as well, and nothing says '
+        'which of the two ends the wait — say one of them',
+      );
+    }
+    if (!untilPresent && until.isEmpty) {
+      return const _Stuck(
+        'this row says nothing that ends the wait — name the values under "until", or say '
+        '"until_present: true" where the field carrying any value at all is the arrival',
+      );
+    }
     // A value of the same field in both lists would make one state mean two opposite things, and
     // which of them a run reports would depend on the order they are read in.
     final Iterable<String> both = until.where(failing.contains);
@@ -326,10 +372,14 @@ final class WaitForHttpField extends ObservingStep {
         return _NotYet(because);
       case AnswerHeld(:final Map<String, Object?> object):
         switch (fieldIn(object, field)) {
-          case FieldText(:final String value) when until.contains(value):
-            return _Arrived(value);
+          // FAILING IS READ FIRST, and it has to be: under "until_present" every value arrives, so
+          // a value the row named as final and wrong would arrive too if the arrival were read
+          // first. Where the row names "until" instead, no value can stand in both lists — the
+          // refusal above stops that row before it asks — so the order changes nothing there.
           case FieldText(:final String value) when failing.contains(value):
             return _EndedBadly(value);
+          case FieldText(:final String value) when untilPresent || until.contains(value):
+            return _Arrived(value);
           case FieldText(:final String value):
             return _NotYet('"$field" of $address holds "$value"');
           case FieldMissing(:final String field):
