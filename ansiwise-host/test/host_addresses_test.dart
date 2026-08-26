@@ -15,7 +15,7 @@ void main() {
   // are made up here on purpose: what is under test is that a PREFIX the row supplies is passed over,
   // and holding it against the real names of one product's interfaces would test that product.
   const MeasureHostAddresses step = MeasureHostAddresses(
-    ignoringInterfaces: <String>['podnet', 'virt', 'bridge-', 'vxlan.calico'],
+    ignoringInterfaces: <String>['podnet', 'virt', 'bridge-'],
   );
 
   /// What `ip -4 -o addr show scope global` writes, one interface per line.
@@ -117,21 +117,30 @@ void main() {
   });
 
   group('the output a real node actually writes', () {
-    // READ OFF apps4.digitacloud.app ON 2026-08-26, byte for byte, because every line above is a
-    // shape this file invented and a parser is only ever wrong about the shapes nobody showed it.
-    // Two things in it that no invented line here carries: the address is configured /26 and the
-    // fields between the marker and it are `metric 100 brd 157.90.201.191`, so a parser reading by
-    // a fixed index rather than from the marker answers with the word "metric".
-    const String apps4 =
+    // READ OFF A LIVE CLUSTER NODE on 2026-08-26 and kept field for field. Every other line in this
+    // file is a shape this file invented, and a parser is only ever wrong about the shapes nobody
+    // showed it. Two things here that no invented line carried:
+    //
+    //   * the address is configured /26, so a step publishing the prefix it FOUND would name the
+    //     whole segment the node shares with every other host on the wire;
+    //   * between the `inet` marker and the address stand `metric 100 brd 157.90.201.191`, so a
+    //     parser reading by a fixed index rather than from the marker answers with the word
+    //     "metric".
+    //
+    // The SECOND device's real name is the one a container network gives its own, and it is written
+    // here under a made-up name for the reason this package's purity check gives: a tool that
+    // carried that name would be a tool that knows what it is being used for. Its shape — a /32 on
+    // an interface the row passes over — is what the line is here for, and that is unchanged.
+    const String liveNode =
         r'2: eth0    inet 157.90.201.150/26 metric 100 brd 157.90.201.191 scope global dynamic '
         r'eth0\       valid_lft 34367sec preferred_lft 34367sec'
         '\n'
-        r'3: vxlan.calico    inet 10.244.249.192/32 scope global vxlan.calico\       valid_lft '
-        r'forever preferred_lft forever';
+        r'3: podnet.overlay    inet 10.244.249.192/32 scope global podnet.overlay\       '
+        r'valid_lft forever preferred_lft forever';
 
     test('is read as the node address alone, as a /32, with the pod network left out', () async {
       final HostMachine machine = HostMachine();
-      machine.shell.answers(listing, apps4);
+      machine.shell.answers(listing, liveNode);
 
       final CheckResult result = await step.check(machine.contextFor(under));
 
