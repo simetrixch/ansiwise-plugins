@@ -16,6 +16,7 @@ export 'src/steps/host/add_user_to_group.dart';
 export 'src/steps/host/addon_status.dart';
 export 'src/steps/host/apply_netplan.dart';
 export 'src/steps/host/clean_package_cache.dart';
+export 'src/steps/host/create_directory.dart';
 export 'src/steps/host/create_file_from_template.dart';
 export 'src/steps/host/create_group.dart';
 export 'src/steps/host/create_storage_directory.dart';

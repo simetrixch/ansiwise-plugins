@@ -67,6 +67,37 @@ final Map<String, Fixture> stepFixtures = <String, Fixture>{
       });
   },
 
+  // `stat` exits non-zero for a path that is not there, and answers three values once the directory
+  // has been made and handed over. Neither the ownership nor the mode is something a fake shell
+  // that only recorded `chown` and `chmod` would ever show, and BOTH have to land before the
+  // postcondition holds — a fixture that flipped them together would report the step exercised on a
+  // machine where one of its two commands did nothing.
+  //
+  // What `stat -c %f` prints is the mode as the machine stores it, in hex: the kind bits of a
+  // directory over the permission bits. The probe hands every integer argument with no default the
+  // same 1, so the owner, the group and the mode here are all that one value.
+  'create_directory': (FakeShell shell, FakeFiles files, FakeHttp http) {
+    const String asked = 'stat -c %u %g %f $_plausibleText';
+    const int directoryBits = 0x4000;
+    int owner = 0;
+    int group = 0;
+    int mode = 0;
+    void saying() =>
+        shell.answers(asked, '$owner $group ${(directoryBits | mode).toRadixString(16)}');
+
+    shell
+      ..fails(asked)
+      ..changes('chown 1:1 $_plausibleText', () {
+        owner = 1;
+        group = 1;
+        saying();
+      })
+      ..changes('chmod 0001 $_plausibleText', () {
+        mode = 1;
+        saying();
+      });
+  },
+
   // The kernel renders /proc/<pid>/exe as `<path> (deleted)` while a process is executing an inode
   // that no longer has a name — which is what a service running a replaced binary looks like, and
   // the whole of what this step reads. The restart is what gives the process a named inode again,

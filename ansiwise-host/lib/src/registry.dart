@@ -7,6 +7,7 @@ import 'steps/host/add_shell_alias.dart';
 import 'steps/host/add_user_to_group.dart';
 import 'steps/host/apply_netplan.dart';
 import 'steps/host/clean_package_cache.dart';
+import 'steps/host/create_directory.dart';
 import 'steps/host/create_file_from_template.dart';
 import 'steps/host/create_group.dart';
 import 'steps/host/create_storage_directory.dart';
@@ -269,6 +270,15 @@ const Map<StepName, RegisteredStep> hostSteps = <StepName, RegisteredStep>{
     create: ExportKubeconfig.fromArguments,
     arguments: ExportKubeconfig.arguments,
     answers: ExportKubeconfig.answers,
+  ),
+  // A directory a workload requires, left at the numbers that workload writes as. The only step
+  // here that takes an owner: every other one that makes a directory either makes it so a file it
+  // is about to write has somewhere to go, or makes the one the cluster's volumes live under.
+  StepName('create_directory'): RegisteredStep(
+    name: StepName('create_directory'),
+    source: 'lib/src/steps/host/create_directory.dart:41',
+    create: CreateDirectory.fromArguments,
+    arguments: CreateDirectory.arguments,
   ),
   // Storage.
   StepName('require_storage_mount'): RegisteredStep(
