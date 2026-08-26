@@ -129,17 +129,28 @@ sealed class Upstream {
   const Upstream();
 }
 
-/// The latest release of a project on github.com, from the releases feed.
+/// The newest release of a project on github.com whose tag matches a pattern.
 ///
 /// For a CLI TOOL this is the right question: the release is what the install fetches. For an
 /// IMAGE it is the wrong one — a project can tag a release with no image behind it, and a cluster
 /// runs the image — which is why the image kinds below ask the registry instead.
 final class GithubRelease extends Upstream {
-  /// Asks the releases feed of [project].
-  const GithubRelease({required this.project});
+  /// Asks the release list of [project] for the releases matching [matching].
+  const GithubRelease({required this.project, required this.matching});
 
   /// The `owner/name` of the project.
   final String project;
+
+  /// The anchored expression a release tag must match whole to be a candidate.
+  ///
+  /// A release list carries every shape a project ever published, and the channel a release was
+  /// cut on is usually part of that shape — so this is where a pin says whether it is willing to
+  /// be told about a pre-release at all. Without it a release candidate competes with the stable
+  /// versions beside it and reads as a version to bump to.
+  ///
+  /// It has no default, because which channel a pin follows is the product's decision and a
+  /// package that guessed it would answer confidently for a question nobody was asked.
+  final String matching;
 }
 
 /// The newest tag of an image on hub.docker.com that matches a pattern.
@@ -481,7 +492,10 @@ Upstream? _upstream(String label, YamlNode node, List<String> problems) {
   final Upstream? upstream = switch (kind) {
     'github_release' => () {
       final String? project = fields.text('project');
-      return project == null ? null : GithubRelease(project: project);
+      final String? matching = fields.text('matching');
+      return project == null || matching == null
+          ? null
+          : GithubRelease(project: project, matching: matching);
     }(),
     'docker_hub' => () {
       final String? image = fields.text('image');

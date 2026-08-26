@@ -129,6 +129,47 @@ appliances:
     );
   });
 
+  test('a release-feed upstream that says which shapes it will see is carried whole', () {
+    const String channelled = '''
+tools:
+  liner:
+    version: "v9.0.0"
+    upstream:
+      kind: github_release
+      project: example/liner
+      matching: '^v[0-9]+\\.[0-9]+\\.[0-9]+\$'
+''';
+    final VersionsDeclaration declaration = parseDeclaration(channelled, where: 'pins.yaml');
+    final Upstream? upstream = declaration.components.single.upstream;
+    expect(upstream, isA<GithubRelease>());
+    expect((upstream! as GithubRelease).matching, r'^v[0-9]+\.[0-9]+\.[0-9]+$');
+  });
+
+  test('a release-feed upstream naming no shape it will see is refused', () {
+    // A release list carries every channel a project ever cut, so a pin that says nothing about
+    // which of them it follows would be answered with whichever one happens to sort highest — a
+    // release candidate read as a version to move to. The pin has to say, and there is no default
+    // to fall back on: which channel a component follows is the product's decision.
+    const String silent = '''
+tools:
+  liner:
+    version: "v9.0.0"
+    upstream:
+      kind: github_release
+      project: example/liner
+''';
+    expect(
+      () => parseDeclaration(silent, where: 'pins.yaml'),
+      throwsA(
+        isA<DeclarationInvalid>().having(
+          (DeclarationInvalid refused) => refused.toString(),
+          'the refusal',
+          contains('"matching"'),
+        ),
+      ),
+    );
+  });
+
   test('every problem is reported at once, not one per run', () {
     const String twiceWrong = '''
 appliances:

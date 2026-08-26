@@ -6,7 +6,8 @@
 /// the reason — because a version appearing on the internet, or a feed being down, must never turn
 /// a tree red, or red stops meaning "the tree is sound".
 ///
-/// Three lessons of the predecessor are load-bearing here and named where they bite:
+/// Four lessons are load-bearing here and named where they bite — three from the predecessor, and
+/// a fourth measured on this reader after it shipped:
 ///
 /// - **An image is published by a REGISTRY**, and a project can tag a release with no image
 ///   behind it, so for an image the registry's tag list is asked and never the release feed.
@@ -16,6 +17,11 @@
 ///   tags fell outside the one page it read.
 /// - **The pattern decides what is comparable.** A tag list carries every shape a project ever
 ///   published, so each candidate must match the declared pattern whole before it competes.
+/// - **A feed's own word "latest" is not the newest.** `releases/latest` on github.com answers
+///   only the newest release a project did NOT mark a pre-release, and 404 where it marked every
+///   one of them. Measured 2026-08-26 against a project cutting every release on a pre-release
+///   channel: that endpoint answered 404 while the whole list served five entries. So the whole
+///   list is asked, and the declared pattern is what says which entries a pin competes against.
 library;
 
 import 'dart:convert';
@@ -28,8 +34,9 @@ final class UpstreamReading {
   /// The newest version [newest], as the upstream serves it.
   ///
   /// [caveat] is what weakens the answer without voiding it — a registry that refused the rest of
-  /// a list mid-walk. It is printed beside the value, because an answer whose ground shrank and
-  /// says nothing about it is the quiet failure this whole report exists to end.
+  /// a list mid-walk, or a release the project itself marks a pre-release. It is printed beside
+  /// the value, because an answer that is not what a reader takes it for and says nothing about
+  /// that is the quiet failure this whole report exists to end.
   const UpstreamReading.of(String this.newest, {this.caveat}) : unresolved = null;
 
   /// No answer, because [unresolved].
@@ -54,26 +61,87 @@ final class UpstreamReading {
 /// answered from what happened to be read.
 const int pageLimit = 200;
 
-/// The latest release tag of [project] on github.com.
-Future<UpstreamReading> githubLatestRelease(
+/// The newest release tag of [project] on github.com matching [matching].
+///
+/// The WHOLE list is asked and never `releases/latest`, which answers one release chosen by the
+/// project's own pre-release marking and 404 where every release carries it. Which entries a pin
+/// is willing to see is the declaration's to say, in the same [matching] the tag lists take: a pin
+/// written in a stable shape never competes against a candidate cut on another channel, and a pin
+/// written in a pre-release shape can be read at all.
+///
+/// The answer names the project's own pre-release marking of the entry it chose, in the caveat.
+/// The marking is carried beside the tag in the feed and a tag name need not repeat it, so a
+/// reader holding a stable pin against this answer would otherwise have no way to see it.
+///
+/// The list is served newest-published first, and a page cut short is answered the way the tag
+/// lists answer one: the maximum over what WAS served, saying so.
+Future<UpstreamReading> githubNewestRelease(
   Http http,
-  String project, {
+  String project,
+  String matching, {
   required Duration timeout,
 }) async {
-  final _Json fetched = await _json(
-    http,
-    'https://api.github.com/repos/$project/releases/latest',
-    timeout: timeout,
-    headers: const <String, String>{'Accept': 'application/vnd.github+json'},
-  );
-  final Object? body = fetched.body;
-  if (body == null) {
-    return UpstreamReading.unresolved(fetched.whyNot!);
+  final Map<String, bool> released = <String, bool>{};
+  String? url = 'https://api.github.com/repos/$project/releases?per_page=100';
+  for (int page = 0; url != null; page++) {
+    if (page >= pageLimit) {
+      return UpstreamReading.unresolved(
+        'the release list of $project did not end within $pageLimit pages',
+      );
+    }
+    final _Json fetched = await _json(
+      http,
+      url,
+      timeout: timeout,
+      headers: const <String, String>{'Accept': 'application/vnd.github+json'},
+    );
+    final Object? body = fetched.body;
+    if (body == null) {
+      if (released.isEmpty) {
+        return UpstreamReading.unresolved(fetched.whyNot!);
+      }
+      final UpstreamReading partial = _newest(released.keys, matching, of: project);
+      return partial.newest == null
+          ? UpstreamReading.unresolved(fetched.whyNot!)
+          : UpstreamReading.of(
+              partial.newest!,
+              caveat: _caveat(prerelease: released[partial.newest!]!, truncatedAfter: page),
+            );
+    }
+    if (body is! List<Object?>) {
+      return UpstreamReading.unresolved(
+        'the release list of $project answered an unexpected shape',
+      );
+    }
+    for (final Object? entry in body) {
+      if (entry is Map<String, Object?> && entry['tag_name'] is String) {
+        released[entry['tag_name']! as String] = entry['prerelease'] == true;
+      }
+    }
+    final HttpAnswer? served = fetched.answer;
+    url = served == null ? null : _nextLinked(served, 'api.github.com');
   }
-  if (body is Map<String, Object?> && body['tag_name'] is String) {
-    return UpstreamReading.of(body['tag_name']! as String);
-  }
-  return const UpstreamReading.unresolved('the releases feed answered without a tag name');
+  final UpstreamReading whole = _newest(released.keys, matching, of: project);
+  return whole.newest == null
+      ? whole
+      : UpstreamReading.of(
+          whole.newest!,
+          caveat: _caveat(prerelease: released[whole.newest!]!, truncatedAfter: null),
+        );
+}
+
+/// What weakens a release-feed answer without voiding it, or null when nothing does.
+///
+/// Both can hold at once — a truncated walk whose maximum is a pre-release — so they are joined
+/// rather than chosen between.
+String? _caveat({required bool prerelease, required int? truncatedAfter}) {
+  final List<String> weakened = <String>[
+    if (prerelease) 'the project marks this release a pre-release',
+    if (truncatedAfter != null)
+      'the feed refused the rest of the list after $truncatedAfter page(s), newest-published '
+          'first; this is the maximum over what it served',
+  ];
+  return weakened.isEmpty ? null : weakened.join('; ');
 }
 
 /// The newest tag of [image] on hub.docker.com matching [matching].
@@ -381,15 +449,25 @@ String? _challengeField(String challenge, String field) {
 
 /// The next page a Link header names, made absolute against [host], or null.
 ///
+/// The address is taken from the link-value whose own `rel` is `next`, never from the first
+/// address in the header. A header carries several link-values and their order is the server's
+/// choice: measured 2026-08-26, page two of a release list on github.com opens with `rel="prev"`
+/// pointing back at page one. Taking the first address there walks page one, page two, page one
+/// again — until the host stops answering, which on an anonymous budget of sixty requests an hour
+/// is the whole report, not just the pin being read.
+///
+/// A link-value's parameters cannot contain `<`, so `[^<]*` cannot run past the end of the
+/// link-value it started in, and `rel="next"` is only ever read off the address it belongs to.
+///
 /// Header lines arrive ending in a carriage return on some transports, and one left in place
 /// lands in the middle of the next address — where every follow-up request fails in silence. It
 /// is stripped here, once, rather than remembered at every caller.
 String? _nextLinked(HttpAnswer answer, String host) {
   final String? link = _header(answer, 'link');
-  if (link == null || !link.contains('rel="next"')) {
+  if (link == null) {
     return null;
   }
-  final RegExpMatch? match = RegExp('<([^>]+)>').firstMatch(link);
+  final RegExpMatch? match = RegExp('<([^>]+)>[^<]*rel="next"').firstMatch(link);
   final String? target = match?[1]?.replaceAll('\r', '');
   if (target == null) {
     return null;
@@ -407,10 +485,14 @@ String? _header(HttpAnswer answer, String name) {
 }
 
 final class _Json {
-  const _Json(this.body, this.whyNot);
+  const _Json(this.body, this.whyNot, {this.answer});
 
   final Object? body;
   final String? whyNot;
+
+  /// The answer the transport gave, where one arrived at all — for a reader whose next page is
+  /// named in a header rather than in the document.
+  final HttpAnswer? answer;
 }
 
 Future<_Json> _json(
@@ -426,13 +508,13 @@ Future<_Json> _json(
     return _Json(null, '$url could not be asked — $failure');
   }
   if (!answer.ok) {
-    return _Json(null, '$url answered ${answer.status}');
+    return _Json(null, '$url answered ${answer.status}', answer: answer);
   }
   final Object? body = _decoded(answer.body);
   if (body == null) {
-    return _Json(null, '$url answered something that is not a document');
+    return _Json(null, '$url answered something that is not a document', answer: answer);
   }
-  return _Json(body, null);
+  return _Json(body, null, answer: answer);
 }
 
 Object? _decoded(String text) {

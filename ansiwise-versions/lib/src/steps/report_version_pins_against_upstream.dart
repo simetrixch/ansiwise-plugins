@@ -170,7 +170,12 @@ final class ReportVersionPinsAgainstUpstream extends ObservingStep {
     final Upstream? upstream = component.upstream;
     return switch (upstream) {
       null => const UpstreamReading.unresolved('no upstream is declared'),
-      final GithubRelease at => githubLatestRelease(context.http, at.project, timeout: timeout),
+      final GithubRelease at => githubNewestRelease(
+        context.http,
+        at.project,
+        at.matching,
+        timeout: timeout,
+      ),
       final DockerHubTags at => dockerHubNewestTag(
         context.http,
         at.image,
