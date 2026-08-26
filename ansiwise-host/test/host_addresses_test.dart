@@ -15,7 +15,7 @@ void main() {
   // are made up here on purpose: what is under test is that a PREFIX the row supplies is passed over,
   // and holding it against the real names of one product's interfaces would test that product.
   const MeasureHostAddresses step = MeasureHostAddresses(
-    ignoringInterfaces: <String>['podnet', 'virt', 'bridge-'],
+    ignoringInterfaces: <String>['podnet', 'virt', 'bridge-', 'vxlan.calico'],
   );
 
   /// What `ip -4 -o addr show scope global` writes, one interface per line.
@@ -113,6 +113,30 @@ void main() {
         machine.published[MeasureHostAddresses.published],
         '157.90.201.153/32, 95.217.3.4/32, 10.1.1.7/32',
       );
+    });
+  });
+
+  group('the output a real node actually writes', () {
+    // READ OFF apps4.digitacloud.app ON 2026-08-26, byte for byte, because every line above is a
+    // shape this file invented and a parser is only ever wrong about the shapes nobody showed it.
+    // Two things in it that no invented line here carries: the address is configured /26 and the
+    // fields between the marker and it are `metric 100 brd 157.90.201.191`, so a parser reading by
+    // a fixed index rather than from the marker answers with the word "metric".
+    const String apps4 =
+        r'2: eth0    inet 157.90.201.150/26 metric 100 brd 157.90.201.191 scope global dynamic '
+        r'eth0\       valid_lft 34367sec preferred_lft 34367sec'
+        '\n'
+        r'3: vxlan.calico    inet 10.244.249.192/32 scope global vxlan.calico\       valid_lft '
+        r'forever preferred_lft forever';
+
+    test('is read as the node address alone, as a /32, with the pod network left out', () async {
+      final HostMachine machine = HostMachine();
+      machine.shell.answers(listing, apps4);
+
+      final CheckResult result = await step.check(machine.contextFor(under));
+
+      expect(result, isA<Satisfied>());
+      expect(machine.published[MeasureHostAddresses.published], '157.90.201.150/32');
     });
   });
 
