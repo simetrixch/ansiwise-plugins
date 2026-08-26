@@ -21,6 +21,7 @@ export 'src/steps/patch_configmap_key.dart';
 export 'src/steps/patch_container_arguments_and_ports.dart';
 export 'src/steps/reapply_calico_manifest.dart';
 export 'src/steps/recycle_kube_system_pod_ips.dart';
+export 'src/steps/remove_calico_rules_from_other_backend.dart';
 export 'src/steps/remove_default_ipv4_ippool.dart';
 export 'src/steps/remove_existing_cluster_issuer.dart';
 export 'src/steps/remove_kubernetes_object.dart';

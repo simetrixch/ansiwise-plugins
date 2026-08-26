@@ -51,6 +51,13 @@ const Set<String> notCoveredByAFakeMachine = <String>{
   'patch_configmap_key',
   'patch_container_arguments_and_ports',
   'reapply_calico_manifest',
+  // The same placeholder problem as the two calico rows above, and one more on top of it. Its
+  // `backend` argument takes a MEASUREMENT, so the probe's placeholder blocks it before any machine
+  // is asked; and even given a real backend it reads the agent's own settings first and refuses
+  // unless they name that backend, which a blank fake shell answers with empty output. Both runs
+  // against a machine holding real rules are driven directly in
+  // remove_calico_rules_from_other_backend_test.dart, where the ruleset is modelled and read back.
+  'remove_calico_rules_from_other_backend',
   'recycle_kube_system_pod_ips',
   // Its apply ends by proving the running agent pods carry the range, and a blank fake shell
   // answers that read with exit zero and no output — nothing proven, so the apply throws before a

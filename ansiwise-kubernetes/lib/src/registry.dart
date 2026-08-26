@@ -12,6 +12,7 @@ import 'steps/patch_configmap_key.dart';
 import 'steps/patch_container_arguments_and_ports.dart';
 import 'steps/reapply_calico_manifest.dart';
 import 'steps/recycle_kube_system_pod_ips.dart';
+import 'steps/remove_calico_rules_from_other_backend.dart';
 import 'steps/remove_default_ipv4_ippool.dart';
 import 'steps/remove_existing_cluster_issuer.dart';
 import 'steps/remove_kubernetes_object.dart';
@@ -99,6 +100,12 @@ const Map<StepName, RegisteredStep> kubernetesSteps = <StepName, RegisteredStep>
     source: 'lib/src/steps/align_calico_nat_port_range.dart:53',
     create: AlignCalicoNatPortRange.fromArguments,
     arguments: AlignCalicoNatPortRange.arguments,
+  ),
+  StepName('remove_calico_rules_from_other_backend'): RegisteredStep(
+    name: StepName('remove_calico_rules_from_other_backend'),
+    source: 'lib/src/steps/remove_calico_rules_from_other_backend.dart:42',
+    create: RemoveCalicoRulesFromOtherBackend.fromArguments,
+    arguments: RemoveCalicoRulesFromOtherBackend.arguments,
   ),
   StepName('patch_container_arguments_and_ports'): RegisteredStep(
     name: StepName('patch_container_arguments_and_ports'),
