@@ -377,7 +377,30 @@ final class FillKeyValueFile extends ReversibleStep<String?> {
 /// already.
 final class KeyBinding {
   /// Binds a key to one source, written as one line separated by [join] where it holds several.
-  const KeyBinding({this.answer, this.file, this.key, this.literal, this.split, this.join});
+  const KeyBinding({
+    this.answer,
+    this.file,
+    this.key,
+    this.literal,
+    this.measured,
+    this.split,
+    this.join,
+  });
+
+  /// The name of the measurement that will fill this key, while it has not yet.
+  ///
+  /// A STEP IS BUILT TWICE AND ONLY THE SECOND TIME HAS A VALUE. Everything that examines a program
+  /// before it runs builds every step — the registry holds a factory, and only an instance says
+  /// whether a run can be taken back — and at that moment no row has measured anything. So a
+  /// `{measured: <name>}` body is a value that DOES NOT EXIST YET and never an error: at execution
+  /// the engine replaces the whole body with the text the measurement published
+  /// (`ansiwise-core/lib/src/engine/step_execution.dart`), and this class sees [literal] instead.
+  ///
+  /// It resolves to nothing while it stands, which is the same silence an unanswered answer keeps.
+  /// Nothing is lost by it: a row naming a measurement no step of the program publishes is refused
+  /// by the resolver before the run starts, so the only way this survives to a real write is a
+  /// program that could not have run at all.
+  final String? measured;
 
   /// The value written out by the row itself, or by the engine in place of a measurement.
   ///
@@ -422,6 +445,9 @@ final class KeyBinding {
   Future<String?> resolveIn(StepContext context, {bool elevated = false}) async {
     if (literal case final String written) {
       return written.isEmpty ? null : written;
+    }
+    if (measured != null) {
+      return null;
     }
     if (file != null) {
       return _recorded(context, elevated: elevated);
@@ -498,17 +524,20 @@ final class KeyBinding {
         'names its source, as {answer: name}, {measured: name} or {file: path, key: name}',
       );
     }
-    if (body['measured'] != null) {
-      // Only reachable where the engine did NOT substitute — a row naming a measurement no step of
-      // the program publishes is refused by the resolver before the run starts, so arriving here
-      // with the body intact means the wiring never happened and the file would otherwise be written
-      // with the key silently absent.
-      throw ArgumentError.value(
-        body,
-        entry.key,
-        'names a measurement that reached this step unfilled — no row of this program published it, '
-        'and a key filled from a measurement nobody took would be written out of nothing',
-      );
+    if (body['measured'] case final String measured) {
+      // NOT AN ERROR, AND THIS IS THE ONE PLACE THAT DECIDES IT. Everything examining a program
+      // before it runs builds every step, and at that moment nothing has measured anything — so a
+      // body still naming a measurement is a value that does not exist yet. At execution the engine
+      // hands this same entry the published text and the branch above takes it.
+      if (!MeasurementName.isValid(measured)) {
+        throw ArgumentError.value(
+          measured,
+          '${entry.key}.measured',
+          'is not a measurement name — lower case letters, digits and underscores, in parts '
+              'separated by dots',
+        );
+      }
+      return KeyBinding(measured: measured);
     }
     final Object? answer = body['answer'];
     final Object? file = body['file'];

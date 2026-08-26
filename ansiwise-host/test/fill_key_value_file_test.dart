@@ -455,15 +455,24 @@ void main() {
       expect(read['node-cidrs']!.file, isNull);
     });
 
-    test('a measurement that reached the step unfilled refuses, rather than writing the key out '
-        'of nothing', () {
-      // Only reachable where the wiring did not happen — the resolver refuses a row naming a
-      // measurement no step of the program publishes, before the run starts. Arriving here with
-      // the body intact would otherwise write the file with the key silently absent, which reads
-      // to everything downstream as an installation that has no such value.
+    test('a measurement still standing unfilled is a value that does not exist yet, and builds', () {
+      // EVERYTHING THAT EXAMINES A PROGRAM BEFORE IT RUNS BUILDS EVERY STEP, and at that moment no
+      // row has measured anything. A binding that threw here would make a program carrying a
+      // measured slot unexaminable — which is exactly what the engine refuses with, in its own
+      // words: "read a mapping entry that names a measurement as one holding no value yet, so the
+      // step still builds while the value does not exist".
+      final Map<String, KeyBinding> read = KeyBinding.readFrom(<String, Object?>{
+        'node-cidrs': <String, Object?>{'measured': 'host_addresses'},
+      });
+
+      expect(read['node-cidrs']!.measured, 'host_addresses');
+      expect(read['node-cidrs']!.literal, isNull);
+    });
+
+    test('a measurement name that is not one refuses', () {
       expect(
         () => KeyBinding.readFrom(<String, Object?>{
-          'node-cidrs': <String, Object?>{'measured': 'host_addresses'},
+          'node-cidrs': <String, Object?>{'measured': 'Host Addresses'},
         }),
         throwsA(isA<ArgumentError>()),
       );
