@@ -377,7 +377,22 @@ final class FillKeyValueFile extends ReversibleStep<String?> {
 /// already.
 final class KeyBinding {
   /// Binds a key to one source, written as one line separated by [join] where it holds several.
-  const KeyBinding({this.answer, this.file, this.key, this.split, this.join});
+  const KeyBinding({this.answer, this.file, this.key, this.literal, this.split, this.join});
+
+  /// The value written out by the row itself, or by the engine in place of a measurement.
+  ///
+  /// THE ENGINE FILLS A MEASURED ENTRY BEFORE THE STEP EVER SEES IT. A row writing
+  /// `values: {node-cidrs: {measured: host_addresses}}` reaches this class as the TEXT that
+  /// measurement published — the substitution happens in
+  /// `ansiwise-core/lib/src/engine/step_execution.dart`, which replaces the whole body with the
+  /// value. So a body that is plain text is either a constant the row wrote out or a machine fact an
+  /// observing row of this same run read, and nothing here can or needs to tell those apart: both
+  /// are already the value.
+  ///
+  /// [split] and [join] do NOT apply to it, and cannot: the substitution keeps no room for them.
+  /// Where several values have to reach one line, the measuring step publishes them in the shape the
+  /// file writes them, which is the only place that still holds the whole list.
+  final String? literal;
 
   /// The name of the answer this key is filled from, or null where a file records it.
   final String? answer;
@@ -405,6 +420,9 @@ final class KeyBinding {
   /// [elevated] is the step's own: whether this machine's files need root is a property of the row
   /// that pointed the step at them, and the source file stands on the same machine.
   Future<String?> resolveIn(StepContext context, {bool elevated = false}) async {
+    if (literal case final String written) {
+      return written.isEmpty ? null : written;
+    }
     if (file != null) {
       return _recorded(context, elevated: elevated);
     }
@@ -456,7 +474,8 @@ final class KeyBinding {
       throw ArgumentError.value(
         declared,
         'values',
-        'is a mapping of KEY to {answer: name} or {file: path, key: name}, each optionally joined',
+        'is a mapping of KEY to {answer: name}, {measured: name} or {file: path, key: name}, each '
+            'optionally joined',
       );
     }
     return <String, KeyBinding>{
@@ -466,11 +485,29 @@ final class KeyBinding {
 
   static KeyBinding _one(MapEntry<String, Object?> entry) {
     final Object? body = entry.value;
+    // TEXT IS ALREADY THE VALUE. A row may write one out, and the engine writes one here in place of
+    // a `{measured: <name>}` body before this step is built — so by the time a mapping reaches this
+    // class, a measured entry is indistinguishable from a constant and both are simply the value.
+    if (body is String) {
+      return KeyBinding(literal: body);
+    }
     if (body is! Map<String, Object?>) {
       throw ArgumentError.value(
         body,
         entry.key,
-        'names its source, as {answer: name} or {file: path, key: name}',
+        'names its source, as {answer: name}, {measured: name} or {file: path, key: name}',
+      );
+    }
+    if (body['measured'] != null) {
+      // Only reachable where the engine did NOT substitute — a row naming a measurement no step of
+      // the program publishes is refused by the resolver before the run starts, so arriving here
+      // with the body intact means the wiring never happened and the file would otherwise be written
+      // with the key silently absent.
+      throw ArgumentError.value(
+        body,
+        entry.key,
+        'names a measurement that reached this step unfilled — no row of this program published it, '
+        'and a key filled from a measurement nobody took would be written out of nothing',
       );
     }
     final Object? answer = body['answer'];

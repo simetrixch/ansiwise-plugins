@@ -25,6 +25,7 @@ import 'steps/host/install_tailscale_client.dart';
 import 'steps/host/install_tool_prerequisites.dart';
 import 'steps/host/link_storage_path.dart';
 import 'steps/host/measure_host_iptables_backend.dart';
+import 'steps/host/measure_host_addresses.dart';
 import 'steps/host/measure_host_local_port_range.dart';
 import 'steps/host/measure_host_upstream_resolvers.dart';
 import 'steps/host/measure_public_nic.dart';
@@ -399,6 +400,24 @@ const Map<StepName, RegisteredStep> hostSteps = <StepName, RegisteredStep>{
       MeasurementSpec(
         name: MeasurementName('backend'),
         describes: 'the packet-filtering backend this machine is on',
+      ),
+    ],
+  ),
+  // WHERE THIS MACHINE CAN BE REACHED, for whatever has to draw a boundary around it. It declares no
+  // answer: a machine's own addresses are read off the machine. Which interfaces are not the
+  // machine's own is a row argument rather than a list here, because that depends on what the
+  // machine runs and this package carries no name of anything a machine might run.
+  StepName('measure_host_addresses'): RegisteredStep(
+    name: StepName('measure_host_addresses'),
+    source: 'lib/src/steps/host/measure_host_addresses.dart:46',
+    create: MeasureHostAddresses.fromArguments,
+    arguments: MeasureHostAddresses.arguments,
+    publishes: <MeasurementSpec>[
+      MeasurementSpec(
+        name: MeasureHostAddresses.published,
+        describes:
+            'the addresses this machine can be reached at, each as a /32, written as a list on one '
+            'line with a comma and a space between them',
       ),
     ],
   ),

@@ -439,4 +439,46 @@ void main() {
       );
     });
   });
+
+  group('where a binding takes its value from', () {
+    // A row writing `{measured: <name>}` never reaches this class as a map: the engine fills the
+    // entry with the value the measurement published before the step is built, replacing the whole
+    // body (ansiwise-core/lib/src/engine/step_execution.dart). So these hold the shape a filled
+    // entry actually arrives in, and the one path on which the filling did not happen.
+    test('plain text is already the value, which is how a filled measurement arrives', () {
+      final Map<String, KeyBinding> read = KeyBinding.readFrom(<String, Object?>{
+        'node-cidrs': '157.90.201.153/32, 10.1.1.7/32',
+      });
+
+      expect(read['node-cidrs']!.literal, '157.90.201.153/32, 10.1.1.7/32');
+      expect(read['node-cidrs']!.answer, isNull);
+      expect(read['node-cidrs']!.file, isNull);
+    });
+
+    test('a measurement that reached the step unfilled refuses, rather than writing the key out '
+        'of nothing', () {
+      // Only reachable where the wiring did not happen — the resolver refuses a row naming a
+      // measurement no step of the program publishes, before the run starts. Arriving here with
+      // the body intact would otherwise write the file with the key silently absent, which reads
+      // to everything downstream as an installation that has no such value.
+      expect(
+        () => KeyBinding.readFrom(<String, Object?>{
+          'node-cidrs': <String, Object?>{'measured': 'host_addresses'},
+        }),
+        throwsA(isA<ArgumentError>()),
+      );
+    });
+
+    test('an answer still names its source rather than carrying a value', () {
+      // AN INNOCENT CASE. The answer source resolves at run time against the run's own answers, so
+      // it must NOT be folded into the literal one: a binding that captured the name as text would
+      // write the word "fqdn" into the file.
+      final Map<String, KeyBinding> read = KeyBinding.readFrom(<String, Object?>{
+        'fqdn': <String, Object?>{'answer': 'fqdn'},
+      });
+
+      expect(read['fqdn']!.answer, 'fqdn');
+      expect(read['fqdn']!.literal, isNull);
+    });
+  });
 }
