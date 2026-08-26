@@ -339,6 +339,47 @@ void main() {
       );
     });
 
+    // THE SHAPE THAT GOT PAST THIS CHECK AND STILL LOST, met on a real machine. The worktree had
+    // been handed to the operator account and the `.git` inside it was still the one that made it.
+    // This row read the OUTER directory, called the hand-over done, and apply never ran — so git
+    // went on refusing the repository to every caller but that one, with `fatal: detected dubious
+    // ownership`, on a machine whose install had reported success.
+    //
+    // Git decides on the `.git`. So does this now.
+    test('a worktree handed over whose .git was left behind is NOT finished', () async {
+      const GitClone owned = GitClone(
+        repository: path,
+        host: host,
+        branch: base,
+        originAnswer: openOwnerName,
+        ownerAnswer: 'operator_user',
+        runAnswer: null,
+      );
+      final FakeShell shell = FakeShell();
+      shell
+        ..answers('stat -c %U $path', 'digi1\n')
+        ..answers('stat -c %U $path/.git', 'root\n')
+        ..answers('git -C $path rev-parse --is-inside-work-tree', 'true\n')
+        ..answers('git -C $path remote get-url origin', '$openUrl\n')
+        ..answers('git -C $path rev-parse --abbrev-ref HEAD', '$base\n')
+        ..answers('git ls-remote --heads $openUrl $base', '$tip	refs/heads/$base\n')
+        ..answers('git -C $path rev-parse HEAD', '$tip\n');
+
+      expect(
+        await owned.check(
+          contextOn(
+            shell: shell,
+            files: FakeFiles(),
+            name: openOwnerName,
+            answerName: openOwnerName,
+            also: const <String, Object>{'operator_user': 'digi1'},
+          ),
+        ),
+        isA<Ready>(),
+        reason: 'the outer directory says handed over and git still refuses — the .git decides',
+      );
+    });
+
     test('a checkout already under the right owner is not disturbed', () async {
       const GitClone owned = GitClone(
         repository: path,

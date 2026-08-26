@@ -591,6 +591,14 @@ final class GitClone extends IrreversibleStep {
   /// repository owned by another account makes every one of its commands fail with the same
   /// message, and a check that learned the ownership from that failure would be reading a symptom.
   ///
+  /// **BOTH THE WORKTREE AND ITS `.git`, because git decides on the SECOND one.** Reading only the
+  /// outer directory is what let a checkout pass this check while git went on refusing it: a tree
+  /// whose worktree had been handed to the account while the `.git` inside it was left with the
+  /// account that made it. This row then reported the hand-over already done, [apply] never ran, and
+  /// every caller but the one that owns the `.git` met `fatal: detected dubious ownership` — on a
+  /// machine whose install had reported success. The account also has to own the worktree to write
+  /// in it, so a mismatch on EITHER is a hand-over that has to happen.
+  ///
   /// **ASKED AS ROOT, and not at this row's elevation.** The row's flag says whether the checkout
   /// and the two settings files are root's to read; this question is a different one, and the two
   /// commands that answer it in [apply] — `install -d` and `chown -R` — are already elevated
@@ -603,25 +611,35 @@ final class GitClone extends IrreversibleStep {
   /// A path that is not there yet is "no other owner": there is nothing to hand over, and the clone
   /// below makes it. That is now a MEASURED answer rather than an assumed one — root can stat
   /// anything that is there, so `stat` answering nothing over a path the files port still finds is a
-  /// reading that could not be taken, and it is refused as one.
+  /// reading that could not be taken, and it is refused as one. An ABSENT `.git` beside a worktree
+  /// that IS there is that same "nothing to hand over": a directory that is not a repository yet is
+  /// what the clone below turns into one.
   Future<({String? owner, String? refusal})> _ownedByAnother(StepContext context) async {
     if (ownerAnswer case final String name) {
       if (context.answers.optionalText(name) case final String account) {
-        final CommandResult owner = await context.shell.run(
-          Command.observing('stat', arguments: <String>['-c', '%U', repository], elevated: true),
-        );
-        if (owner.ok && owner.trimmed.isNotEmpty) {
-          return (owner: owner.trimmed == account ? null : owner.trimmed, refusal: null);
-        }
-        if (await context.files.exists(repository, elevated: true)) {
-          return (
-            owner: null,
-            refusal:
-                'who $repository belongs to could not be read, and it is there — so this row can '
-                'say neither that it has to be handed to "$account" nor that it does not, and git '
-                'refuses a repository owned by another account outright: '
-                '${owner.stderr.trim().isEmpty ? 'stat answered nothing' : owner.stderr.trim()}',
+        // The worktree first, then the directory git actually decides on. A mismatch on either is a
+        // hand-over, and the `.git` is asked SECOND so that its answer is the one reported when both
+        // disagree — that is the one whose refusal an operator meets.
+        for (final String path in <String>[repository, '$repository/.git']) {
+          final CommandResult owner = await context.shell.run(
+            Command.observing('stat', arguments: <String>['-c', '%U', path], elevated: true),
           );
+          if (owner.ok && owner.trimmed.isNotEmpty) {
+            if (owner.trimmed != account) {
+              return (owner: owner.trimmed, refusal: null);
+            }
+            continue;
+          }
+          if (await context.files.exists(path, elevated: true)) {
+            return (
+              owner: null,
+              refusal:
+                  'who $path belongs to could not be read, and it is there — so this row can '
+                  'say neither that it has to be handed to "$account" nor that it does not, and git '
+                  'refuses a repository owned by another account outright: '
+                  '${owner.stderr.trim().isEmpty ? 'stat answered nothing' : owner.stderr.trim()}',
+            );
+          }
         }
       }
     }
