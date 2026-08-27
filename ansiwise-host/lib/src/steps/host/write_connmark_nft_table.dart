@@ -1,5 +1,6 @@
 import 'package:ansiwise_core/ansiwise_core.dart';
 import 'measure_public_nic.dart';
+import 'quoted_slot.dart';
 
 /// Writes the rules that mark a connection arriving on the public address, so its replies can be
 /// steered.
@@ -114,7 +115,7 @@ final class WriteConnmarkNftTable extends ReversibleStep<String?> with FileStep,
         ? const FileContent.nothing(
             'nothing is steered on this machine, so no connection has to be marked',
           )
-        : FileContent.text(await renderedWith(context, valuesFor(nic)));
+        : FileContent.text(await renderedKeepingQuoting(context, valuesFor(nic)));
   }
 
   /// What the rules file held before, or null when it was not there.

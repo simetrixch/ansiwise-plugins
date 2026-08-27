@@ -1,5 +1,6 @@
 import 'package:ansiwise_core/ansiwise_core.dart';
 import 'measure_public_nic.dart';
+import 'quoted_slot.dart';
 
 /// Writes the network drop-in that sends replies from the public address out the public gateway.
 ///
@@ -117,7 +118,7 @@ final class WriteNetplanPublicSrcRouting extends ReversibleStep<String?>
             'this machine answers by the interface its public address is on, so nothing has to be '
             'steered',
           )
-        : FileContent.text(await renderedWith(context, valuesFor(nic)));
+        : FileContent.text(await renderedKeepingQuoting(context, valuesFor(nic)));
   }
 
   /// What the drop-in held before, or null when it was not there.

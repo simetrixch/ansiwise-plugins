@@ -135,6 +135,63 @@ void main() {
     });
   });
 
+  group('a value that would end the quoting its slot stands inside', () {
+    /// The slot inside a quoted flow list, which is where a value ends the scalar AND the list.
+    const String quoted =
+        'fqdn: <fqdn>\n'
+        'plane: <build-plane>\n'
+        "to: ['<alert-recipients>']\n"
+        'note: <note?>\n';
+
+    Map<String, Object> answeredWith(String recipient) =>
+        Map<String, Object>.of(answered)..['alert_recipients'] = <String>[recipient];
+
+    test('is BLOCKED at the row that would write it, and no file is written', () async {
+      // Without this the file is written and reads back as nothing at all — a mailbox may carry an
+      // apostrophe, so the value is one nobody would call wrong, and the failure surfaces in
+      // whatever reads the file next rather than here.
+      final HostMachine machine = machineWith(text: quoted);
+      final StepContext context = runWith(machine, answeredWith("o'brien@example.com"));
+
+      expect(await step.check(context), isA<Blocked>());
+      await expectLater(() => step.apply(context), throwsA(isA<TemplateRefused>()));
+      expect(machine.files.contents[path], isNull);
+    });
+
+    test('says nothing would be done, so a dry run names it too', () async {
+      final HostMachine machine = machineWith(text: quoted);
+
+      expect(
+        await step.plan(runWith(machine, answeredWith("o'brien@example.com"))),
+        isA<NothingPlan>(),
+      );
+    });
+
+    test('THE INNOCENT NEIGHBOUR: an address without one is written into the same slot', () async {
+      // Without this a step that blocked on every quoted slot would pass the assertions above and
+      // stop every installation whose template quotes anything.
+      final HostMachine machine = machineWith(text: quoted);
+      final StepContext context = runWith(machine, answeredWith('a@example.com'));
+
+      expect(await step.check(context), isA<Ready>());
+      await step.apply(context);
+
+      expect(machine.files.contents[path], contains("to: ['a@example.com']"));
+    });
+
+    test('THE INNOCENT NEIGHBOUR: the same value in an unquoted slot is written', () async {
+      // The template beside this one writes `to: <alert-recipients>`, where an apostrophe closes
+      // nothing. A step that refused the value rather than the place it lands would stop this.
+      final HostMachine machine = machineWith();
+      final StepContext context = runWith(machine, answeredWith("o'brien@example.com"));
+
+      expect(await step.check(context), isA<Ready>());
+      await step.apply(context);
+
+      expect(machine.files.contents[path], contains("to: o'brien@example.com"));
+    });
+  });
+
   group('taking it back', () {
     test('a file that was not there is GONE again', () async {
       final HostMachine machine = machineWith();

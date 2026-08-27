@@ -348,7 +348,7 @@ const Map<StepName, RegisteredStep> hostSteps = <StepName, RegisteredStep>{
   ),
   StepName('write_netplan_public_src_routing'): RegisteredStep(
     name: StepName('write_netplan_public_src_routing'),
-    source: 'lib/src/steps/host/write_netplan_public_src_routing.dart:25',
+    source: 'lib/src/steps/host/write_netplan_public_src_routing.dart:26',
     create: WriteNetplanPublicSrcRouting.fromArguments,
     arguments: WriteNetplanPublicSrcRouting.arguments,
   ),
@@ -366,19 +366,19 @@ const Map<StepName, RegisteredStep> hostSteps = <StepName, RegisteredStep>{
   ),
   StepName('write_connmark_nft_table'): RegisteredStep(
     name: StepName('write_connmark_nft_table'),
-    source: 'lib/src/steps/host/write_connmark_nft_table.dart:20',
+    source: 'lib/src/steps/host/write_connmark_nft_table.dart:21',
     create: WriteConnmarkNftTable.fromArguments,
     arguments: WriteConnmarkNftTable.arguments,
   ),
   StepName('write_public_src_routing_script'): RegisteredStep(
     name: StepName('write_public_src_routing_script'),
-    source: 'lib/src/steps/host/write_public_src_routing_script.dart:15',
+    source: 'lib/src/steps/host/write_public_src_routing_script.dart:16',
     create: WritePublicSrcRoutingScript.fromArguments,
     arguments: WritePublicSrcRoutingScript.arguments,
   ),
   StepName('write_public_src_routing_unit'): RegisteredStep(
     name: StepName('write_public_src_routing_unit'),
-    source: 'lib/src/steps/host/write_public_src_routing_unit.dart:14',
+    source: 'lib/src/steps/host/write_public_src_routing_unit.dart:15',
     create: WritePublicSrcRoutingUnit.fromArguments,
     arguments: WritePublicSrcRoutingUnit.arguments,
   ),
@@ -448,13 +448,13 @@ const Map<StepName, RegisteredStep> hostSteps = <StepName, RegisteredStep>{
   // name of any file a product keeps.
   StepName('create_file_from_template'): RegisteredStep(
     name: StepName('create_file_from_template'),
-    source: 'lib/src/steps/host/create_file_from_template.dart:24',
+    source: 'lib/src/steps/host/create_file_from_template.dart:25',
     create: CreateFileFromTemplate.fromArguments,
     arguments: CreateFileFromTemplate.arguments,
   ),
   StepName('write_file_from_template'): RegisteredStep(
     name: StepName('write_file_from_template'),
-    source: 'lib/src/steps/host/write_file_from_template.dart:27',
+    source: 'lib/src/steps/host/write_file_from_template.dart:28',
     create: WriteFileFromTemplate.fromArguments,
     arguments: WriteFileFromTemplate.arguments,
   ),

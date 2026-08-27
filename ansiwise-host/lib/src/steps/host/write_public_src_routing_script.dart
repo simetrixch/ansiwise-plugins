@@ -1,5 +1,6 @@
 import 'package:ansiwise_core/ansiwise_core.dart';
 import 'measure_public_nic.dart';
+import 'quoted_slot.dart';
 
 /// Writes the script that loads the marking rules and installs the rule keyed on the mark.
 ///
@@ -131,7 +132,7 @@ final class WritePublicSrcRoutingScript extends ReversibleStep<String?>
       ? const FileContent.nothing(
           'nothing is steered on this machine, so there is no rule to install',
         )
-      : FileContent.text(await renderedWith(context, values));
+      : FileContent.text(await renderedKeepingQuoting(context, values));
 
   /// What the script file held before, or null when it was not there.
   ///

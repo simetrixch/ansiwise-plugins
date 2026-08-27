@@ -1,5 +1,6 @@
 import 'package:ansiwise_core/ansiwise_core.dart';
 import 'fill_key_value_file.dart';
+import 'quoted_slot.dart';
 
 /// Puts a file on the machine from a template beside the programs, and never overrules one that is
 /// already there.
@@ -186,7 +187,7 @@ final class CreateFileFromTemplate extends ReversibleStep<bool> with FileStep, T
       }
     }
 
-    return FileContent.text(await renderedWith(context, filled));
+    return FileContent.text(await renderedKeepingQuoting(context, filled));
   }
 
   @override

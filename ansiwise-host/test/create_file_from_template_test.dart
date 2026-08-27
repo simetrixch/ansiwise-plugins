@@ -304,4 +304,54 @@ void main() {
       expect(machine.files.contents['/etc/listed.conf'], 'to: a@example.com,b@example.com\n');
     });
   });
+
+  group('a value that would end the quoting its slot stands inside', () {
+    // The create-only writer puts the file down ONCE, so the file it renders wrong is the file the
+    // machine keeps: nothing here ever rewrites it, and every later run reports the path satisfied
+    // because something is standing there.
+    const String quotedTemplate = 'ansiwise/templates/quoted.tpl';
+    const String quoted = "to: ['<alert-recipients>']\n";
+
+    HostMachine machineForQuoted() {
+      final HostMachine machine = HostMachine();
+      machine.files.contents[quotedTemplate] = quoted;
+      return machine;
+    }
+
+    const CreateFileFromTemplate quoting = CreateFileFromTemplate(
+      templatePath: quotedTemplate,
+      path: '/etc/quoted.conf',
+      fileMode: 0x1a4,
+      values: <String, KeyBinding>{
+        'alert-recipients': KeyBinding(answer: 'alert_recipients', join: ', '),
+      },
+    );
+
+    StepContext runWith(HostMachine machine, String recipient) => machine.contextFor(
+      const StepName('under_test'),
+      Arguments.none,
+      Arguments(<String, Object>{
+        'alert_recipients': <String>[recipient],
+      }),
+    );
+
+    test('is BLOCKED, and no file is put down', () async {
+      final HostMachine machine = machineForQuoted();
+      final StepContext context = runWith(machine, "o'brien@example.com");
+
+      expect(await quoting.check(context), isA<Blocked>());
+      await expectLater(() => quoting.apply(context), throwsA(isA<TemplateRefused>()));
+      expect(machine.files.contents['/etc/quoted.conf'], isNull);
+    });
+
+    test('THE INNOCENT NEIGHBOUR: an address without one is put down', () async {
+      final HostMachine machine = machineForQuoted();
+      final StepContext context = runWith(machine, 'a@example.com');
+
+      expect(await quoting.check(context), isA<Ready>());
+      await quoting.apply(context);
+
+      expect(machine.files.contents['/etc/quoted.conf'], "to: ['a@example.com']\n");
+    });
+  });
 }

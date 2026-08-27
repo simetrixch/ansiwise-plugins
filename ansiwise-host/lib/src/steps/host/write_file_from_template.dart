@@ -1,6 +1,7 @@
 import 'package:ansiwise_core/ansiwise_core.dart';
 
 import 'fill_key_value_file.dart';
+import 'quoted_slot.dart';
 
 /// Writes a file from a template beside the programs, on every run.
 ///
@@ -155,7 +156,7 @@ final class WriteFileFromTemplate extends ReversibleStep<String?> with FileStep,
       }
     }
 
-    return FileContent.text(await renderedWith(context, filled));
+    return FileContent.text(await renderedKeepingQuoting(context, filled));
   }
 
   /// What the file held before, or null when it was not there.

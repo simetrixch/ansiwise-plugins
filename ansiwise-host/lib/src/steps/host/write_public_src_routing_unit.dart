@@ -1,5 +1,6 @@
 import 'package:ansiwise_core/ansiwise_core.dart';
 import 'measure_public_nic.dart';
+import 'quoted_slot.dart';
 
 /// Writes the service that runs the steering script, and takes it away again when it is stopped.
 ///
@@ -144,7 +145,7 @@ final class WritePublicSrcRoutingUnit extends ReversibleStep<String?> with FileS
       ? const FileContent.nothing(
           'nothing is steered on this machine, so there is no service to install',
         )
-      : FileContent.text(await renderedWith(context, values));
+      : FileContent.text(await renderedKeepingQuoting(context, values));
 
   @override
   Future<void> apply(StepContext context) async {
