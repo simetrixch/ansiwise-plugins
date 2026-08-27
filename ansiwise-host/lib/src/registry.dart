@@ -17,6 +17,7 @@ import 'steps/host/enable_addons.dart';
 import 'steps/host/enable_service.dart';
 import 'steps/host/export_kubeconfig.dart';
 import 'steps/host/fill_key_value_file.dart';
+import 'steps/host/hand_directory_to_account.dart';
 import 'steps/host/install_authorized_key.dart';
 import 'steps/host/install_packages.dart';
 import 'steps/host/install_pinned_tool.dart';
@@ -280,6 +281,15 @@ const Map<StepName, RegisteredStep> hostSteps = <StepName, RegisteredStep>{
     source: 'lib/src/steps/host/create_directory.dart:41',
     create: CreateDirectory.fromArguments,
     arguments: CreateDirectory.arguments,
+  ),
+  // The same directory for the other kind of writer: a real account on this machine, named in an
+  // answer because which number an installation gave it is that machine's own fact. Two steps and
+  // not one with a choice, so that neither has an optional argument.
+  StepName('hand_directory_to_account'): RegisteredStep(
+    name: StepName('hand_directory_to_account'),
+    source: 'lib/src/steps/host/hand_directory_to_account.dart:39',
+    create: HandDirectoryToAccount.fromArguments,
+    arguments: HandDirectoryToAccount.arguments,
   ),
   // Storage.
   StepName('require_storage_mount'): RegisteredStep(

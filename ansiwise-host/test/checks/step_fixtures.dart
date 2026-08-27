@@ -98,6 +98,35 @@ final Map<String, Fixture> stepFixtures = <String, Fixture>{
       });
   },
 
+  // The same directory measured the same way, and one thing more: this step is handed the NAME of an
+  // account and reads the numbers off the machine, so the fake has to carry an account at all. The
+  // name it is handed is the probe's own plausible text, because the probe plants an answer under
+  // that name and fills the step's `account_answer` with it.
+  'hand_directory_to_account': (FakeShell shell, FakeFiles files, FakeHttp http) {
+    const String asked = 'stat -c %u %g %f $_plausibleText';
+    const int directoryBits = 0x4000;
+    const int account = 1000;
+    int owner = 0;
+    int group = 0;
+    int mode = 0;
+    void saying() =>
+        shell.answers(asked, '$owner $group ${(directoryBits | mode).toRadixString(16)}');
+
+    shell
+      ..answers('id -u $_plausibleText', '$account')
+      ..answers('id -g $_plausibleText', '$account')
+      ..fails(asked)
+      ..changes('chown $account:$account $_plausibleText', () {
+        owner = account;
+        group = account;
+        saying();
+      })
+      ..changes('chmod 0001 $_plausibleText', () {
+        mode = 1;
+        saying();
+      });
+  },
+
   // The kernel renders /proc/<pid>/exe as `<path> (deleted)` while a process is executing an inode
   // that no longer has a name — which is what a service running a replaced binary looks like, and
   // the whole of what this step reads. The restart is what gives the process a named inode again,
