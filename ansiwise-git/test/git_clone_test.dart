@@ -265,10 +265,19 @@ void main() {
       expect((result as Blocked).reason, contains('platform_branch'));
     });
 
-    test('the directory is made for its owner and handed over before git is asked', () async {
-      // A checkout under a path only root may write cannot be created by the account that has to
-      // use it, and one created AS root is one git then refuses to that account outright. Both are
-      // the same act: make it with elevation, own it as the answer says.
+    test('the directory is made for its owner BEFORE git, and handed over AFTER it', () async {
+      // TWO ACTS AND THE ORDER BETWEEN THEM IS THE WHOLE OF IT. The directory is made with elevation
+      // first, because a checkout under a path only root may write cannot be created by the account
+      // that has to use it. The hand-over comes LAST, because git writes the repository into that
+      // directory in between — and a program of this kind is started elevated, so a row that asks
+      // for no elevation of its own is still a root process. Handing over first gave the account an
+      // empty directory and left root owning the `.git` inside it, on every machine, from the first
+      // install. Nothing met it while only elevated programs drove that checkout; the first caller
+      // that was not root was refused by git outright.
+      //
+      // This check used to pin the order the other way round, which is why it went red on the fix
+      // rather than on the defect — the order is asserted here so the next reader cannot quietly
+      // put it back.
       const GitClone owned = GitClone(
         repository: path,
         host: host,
@@ -292,8 +301,8 @@ void main() {
         shell.ran,
         containsAllInOrder(<String>[
           'install -d -o digi1 -g digi1 $path',
-          'chown -R digi1:digi1 $path',
           'git clone --branch $base $openUrl $path',
+          'chown -R digi1:digi1 $path',
         ]),
         reason: 'git is asked nothing until the directory is one the run may use',
       );

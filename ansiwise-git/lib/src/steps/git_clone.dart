@@ -385,12 +385,6 @@ final class GitClone extends IrreversibleStep {
           account,
           repository,
         ], elevated: true);
-        await _mustRunAs(context, <String>[
-          'chown',
-          '-R',
-          '$account:$account',
-          repository,
-        ], elevated: true);
       }
     }
 
@@ -407,6 +401,7 @@ final class GitClone extends IrreversibleStep {
         url,
         repository,
       ], environment: reaching);
+      await _handOver(context);
       return;
     }
 
@@ -440,6 +435,37 @@ final class GitClone extends IrreversibleStep {
       standsOn,
       'origin/$standsOn',
     ]);
+    await _handOver(context);
+  }
+
+  /// Hands the checkout to the account the row names, AFTER git has written into it.
+  ///
+  /// **THE ORDER IS THE WHOLE OF IT, and it used to be the other way round.** The directory is made
+  /// and handed over before git is asked anything, because a checkout under a path only root may
+  /// write cannot be created by the account that has to use it — that part is right and stays. What
+  /// was wrong is that the hand-over ALSO ran there and nowhere else: git then wrote the repository
+  /// into a directory that had just been handed over, and every file it made — the whole of `.git`
+  /// among them — came out belonging to whoever ran it. Which is root: a program of this kind is
+  /// started elevated, so a row that asks for no elevation of its own is still a root process.
+  ///
+  /// So the account was given an empty directory and root kept the repository inside it, on every
+  /// machine, from the first install. Nothing met it while only elevated programs drove that
+  /// checkout; the first caller that was not root was refused by git outright, four programs and one
+  /// run kind later.
+  ///
+  /// `-R` and unconditional: it also corrects a tree left under the wrong owner by an earlier shape
+  /// of this row, and it costs one command over a tree this row has just written anyway.
+  Future<void> _handOver(StepContext context) async {
+    if (ownerAnswer case final String name) {
+      if (context.answers.optionalText(name) case final String account) {
+        await _mustRunAs(context, <String>[
+          'chown',
+          '-R',
+          '$account:$account',
+          repository,
+        ], elevated: true);
+      }
+    }
   }
 
   /// What the machine's own settings say this checkout is, or why they cannot be read.
