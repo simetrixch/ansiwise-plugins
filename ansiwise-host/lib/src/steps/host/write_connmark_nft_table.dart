@@ -26,6 +26,7 @@ final class WriteConnmarkNftTable extends ReversibleStep<String?> with FileStep,
     required this.tableName,
     required this.mark,
     this.elevated = false,
+    this.escaping,
   });
 
   /// Builds the step from what the program gave it.
@@ -35,6 +36,7 @@ final class WriteConnmarkNftTable extends ReversibleStep<String?> with FileStep,
     tableName: arguments.text('table_name'),
     mark: arguments.text('mark'),
     elevated: arguments.has('elevated') && arguments.flag('elevated'),
+    escaping: Escaping.named(arguments.optionalText('escaping')),
   );
 
   /// What this step accepts.
@@ -75,6 +77,16 @@ final class WriteConnmarkNftTable extends ReversibleStep<String?> with FileStep,
           'off for a path this account owns',
       required: false,
     ),
+    ArgumentSpec(
+      name: 'escaping',
+      kind: ArgumentKind.text,
+      describes:
+          'how this file writes a quote character that is part of a value, where a slot stands '
+          'inside quoting — "doubled" writes it twice, as YAML single quoting and SQL do, and '
+          '"backslash" puts one in front, as JSON and YAML double quoting do. Leave it off and a '
+          'value that would close the quoting its slot stands inside is refused by name instead',
+      required: false,
+    ),
   ];
 
   /// `0644` — a rule set that carries nothing secret and that the loader reads.
@@ -97,6 +109,10 @@ final class WriteConnmarkNftTable extends ReversibleStep<String?> with FileStep,
   /// The mark put on connections arriving on the public address.
   final String mark;
 
+  /// How this file writes a quote character that is part of a value, where a slot stands inside
+  /// quoting, or null where the row says nothing and such a value is refused.
+  final Escaping? escaping;
+
   @override
   String pathFor(StepContext context) => path;
 
@@ -115,7 +131,9 @@ final class WriteConnmarkNftTable extends ReversibleStep<String?> with FileStep,
         ? const FileContent.nothing(
             'nothing is steered on this machine, so no connection has to be marked',
           )
-        : FileContent.text(await renderedKeepingQuoting(context, valuesFor(nic)));
+        : FileContent.text(
+            await renderedKeepingQuoting(context, valuesFor(nic), escaping: escaping),
+          );
   }
 
   /// What the rules file held before, or null when it was not there.

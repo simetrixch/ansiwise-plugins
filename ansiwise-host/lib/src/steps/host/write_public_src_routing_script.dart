@@ -24,6 +24,7 @@ final class WritePublicSrcRoutingScript extends ReversibleStep<String?>
     required this.table,
     required this.priority,
     this.elevated = false,
+    this.escaping,
   });
 
   /// Builds the step from what the program gave it.
@@ -36,6 +37,7 @@ final class WritePublicSrcRoutingScript extends ReversibleStep<String?>
         table: arguments.integer('table'),
         priority: arguments.integer('priority'),
         elevated: arguments.has('elevated') && arguments.flag('elevated'),
+        escaping: Escaping.named(arguments.optionalText('escaping')),
       );
 
   /// What this step accepts.
@@ -87,6 +89,16 @@ final class WritePublicSrcRoutingScript extends ReversibleStep<String?>
           'off for a path this account owns',
       required: false,
     ),
+    ArgumentSpec(
+      name: 'escaping',
+      kind: ArgumentKind.text,
+      describes:
+          'how this file writes a quote character that is part of a value, where a slot stands '
+          'inside quoting — "doubled" writes it twice, as YAML single quoting and SQL do, and '
+          '"backslash" puts one in front, as JSON and YAML double quoting do. Leave it off and a '
+          'value that would close the quoting its slot stands inside is refused by name instead',
+      required: false,
+    ),
   ];
 
   /// `0755` — a script the unit runs.
@@ -115,6 +127,10 @@ final class WritePublicSrcRoutingScript extends ReversibleStep<String?>
   /// The number the rule sits at.
   final int priority;
 
+  /// How this file writes a quote character that is part of a value, where a slot stands inside
+  /// quoting, or null where the row says nothing and such a value is refused.
+  final Escaping? escaping;
+
   @override
   String pathFor(StepContext context) => path;
 
@@ -132,7 +148,7 @@ final class WritePublicSrcRoutingScript extends ReversibleStep<String?>
       ? const FileContent.nothing(
           'nothing is steered on this machine, so there is no rule to install',
         )
-      : FileContent.text(await renderedKeepingQuoting(context, values));
+      : FileContent.text(await renderedKeepingQuoting(context, values, escaping: escaping));
 
   /// What the script file held before, or null when it was not there.
   ///

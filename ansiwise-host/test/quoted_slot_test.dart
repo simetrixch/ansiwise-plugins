@@ -141,4 +141,75 @@ void main() {
       expect(broken.map((QuotingBroken each) => each.slot), <String>['<recipients>', '<note>']);
     });
   });
+
+  group('how a file writes a quote that is part of a value', () {
+    // THE ROW SAYS IT, BECAUSE THE TEMPLATE CANNOT. The template already shows which quoting a slot
+    // stands inside — the scan above reads it there. What it cannot show is how this file writes
+    // that character inside itself, because that is the grammar of the file, and this package
+    // deliberately does not know which grammar it is writing.
+
+    test('doubled writes the quote twice, which is what YAML single quoting reads back', () {
+      expect(Escaping.doubled.applied("o'brien@example.com", "'"), "o''brien@example.com");
+    });
+
+    test('backslash puts one in front, which is what JSON reads back', () {
+      expect(Escaping.backslash.applied('he said "hi"', '"'), r'he said \"hi\"');
+    });
+
+    test('backslash escapes the BACKSLASH FIRST, or it would escape its own escape', () {
+      // Doing it the other way round turns `a\"b` into `a\\"b` — the backslash the escaping just
+      // added gets one of its own, the quote is left bare, and the quoting closes after all.
+      expect(Escaping.backslash.applied(r'a\"b', '"'), r'a\\\"b');
+    });
+
+    test('THE INNOCENT NEIGHBOUR: a value carrying no quote comes back unchanged', () {
+      expect(Escaping.doubled.applied('a@example.com', "'"), 'a@example.com');
+      expect(Escaping.backslash.applied('a@example.com', '"'), 'a@example.com');
+    });
+
+    test('a row names one by the word a program file writes, and nothing else', () {
+      expect(Escaping.named('doubled'), Escaping.doubled);
+      expect(Escaping.named('backslash'), Escaping.backslash);
+      expect(
+        Escaping.named('quoted'),
+        isNull,
+        reason: 'a word this does not know is not an escaping',
+      );
+      expect(Escaping.named(null), isNull, reason: 'a row that says nothing has said nothing');
+    });
+  });
+
+  group('whether one value can be escaped at all', () {
+    // ONE VALUE FILLS EVERY SLOT OF ITS NAME AT ONCE. So what decides whether escaping is possible
+    // is not the one broken slot: it is every place that name stands.
+
+    test('a name standing in one quoting throughout can be made to fit it', () {
+      final Map<String, Set<String?>> where = quotingOfEachSlot(
+        "to: '<recipients>'\ncc: '<recipients>'\n",
+      );
+
+      expect(where['recipients'], <String?>{"'"});
+    });
+
+    test('a name standing inside quoting AND outside it cannot', () {
+      // Escaping it would corrupt the bare occurrence; leaving it would break the quoted one. The
+      // two readings are both in the set, which is what the caller refuses on.
+      final Map<String, Set<String?>> where = quotingOfEachSlot(
+        "to: '<recipients>'\n# reported as <recipients>\n",
+      );
+
+      expect(where['recipients'], hasLength(2));
+      expect(where['recipients'], containsAll(<String?>["'", null]));
+    });
+
+    test('a name standing in single quoting in one line and double in another cannot either', () {
+      final Map<String, Set<String?>> where = quotingOfEachSlot("a: '<name>'\nb: \"<name>\"\n");
+
+      expect(where['name'], hasLength(2));
+    });
+
+    test('THE INNOCENT NEIGHBOUR: a name standing nowhere near quoting is one reading', () {
+      expect(quotingOfEachSlot('a: <name>\nb: <name>\n')['name'], <String?>{null});
+    });
+  });
 }

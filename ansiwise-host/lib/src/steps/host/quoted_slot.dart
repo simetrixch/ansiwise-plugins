@@ -19,13 +19,56 @@
 /// of text opened with `'` is closed by the next `'`, and one opened with `"` by the next `"` that
 /// no backslash escapes.
 ///
-/// **This REFUSES, and repairs nothing.** Nothing here escapes a value for the quoting it lands in,
-/// and nothing here lets a slot say which quoting it stands in — both need a notation, and which
-/// side declares it is undecided. What is not in question is that a file which cannot be read back
-/// is not a file a step may write in silence.
+/// **A row may say how its file escapes, and then a value is made to fit.** The template already
+/// says WHICH quoting a slot stands inside — this scan reads it there. What a template cannot say is
+/// how that quote is written inside itself, because that is the grammar of the file and this package
+/// deliberately does not know which grammar it is writing. So the ROW says it, as `escaping:`, and
+/// the two conventions every grammar this platform writes uses are the two it accepts: `doubled`,
+/// where `'` inside single quoting is written `''` (YAML, SQL), and `backslash`, where `\` and `"`
+/// are each preceded by one (JSON, YAML's double quoting, C).
+///
+/// **A row that says nothing is still REFUSED**, which is what keeps this from becoming a silent
+/// path to a broken file: escaping happens only where somebody wrote down how this file escapes.
+///
+/// **And a value standing in two different quotings is refused even then.** One value is filled into
+/// every slot of its name at once, so escaping it for single quoting would corrupt the occurrence
+/// standing in double quoting or in none. Nothing here can make one text fit two contexts, and
+/// saying so is better than picking one of them.
 library;
 
 import 'package:ansiwise_core/ansiwise_core.dart';
+
+/// How the file a row writes says a quote character that is part of a value.
+///
+/// **Two, because two is what the grammars this platform writes use.** A third would be a guess
+/// about a file nobody here has written yet, and the row that meets it can say so then.
+enum Escaping {
+  /// The quote is written twice: `o'brien` inside single quoting becomes `o''brien`.
+  ///
+  /// YAML's single-quoted scalars and SQL's string literals. Nothing else in the value changes — a
+  /// backslash inside single quoting is an ordinary character to both.
+  doubled,
+
+  /// A backslash is put in front of the quote, and in front of any backslash already there.
+  ///
+  /// JSON, YAML's double-quoted scalars, C. THE BACKSLASH IS ESCAPED FIRST: doing it the other way
+  /// round would put a backslash in front of the backslash this escaping had just added, and the
+  /// quote would close after all.
+  backslash;
+
+  /// The name a program row writes, which is this constant's own.
+  static Escaping? named(String? word) => switch (word) {
+    'doubled' => Escaping.doubled,
+    'backslash' => Escaping.backslash,
+    _ => null,
+  };
+
+  /// [value] with every [quote] in it written the way this convention writes one.
+  String applied(String value, String quote) => switch (this) {
+    Escaping.doubled => value.replaceAll(quote, quote * 2),
+    Escaping.backslash => value.replaceAll(r'\', r'\\').replaceAll(quote, '\\$quote'),
+  };
+}
 
 /// One slot of a template whose value would end the quoting the slot stands inside.
 final class QuotingBroken {
@@ -121,27 +164,90 @@ extension QuotingKept on TemplateStep {
   /// carrying neither quote character cannot end one, which is nearly every value of nearly every
   /// run, and reading the template is a round trip to the machine paid again on the check, the plan
   /// and the apply of every step that writes one.
-  Future<String> renderedKeepingQuoting(StepContext context, Map<String, String> values) async {
-    if (values.values.any(_carriesQuote) && await context.files.exists(templatePath)) {
-      final List<QuotingBroken> broken = quotingBrokenIn(
-        await context.files.read(templatePath),
-        values,
-      );
-      if (broken.isNotEmpty) {
-        throw TemplateRefused(
-          <String>[
-            '$templatePath stands a slot inside quoting that the value fills it with would close, '
-                'so the file this writes cannot be read back',
-            ...broken.map((QuotingBroken each) => each.sentence),
-            'nothing here escapes a value for the quoting it lands in: either the template writes '
-                'the slot where no quoting is open, or the value is one without that character',
-          ].join('; '),
-        );
-      }
+  Future<String> renderedKeepingQuoting(
+    StepContext context,
+    Map<String, String> values, {
+    Escaping? escaping,
+  }) async {
+    if (!values.values.any(_carriesQuote) || !await context.files.exists(templatePath)) {
+      return renderedWith(context, values);
     }
-    return renderedWith(context, values);
+
+    final String text = await context.files.read(templatePath);
+    final List<QuotingBroken> broken = quotingBrokenIn(text, values);
+    if (broken.isEmpty) {
+      return renderedWith(context, values);
+    }
+
+    // NOTHING IS ESCAPED WHERE NOBODY SAID HOW. The template says which quoting a slot stands
+    // inside; what it cannot say is how this file writes that character inside itself, because that
+    // is the grammar of the file. A row that did not say it gets the refusal it got before.
+    if (escaping == null) {
+      throw TemplateRefused(
+        <String>[
+          '$templatePath stands a slot inside quoting that the value fills it with would close, '
+              'so the file this writes cannot be read back',
+          ...broken.map((QuotingBroken each) => each.sentence),
+          'this row says no escaping, so nothing here may change the value: write escaping: '
+              'doubled where this file writes a quote twice, or escaping: backslash where it puts '
+              'one in front — or move the slot out of the quoting, or answer a value without that '
+              'character',
+        ].join('; '),
+      );
+    }
+
+    // ONE VALUE FILLS EVERY SLOT OF ITS NAME, so a name standing in two different quotings cannot
+    // be made to fit both at once. That is refused by name rather than escaped for whichever
+    // occurrence happened to be found first.
+    final Map<String, Set<String?>> everywhere = quotingOfEachSlot(text);
+    final List<String> ambiguous = <String>[
+      for (final QuotingBroken each in broken)
+        if ((everywhere[_nameOf(each.slot)] ?? const <String?>{}).length > 1)
+          '${each.slot} stands in more than one quoting in this template',
+    ];
+    if (ambiguous.isNotEmpty) {
+      throw TemplateRefused(
+        <String>[
+          '$templatePath fills one value into slots standing in different quotings, and one text '
+              'cannot be escaped for both',
+          ...{...ambiguous},
+          'give each context its own slot name, or move the value out of the quoting it does not '
+              'belong in',
+        ].join('; '),
+      );
+    }
+
+    // Escaped for the quoting each name stands in, which by now is exactly one.
+    final Map<String, String> fitted = <String, String>{
+      ...values,
+      for (final QuotingBroken each in broken)
+        _nameOf(each.slot): escaping.applied(values[_nameOf(each.slot)]!, each.quote),
+    };
+    return renderedWith(context, fitted);
   }
 }
+
+/// Which quotings each slot name of [text] stands inside, across every occurrence of it.
+///
+/// **One value fills every slot of its name at once**, so this is what decides whether escaping is
+/// possible at all: a name standing once inside single quoting can be escaped for it, and a name
+/// standing once inside single quoting and once inside none cannot — escaping it would corrupt the
+/// second occurrence, and leaving it would break the first.
+///
+/// A null in the set is an occurrence standing inside no quoting.
+Map<String, Set<String?>> quotingOfEachSlot(String text) {
+  final Map<String, Set<String?>> found = <String, Set<String?>>{};
+  final List<String> lines = text.split('\n');
+  for (final String line in lines) {
+    for (final RegExpMatch match in slotPattern.allMatches(line)) {
+      found.putIfAbsent(match.group(1)!, () => <String?>{}).add(_quotingAt(line, match.start));
+    }
+  }
+  return found;
+}
+
+/// The answer name inside a slot mark, so `<recipients?>` answers `recipients`.
+String _nameOf(String slot) => slotPattern.firstMatch(slot)!.group(1)!;
 
 /// Whether [value] carries either character that closes quoting.
 bool _carriesQuote(String value) => value.contains("'") || value.contains('"');

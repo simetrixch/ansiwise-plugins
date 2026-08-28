@@ -43,6 +43,7 @@ final class WriteFileFromTemplate extends ReversibleStep<String?> with FileStep,
     this.runAnswer,
     this.values = const <String, KeyBinding>{},
     this.elevated = false,
+    this.escaping,
   });
 
   /// Builds the step from what the program gave it.
@@ -55,6 +56,7 @@ final class WriteFileFromTemplate extends ReversibleStep<String?> with FileStep,
         ? KeyBinding.readFrom(arguments.raw('values'))
         : const <String, KeyBinding>{},
     elevated: arguments.has('elevated') && arguments.flag('elevated'),
+    escaping: Escaping.named(arguments.optionalText('escaping')),
   );
 
   /// What this step accepts.
@@ -108,6 +110,16 @@ final class WriteFileFromTemplate extends ReversibleStep<String?> with FileStep,
           'off for a path this account owns',
       required: false,
     ),
+    ArgumentSpec(
+      name: 'escaping',
+      kind: ArgumentKind.text,
+      describes:
+          'how this file writes a quote character that is part of a value, where a slot stands '
+          'inside quoting — "doubled" writes it twice, as YAML single quoting and SQL do, and '
+          '"backslash" puts one in front, as JSON and YAML double quoting do. Leave it off and a '
+          'value that would close the quoting its slot stands inside is refused by name instead',
+      required: false,
+    ),
   ];
 
   /// Where the template stands, as the row names it.
@@ -129,6 +141,10 @@ final class WriteFileFromTemplate extends ReversibleStep<String?> with FileStep,
 
   /// Which answer fills each slot of the template.
   final Map<String, KeyBinding> values;
+
+  /// How this file writes a quote character that is part of a value, where a slot stands inside
+  /// quoting, or null where the row says nothing and such a value is refused.
+  final Escaping? escaping;
 
   @override
   String pathFor(StepContext context) {
@@ -156,7 +172,7 @@ final class WriteFileFromTemplate extends ReversibleStep<String?> with FileStep,
       }
     }
 
-    return FileContent.text(await renderedKeepingQuoting(context, filled));
+    return FileContent.text(await renderedKeepingQuoting(context, filled, escaping: escaping));
   }
 
   /// What the file held before, or null when it was not there.

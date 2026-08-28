@@ -1,5 +1,6 @@
 import 'package:ansiwise_core/ansiwise_core.dart';
 import 'package:ansiwise_host/ansiwise_host.dart';
+import 'package:ansiwise_host/src/steps/host/quoted_slot.dart';
 import 'package:test/test.dart';
 
 import 'host_fixture.dart';
@@ -164,6 +165,37 @@ void main() {
       expect(
         await step.plan(runWith(machine, answeredWith("o'brien@example.com"))),
         isA<NothingPlan>(),
+      );
+    });
+
+    test('is WRITTEN, escaped, where the row says how this file escapes', () async {
+      // The row is the only one that can say it: the template already shows WHICH quoting the slot
+      // stands inside, and what it cannot show is how the file writes that character inside itself,
+      // because that is the grammar of the file. `doubled` is YAML single quoting and SQL.
+      const WriteFileFromTemplate escaping = WriteFileFromTemplate(
+        templatePath: templatePath,
+        path: path,
+        fileMode: 0x1a4,
+        escaping: Escaping.doubled,
+        values: <String, KeyBinding>{
+          'fqdn': KeyBinding(answer: 'fqdn'),
+          'build-plane': KeyBinding(answer: 'build_plane'),
+          'alert-recipients': KeyBinding(answer: 'alert_recipients', join: ', '),
+          'note': KeyBinding(answer: 'note'),
+        },
+      );
+      final HostMachine machine = machineWith(text: quoted);
+      final StepContext context = runWith(machine, answeredWith("o'brien@example.com"));
+
+      expect(await escaping.check(context), isA<Ready>());
+      await escaping.apply(context);
+
+      expect(
+        machine.files.contents[path],
+        contains("to: ['o''brien@example.com']"),
+        reason:
+            'the apostrophe is written twice, which YAML single quoting reads back as one — the '
+            'file carries the address nobody would call wrong, and it can be read',
       );
     });
 

@@ -31,6 +31,7 @@ final class WriteNetplanPublicSrcRouting extends ReversibleStep<String?>
     required this.path,
     required this.table,
     this.elevated = false,
+    this.escaping,
   });
 
   /// Builds the step from what the program gave it.
@@ -40,6 +41,7 @@ final class WriteNetplanPublicSrcRouting extends ReversibleStep<String?>
         path: arguments.text('path'),
         table: arguments.integer('table'),
         elevated: arguments.has('elevated') && arguments.flag('elevated'),
+        escaping: Escaping.named(arguments.optionalText('escaping')),
       );
 
   /// What this step accepts.
@@ -80,6 +82,16 @@ final class WriteNetplanPublicSrcRouting extends ReversibleStep<String?>
           'off for a path this account owns',
       required: false,
     ),
+    ArgumentSpec(
+      name: 'escaping',
+      kind: ArgumentKind.text,
+      describes:
+          'how this file writes a quote character that is part of a value, where a slot stands '
+          'inside quoting — "doubled" writes it twice, as YAML single quoting and SQL do, and '
+          '"backslash" puts one in front, as JSON and YAML double quoting do. Leave it off and a '
+          'value that would close the quoting its slot stands inside is refused by name instead',
+      required: false,
+    ),
   ];
 
   /// `0600` — the network tool refuses to read a file anyone can read.
@@ -98,6 +110,10 @@ final class WriteNetplanPublicSrcRouting extends ReversibleStep<String?>
 
   /// The table holding the public gateway.
   final int table;
+
+  /// How this file writes a quote character that is part of a value, where a slot stands inside
+  /// quoting, or null where the row says nothing and such a value is refused.
+  final Escaping? escaping;
 
   @override
   String pathFor(StepContext context) => path;
@@ -118,7 +134,9 @@ final class WriteNetplanPublicSrcRouting extends ReversibleStep<String?>
             'this machine answers by the interface its public address is on, so nothing has to be '
             'steered',
           )
-        : FileContent.text(await renderedKeepingQuoting(context, valuesFor(nic)));
+        : FileContent.text(
+            await renderedKeepingQuoting(context, valuesFor(nic), escaping: escaping),
+          );
   }
 
   /// What the drop-in held before, or null when it was not there.
