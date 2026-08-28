@@ -596,6 +596,32 @@ final class GitClone extends IrreversibleStep {
         'is not there — the program that generates this installation writes it';
   }
 
+  /// What every git command here says before anything else: this checkout is trusted.
+  ///
+  /// **git refuses a repository owned by another account outright**, before it answers any question
+  /// asked of it — `detected dubious ownership in repository at ...`. That refusal is not an answer
+  /// about the checkout, but it comes back on the same channel as one, and a caller reading it as
+  /// one concludes there is no checkout and clones onto the one that is standing. That is what
+  /// happened: an elevated row met a checkout belonging to the operating account, its
+  /// `rev-parse --is-inside-work-tree` came back not-ok, and the clone that followed died on a
+  /// directory that was not empty.
+  ///
+  /// **It is not dubious, and this says so rather than working around it.** The row declares who
+  /// the directory belongs to — `owner_answer` — and hands it to that account where it does not. A
+  /// platform that places a checkout and prescribes its owner knows the one thing git cannot: that
+  /// the account owning it is the intended one.
+  ///
+  /// **`-c` and never `git config --global`.** It is said for this command and no other. Written
+  /// into an account's configuration it would outlive the run that needed it, about a path that may
+  /// not be there tomorrow.
+  /// **Said only to a command that reads the checkout.** `clone` lands on a path that holds no
+  /// repository yet and `ls-remote` asks a remote; neither can meet a dubious owner, and a
+  /// statement about a local path in front of them would stand in the record saying nothing.
+  List<String> _trusting(List<String> arguments) =>
+      arguments.length >= 2 && arguments.first == '-C' && arguments[1] == repository
+      ? <String>['-c', 'safe.directory=$repository', ...arguments]
+      : arguments;
+
   Future<CommandResult> _observe(
     StepContext context,
     List<String> arguments, {
@@ -603,7 +629,7 @@ final class GitClone extends IrreversibleStep {
   }) => context.shell.run(
     Command.detailed(
       'git',
-      arguments: arguments,
+      arguments: _trusting(arguments),
       environment: environment,
       observes: true,
       elevated: elevated,
@@ -697,11 +723,16 @@ final class GitClone extends IrreversibleStep {
     Map<String, String> environment = const <String, String>{},
   }) async {
     final CommandResult answer = await context.shell.run(
-      Command.detailed('git', arguments: arguments, environment: environment, elevated: elevated),
+      Command.detailed(
+        'git',
+        arguments: _trusting(arguments),
+        environment: environment,
+        elevated: elevated,
+      ),
     );
     if (!answer.ok) {
       throw CommandFailed(
-        argv: <String>['git', ...arguments],
+        argv: <String>['git', ..._trusting(arguments)],
         exitCode: answer.exitCode,
         stdout: answer.stdout,
         stderr: answer.stderr,

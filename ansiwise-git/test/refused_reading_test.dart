@@ -218,7 +218,10 @@ void main() {
     /// may enter.
     FakeShell refusingOwner() => FakeShell()
       ..fails(readOwner, stderr: "stat: cannot statx '$checkout': Permission denied")
-      ..answers('git -C $checkout rev-parse --is-inside-work-tree', 'true\n');
+      ..answers(
+        'git -c safe.directory=$checkout -C $checkout rev-parse --is-inside-work-tree',
+        'true\n',
+      );
 
     test('THE PLANTED DEFECT: an owner that could not be read over a checkout that IS there '
         'REFUSES', () async {
@@ -245,7 +248,7 @@ void main() {
         // over because there is nothing there, and the clone makes it.
         final FakeShell shell = FakeShell()
           ..fails(readOwner, stderr: "stat: cannot statx '$checkout': No such file or directory")
-          ..fails('git -C $checkout rev-parse --is-inside-work-tree');
+          ..fails('git -c safe.directory=$checkout -C $checkout rev-parse --is-inside-work-tree');
 
         expect(await cloningRow().check(cloning(shell, FakeFiles())), isA<Ready>());
       },
@@ -267,13 +270,16 @@ void main() {
         // nothing to hand over — so the row goes on and measures the checkout itself.
         final FakeShell shell = FakeShell()
           ..answers(readOwner, '$account\n')
-          ..fails('git -C $checkout rev-parse --is-inside-work-tree');
+          ..fails('git -c safe.directory=$checkout -C $checkout rev-parse --is-inside-work-tree');
 
         expect(
           await cloningRow().check(cloning(shell, FakeFiles()..directories.add(checkout))),
           isA<Ready>(),
         );
-        expect(shell.ran, contains('git -C $checkout rev-parse --is-inside-work-tree'));
+        expect(
+          shell.ran,
+          contains('git -c safe.directory=$checkout -C $checkout rev-parse --is-inside-work-tree'),
+        );
       },
     );
   });

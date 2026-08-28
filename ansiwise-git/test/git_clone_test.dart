@@ -48,7 +48,7 @@ void main() {
   /// A machine with no checkout at the path.
   FakeShell bare() {
     final FakeShell shell = FakeShell();
-    shell.fails('git -C $path rev-parse --is-inside-work-tree');
+    shell.fails('git -c safe.directory=$path -C $path rev-parse --is-inside-work-tree');
     return shell;
   }
 
@@ -56,11 +56,11 @@ void main() {
   FakeShell standing({String localTip = tip}) {
     final FakeShell shell = FakeShell();
     shell
-      ..answers('git -C $path rev-parse --is-inside-work-tree', 'true\n')
-      ..answers('git -C $path remote get-url origin', '$url\n')
-      ..answers('git -C $path rev-parse --abbrev-ref HEAD', '$base\n')
+      ..answers('git -c safe.directory=$path -C $path rev-parse --is-inside-work-tree', 'true\n')
+      ..answers('git -c safe.directory=$path -C $path remote get-url origin', '$url\n')
+      ..answers('git -c safe.directory=$path -C $path rev-parse --abbrev-ref HEAD', '$base\n')
       ..answers('git ls-remote --heads $url $base', '$tip\trefs/heads/$base\n')
-      ..answers('git -C $path rev-parse HEAD', '$localTip\n');
+      ..answers('git -c safe.directory=$path -C $path rev-parse HEAD', '$localTip\n');
     return shell;
   }
 
@@ -135,8 +135,8 @@ void main() {
       expect(
         shell.ran,
         containsAllInOrder(<String>[
-          'git -C $path fetch origin $base',
-          'git -C $path checkout -B $base origin/$base',
+          'git -c safe.directory=$path -C $path fetch origin $base',
+          'git -c safe.directory=$path -C $path checkout -B $base origin/$base',
         ]),
       );
       expect(shell.ran, isNot(contains('git clone --branch $base $url $path')));
@@ -146,11 +146,17 @@ void main() {
       'a remote pointing somewhere else is corrected to the address the settings compose',
       () async {
         final FakeShell shell = standing();
-        shell.answers('git -C $path remote get-url origin', 'https://$host/somebody/else.git\n');
+        shell.answers(
+          'git -c safe.directory=$path -C $path remote get-url origin',
+          'https://$host/somebody/else.git\n',
+        );
         expect(await step.check(contextOn(shell: shell, files: settings())), isA<Ready>());
 
         await step.apply(contextOn(shell: shell, files: settings()));
-        expect(shell.ran, contains('git -C $path remote set-url origin $url'));
+        expect(
+          shell.ran,
+          contains('git -c safe.directory=$path -C $path remote set-url origin $url'),
+        );
       },
     );
 
@@ -327,11 +333,11 @@ void main() {
       final FakeShell shell = FakeShell();
       shell
         ..answers('stat -c %U $path', 'root\n')
-        ..answers('git -C $path rev-parse --is-inside-work-tree', 'true\n')
-        ..answers('git -C $path remote get-url origin', '$openUrl\n')
-        ..answers('git -C $path rev-parse --abbrev-ref HEAD', '$base\n')
+        ..answers('git -c safe.directory=$path -C $path rev-parse --is-inside-work-tree', 'true\n')
+        ..answers('git -c safe.directory=$path -C $path remote get-url origin', '$openUrl\n')
+        ..answers('git -c safe.directory=$path -C $path rev-parse --abbrev-ref HEAD', '$base\n')
         ..answers('git ls-remote --heads $openUrl $base', '$tip\trefs/heads/$base\n')
-        ..answers('git -C $path rev-parse HEAD', '$tip\n');
+        ..answers('git -c safe.directory=$path -C $path rev-parse HEAD', '$tip\n');
 
       expect(
         await owned.check(
@@ -368,11 +374,11 @@ void main() {
       shell
         ..answers('stat -c %U $path', 'digi1\n')
         ..answers('stat -c %U $path/.git', 'root\n')
-        ..answers('git -C $path rev-parse --is-inside-work-tree', 'true\n')
-        ..answers('git -C $path remote get-url origin', '$openUrl\n')
-        ..answers('git -C $path rev-parse --abbrev-ref HEAD', '$base\n')
+        ..answers('git -c safe.directory=$path -C $path rev-parse --is-inside-work-tree', 'true\n')
+        ..answers('git -c safe.directory=$path -C $path remote get-url origin', '$openUrl\n')
+        ..answers('git -c safe.directory=$path -C $path rev-parse --abbrev-ref HEAD', '$base\n')
         ..answers('git ls-remote --heads $openUrl $base', '$tip	refs/heads/$base\n')
-        ..answers('git -C $path rev-parse HEAD', '$tip\n');
+        ..answers('git -c safe.directory=$path -C $path rev-parse HEAD', '$tip\n');
 
       expect(
         await owned.check(
@@ -401,11 +407,11 @@ void main() {
       final FakeShell shell = FakeShell();
       shell
         ..answers('stat -c %U $path', 'digi1\n')
-        ..answers('git -C $path rev-parse --is-inside-work-tree', 'true\n')
-        ..answers('git -C $path remote get-url origin', '$openUrl\n')
-        ..answers('git -C $path rev-parse --abbrev-ref HEAD', '$base\n')
+        ..answers('git -c safe.directory=$path -C $path rev-parse --is-inside-work-tree', 'true\n')
+        ..answers('git -c safe.directory=$path -C $path remote get-url origin', '$openUrl\n')
+        ..answers('git -c safe.directory=$path -C $path rev-parse --abbrev-ref HEAD', '$base\n')
         ..answers('git ls-remote --heads $openUrl $base', '$tip\trefs/heads/$base\n')
-        ..answers('git -C $path rev-parse HEAD', '$tip\n');
+        ..answers('git -c safe.directory=$path -C $path rev-parse HEAD', '$tip\n');
 
       expect(
         await owned.check(
@@ -543,5 +549,96 @@ void main() {
         expect(await refusalOf(row()), contains('three credential arguments'));
       });
     }
+  });
+
+  group('a checkout git would call dubious', () {
+    // WHAT GIT DOES, IN ITS OWN WORDS. A repository owned by another account is refused before any
+    // question asked of it is answered, and the refusal arrives on the same channel an answer would
+    // — so a caller that does not say the checkout is trusted reads "there is no checkout here"
+    // and clones onto the one that is standing. Measured on a real machine: an elevated row met a
+    // checkout belonging to the operating account, and the clone that followed died with
+    // "destination path already exists and is not an empty directory".
+    //
+    // The fixture is the machine as it really answered: the guarded form works, the bare form is
+    // refused. If the step ever stops saying safe.directory, it meets the refusal instead of the
+    // answer and every one of these goes red.
+    FakeShell refusingTheUnguarded({String localTip = tip}) {
+      final FakeShell shell = standing(localTip: localTip);
+      for (final String bare in <String>[
+        'git -C $path rev-parse --is-inside-work-tree',
+        'git -C $path remote get-url origin',
+        'git -C $path rev-parse --abbrev-ref HEAD',
+        'git -C $path rev-parse HEAD',
+      ]) {
+        shell.fails(
+          bare,
+          exitCode: 128,
+          stderr: "fatal: detected dubious ownership in repository at '$path'",
+        );
+      }
+      return shell;
+    }
+
+    test('is read, not mistaken for absent — a checkout on the tip is finished', () async {
+      final FakeShell shell = refusingTheUnguarded();
+
+      expect(
+        await step.check(contextOn(shell: shell, files: settings())),
+        isA<Satisfied>(),
+        reason:
+            'a checkout standing on the published tip is finished. Reading git\'s ownership '
+            'refusal as an answer about the checkout makes this Ready, and the apply then clones '
+            'onto a directory that is not empty',
+      );
+      expect(
+        shell.ran,
+        isNot(contains('git clone --branch $base $url $path')),
+        reason: 'nothing is cloned over a checkout that is already standing where it should',
+      );
+    });
+
+    test(
+      'is still corrected where it has fallen behind, and the refusal never decides it',
+      () async {
+        final FakeShell shell = refusingTheUnguarded(
+          localTip: 'a1b2c3d4e5f60718293a4b5c6d7e8f9012345678',
+        );
+
+        expect(await step.check(contextOn(shell: shell, files: settings())), isA<Ready>());
+      },
+    );
+
+    test('every command it puts to the checkout says the checkout is trusted', () async {
+      final FakeShell shell = standing();
+      await step.check(contextOn(shell: shell, files: settings()));
+
+      final Iterable<String> againstTheCheckout = shell.ran.where(
+        (String argv) => argv.contains('-C $path'),
+      );
+      expect(againstTheCheckout, isNotEmpty);
+      for (final String argv in againstTheCheckout) {
+        expect(
+          argv,
+          startsWith('git -c safe.directory=$path '),
+          reason: 'git refuses a repository owned by another account before it answers anything',
+        );
+      }
+    });
+
+    test(
+      'INNOCENT CASE: a command that reaches the network says nothing about a local path',
+      () async {
+        final FakeShell shell = standing();
+        await step.check(contextOn(shell: shell, files: settings()));
+
+        expect(
+          shell.ran,
+          contains('git ls-remote --heads $url $base'),
+          reason:
+              'ls-remote asks a remote and meets no owner at all, so a statement about a directory '
+              'in front of it would stand in the record saying nothing',
+        );
+      },
+    );
   });
 }
