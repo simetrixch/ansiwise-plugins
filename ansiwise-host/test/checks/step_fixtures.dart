@@ -46,12 +46,15 @@ final Map<String, Fixture> stepFixtures = <String, Fixture>{
     for (final String package in _plausiblePackages) {
       shell.fails('dpkg-query -W -f=\${Status} $package');
     }
-    shell.changes('apt-get update', () {});
-    shell.changes('apt-get install --yes ${_plausiblePackages.join(' ')}', () {
-      for (final String package in _plausiblePackages) {
-        shell.answers('dpkg-query -W -f=\${Status} $package', 'install ok installed');
-      }
-    });
+    shell.changes('apt-get -o DPkg::Lock::Timeout=600 update', () {});
+    shell.changes(
+      'apt-get -o DPkg::Lock::Timeout=600 install --yes ${_plausiblePackages.join(' ')}',
+      () {
+        for (final String package in _plausiblePackages) {
+          shell.answers('dpkg-query -W -f=\${Status} $package', 'install ok installed');
+        }
+      },
+    );
   },
 
   // `getent group` answers nothing for a group that is not there and the group's line once it is,

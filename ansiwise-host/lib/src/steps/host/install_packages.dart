@@ -40,10 +40,33 @@ final class InstallPackages extends ReversibleStep<List<String>> {
     return const CheckResult.ready();
   }
 
+  /// What every apt command here says before its own words: wait for the lock, do not fail on it.
+  ///
+  /// **Ubuntu runs `unattended-upgrades` on its own, shortly after boot.** A machine that was just
+  /// restored or just provisioned is therefore holding the dpkg lock through the first minutes of
+  /// its life — which is exactly when a first installation reaches this step, four rows into the
+  /// first program it runs. Without this the run ends at
+  /// `Could not get lock /var/lib/dpkg/lock-frontend`, and the operator is sent to look at a
+  /// package manager that is behaving perfectly normally.
+  ///
+  /// **apt already knows how to wait**, and says so while it does. This asks it to, for a bound
+  /// that stands in the argv — so a record shows how long the run was willing to wait, rather than
+  /// leaving a reader to guess whether it waited at all.
+  ///
+  /// **What it does NOT do is take the lock away.** Stopping or masking `unattended-upgrades` would
+  /// trade a machine's security updates for a quieter installation, which is not a trade this makes.
+  static const List<String> _waitingForTheLock = <String>['-o', 'DPkg::Lock::Timeout=600'];
+
   @override
   Future<StepPlan> plan(StepContext context) async {
     final List<String> missing = await _missing(context);
-    return StepPlan.argv(<String>['apt-get', 'install', '--yes', ...missing]);
+    return StepPlan.argv(<String>[
+      'apt-get',
+      ..._waitingForTheLock,
+      'install',
+      '--yes',
+      ...missing,
+    ]);
   }
 
   @override
@@ -54,14 +77,14 @@ final class InstallPackages extends ReversibleStep<List<String>> {
     final CommandResult refreshed = await context.shell.run(
       const Command.detailed(
         'apt-get',
-        arguments: <String>['update'],
+        arguments: <String>[..._waitingForTheLock, 'update'],
         environment: _quiet,
         elevated: true,
       ),
     );
     if (!refreshed.ok) {
       throw CommandFailed(
-        argv: <String>['apt-get', 'update'],
+        argv: <String>['apt-get', ..._waitingForTheLock, 'update'],
         exitCode: refreshed.exitCode,
         stdout: '',
         stderr: refreshed.stderr,
@@ -71,14 +94,14 @@ final class InstallPackages extends ReversibleStep<List<String>> {
     final CommandResult installed = await context.shell.run(
       Command.detailed(
         'apt-get',
-        arguments: <String>['install', '--yes', ...missing],
+        arguments: <String>[..._waitingForTheLock, 'install', '--yes', ...missing],
         environment: _quiet,
         elevated: true,
       ),
     );
     if (!installed.ok) {
       throw CommandFailed(
-        argv: <String>['apt-get', 'install', '--yes', ...missing],
+        argv: <String>['apt-get', ..._waitingForTheLock, 'install', '--yes', ...missing],
         exitCode: installed.exitCode,
         stdout: '',
         stderr: installed.stderr,
@@ -114,7 +137,7 @@ final class InstallPackages extends ReversibleStep<List<String>> {
     await context.shell.run(
       Command.detailed(
         'apt-get',
-        arguments: <String>['remove', '--yes', ...installed],
+        arguments: <String>[..._waitingForTheLock, 'remove', '--yes', ...installed],
         environment: _quiet,
         elevated: true,
       ),
