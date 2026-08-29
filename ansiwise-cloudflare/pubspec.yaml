@@ -26,7 +26,7 @@ dependencies:
   ansiwise_core:
     git:
       url: https://github.com/simetrixch/ansiwise-core.git
-      ref: 0.6.0-beta-20260828130442
+      ref: 0.6.1-beta-20260829215011
 
 dev_dependencies:
   test: ^1.31.2
