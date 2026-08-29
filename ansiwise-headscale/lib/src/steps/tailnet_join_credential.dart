@@ -172,7 +172,11 @@ final class TailnetJoinCredential extends IrreversibleStep {
     final String file = _filled(context, <String>[keyFile]).single;
     if (usable.isNotEmpty && await context.files.exists(file)) {
       final String held = (await context.files.read(file)).trim();
-      if (usable.contains(held)) {
+      // BY PREFIX, because the listing does not carry credentials. What it prints under `key` is
+      // the key's opening — 27 characters where the credential is 88 — and only `create` ever
+      // answers with the whole of one. Compared for equality this could never match, so a run
+      // could never find its own key standing and would mint another on every retry.
+      if (_isWholeKey(held, usable)) {
         return CheckResult.satisfied(
           'the coordinator still redeems the credential standing at $file — handed back, '
           'never replaced',
@@ -221,11 +225,22 @@ final class TailnetJoinCredential extends IrreversibleStep {
     if (usable == null) {
       throw StateError('the coordinator\'s admin surface stopped answering its key listing');
     }
+    // WHAT THE LISTING SAYS AND WHAT IT CANNOT GIVE. It says which keys the coordinator would still
+    // redeem, by their opening; it never carries a credential. So the only place a whole key lives
+    // is the file this step wrote, and a standing key is handed back only when THAT file holds it.
+    //
+    // Taken out of the listing instead, what reached the machine was 28 bytes of a key's opening
+    // and tailscale refused it: "failed to parse auth-key: key too short, expected at least 77
+    // chars after prefix, got 16" (apps4, 2026-08-29).
+    final String keyPath = _filled(context, <String>[keyFile]).single;
+    final String standing = await context.files.exists(keyPath)
+        ? (await context.files.read(keyPath)).trim()
+        : '';
     String key;
-    if (usable.isNotEmpty) {
-      // The coordinator still redeems one — handed back rather than replaced, so a retry carries
-      // the SAME credential the machine may already have been told to use.
-      key = usable.first;
+    if (_isWholeKey(standing, usable)) {
+      // The coordinator still redeems the one this machine was already told to use — handed back
+      // rather than replaced, so a retry carries the SAME credential.
+      key = standing;
     } else {
       final CommandResult minted = await context.shell.run(
         Command.detailed(
@@ -316,7 +331,13 @@ final class TailnetJoinCredential extends IrreversibleStep {
     return _Coordinator(ids);
   }
 
-  /// The keys the coordinator would still redeem for user [uid], or null when it did not answer.
+  /// The OPENINGS of the keys the coordinator would still redeem for user [uid], or null when it
+  /// did not answer.
+  ///
+  /// **OPENINGS AND NOT KEYS.** The listing prints `key` as the credential's first characters —
+  /// 27 where the whole is 88 — and only `create` ever answers with the whole of one. So what comes
+  /// back here decides WHETHER a key still stands, never WHAT it is: the only place a credential
+  /// lives is the file this step wrote, and it is matched against these by its opening.
   ///
   /// Redeemable means listed, not yet used, and not past its expiration. An expiration that cannot
   /// be read counts as NOT past — doubt about a timestamp must never be read as "the key is dead",
@@ -457,3 +478,14 @@ final class _Coordinator {
   /// The user id standing under [name], or null when the coordinator holds no such user.
   String? idOf(String name) => _ids[name];
 }
+
+/// Whether [held] is a WHOLE key the coordinator still redeems, told from the openings it lists.
+///
+/// **LONGER THAN THE OPENING IT MATCHES, and that is the whole of the distinction.** The listing
+/// prints a key's first characters; a credential is that and much more. An opening trivially begins
+/// with itself, so a file that came to hold one — written by a run that took the listing for a
+/// credential — would be handed back for ever, and the machine refused every time with "key too
+/// short". Length is what tells the two apart, and it is the coordinator's own: it refuses anything
+/// under 77 characters after the prefix.
+bool _isWholeKey(String held, Iterable<String> openings) =>
+    held.isNotEmpty && openings.any((String o) => held.length > o.length && held.startsWith(o));

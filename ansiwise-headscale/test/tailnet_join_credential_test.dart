@@ -105,9 +105,11 @@ void main() {
       )
       ..answers(
         '$admin preauthkeys list -o json',
-        '[{"id":1,"key":"k-live","created_at":{"seconds":1788009710,"nanos":1},"expiration":{"seconds":4102444800,"nanos":0},"user":{"id":7,"name":"m1"}}]',
+        '[{"id":1,"key":"hskey-auth-abc","created_at":{"seconds":1788009710,"nanos":1},"expiration":{"seconds":4102444800,"nanos":0},"user":{"id":7,"name":"m1"}}]',
       );
-    final FakeFiles files = FakeFiles(<String, String>{'/run/join-key': 'k-live\n'});
+    final FakeFiles files = FakeFiles(<String, String>{
+      '/run/join-key': 'hskey-auth-abcDEFghiJKLmnoPQRstu\n',
+    });
 
     final CheckResult answer = await step.check(contextOn(shell, files));
 
@@ -125,13 +127,15 @@ void main() {
         )
         ..answers(
           '$admin preauthkeys list -o json',
-          '[{"id":1,"key":"k-spent","used":true,"created_at":{"seconds":1788009710,"nanos":1},"expiration":{"seconds":4102444800,"nanos":0},"user":{"id":7,"name":"m1"}}]',
+          '[{"id":1,"key":"hskey-auth-spent","used":true,"created_at":{"seconds":1788009710,"nanos":1},"expiration":{"seconds":4102444800,"nanos":0},"user":{"id":7,"name":"m1"}}]',
         )
         ..answers(
           '$admin preauthkeys create --user 7 --expiration 24h -o json',
           '{"key":"k-fresh"}',
         );
-      final FakeFiles files = FakeFiles(<String, String>{'/run/join-key': 'k-spent\n'});
+      final FakeFiles files = FakeFiles(<String, String>{
+        '/run/join-key': 'hskey-auth-spentDEFghiJKL\n',
+      });
       final StepContext context = contextOn(shell, files);
 
       expect(await step.check(context), isA<Ready>());
@@ -156,11 +160,13 @@ void main() {
         // THE PAIR THE COORDINATOR REALLY WRITES for the readable one — seconds since the epoch,
         // not a timestamp — and a string beside it, because a coordinator that states one states
         // the same fact. Every entry carries the user it belongs to, as the real listing does.
-        '[{"id":1,"key":"k-old","user":{"id":7,"name":"m1"},'
+        '[{"id":1,"key":"hskey-auth-old","user":{"id":7,"name":"m1"},'
             '"expiration":{"seconds":1735689600,"nanos":1}},'
-            '{"id":2,"key":"k-odd","user":{"id":7,"name":"m1"},"expiration":"not-a-moment"}]',
+            '{"id":2,"key":"hskey-auth-odd","user":{"id":7,"name":"m1"},"expiration":"not-a-moment"}]',
       );
-    final FakeFiles files = FakeFiles(<String, String>{'/run/join-key': 'k-odd\n'});
+    final FakeFiles files = FakeFiles(<String, String>{
+      '/run/join-key': 'hskey-auth-oddDEFghiJKL\n',
+    });
 
     expect(await step.check(contextOn(shell, files)), isA<Satisfied>());
 
@@ -186,6 +192,58 @@ void main() {
     // machine's. Asked with an empty file the answer would be Ready whether the owner was read or
     // not, and the case would prove nothing.
     final FakeFiles files = FakeFiles(<String, String>{'/run/join-key': 'k-somebody-elses\n'});
+    expect(await step.check(contextOn(shell, files)), isA<Ready>());
+  });
+
+  test(
+    'what the listing prints is never handed to the machine — it is an OPENING, not a key',
+    () async {
+      // THE FAILURE THIS HOLDS. The coordinator lists a key it would still redeem, and the file
+      // holds nothing — a machine whose credential was minted by somebody else's run, or by a hand.
+      // Taken out of the listing, what reaches the machine is the key's first characters, and
+      // tailscale refuses it: "key too short, expected at least 77 chars after prefix, got 16"
+      // (apps4, 2026-08-29). The whole of a key is answered only by create, so a mint is the only
+      // way to have one.
+      final FakeShell shell = FakeShell()
+        ..answers('$admin users list -o json', '[{"id":7,"name":"m1"}]')
+        ..answers(
+          '$admin preauthkeys list -o json',
+          '[{"id":1,"key":"hskey-auth-standing","user":{"id":7,"name":"m1"},'
+              '"expiration":{"seconds":4102444800,"nanos":0}}]',
+        )
+        ..answers(
+          '$admin preauthkeys create --user 7 --expiration 24h -o json',
+          '{"id":2,"key":"hskey-auth-standingBUTwholeANDlongEnoughToBeRedeemed",'
+              '"user":{"id":7,"name":"m1"},"expiration":{"seconds":4102444800,"nanos":0}}',
+        );
+      final FakeFiles files = FakeFiles();
+
+      expect(await step.check(contextOn(shell, files)), isA<Ready>());
+      await step.apply(contextOn(shell, files));
+
+      // What was staged is what create answered, never what the listing printed.
+      expect(
+        files.contents['/run/join-key'],
+        'hskey-auth-standingBUTwholeANDlongEnoughToBeRedeemed\n',
+      );
+      expect(shell.ran, contains('$admin preauthkeys create --user 7 --expiration 24h -o json'));
+    },
+  );
+
+  test('a file that came to hold an OPENING is replaced, not handed back for ever', () async {
+    // THE TRAP THE FIX WOULD OTHERWISE LEAVE BEHIND. An earlier run wrote what the listing
+    // printed into the key file, and an opening trivially begins with itself — so a check that
+    // asked only 'does it begin with one' would call that file good on every run, and the machine
+    // would be refused every time. Length is what tells a key from its opening.
+    final FakeShell shell = FakeShell()
+      ..answers('$admin users list -o json', '[{"id":7,"name":"m1"}]')
+      ..answers(
+        '$admin preauthkeys list -o json',
+        '[{"id":1,"key":"hskey-auth-opening","user":{"id":7,"name":"m1"},'
+            '"expiration":{"seconds":4102444800,"nanos":0}}]',
+      );
+    final FakeFiles files = FakeFiles(<String, String>{'/run/join-key': 'hskey-auth-opening\n'});
+
     expect(await step.check(contextOn(shell, files)), isA<Ready>());
   });
 
