@@ -20,7 +20,12 @@ void main() {
   const String thisMachine = 's1.example.com';
   const String mirrorMachine = 'm1.example.com';
   const String mirrorHost = 'mirror.$mirrorMachine';
-  const String profilePath = '$repository/cluster/profile.yaml';
+  // NAMED FOR THE MACHINE, with the slot every real program's path carries: the profile of one
+  // installation is named for that installation, so a program file shipped to every installation
+  // spells the name as a slot. It stood here without one, and a path whose slot is never filled
+  // was therefore a path no test could notice going unread (measured on a real deployment,
+  // 2026-08-29: both steps reported themselves satisfied and wrote no mirror at all).
+  const String profilePath = '$repository/clusters/active/$thisMachine.yaml';
   const String secretsPath = '$repository/secrets/secrets.$tier';
   const String certsDirectory = '/var/lib/containerd/certs.d';
   const String mirroredRegistry = 'registry.example.com';
@@ -34,7 +39,7 @@ void main() {
 
   const RegistryMirror layout = RegistryMirror(
     repository: repository,
-    profilePath: 'cluster/profile.yaml',
+    profilePath: 'clusters/active/<$machineNameAnswer>.yaml',
     mirrorHostKey: 'global.endpoints.registry.host',
     secretsPath: 'secrets/secrets.<$tierAnswer>',
     credentialKey: 'REGISTRY_PULL_DOCKERCONFIGJSON',

@@ -69,7 +69,7 @@ final class RequireRegistryPullCredential extends ObservingStep {
     final String? host = await layout.mirrorHostIn(context, elevated: elevated);
     if (host == null) {
       return CheckResult.satisfied(
-        "the mirror's address is not readable from ${layout.profile}, so no mirror is written and "
+        "the mirror's address is not readable from ${layout.profileIn(context)}, so no mirror is written and "
         'pulls stay on the public path',
       );
     }

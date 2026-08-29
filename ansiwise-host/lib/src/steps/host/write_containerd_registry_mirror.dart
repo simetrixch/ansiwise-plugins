@@ -104,7 +104,7 @@ final class WriteContainerdRegistryMirror extends ReversibleStep<String?> {
     final String? host = await layout.mirrorHostIn(context, elevated: elevated);
     if (host == null) {
       return CheckResult.satisfied(
-        "the mirror's address is not readable from ${layout.profile}, so there is no mirror to "
+        "the mirror's address is not readable from ${layout.profileIn(context)}, so there is no mirror to "
         'write',
       );
     }

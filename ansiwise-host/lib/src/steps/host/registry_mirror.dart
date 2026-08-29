@@ -167,7 +167,18 @@ final class RegistryMirror {
   final String? runAnswer;
 
   /// Where the profile stands, as a whole path.
-  String get profile => '$repository/$profilePath';
+  ///
+  /// **THE SLOTS ARE FILLED FROM THE ANSWERS THE LAYOUT ALREADY NAMES**, which is what makes a
+  /// profile named for one installation nameable in a program file shipped to every installation.
+  /// A profile is named for the machine the run stands on, so the slot spelled like
+  /// [thisMachineAnswer] is filled from that answer, and the one spelled like [runAnswer] from that.
+  ///
+  /// Measured on a real deployment (2026-08-29): read without filling them, the path kept the slot
+  /// — `clusters/active/<fqdn>.yaml` — no such file existed, and both steps of this family reported
+  /// themselves satisfied and wrote no mirror at all. Every machine of that installation went on
+  /// pulling from the public registry, and nothing said so.
+  String profileIn(StepContext context) =>
+      '$repository/${_runAnswerFilled(context, _filled(context, thisMachineAnswer, profilePath))}';
 
   /// Where the credential file stands on this machine, as a whole path.
   String secretsIn(StepContext context) => '$repository/${_runAnswerFilled(context, secretsPath)}';
@@ -208,6 +219,7 @@ final class RegistryMirror {
   /// written when the checkout is generated, and composing it here would produce a second answer
   /// that only agrees with the first by accident.
   Future<String?> mirrorHostIn(StepContext context, {bool elevated = false}) async {
+    final String profile = profileIn(context);
     if (!await context.files.exists(profile, elevated: elevated)) {
       return null;
     }
@@ -276,22 +288,24 @@ final class RegistryMirror {
     return PullCredential.usable(blob);
   }
 
-  /// The text that stands where this run's own value for [runAnswer] belongs, or null when the row
-  /// names no such answer.
-  ///
-  /// Derived from the name rather than declared beside it, so the slot and the answer cannot come
-  /// apart: a program that renames the answer renames the slot in the same act.
-  String? get _runSlot => runAnswer == null ? null : '<$runAnswer>';
-
   /// [text] with this run's own value for [runAnswer] where the slot marks it.
   ///
   /// Text carrying no slot, a layout naming no answer, and a run that does not hold the answer all
   /// come back unchanged — the last of them so the slot is still visible in whatever names the path,
   /// rather than being replaced by an empty string nobody could see.
   String _runAnswerFilled(StepContext context, String text) {
-    final String? slot = _runSlot;
     final String? answer = runAnswer;
-    if (slot == null || answer == null || !text.contains(slot) || !context.answers.has(answer)) {
+    return answer == null ? text : _filled(context, answer, text);
+  }
+
+  /// [text] with this run's value for [answer] where the slot spelled `<answer>` marks it.
+  ///
+  /// Text carrying no slot and a run that does not hold the answer both come back unchanged — the
+  /// second so the slot is still visible in whatever names the path, rather than being replaced by
+  /// an empty string nobody could see.
+  static String _filled(StepContext context, String answer, String text) {
+    final String slot = '<$answer>';
+    if (!text.contains(slot) || !context.answers.has(answer)) {
       return text;
     }
     return text.replaceAll(slot, context.answers.text(answer));
