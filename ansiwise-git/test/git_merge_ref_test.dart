@@ -96,6 +96,67 @@ void main() {
     });
   });
 
+  group('where the commit comes from: the row writes it, or names the answer holding it', () {
+    /// The name of the answer a row would point at, and — deliberately — not a word any product of
+    /// ours uses, for the reason [nameAnswer] gives.
+    const String refAnswerName = 'ref_name';
+
+    const GitMergeRef answered = GitMergeRef(
+      repository: repository,
+      branchAnswer: nameAnswer,
+      ref: '',
+      refAnswer: refAnswerName,
+    );
+
+    test('the commit taken from the named answer drives the merge', () async {
+      final FakeShell shell = standing()..answers('git -C $repository merge --no-edit $ref', '');
+
+      await answered.apply(
+        contextOn(shell: shell, also: const <String, Object>{refAnswerName: ref}),
+      );
+      expect(shell.ran, contains('git -C $repository merge --no-edit $ref'));
+    });
+
+    test('the commit written on the row drives the merge exactly as before', () async {
+      final FakeShell shell = standing()..answers('git -C $repository merge --no-edit $ref', '');
+
+      await step.apply(contextOn(shell: shell));
+      expect(shell.ran, contains('git -C $repository merge --no-edit $ref'));
+    });
+
+    test('a row writing the commit AND naming an answer is refused by both names', () async {
+      const GitMergeRef both = GitMergeRef(
+        repository: repository,
+        branchAnswer: nameAnswer,
+        ref: ref,
+        refAnswer: refAnswerName,
+      );
+
+      final CheckResult answer = await both.check(
+        contextOn(shell: standing(), also: const <String, Object>{refAnswerName: ref}),
+      );
+      expect((answer as Blocked).reason, contains('"ref"'));
+      expect(answer.reason, contains('"ref_answer"'));
+    });
+
+    test('a row giving the commit neither way is refused by both names', () async {
+      const GitMergeRef neither = GitMergeRef(
+        repository: repository,
+        branchAnswer: nameAnswer,
+        ref: '',
+      );
+
+      final CheckResult answer = await neither.check(contextOn(shell: standing()));
+      expect((answer as Blocked).reason, contains('"ref"'));
+      expect(answer.reason, contains('"ref_answer"'));
+    });
+
+    test('a run holding no answer under the row\'s name is refused by that name', () async {
+      final CheckResult answer = await answered.check(contextOn(shell: standing()));
+      expect((answer as Blocked).reason, contains(refAnswerName));
+    });
+  });
+
   group('the merge itself', () {
     test('a clean merge is the one command and nothing after it', () async {
       final FakeShell shell = standing()..answers('git -C $repository merge --no-edit $ref', '');

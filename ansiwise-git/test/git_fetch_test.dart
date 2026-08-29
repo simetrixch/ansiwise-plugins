@@ -112,4 +112,78 @@ void main() {
     expect(answer, isA<Blocked>());
     expect((answer as Blocked).reason, contains('measurement'));
   });
+
+  group('where the tag comes from: the row writes it, or names the answer holding it', () {
+    /// The name of the answer a row would point at, and — deliberately — not a word any product of
+    /// ours uses, for the reason [nameAnswer] gives.
+    const String tagAnswerName = 'tag_name';
+
+    const GitFetch answered = GitFetch(
+      repository: repository,
+      remote: remote,
+      tagAnswer: tagAnswerName,
+    );
+
+    test('the tag taken from the named answer is what the remote is asked about', () async {
+      final FakeShell shell = remoteHas(tagAt: tip);
+      const Map<String, Object> holding = <String, Object>{tagAnswerName: tag};
+
+      expect(await answered.check(contextOn(shell: shell, also: holding)), isA<Ready>());
+      await answered.apply(contextOn(shell: shell, also: holding));
+      expect(shell.ran, contains('git -C $repository fetch $remote tag $tag'));
+    });
+
+    test('the tag written on the row is fetched exactly as before', () async {
+      final FakeShell shell = remoteHas(tagAt: tip);
+
+      await fetchingTag.apply(contextOn(shell: shell));
+      expect(shell.ran, contains('git -C $repository fetch $remote tag $tag'));
+    });
+
+    test(
+      'a row writing the tag AND naming an answer holding one is refused by both names',
+      () async {
+        const GitFetch both = GitFetch(
+          repository: repository,
+          remote: remote,
+          tag: tag,
+          tagAnswer: tagAnswerName,
+        );
+
+        final CheckResult answer = await both.check(
+          contextOn(shell: remoteHas(), also: const <String, Object>{tagAnswerName: tag}),
+        );
+        expect((answer as Blocked).reason, contains('"tag"'));
+        expect(answer.reason, contains('"tag_answer"'));
+      },
+    );
+
+    test('a row giving the ref neither way is refused by both names', () async {
+      const GitFetch neither = GitFetch(repository: repository, remote: remote);
+
+      final CheckResult answer = await neither.check(contextOn(shell: remoteHas()));
+      expect((answer as Blocked).reason, contains('"tag"'));
+      expect(answer.reason, contains('"tag_answer"'));
+    });
+
+    test('a branch beside an answered tag is refused, because they are two statements', () async {
+      const GitFetch both = GitFetch(
+        repository: repository,
+        remote: remote,
+        branch: base,
+        tagAnswer: tagAnswerName,
+      );
+
+      final CheckResult answer = await both.check(
+        contextOn(shell: remoteHas(), also: const <String, Object>{tagAnswerName: tag}),
+      );
+      expect((answer as Blocked).reason, contains('two rows'));
+    });
+
+    test('a run holding no answer under the row\'s name is refused by that name', () async {
+      final CheckResult answer = await answered.check(contextOn(shell: remoteHas()));
+
+      expect((answer as Blocked).reason, contains(tagAnswerName));
+    });
+  });
 }

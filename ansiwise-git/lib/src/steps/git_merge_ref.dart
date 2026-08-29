@@ -7,7 +7,8 @@ import 'package:ansiwise_core/ansiwise_core.dart';
 /// against a deliberately chosen commit — a tag somebody released, never whatever happens to be the
 /// tip today. The commit is therefore an ARGUMENT the row states, and a row usually states it as
 /// `{measured: value}`: the commit is recorded somewhere on the branch itself, an earlier row reads
-/// it out, and no person re-types it.
+/// it out, and no person re-types it. Where a person names the state instead, the row names
+/// `ref_answer` — the answer this run reads the commit out of — and writes no `ref` at all.
 ///
 /// **A merge and not a reset, because the branch owns content the source never carried.** A
 /// generated branch holds two kinds of bytes: what came from the source, and what was written onto
@@ -33,11 +34,13 @@ import 'package:ansiwise_core/ansiwise_core.dart';
 /// among its ancestors has nothing to take, so a second run finds nothing to do — which is what
 /// makes the operation repeatable on a branch that failed further down the program.
 final class GitMergeRef extends ReversibleStep<String?> {
-  /// Merges [ref] into the branch named by [branchAnswer], in the checkout at [repository].
+  /// Merges [ref] — or the value the run answers under [refAnswer] — into the branch named by
+  /// [branchAnswer], in the checkout at [repository].
   const GitMergeRef({
     required this.repository,
     required this.branchAnswer,
     required this.ref,
+    this.refAnswer,
     this.towardRef = const <String>[],
   });
 
@@ -50,6 +53,7 @@ final class GitMergeRef extends ReversibleStep<String?> {
     repository: arguments.text('repository'),
     branchAnswer: arguments.text('branch_answer'),
     ref: arguments.optionalText('ref') ?? '',
+    refAnswer: arguments.optionalText('ref_answer'),
     towardRef: arguments.has('toward_ref') ? arguments.textList('toward_ref') : const <String>[],
   );
 
@@ -80,6 +84,14 @@ final class GitMergeRef extends ReversibleStep<String?> {
           'branch itself and no person should re-type it',
     ),
     ArgumentSpec(
+      name: 'ref_answer',
+      kind: ArgumentKind.answerName,
+      required: false,
+      describes:
+          'the name of the answer this run reads that commit out of, where a person names the '
+          'state the branch is brought to — a row writes "ref" or this, never both',
+    ),
+    ArgumentSpec(
       name: 'toward_ref',
       kind: ArgumentKind.textList,
       required: false,
@@ -100,6 +112,9 @@ final class GitMergeRef extends ReversibleStep<String?> {
   /// The commit the branch is brought up to, or empty while nothing has measured it yet.
   final String ref;
 
+  /// The name of the answer the commit is read out of, or null where the row writes it as [ref].
+  final String? refAnswer;
+
   /// The patterns under which a content conflict is resolved toward the incoming commit.
   final List<String> towardRef;
 
@@ -112,11 +127,8 @@ final class GitMergeRef extends ReversibleStep<String?> {
         'of the branch being brought forward comes from',
       );
     }
-    if (ref.isEmpty) {
-      return const CheckResult.blocked(
-        'no commit to merge was given — the row states it, usually as {measured: value} from the '
-        'row that reads where this branch is recorded to stand',
-      );
+    if (_unreadable(context) case final String refusal) {
+      return CheckResult.blocked(refusal);
     }
 
     final String? head = await _head(context);
@@ -128,8 +140,9 @@ final class GitMergeRef extends ReversibleStep<String?> {
     }
     if (head != branch) {
       return CheckResult.blocked(
-        'this checkout is on "$head", and the branch being brought to $ref is "$branch" — check '
-        'that branch out first; this step refuses to move a checkout somebody else is standing on',
+        'this checkout is on "$head", and the branch being brought to ${_refOf(context)} is '
+        '"$branch" — check that branch out first; this step refuses to move a checkout somebody '
+        'else is standing on',
       );
     }
 
@@ -143,13 +156,20 @@ final class GitMergeRef extends ReversibleStep<String?> {
     final CommandResult resolved = await context.shell.run(
       Command.observing(
         'git',
-        arguments: <String>['-C', repository, 'rev-parse', '--verify', '--quiet', '$ref^{commit}'],
+        arguments: <String>[
+          '-C',
+          repository,
+          'rev-parse',
+          '--verify',
+          '--quiet',
+          '${_refOf(context)}^{commit}',
+        ],
       ),
     );
     if (!resolved.ok) {
       return CheckResult.blocked(
-        'nothing in $repository resolves "$ref" to a commit — fetch it first, because a merge '
-        'against a name the checkout does not hold has nothing to merge',
+        'nothing in $repository resolves "${_refOf(context)}" to a commit — fetch it first, '
+        'because a merge against a name the checkout does not hold has nothing to merge',
       );
     }
 
@@ -171,11 +191,20 @@ final class GitMergeRef extends ReversibleStep<String?> {
     final CommandResult carried = await context.shell.run(
       Command.observing(
         'git',
-        arguments: <String>['-C', repository, 'merge-base', '--is-ancestor', ref, 'HEAD'],
+        arguments: <String>[
+          '-C',
+          repository,
+          'merge-base',
+          '--is-ancestor',
+          _refOf(context),
+          'HEAD',
+        ],
       ),
     );
     if (carried.ok) {
-      return CheckResult.satisfied('$branch already carries $ref among its ancestors');
+      return CheckResult.satisfied(
+        '$branch already carries ${_refOf(context)} among its ancestors',
+      );
     }
 
     return const CheckResult.ready();
@@ -183,19 +212,19 @@ final class GitMergeRef extends ReversibleStep<String?> {
 
   @override
   Future<StepPlan> plan(StepContext context) async {
-    if (ref.isEmpty) {
-      return const StepPlan.nothing(
-        'no commit to merge was given yet — the row takes it from a measurement an earlier row '
-        'publishes while the run happens',
-      );
+    if (_unreadable(context) case final String refusal) {
+      return StepPlan.nothing(refusal);
     }
-    return StepPlan.argv(<String>['git', '-C', repository, 'merge', '--no-edit', ref]);
+    return StepPlan.argv(<String>['git', '-C', repository, 'merge', '--no-edit', _refOf(context)]);
   }
 
   @override
   Future<void> apply(StepContext context) async {
+    if (_unreadable(context) case final String refusal) {
+      throw StateError(refusal);
+    }
     final CommandResult merged = await context.shell.run(
-      Command('git', <String>['-C', repository, 'merge', '--no-edit', ref]),
+      Command('git', <String>['-C', repository, 'merge', '--no-edit', _refOf(context)]),
     );
     if (merged.ok) {
       return;
@@ -208,7 +237,7 @@ final class GitMergeRef extends ReversibleStep<String?> {
       // No conflicts and still not ok is a failure of the merge itself — a broken tree, a refused
       // strategy — and the honest report is the command's own words.
       throw CommandFailed(
-        argv: <String>['git', '-C', repository, 'merge', '--no-edit', ref],
+        argv: <String>['git', '-C', repository, 'merge', '--no-edit', _refOf(context)],
         exitCode: merged.exitCode,
         stdout: merged.stdout,
         stderr: merged.stderr,
@@ -231,9 +260,10 @@ final class GitMergeRef extends ReversibleStep<String?> {
       // resolving one per run is an operator running this as many times as there are paths.
       await _mustRun(context, <String>['-C', repository, 'merge', '--abort']);
       throw StateError(
-        'the merge of $ref stopped on ${kept.join(', ')} — the branch and the incoming commit '
-        'both decided something there, and no later row of this program writes those paths again, '
-        'so only a person can say which decision stands. The merge was aborted; nothing changed.',
+        'the merge of ${_refOf(context)} stopped on ${kept.join(', ')} — the branch and the '
+        'incoming commit both decided something there, and no later row of this program writes '
+        'those paths again, so only a person can say which decision stands. The merge was aborted; '
+        'nothing changed.',
       );
     }
 
@@ -274,6 +304,35 @@ final class GitMergeRef extends ReversibleStep<String?> {
       return;
     }
     await _mustRun(context, <String>['-C', repository, 'reset', '--hard', captured]);
+  }
+
+  /// The commit the branch is brought up to, or the empty text while nothing names one.
+  String _refOf(StepContext context) {
+    if (ref.isNotEmpty) {
+      return ref;
+    }
+    if (refAnswer case final String named) {
+      return context.answers.has(named) ? context.answers.text(named).trim() : '';
+    }
+    return '';
+  }
+
+  /// Why this row cannot be read at all, or null where it can.
+  String? _unreadable(StepContext context) {
+    if (ref.isNotEmpty && refAnswer != null) {
+      return 'this row states "ref" AND names "ref_answer", and one row brings the branch to one '
+          'commit — write the commit, or name the answer holding it, never both';
+    }
+    if (ref.isEmpty && refAnswer == null) {
+      return 'no commit to merge was given — the row states "ref", usually as {measured: value} '
+          'from the row that reads where this branch is recorded to stand, or names "ref_answer" '
+          'where a person answers the state the branch is brought to';
+    }
+    if (refAnswer != null && _refOf(context).isEmpty) {
+      return 'this run holds no answer called "$refAnswer", and that is where this row says the '
+          'commit the branch is brought to comes from';
+    }
+    return null;
   }
 
   /// Whether a merge is standing unfinished in the checkout.

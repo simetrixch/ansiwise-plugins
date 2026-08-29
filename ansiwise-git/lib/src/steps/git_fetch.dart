@@ -23,13 +23,15 @@ import 'package:ansiwise_core/ansiwise_core.dart';
 /// what would change does not perform it: what it announces is the ref it would bring, and from
 /// where.
 final class GitFetch extends IrreversibleStep {
-  /// Brings [branch] or [tag] of [remote] into the checkout this row names.
+  /// Brings [branch] or [tag] — the latter also nameable through [tagAnswer] — of [remote] into
+  /// the checkout this row names.
   const GitFetch({
     required this.remote,
     this.repository,
     this.repositoryAnswer,
     this.branch,
     this.tag,
+    this.tagAnswer,
   });
 
   /// Builds the step from what the program gave it.
@@ -39,6 +41,7 @@ final class GitFetch extends IrreversibleStep {
     remote: arguments.optionalText('remote') ?? 'origin',
     branch: arguments.optionalText('branch'),
     tag: arguments.optionalText('tag'),
+    tagAnswer: arguments.optionalText('tag_answer'),
   );
 
   /// What this step accepts.
@@ -83,6 +86,14 @@ final class GitFetch extends IrreversibleStep {
           'the tag brought into this checkout — write this where a later row resolves a tag by '
           'name, which a checkout that has never fetched it resolves to nothing at all',
     ),
+    ArgumentSpec(
+      name: 'tag_answer',
+      kind: ArgumentKind.answerName,
+      required: false,
+      describes:
+          'the name of the answer this run reads the tag out of, where a person names it — a row '
+          'writes "tag" or this, never both',
+    ),
   ];
 
   /// The checkout, where the program knows the path.
@@ -100,6 +111,9 @@ final class GitFetch extends IrreversibleStep {
   /// The tag this row brings in, or null where it names a branch instead.
   final String? tag;
 
+  /// The name of the answer the tag is read out of, or null where the row writes it as [tag].
+  final String? tagAnswer;
+
   /// Why the change this step makes cannot be taken back.
   @override
   String get irreversibleReason =>
@@ -116,18 +130,19 @@ final class GitFetch extends IrreversibleStep {
     if (published.refusal case final String refusal) {
       return CheckResult.blocked(
         '$remote could not be asked what it publishes, so nothing here says whether it carries a '
-        '${branch != null ? 'branch' : 'tag'} called "${branch ?? tag}": $refusal',
+        '${branch != null ? 'branch' : 'tag'} called "${branch ?? _tagOf(context)}": $refusal',
       );
     }
     if (published.commit.isEmpty) {
       return CheckResult.blocked(
-        '$remote publishes no ${branch != null ? 'branch' : 'tag'} called "${branch ?? tag}", so '
-        'there is nothing to bring — the name is wrong, or whatever writes it has not run',
+        '$remote publishes no ${branch != null ? 'branch' : 'tag'} called '
+        '"${branch ?? _tagOf(context)}", so there is nothing to bring — the name is wrong, or '
+        'whatever writes it has not run',
       );
     }
     return await _here(context) == published.commit
         ? CheckResult.satisfied(
-            '${branch ?? tag} is here on ${published.commit}, as $remote publishes it',
+            '${branch ?? _tagOf(context)} is here on ${published.commit}, as $remote publishes it',
           )
         : const CheckResult.ready();
   }
@@ -137,7 +152,7 @@ final class GitFetch extends IrreversibleStep {
     if (_unreadable(context) case final String refusal) {
       return StepPlan.nothing(refusal);
     }
-    return StepPlan.argv(<String>['git', '-C', _repositoryOf(context), ..._fetch]);
+    return StepPlan.argv(<String>['git', '-C', _repositoryOf(context), ..._fetch(context)]);
   }
 
   @override
@@ -147,7 +162,7 @@ final class GitFetch extends IrreversibleStep {
     }
     final Command fetching = Command.detailed(
       'git',
-      arguments: <String>['-C', _repositoryOf(context), ..._fetch],
+      arguments: <String>['-C', _repositoryOf(context), ..._fetch(context)],
     );
     final CommandResult fetched = await context.shell.run(fetching);
     if (!fetched.ok) {
@@ -165,18 +180,20 @@ final class GitFetch extends IrreversibleStep {
   /// The branch form names its destination outright rather than relying on what the checkout's
   /// configuration happens to map: a remote added by hand often maps nothing, and the fetch then
   /// updates a name no later row reads.
-  List<String> get _fetch {
+  List<String> _fetch(StepContext context) {
     final String? named = branch;
     if (named != null) {
       return <String>['fetch', remote, '+refs/heads/$named:refs/remotes/$remote/$named'];
     }
-    return <String>['fetch', remote, 'tag', tag!];
+    return <String>['fetch', remote, 'tag', _tagOf(context)];
   }
 
   /// What this checkout currently resolves the row's ref to, or the empty text where it holds none.
   Future<String> _here(StepContext context) async {
     final String? named = branch;
-    final String what = named != null ? 'refs/remotes/$remote/$named' : 'refs/tags/$tag';
+    final String what = named != null
+        ? 'refs/remotes/$remote/$named'
+        : 'refs/tags/${_tagOf(context)}';
     final CommandResult resolved = await context.shell.run(
       Command.observing(
         'git',
@@ -218,7 +235,7 @@ final class GitFetch extends IrreversibleStep {
           _repositoryOf(context),
           'ls-remote',
           remote,
-          branch != null ? 'refs/heads/$branch' : 'refs/tags/$tag*',
+          branch != null ? 'refs/heads/$branch' : 'refs/tags/${_tagOf(context)}*',
         ],
       ),
     );
@@ -230,7 +247,7 @@ final class GitFetch extends IrreversibleStep {
             '${listed.stderr.trim().isEmpty ? ' and wrote nothing' : ': ${listed.stderr.trim()}'}',
       );
     }
-    final String wanted = branch != null ? 'refs/heads/$branch' : 'refs/tags/$tag';
+    final String wanted = branch != null ? 'refs/heads/$branch' : 'refs/tags/${_tagOf(context)}';
     String plain = '';
     for (final String line in listed.trimmed.split('\n')) {
       final List<String> parts = line.trim().split(RegExp(r'\s+'));
@@ -272,15 +289,36 @@ final class GitFetch extends IrreversibleStep {
           'the checkout is named';
     }
     final bool named = branch != null && branch!.isNotEmpty;
-    final bool tagged = tag != null && tag!.isNotEmpty;
+    final bool written = tag != null && tag!.isNotEmpty;
+    if (written && tagAnswer != null) {
+      return 'this row states "tag" AND names "tag_answer", and one row brings one tag — write '
+          'the tag, or name the answer holding it, never both';
+    }
+    final bool tagged = written || tagAnswer != null;
     if (named && tagged) {
       return 'this row names a branch AND a tag, and they are different statements — a row saying '
           'both would be satisfied by half of it. Write two rows, each saying what it is for';
     }
     if (!named && !tagged) {
-      return 'this row names neither a branch nor a tag, so there is nothing to bring. Where the '
+      return 'this row names neither a branch nor a tag, so there is nothing to bring — it writes '
+          '"branch" or "tag", or names "tag_answer" where a person answers the tag. Where the '
           'name comes from a measurement, the row publishing it has still to pass';
     }
+    if (!named && _tagOf(context).isEmpty) {
+      return 'this run holds no answer called "$tagAnswer", and that is where this row says the '
+          'tag is named';
+    }
     return null;
+  }
+
+  /// The tag this row brings in, or the empty text while nothing names one.
+  String _tagOf(StepContext context) {
+    if (tag case final String written when written.isNotEmpty) {
+      return written;
+    }
+    if (tagAnswer case final String named) {
+      return context.answers.has(named) ? context.answers.text(named).trim() : '';
+    }
+    return '';
   }
 }
