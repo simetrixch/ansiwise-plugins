@@ -105,7 +105,7 @@ void main() {
       )
       ..answers(
         '$admin preauthkeys list -o json',
-        '[{"id":1,"key":"hskey-auth-abc","created_at":{"seconds":1788009710,"nanos":1},"expiration":{"seconds":4102444800,"nanos":0},"user":{"id":7,"name":"m1"}}]',
+        '[{"id":1,"key":"hskey-auth-abcDEF***","created_at":{"seconds":1788009710,"nanos":1},"expiration":{"seconds":4102444800,"nanos":0},"user":{"id":7,"name":"m1"}}]',
       );
     final FakeFiles files = FakeFiles(<String, String>{
       '/run/join-key': 'hskey-auth-abcDEFghiJKLmnoPQRstu\n',
@@ -127,7 +127,7 @@ void main() {
         )
         ..answers(
           '$admin preauthkeys list -o json',
-          '[{"id":1,"key":"hskey-auth-spent","used":true,"created_at":{"seconds":1788009710,"nanos":1},"expiration":{"seconds":4102444800,"nanos":0},"user":{"id":7,"name":"m1"}}]',
+          '[{"id":1,"key":"hskey-auth-spentDE***","used":true,"created_at":{"seconds":1788009710,"nanos":1},"expiration":{"seconds":4102444800,"nanos":0},"user":{"id":7,"name":"m1"}}]',
         )
         ..answers(
           '$admin preauthkeys create --user 7 --expiration 24h -o json',
@@ -160,17 +160,17 @@ void main() {
         // THE PAIR THE COORDINATOR REALLY WRITES for the readable one — seconds since the epoch,
         // not a timestamp — and a string beside it, because a coordinator that states one states
         // the same fact. Every entry carries the user it belongs to, as the real listing does.
-        '[{"id":1,"key":"hskey-auth-old","user":{"id":7,"name":"m1"},'
+        '[{"id":1,"key":"hskey-auth-oldDEFGH***","user":{"id":7,"name":"m1"},'
             '"expiration":{"seconds":1735689600,"nanos":1}},'
-            '{"id":2,"key":"hskey-auth-odd","user":{"id":7,"name":"m1"},"expiration":"not-a-moment"}]',
+            '{"id":2,"key":"hskey-auth-oddDEFGH***","user":{"id":7,"name":"m1"},"expiration":"not-a-moment"}]',
       );
     final FakeFiles files = FakeFiles(<String, String>{
-      '/run/join-key': 'hskey-auth-oddDEFghiJKL\n',
+      '/run/join-key': 'hskey-auth-oddDEFGHwholeANDlonger\n',
     });
 
     expect(await step.check(contextOn(shell, files)), isA<Satisfied>());
 
-    files.contents['/run/join-key'] = 'k-old\n';
+    files.contents['/run/join-key'] = 'hskey-auth-oldDEFGHwholeANDlonger\n';
     expect(await step.check(contextOn(shell, files)), isA<Ready>());
   });
 
@@ -183,7 +183,7 @@ void main() {
       ..answers('$admin users list -o json', '[{"id":7,"name":"m1"}]')
       ..answers(
         '$admin preauthkeys list -o json',
-        '[{"id":1,"key":"k-somebody-elses","user":{"id":9,"name":"s2"},'
+        '[{"id":1,"key":"hskey-auth-somebody-el***","user":{"id":9,"name":"s2"},'
             '"expiration":{"seconds":4102444800,"nanos":0}}]',
       );
 
@@ -191,7 +191,9 @@ void main() {
     // on a key the coordinator still redeems FOR THIS MACHINE, and the one standing here is another
     // machine's. Asked with an empty file the answer would be Ready whether the owner was read or
     // not, and the case would prove nothing.
-    final FakeFiles files = FakeFiles(<String, String>{'/run/join-key': 'k-somebody-elses\n'});
+    final FakeFiles files = FakeFiles(<String, String>{
+      '/run/join-key': 'hskey-auth-somebody-elsesWHOLE\n',
+    });
     expect(await step.check(contextOn(shell, files)), isA<Ready>());
   });
 
@@ -208,7 +210,7 @@ void main() {
         ..answers('$admin users list -o json', '[{"id":7,"name":"m1"}]')
         ..answers(
           '$admin preauthkeys list -o json',
-          '[{"id":1,"key":"hskey-auth-standing","user":{"id":7,"name":"m1"},'
+          '[{"id":1,"key":"hskey-auth-standing***","user":{"id":7,"name":"m1"},'
               '"expiration":{"seconds":4102444800,"nanos":0}}]',
         )
         ..answers(
@@ -239,10 +241,10 @@ void main() {
       ..answers('$admin users list -o json', '[{"id":7,"name":"m1"}]')
       ..answers(
         '$admin preauthkeys list -o json',
-        '[{"id":1,"key":"hskey-auth-opening","user":{"id":7,"name":"m1"},'
+        '[{"id":1,"key":"hskey-auth-opening***","user":{"id":7,"name":"m1"},'
             '"expiration":{"seconds":4102444800,"nanos":0}}]',
       );
-    final FakeFiles files = FakeFiles(<String, String>{'/run/join-key': 'hskey-auth-opening\n'});
+    final FakeFiles files = FakeFiles(<String, String>{'/run/join-key': 'hskey-auth-opening***\n'});
 
     expect(await step.check(contextOn(shell, files)), isA<Ready>());
   });

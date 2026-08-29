@@ -479,13 +479,38 @@ final class _Coordinator {
   String? idOf(String name) => _ids[name];
 }
 
-/// Whether [held] is a WHOLE key the coordinator still redeems, told from the openings it lists.
+/// What the coordinator prints where a key's remainder was taken out.
 ///
-/// **LONGER THAN THE OPENING IT MATCHES, and that is the whole of the distinction.** The listing
-/// prints a key's first characters; a credential is that and much more. An opening trivially begins
-/// with itself, so a file that came to hold one — written by a run that took the listing for a
-/// credential — would be handed back for ever, and the machine refused every time with "key too
-/// short". Length is what tells the two apart, and it is the coordinator's own: it refuses anything
-/// under 77 characters after the prefix.
-bool _isWholeKey(String held, Iterable<String> openings) =>
-    held.isNotEmpty && openings.any((String o) => held.length > o.length && held.startsWith(o));
+/// Measured on headscale v0.29.2 (2026-08-29): every listed key is its first 24 characters and then
+/// this, the same for every one of them. It is what makes a listing readable without making it a
+/// place credentials are handed out from.
+const String _redaction = '***';
+
+/// Whether [held] is a WHOLE key the coordinator still redeems, told from the values it lists.
+///
+/// **THE LISTING REDACTS, IT DOES NOT TRUNCATE.** `hskey-auth-<13 more>***` where the credential is
+/// `hskey-auth-<77 more>` — so a listed value is not a prefix of the key it stands for, and a
+/// stored key compared against it directly matches nothing. What IS a prefix is that value with the
+/// marker taken off, and that is what this compares.
+///
+/// **AND A CREDENTIAL NEVER CARRIES THE MARKER.** A file that came to hold a listed value — written
+/// by a run that took the listing for a credential, which is how apps3's came to hold one — would
+/// otherwise be recognised as the key it merely names, handed back for ever, and refused by the
+/// machine every time with "key too short".
+///
+/// A coordinator that prints keys whole is still read correctly: nothing was redacted, so the value
+/// is its own opening and an exact match is a match.
+///
+/// Every case here was put to a live coordinator before it was written down.
+bool _isWholeKey(String held, Iterable<String> listed) {
+  if (held.isEmpty || held.contains(_redaction)) {
+    return false;
+  }
+  return listed.any((String value) {
+    final bool redacted = value.endsWith(_redaction);
+    final String opening = redacted ? value.substring(0, value.length - _redaction.length) : value;
+    return opening.isNotEmpty &&
+        held.startsWith(opening) &&
+        (!redacted || held.length > opening.length);
+  });
+}

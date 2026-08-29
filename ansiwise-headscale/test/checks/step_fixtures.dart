@@ -38,7 +38,7 @@ final Map<String, Fixture> stepFixtures = <String, Fixture>{
     shell.changes('headscale preauthkeys create --user 1 --expiration 24h -o json', () {
       shell.answers(
         'headscale preauthkeys list -o json',
-        '[{"id":1,"key":"hskey-auth-redeemable","user":{"id":1,"name":"$_machine"},'
+        '[{"id":1,"key":"hskey-auth-redeemabl***","user":{"id":1,"name":"$_machine"},'
             '"expiration":{"seconds":4102444800,"nanos":0}}]',
       );
     });
