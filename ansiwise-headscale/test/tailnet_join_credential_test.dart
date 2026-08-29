@@ -49,7 +49,12 @@ void main() {
   test(
     'a machine with no coordinator user is ready, and the apply creates, mints and stages',
     () async {
-      final FakeShell shell = FakeShell()..answers('$admin users list -o json', '[]');
+      // JSON `null`, WHICH IS WHAT A FRESH COORDINATOR REALLY WRITES — measured on apps3
+      // (2026-08-29), at exit 0. This case scripted an empty ARRAY, a shape headscale does not
+      // emit, so it proved a reading nothing performs while the real one went unread: the run
+      // stopped saying the admin surface had not answered, on the very first slave an
+      // installation ever adds.
+      final FakeShell shell = FakeShell()..answers('$admin users list -o json', 'null');
       shell.changes('$admin users create m1', () {
         shell.answers('$admin users list -o json', '[{"name":"m1","id":7}]');
         shell.answers('$admin preauthkeys list --user 7 -o json', 'null');
@@ -68,6 +73,24 @@ void main() {
       expect(shell.ran, contains('$admin users create m1'));
     },
   );
+
+  test('an empty user listing is an ANSWER, and the check is ready on it', () async {
+    // The two are told apart by the exit code and by nothing else: `null` at exit 0 is a
+    // coordinator saying it has no users, and the case above proves the apply then creates one.
+    // Silence is the case before that one — a non-zero exit — and it still blocks.
+    final FakeShell shell = FakeShell()..answers('$admin users list -o json', 'null');
+    expect(await step.check(contextOn(shell, FakeFiles())), isA<Ready>());
+  });
+
+  test('output that is neither a listing nor that empty answer IS silence', () async {
+    // A surface answering something else has not answered: minting on it would hand a machine a
+    // credential nothing agreed to redeem.
+    final FakeShell shell = FakeShell()
+      ..answers('$admin users list -o json', 'Error: unknown command');
+    final CheckResult answer = await step.check(contextOn(shell, FakeFiles()));
+    expect(answer, isA<Blocked>());
+    expect((answer as Blocked).reason, contains('nothing is minted on silence'));
+  });
 
   test('a key the coordinator still redeems is handed back, never replaced', () async {
     // Create-only, proven by absence: the check is satisfied on the standing credential, so a

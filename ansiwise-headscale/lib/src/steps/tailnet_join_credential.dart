@@ -299,12 +299,12 @@ final class TailnetJoinCredential extends IrreversibleStep {
     if (listed.exitCode != 0) {
       return null;
     }
-    final Object? decoded = _decoded(listed.stdout);
-    if (decoded is! List<Object?>) {
+    final List<Object?>? rows = _rowsOf(listed.stdout);
+    if (rows == null) {
       return null;
     }
     final Map<String, String> ids = <String, String>{};
-    for (final Object? entry in decoded) {
+    for (final Object? entry in rows) {
       if (entry is Map<String, Object?>) {
         final Object? name = entry['name'];
         final Object? id = entry['id'];
@@ -342,16 +342,12 @@ final class TailnetJoinCredential extends IrreversibleStep {
     if (listed.exitCode != 0) {
       return null;
     }
-    final Object? decoded = _decoded(listed.stdout);
-    // The coordinator answers an empty listing as JSON null, and that IS an answer: no keys.
-    if (decoded == null && listed.stdout.trim() != 'null' && listed.stdout.trim().isNotEmpty) {
+    final List<Object?>? rows = _rowsOf(listed.stdout);
+    if (rows == null) {
       return null;
     }
-    if (decoded is! List<Object?>) {
-      return <String>[];
-    }
     final List<String> usable = <String>[];
-    for (final Object? entry in decoded) {
+    for (final Object? entry in rows) {
       if (entry is! Map<String, Object?>) {
         continue;
       }
@@ -388,6 +384,29 @@ final class TailnetJoinCredential extends IrreversibleStep {
         stderr: answer.stderr,
       );
     }
+  }
+
+  /// The rows of a listing, or null where the surface did not answer at all.
+  ///
+  /// **AN EMPTY LISTING IS AN ANSWER, AND IT IS THE FIRST ONE EVERY INSTALLATION GIVES.** The
+  /// coordinator writes JSON `null` for a listing with nothing in it — a fresh installation's user
+  /// list and a fresh user's key list alike — so reading that as silence reads "there is nobody
+  /// yet" as "there is nothing there". Measured on apps3 (2026-08-29): `users list -o json` answered
+  /// `null` at exit 0, and the run stopped saying the admin surface had not answered, on the very
+  /// first slave an installation ever adds.
+  ///
+  /// **ONE READING FOR BOTH LISTINGS.** The key listing had learned this and the user listing had
+  /// not, which is how a step comes to believe two different things about one surface.
+  ///
+  /// Silence is a non-zero exit — the caller's to judge — or output that is neither a list nor that
+  /// empty answer.
+  static List<Object?>? _rowsOf(String stdout) {
+    final String body = stdout.trim();
+    if (body.isEmpty || body == 'null') {
+      return const <Object?>[];
+    }
+    final Object? decoded = _decoded(stdout);
+    return decoded is List<Object?> ? decoded : null;
   }
 
   /// [text] as JSON, or null when it is not.
