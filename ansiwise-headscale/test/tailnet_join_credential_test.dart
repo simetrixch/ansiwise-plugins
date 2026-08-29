@@ -56,12 +56,15 @@ void main() {
       // installation ever adds.
       final FakeShell shell = FakeShell()..answers('$admin users list -o json', 'null');
       shell.changes('$admin users create m1', () {
-        shell.answers('$admin users list -o json', '[{"name":"m1","id":7}]');
-        shell.answers('$admin preauthkeys list --user 7 -o json', 'null');
+        shell.answers(
+          '$admin users list -o json',
+          '[{"id":7,"name":"m1","created_at":{"seconds":1788008991,"nanos":1}}]',
+        );
+        shell.answers('$admin preauthkeys list -o json', 'null');
       });
       shell.answers(
         '$admin preauthkeys create --user 7 --expiration 24h -o json',
-        '{"key":"k-new"}',
+        '{"id":1,"key":"k-new","created_at":{"seconds":1788009710,"nanos":1},"expiration":{"seconds":4102444800,"nanos":0},"user":{"id":7,"name":"m1"}}',
       );
       final FakeFiles files = FakeFiles();
       final StepContext context = contextOn(shell, files);
@@ -96,8 +99,14 @@ void main() {
     // Create-only, proven by absence: the check is satisfied on the standing credential, so a
     // second run reaches no create at all and the coordinator ends the day holding ONE live key.
     final FakeShell shell = FakeShell()
-      ..answers('$admin users list -o json', '[{"name":"m1","id":7}]')
-      ..answers('$admin preauthkeys list --user 7 -o json', '[{"key":"k-live","used":false}]');
+      ..answers(
+        '$admin users list -o json',
+        '[{"id":7,"name":"m1","created_at":{"seconds":1788008991,"nanos":1}}]',
+      )
+      ..answers(
+        '$admin preauthkeys list -o json',
+        '[{"id":1,"key":"k-live","created_at":{"seconds":1788009710,"nanos":1},"expiration":{"seconds":4102444800,"nanos":0},"user":{"id":7,"name":"m1"}}]',
+      );
     final FakeFiles files = FakeFiles(<String, String>{'/run/join-key': 'k-live\n'});
 
     final CheckResult answer = await step.check(contextOn(shell, files));
@@ -110,8 +119,14 @@ void main() {
     'a key the coordinator reports as USED is replaced — a dead key is not a live credential',
     () async {
       final FakeShell shell = FakeShell()
-        ..answers('$admin users list -o json', '[{"name":"m1","id":7}]')
-        ..answers('$admin preauthkeys list --user 7 -o json', '[{"key":"k-spent","used":true}]')
+        ..answers(
+          '$admin users list -o json',
+          '[{"id":7,"name":"m1","created_at":{"seconds":1788008991,"nanos":1}}]',
+        )
+        ..answers(
+          '$admin preauthkeys list -o json',
+          '[{"id":1,"key":"k-spent","used":true,"created_at":{"seconds":1788009710,"nanos":1},"expiration":{"seconds":4102444800,"nanos":0},"user":{"id":7,"name":"m1"}}]',
+        )
         ..answers(
           '$admin preauthkeys create --user 7 --expiration 24h -o json',
           '{"key":"k-fresh"}',
@@ -132,11 +147,18 @@ void main() {
     // about the network rather than about the key — and the unreadable one MUST be, because doubt
     // read as "dead" is what makes a run mint a second live credential beside the first.
     final FakeShell shell = FakeShell()
-      ..answers('$admin users list -o json', '[{"name":"m1","id":7}]')
       ..answers(
-        '$admin preauthkeys list --user 7 -o json',
-        '[{"key":"k-old","used":false,"expiration":"2025-01-01T00:00:00.000001Z"},'
-            '{"key":"k-odd","used":false,"expiration":"not-a-moment"}]',
+        '$admin users list -o json',
+        '[{"id":7,"name":"m1","created_at":{"seconds":1788008991,"nanos":1}}]',
+      )
+      ..answers(
+        '$admin preauthkeys list -o json',
+        // THE PAIR THE COORDINATOR REALLY WRITES for the readable one — seconds since the epoch,
+        // not a timestamp — and a string beside it, because a coordinator that states one states
+        // the same fact. Every entry carries the user it belongs to, as the real listing does.
+        '[{"id":1,"key":"k-old","user":{"id":7,"name":"m1"},'
+            '"expiration":{"seconds":1735689600,"nanos":1}},'
+            '{"id":2,"key":"k-odd","user":{"id":7,"name":"m1"},"expiration":"not-a-moment"}]',
       );
     final FakeFiles files = FakeFiles(<String, String>{'/run/join-key': 'k-odd\n'});
 
@@ -146,13 +168,37 @@ void main() {
     expect(await step.check(contextOn(shell, files)), isA<Ready>());
   });
 
+  test('a key belonging to ANOTHER machine is never handed back', () async {
+    // The coordinator's key listing takes no user and carries every user's keys, so the entry's
+    // own `user` is the only thing that says whose it is. Taken without that reading, the first
+    // key in the list wins — and one machine is told to join with the credential minted for
+    // another, which the coordinator redeems exactly once.
+    final FakeShell shell = FakeShell()
+      ..answers('$admin users list -o json', '[{"id":7,"name":"m1"}]')
+      ..answers(
+        '$admin preauthkeys list -o json',
+        '[{"id":1,"key":"k-somebody-elses","user":{"id":9,"name":"s2"},'
+            '"expiration":{"seconds":4102444800,"nanos":0}}]',
+      );
+
+    // THE FILE ALREADY HOLDS THAT KEY, which is what makes this a statement: satisfied is answered
+    // on a key the coordinator still redeems FOR THIS MACHINE, and the one standing here is another
+    // machine's. Asked with an empty file the answer would be Ready whether the owner was read or
+    // not, and the case would prove nothing.
+    final FakeFiles files = FakeFiles(<String, String>{'/run/join-key': 'k-somebody-elses\n'});
+    expect(await step.check(contextOn(shell, files)), isA<Ready>());
+  });
+
   test('a mint that returns no key fails WITHOUT the output riding the error', () async {
     // The coordinator's answer to a failed create is not a credential, but nothing here may gamble
     // on that: whatever it printed must not reach an exception message, which outlives the run in
     // the record.
     final FakeShell shell = FakeShell()
-      ..answers('$admin users list -o json', '[{"name":"m1","id":7}]')
-      ..answers('$admin preauthkeys list --user 7 -o json', 'null')
+      ..answers(
+        '$admin users list -o json',
+        '[{"id":7,"name":"m1","created_at":{"seconds":1788008991,"nanos":1}}]',
+      )
+      ..answers('$admin preauthkeys list -o json', 'null')
       ..answers('$admin preauthkeys create --user 7 --expiration 24h -o json', 'k-leaked-anyway');
     await expectLater(
       step.apply(contextOn(shell, FakeFiles())),
@@ -180,8 +226,11 @@ void main() {
         runAnswer: 'stage',
       );
       final FakeShell shell = FakeShell()
-        ..answers('$admin users list -o json', '[{"name":"m1","id":7}]')
-        ..answers('$admin preauthkeys list --user 7 -o json', 'null')
+        ..answers(
+          '$admin users list -o json',
+          '[{"id":7,"name":"m1","created_at":{"seconds":1788008991,"nanos":1}}]',
+        )
+        ..answers('$admin preauthkeys list -o json', 'null')
         ..answers('$admin preauthkeys create --user 7 --expiration 24h -o json', '{"key":"k-m1"}');
       final FakeFiles files = FakeFiles();
 
@@ -195,8 +244,11 @@ void main() {
     // The value leaves the step through the file alone. Every command the fake recorded is checked
     // against it, because an argument is visible to every account on the machine.
     final FakeShell shell = FakeShell()
-      ..answers('$admin users list -o json', '[{"name":"m1","id":7}]')
-      ..answers('$admin preauthkeys list --user 7 -o json', 'null')
+      ..answers(
+        '$admin users list -o json',
+        '[{"id":7,"name":"m1","created_at":{"seconds":1788008991,"nanos":1}}]',
+      )
+      ..answers('$admin preauthkeys list -o json', 'null')
       ..answers(
         '$admin preauthkeys create --user 7 --expiration 24h -o json',
         '{"key":"k-secret"}',

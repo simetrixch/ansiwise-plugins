@@ -327,15 +327,12 @@ final class TailnetJoinCredential extends IrreversibleStep {
     final CommandResult listed = await context.shell.run(
       Command.observing(
         admin.first,
-        arguments: <String>[
-          ...admin.sublist(1),
-          'preauthkeys',
-          'list',
-          '--user',
-          uid,
-          '-o',
-          'json',
-        ],
+        // NO USER FLAG. The coordinator's `preauthkeys list` takes none — it lists every key there
+        // is, and which user each belongs to is a field of the entry. Asked with one it answers
+        // "unknown flag: --user" and exits 1, which this step then reports as the surface having
+        // stopped answering (measured against headscale v0.29.2 on 2026-08-29, on the first slave
+        // an installation ever added). `create` below still takes it; only the listing lost it.
+        arguments: <String>[...admin.sublist(1), 'preauthkeys', 'list', '-o', 'json'],
         elevated: needsRoot,
       ),
     );
@@ -351,16 +348,20 @@ final class TailnetJoinCredential extends IrreversibleStep {
       if (entry is! Map<String, Object?>) {
         continue;
       }
+      // WHOSE KEY IT IS, read off the entry — the listing carries every user's, so a step that took
+      // them all would hand one machine the credential minted for another.
+      final Object? owner = entry['user'];
+      final Object? ownerId = owner is Map<String, Object?> ? owner['id'] : null;
+      if (ownerId == null || ownerId.toString() != uid) {
+        continue;
+      }
       final Object? key = entry['key'];
       if (key is! String || key.isEmpty || entry['used'] == true) {
         continue;
       }
-      final Object? expiration = entry['expiration'];
-      if (expiration is String && expiration.isNotEmpty) {
-        final DateTime? until = DateTime.tryParse(expiration);
-        if (until != null && !until.isAfter(context.clock.now().toUtc())) {
-          continue;
-        }
+      final DateTime? until = _instant(entry['expiration']);
+      if (until != null && !until.isAfter(context.clock.now().toUtc())) {
+        continue;
       }
       usable.add(key);
     }
@@ -407,6 +408,30 @@ final class TailnetJoinCredential extends IrreversibleStep {
     }
     final Object? decoded = _decoded(stdout);
     return decoded is List<Object?> ? decoded : null;
+  }
+
+  /// A moment the coordinator states, or null where it states none this can read.
+  ///
+  /// **IT WRITES A PAIR AND NOT A TIMESTAMP**: `{"seconds": …, "nanos": …}`, seconds since the
+  /// epoch — the shape its protocol carries. Read as a string this is not a string at all, so the
+  /// check simply did not run, and an EXPIRED key was handed back as one the coordinator would
+  /// still redeem (headscale v0.29.2, measured 2026-08-29). A string is still accepted, because a
+  /// coordinator that states one is stating the same fact.
+  ///
+  /// Nanoseconds are dropped: what this decides is whether a moment has passed, and no key's life
+  /// is measured that finely.
+  static DateTime? _instant(Object? stated) {
+    if (stated is String && stated.isNotEmpty) {
+      return DateTime.tryParse(stated);
+    }
+    if (stated is Map<String, Object?>) {
+      final Object? seconds = stated['seconds'];
+      final int? epoch = seconds is int ? seconds : int.tryParse(seconds?.toString() ?? '');
+      if (epoch != null) {
+        return DateTime.fromMillisecondsSinceEpoch(epoch * 1000, isUtc: true);
+      }
+    }
+    return null;
   }
 
   /// [text] as JSON, or null when it is not.

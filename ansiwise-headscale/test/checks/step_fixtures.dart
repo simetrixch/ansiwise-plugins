@@ -22,16 +22,24 @@ final Map<String, Fixture> stepFixtures = <String, Fixture>{
   // listing carries one — the state change the real coordinator makes, without which the second
   // run could never find the credential standing.
   'tailnet_join_credential': (FakeShell shell, FakeFiles files, FakeHttp http) {
-    shell.answers('headscale users list -o json', '[{"name":"$_machine","id":1}]');
-    shell.answers('headscale preauthkeys list --user 1 -o json', 'null');
+    // AS THE COORDINATOR REALLY ANSWERS, read off a live one on 2026-08-29 (headscale v0.29.2):
+    // the key listing takes NO user and carries every user's keys, each entry naming its own owner,
+    // and a moment is a `{seconds, nanos}` pair rather than a timestamp.
+    shell.answers(
+      'headscale users list -o json',
+      '[{"id":1,"name":"$_machine","created_at":{"seconds":1788008991,"nanos":1}}]',
+    );
+    shell.answers('headscale preauthkeys list -o json', 'null');
     shell.answers(
       'headscale preauthkeys create --user 1 --expiration 24h -o json',
-      '{"key":"k-redeemable"}',
+      '{"id":1,"key":"k-redeemable","user":{"id":1,"name":"$_machine"},'
+          '"expiration":{"seconds":4102444800,"nanos":0}}',
     );
     shell.changes('headscale preauthkeys create --user 1 --expiration 24h -o json', () {
       shell.answers(
-        'headscale preauthkeys list --user 1 -o json',
-        '[{"key":"k-redeemable","used":false}]',
+        'headscale preauthkeys list -o json',
+        '[{"id":1,"key":"k-redeemable","user":{"id":1,"name":"$_machine"},'
+            '"expiration":{"seconds":4102444800,"nanos":0}}]',
       );
     });
   },
