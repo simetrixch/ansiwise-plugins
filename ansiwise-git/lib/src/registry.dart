@@ -1,6 +1,7 @@
 import 'package:ansiwise_core/ansiwise_core.dart';
 
 import 'steps/copy_branch_file.dart';
+import 'steps/branch/remove_branch_file.dart';
 import 'steps/git_branch.dart';
 import 'steps/git_clone.dart';
 import 'steps/git_fetch.dart';
@@ -64,6 +65,12 @@ const Map<StepName, RegisteredStep> gitSteps = <StepName, RegisteredStep>{
     create: MeasureValueInBranchFile.fromArguments,
     arguments: MeasureValueInBranchFile.arguments,
     publishes: MeasureValueInBranchFile.publishes,
+  ),
+  StepName('remove_branch_file'): RegisteredStep(
+    name: StepName('remove_branch_file'),
+    source: 'lib/src/steps/branch/remove_branch_file.dart:23',
+    create: RemoveBranchFile.fromArguments,
+    arguments: RemoveBranchFile.arguments,
   ),
   StepName('copy_branch_file'): RegisteredStep(
     name: StepName('copy_branch_file'),

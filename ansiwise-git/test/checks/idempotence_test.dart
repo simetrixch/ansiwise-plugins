@@ -63,6 +63,13 @@ const Set<String> notCoveredByAFakeMachine = <String>{
   // test/git_merge_ref_test.dart drives the merge over a fake checkout, up to and including a
   // second run finding the commit already among the ancestors; test/copy_branch_file_test.dart
   // does the same for the copy, whose second run finds the destination already holding the source.
+  // It reads which branch the checkout stands on and whether that branch tracks the path, and a
+  // probe hands every text argument the same one-character value — so the checkout it is pointed at
+  // is not on the fake machine and the step refuses before it removes anything. What measures it
+  // instead is test/remove_branch_file_test.dart, where the same step runs against a checkout that
+  // answers: it removes what the branch carries, and a branch no longer carrying it is satisfied
+  // without a command — which is the property this audit asks of a second run.
+  'remove_branch_file',
   'copy_branch_file',
   'git_merge_ref',
   // For exactly the reason above: both values come from answers whose NAMES the row chooses, and a
