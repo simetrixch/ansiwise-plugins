@@ -20,7 +20,7 @@ publish_to: none
 # compiles the executable a machine is given. Named because a clone of this repository alone cannot
 # build anything, and nothing else said where to look.
 repository: https://github.com/simetrixch/ansiwise-plugins
-version: 0.6.9
+version: 0.6.10
 
 environment:
   sdk: ^3.12.0
@@ -36,12 +36,12 @@ dependencies:
   ansiwise_vault:
     git:
       url: https://github.com/simetrixch/ansiwise-plugins.git
-      ref: 0.6.9-beta-20260830154020
+      ref: 0.6.10-beta-20260830201019
       path: ansiwise-vault
   ansiwise_kubernetes:
     git:
       url: https://github.com/simetrixch/ansiwise-plugins.git
-      ref: 0.6.9-beta-20260830154020
+      ref: 0.6.10-beta-20260830201019
       path: ansiwise-kubernetes
 
 dev_dependencies:
