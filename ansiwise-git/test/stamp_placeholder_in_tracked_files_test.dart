@@ -668,6 +668,53 @@ void main() {
       );
       expect((answer as Blocked).reason, contains('first_dns_label_of'));
     });
+
+    test('THE PLANTED DEFECT: a rule that works nothing out of a value is refused HERE', () async {
+      // The framework's set holds a rule whose value is read off the machine rather than worked out
+      // of text, and it refuses anything that asks it to work a value out. Reached from a stamp,
+      // that refusal would arrive in the middle of the row as a stack trace about a rule, on a row
+      // whose own declaration was the thing that was wrong.
+      const StampPlaceholderInTrackedFiles misruled = StampPlaceholderInTrackedFiles(
+        repository: repository,
+        refuseOnBranch: sourceBranch,
+        placeholder: '__ORIGIN__',
+        valueFile: recordsPath,
+        valueKey: 'origin',
+        valueRule: 'secret_in_file_at',
+        keepMarker: keepMarker,
+        rule: rule,
+      );
+      final FakeShell shell = searching(carrying: <String>[], literal: '__ORIGIN__');
+
+      final CheckResult answer = await misruled.check(
+        contextOn(shell: shell, files: recorded(<String, String>{})),
+      );
+      expect(
+        (answer as Blocked).reason,
+        allOf(contains('secret_in_file_at'), contains('read off the machine')),
+      );
+    });
+
+    test('THE INNOCENT NEIGHBOUR: a rule that DOES work a value out is still taken', () async {
+      // Without this, a version that refused every named rule would satisfy the two tests above and
+      // take the one case value_rule exists for with it.
+      const StampPlaceholderInTrackedFiles ruled = StampPlaceholderInTrackedFiles(
+        repository: repository,
+        refuseOnBranch: sourceBranch,
+        placeholder: '__ORIGIN__',
+        valueFile: recordsPath,
+        valueKey: 'origin',
+        valueRule: 'first_dns_label_of',
+        keepMarker: keepMarker,
+        rule: rule,
+      );
+      final FakeShell shell = searching(carrying: <String>[], literal: '__ORIGIN__');
+
+      final CheckResult answer = await ruled.check(
+        contextOn(shell: shell, files: recorded(<String, String>{})),
+      );
+      expect(answer, isNot(isA<Blocked>()));
+    });
   });
 
   group('a tree that is not there is not a tree with nothing in it', () {

@@ -576,6 +576,14 @@ final class StampPlaceholderInTrackedFiles extends ReversibleStep<List<String>> 
         return '"$named" reads a pair of answers, and a stamp holds one value to work its '
             'replacement out of';
       }
+      // A RULE THAT WORKS NOTHING OUT OF TEXT. Its value is read off the machine and the framework
+      // fills it before a run's first step, so applying it to a value here would refuse in the
+      // middle of the stamp — a stack trace about a rule, on a row whose own declaration is what
+      // was wrong. Said here instead, where every other thing wrong with this row is said.
+      if (rule.readsAFile) {
+        return '"$named" is read off the machine rather than worked out of a value, and a stamp '
+            'works its replacement out of the value this row already names';
+      }
     }
     return null;
   }
