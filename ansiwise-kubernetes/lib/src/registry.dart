@@ -20,6 +20,7 @@ import 'steps/replace_calico_agent_for_pod_cidr.dart';
 import 'steps/require_pod_cidr_free_of_reserved_ranges.dart';
 import 'steps/require_unpopulated_cluster_for_pod_cidr_migration.dart';
 import 'steps/restart_cert_manager_and_reapply_cluster_issuer.dart';
+import 'steps/trust_cluster_authority.dart';
 import 'steps/set_default_storage_class.dart';
 import 'steps/verify_ippool_converged_with_self_heal.dart';
 import 'steps/wait_for_command_output.dart';
@@ -138,6 +139,12 @@ const Map<StepName, RegisteredStep> kubernetesSteps = <StepName, RegisteredStep>
     source: 'lib/src/steps/apply_cluster_issuer.dart:26',
     create: ApplyClusterIssuer.fromArguments,
     arguments: ApplyClusterIssuer.arguments,
+  ),
+  StepName('trust_cluster_authority'): RegisteredStep(
+    name: StepName('trust_cluster_authority'),
+    source: 'lib/src/steps/trust_cluster_authority.dart:36',
+    create: TrustClusterAuthority.fromArguments,
+    arguments: TrustClusterAuthority.arguments,
   ),
   StepName('restart_cert_manager_and_reapply_cluster_issuer'): RegisteredStep(
     name: StepName('restart_cert_manager_and_reapply_cluster_issuer'),

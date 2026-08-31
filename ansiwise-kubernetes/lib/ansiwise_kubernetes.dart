@@ -30,6 +30,7 @@ export 'src/steps/require_pod_cidr_free_of_reserved_ranges.dart';
 export 'src/steps/require_unpopulated_cluster_for_pod_cidr_migration.dart';
 export 'src/steps/restart_cert_manager_and_reapply_cluster_issuer.dart';
 export 'src/steps/set_default_storage_class.dart';
+export 'src/steps/trust_cluster_authority.dart';
 export 'src/steps/verify_ippool_converged_with_self_heal.dart';
 export 'src/steps/wait_for_command_output.dart';
 export 'src/steps/write_cluster_issuer_manifest.dart';

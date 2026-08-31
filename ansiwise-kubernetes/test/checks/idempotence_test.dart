@@ -66,6 +66,12 @@ const Set<String> notCoveredByAFakeMachine = <String>{
   'replace_calico_agent_for_pod_cidr',
   'restart_cert_manager_and_reapply_cluster_issuer',
   'set_default_storage_class',
+  // The authority it puts on the machine is written into a Secret by the certificate service, and a
+  // blank fake shell answers that read with no data at all — so the apply names the unwritten
+  // Secret and throws before a second run could measure anything. Both runs against a cluster that
+  // holds one, and the machine that ends up trusting it, are driven directly in
+  // trust_cluster_authority_test.dart, where the bundle a rebuild leaves is modelled and read back.
+  'trust_cluster_authority',
   'verify_ippool_converged_with_self_heal',
   // NOT a machine the fake cannot arrange — a probe that cannot tell two paths apart. The audit
   // hands every text argument the same placeholder, so the template this step renders FROM and the
