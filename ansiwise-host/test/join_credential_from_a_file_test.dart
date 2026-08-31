@@ -136,17 +136,25 @@ void main() {
     expect(ran.shell.ran.where((String each) => each.contains(credential)), isEmpty);
   });
 
-  test('THE PLANTED DEFECT: no file means no run, and the refusal names the path', () async {
+  test('THE PLANTED DEFECT: no file means no join, and the refusal names the path', () async {
     // Not an empty credential and not a default. Joined with nothing, the client waits for a person
-    // this run does not have — so the run stops before its first row, where the reason still points
-    // at the file somebody has to go and look at.
+    // this run does not have — so the run stops at the row that needed the credential, with the
+    // reason still pointing at the file somebody has to go and look at.
+    //
+    // WHERE it stops moved on purpose. The rule is read in front of every step rather than once
+    // before the first, because the case it exists for is a value the run itself produces: a machine
+    // that mints a credential and spends it two rows later has no such file when the run starts.
+    // What is unchanged is the whole of the guarantee — never an empty credential, never a default,
+    // and nothing staged for the client.
     final ({RunRecord closed, FakeShell shell, List<String> staged}) ran = await joinOn(
       const <String, String>{},
     );
 
     expect(ran.closed.exitCode, 1);
-    expect(ran.closed.steps, isEmpty);
-    expect(ran.closed.issues.single, allOf(contains(TailnetJoin.authKeyAnswer), contains(keyFile)));
-    expect(ran.shell.ran, isEmpty, reason: 'nothing reached the client');
+    expect(
+      ran.closed.issues.join(' '),
+      allOf(contains(TailnetJoin.authKeyAnswer), contains(keyFile)),
+    );
+    expect(ran.staged, isEmpty, reason: 'no credential was ever staged for the client');
   });
 }
