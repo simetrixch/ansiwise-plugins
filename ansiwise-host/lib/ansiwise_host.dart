@@ -6,6 +6,7 @@
 /// value stands in that product's program row.
 library;
 
+export 'src/conditions/key_has_value.dart';
 export 'src/conditions/key_is_true.dart';
 export 'src/conditions/answers_compare.dart';
 export 'src/conditions/keys_compare.dart';

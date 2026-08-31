@@ -1,4 +1,5 @@
 import 'package:ansiwise_core/ansiwise_core.dart';
+import 'conditions/key_has_value.dart';
 import 'conditions/key_is_true.dart';
 import 'conditions/answers_compare.dart';
 import 'conditions/keys_compare.dart';
@@ -522,6 +523,23 @@ const Map<PredicateName, RegisteredPredicate> hostConditions = <PredicateName, R
     create: KeyIsTrue.holdingFalse,
     describes: 'whether a key in a KEY=value file holds false',
     arguments: KeyIsTrue.arguments,
+  ),
+  // The third shape, for a fact that is neither a truth nor a relation but a CHOICE among named
+  // things — which authority a cluster issues from, named rather than asserted. Two names again,
+  // for the same reason as the pairs around it.
+  PredicateName('key_has_value'): RegisteredPredicate.taking(
+    name: PredicateName('key_has_value'),
+    source: 'lib/src/conditions/key_has_value.dart:50',
+    create: KeyHasValue.matching,
+    describes: 'whether a key in a KEY=value file carries one stated value',
+    arguments: KeyHasValue.arguments,
+  ),
+  PredicateName('key_lacks_value'): RegisteredPredicate.taking(
+    name: PredicateName('key_lacks_value'),
+    source: 'lib/src/conditions/key_has_value.dart:50',
+    create: KeyHasValue.differing,
+    describes: 'whether a key in a KEY=value file carries anything but one stated value',
+    arguments: KeyHasValue.arguments,
   ),
   // Two names for one comparison, because a `not:` behind `when:` would be an operator and an
   // operator is where a program file starts being a language.
