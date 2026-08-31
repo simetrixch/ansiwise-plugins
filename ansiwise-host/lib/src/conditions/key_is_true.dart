@@ -30,20 +30,52 @@ import '../steps/host/key_value_file.dart';
 /// "it does not hold" would put words in its mouth — a step skipped for a reason nobody wrote down.
 /// The refusal is [ConditionUnanswerable], and it names the path, the key and what stood there.
 ///
+/// **TWO REGISTERED NAMES OVER ONE READING, and a program row still writes one bare word.** An
+/// installation gates as often on a switch being OFF as on its being on: the rows that ask an
+/// authority for a certificate run where `ENABLE_CERTIFICATES` is true, and the rows that give the
+/// cluster an authority of its own run where it is false. Written as `not: [certificates_enabled]`
+/// that would be an operator behind `when:`, and an operator is where a program file starts being a
+/// language. So there are two shapes, [KeyIsTrue.holdingTrue] and [KeyIsTrue.holdingFalse], bound
+/// under two names — exactly as the comparison in `keys_compare.dart` is bound under
+/// `key_values_agree` and `key_values_differ`.
+///
+/// **THE THREE REFUSALS ARE THE SAME IN BOTH SHAPES, and that is the point of reading rather than
+/// negating.** A missing file, a missing line and an unreadable value are refused by both, so the
+/// false shape never turns a file that said nothing into a decision to act. A negation would have
+/// answered "true does not hold" for all three and quietly run the rows meant for a switch nobody
+/// set.
+///
 /// **A refusal here costs nothing, because it lands before the first step.** Every condition of a
 /// program is measured once, before any step runs, so a run refused by this one has touched nothing
 /// and there is no half-built machine to put back. It also means the file has to exist BEFORE the
 /// program starts: a program that writes the file and then gates a later step on it cannot work,
 /// because the answer was taken before that step existed.
 final class KeyIsTrue implements Predicate {
-  /// Asks whether [key] holds true in the file at [path].
-  const KeyIsTrue({required this.path, required this.key, this.runAnswer});
+  /// Asks whether [key] holds the word this shape reads for, in the file at [path].
+  ///
+  /// [holdsWhenTrue] is which of the two registered shapes this is. It is not configuration and it
+  /// never appears in a file: it is decided by which of the two names the installation bound. It
+  /// defaults to the shape that reads `true`, because that is the one an installation reaches for
+  /// first and the one every existing row names.
+  const KeyIsTrue({
+    required this.path,
+    required this.key,
+    this.runAnswer,
+    this.holdsWhenTrue = true,
+  });
 
-  /// Builds the condition from what one installation told it.
-  factory KeyIsTrue.fromValues(Arguments values) => KeyIsTrue(
+  /// The shape that holds where the key says `true`.
+  factory KeyIsTrue.holdingTrue(Arguments values) => KeyIsTrue._from(values, holdsWhenTrue: true);
+
+  /// The shape that holds where the key says `false`.
+  factory KeyIsTrue.holdingFalse(Arguments values) => KeyIsTrue._from(values, holdsWhenTrue: false);
+
+  /// Builds either shape from what one installation told it.
+  factory KeyIsTrue._from(Arguments values, {required bool holdsWhenTrue}) => KeyIsTrue(
     path: values.text('file'),
     key: values.text('key'),
     runAnswer: values.has('run_answer') ? values.text('run_answer') : null,
+    holdsWhenTrue: holdsWhenTrue,
   );
 
   /// What this condition has to be told before a program row may name it.
@@ -75,6 +107,10 @@ final class KeyIsTrue implements Predicate {
 
   /// The key in it that decides.
   final String key;
+
+  /// Which word this shape holds on: `true` for the shape bound as `key_is_true`, `false` for the
+  /// one bound as `key_is_false`.
+  final bool holdsWhenTrue;
 
   /// WHICH answer fills the slot in the path, or null where the path carries none.
   ///
@@ -123,11 +159,13 @@ final class KeyIsTrue implements Predicate {
         'a commented-out assignment is not one: write $key=$yes or $key=$no',
       );
     }
-    if (value == yes) {
-      return PredicateResult.holds('$path says $key is $yes');
-    }
-    if (value == no) {
-      return PredicateResult.doesNotHold('$path says $key is $no');
+    if (value == yes || value == no) {
+      // The reading is one reading; which shape this is decides only which of the two words makes
+      // it hold. The sentence says what the file said, so a record is read the same either way.
+      final bool said = value == yes;
+      return said == holdsWhenTrue
+          ? PredicateResult.holds('$path says $key is $value')
+          : PredicateResult.doesNotHold('$path says $key is $value');
     }
     if (value.isEmpty) {
       throw ConditionUnanswerable(

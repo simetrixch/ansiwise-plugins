@@ -5,7 +5,8 @@ import 'package:test/test.dart';
 
 import 'host_fixture.dart';
 
-/// The one condition this package carries, over a file planted for each answer it can give.
+/// The two shapes of the one reading this package carries, over a file planted for each answer it
+/// can give.
 ///
 /// FIVE PLANTED CASES AND THE INNOCENT ONE FIRST. The four refusable shapes — a key that is absent,
 /// a file that is not there, a value that is neither word, a key assigned nothing — each prove this
@@ -14,6 +15,7 @@ import 'host_fixture.dart';
 /// pass all four, and a check nothing can satisfy measures nothing.
 void main() {
   _slots();
+  _theOtherShape();
 
   const String settings = '/etc/subject/settings';
   const String subjectKey = 'SUBJECT_ON';
@@ -213,6 +215,61 @@ void _slots() {
         plain.pathIn(const Arguments(<String, Object>{'stage': 'prod'})),
         '/etc/subject/settings',
         reason: 'a row naming no answer must not have its path rewritten behind it',
+      );
+    });
+  });
+}
+
+/// The shape bound as `key_is_false`, planted the same way as the one above.
+///
+/// THREE CASES, AND THE ONE IN THE MIDDLE IS WHAT A NEGATION WOULD HAVE GOT WRONG. A `not:` behind
+/// `when:` holds wherever the true shape does not, which includes every file this condition refuses
+/// to read — so a switch nobody set would have run the rows meant for a switch set to false. The
+/// third case plants exactly that file and requires a refusal, not an answer.
+void _theOtherShape() {
+  const String settings = '/etc/subject/settings';
+  const String subjectKey = 'SUBJECT_ON';
+
+  Future<PredicateResult> askFalse(String text) => const KeyIsTrue(
+    path: settings,
+    key: subjectKey,
+    holdsWhenTrue: false,
+  ).evaluate(
+    HostMachine(
+      files: FakeFiles(<String, String>{settings: text}),
+    ).contextFor(const StepName('key_is_false')),
+  );
+
+  group('the shape that reads for false', () {
+    test('THE INNOCENT CASE: the key holds false, and the condition holds', () async {
+      final PredicateResult result = await askFalse('$subjectKey="false"\n');
+
+      expect(result.held, isTrue);
+      expect(
+        result.because,
+        allOf(contains(settings), contains(subjectKey), contains('false')),
+        reason: 'the plan an operator reads has to say which word switched these rows on',
+      );
+    });
+
+    test('the key holds true, and the condition does not hold', () async {
+      final PredicateResult result = await askFalse('$subjectKey="true"\n');
+
+      expect(result.held, isFalse);
+      expect(
+        result.because,
+        contains('true'),
+        reason: 'a row skipped here was skipped because the file said true, and the record says so',
+      );
+    });
+
+    test('WHAT A NEGATION WOULD HAVE ANSWERED: an unreadable value is refused, not held', () async {
+      await expectLater(
+        askFalse('$subjectKey="ture"\n'),
+        throwsA(isA<ConditionUnanswerable>()),
+        reason:
+            'the false shape refuses everywhere the true shape refuses; a negation would have held '
+            'here and run the rows for a switch the operator never set',
       );
     });
   });

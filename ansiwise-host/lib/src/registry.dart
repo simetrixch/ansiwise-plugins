@@ -506,11 +506,21 @@ const Map<StepName, RegisteredStep> hostSteps = <StepName, RegisteredStep>{
 /// properties of one installation, and they are said on that installation's own configuration under
 /// `conditions:`, where the framework binds them onto this entry under the name it chose.
 const Map<PredicateName, RegisteredPredicate> hostConditions = <PredicateName, RegisteredPredicate>{
+  // Two names for one reading, for the reason the pair below carries: a `not:` behind `when:` would
+  // be an operator, and a program row writes one bare word. An installation gates on a switch being
+  // off as often as on its being on.
   PredicateName('key_is_true'): RegisteredPredicate.taking(
     name: PredicateName('key_is_true'),
-    source: 'lib/src/conditions/key_is_true.dart:38',
-    create: KeyIsTrue.fromValues,
+    source: 'lib/src/conditions/key_is_true.dart:53',
+    create: KeyIsTrue.holdingTrue,
     describes: 'whether a key in a KEY=value file holds true',
+    arguments: KeyIsTrue.arguments,
+  ),
+  PredicateName('key_is_false'): RegisteredPredicate.taking(
+    name: PredicateName('key_is_false'),
+    source: 'lib/src/conditions/key_is_true.dart:53',
+    create: KeyIsTrue.holdingFalse,
+    describes: 'whether a key in a KEY=value file holds false',
     arguments: KeyIsTrue.arguments,
   ),
   // Two names for one comparison, because a `not:` behind `when:` would be an operator and an
