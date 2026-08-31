@@ -230,15 +230,12 @@ void _theOtherShape() {
   const String settings = '/etc/subject/settings';
   const String subjectKey = 'SUBJECT_ON';
 
-  Future<PredicateResult> askFalse(String text) => const KeyIsTrue(
-    path: settings,
-    key: subjectKey,
-    holdsWhenTrue: false,
-  ).evaluate(
-    HostMachine(
-      files: FakeFiles(<String, String>{settings: text}),
-    ).contextFor(const StepName('key_is_false')),
-  );
+  Future<PredicateResult> askFalse(String text) =>
+      const KeyIsTrue(path: settings, key: subjectKey, holdsWhenTrue: false).evaluate(
+        HostMachine(
+          files: FakeFiles(<String, String>{settings: text}),
+        ).contextFor(const StepName('key_is_false')),
+      );
 
   group('the shape that reads for false', () {
     test('THE INNOCENT CASE: the key holds false, and the condition holds', () async {
