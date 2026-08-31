@@ -33,7 +33,8 @@ final class TailnetJoinCredential extends IrreversibleStep {
     required this.needsRoot,
     required this.userAnswer,
     required this.ttl,
-    required this.keyFile,
+    this.keyFile = '',
+    this.keyFileAnswer,
     required this.runAnswer,
   });
 
@@ -52,7 +53,8 @@ final class TailnetJoinCredential extends IrreversibleStep {
       needsRoot: arguments.has('headscale_needs_root') && arguments.flag('headscale_needs_root'),
       userAnswer: arguments.text('user_answer'),
       ttl: arguments.text('ttl'),
-      keyFile: arguments.text('key_file'),
+      keyFile: arguments.optionalText('key_file') ?? '',
+      keyFileAnswer: arguments.optionalText('key_file_answer'),
       runAnswer: arguments.optionalText('run_answer'),
     );
   }
@@ -97,11 +99,22 @@ final class TailnetJoinCredential extends IrreversibleStep {
     ArgumentSpec(
       name: 'key_file',
       kind: ArgumentKind.text,
+      required: false,
       describes:
           'where the credential is put for the caller, readable by this account alone — the '
           'caller reads it and removes it, and the file is the ONLY way the value leaves this '
           'step. It may carry the slots the two named answers fill, so two machines\' credentials '
-          'never share a file',
+          'never share a file. A row writes this or names "key_file_answer", never both',
+    ),
+    ArgumentSpec(
+      name: 'key_file_answer',
+      kind: ArgumentKind.answerName,
+      required: false,
+      describes:
+          'the name of the answer holding the path instead, for a run that has to READ the file '
+          'afterwards: an answer can be derived from, and a path this step composes for itself '
+          'reaches no later row. The answer holds the path whole, so no slot is filled in it — a '
+          'row writes "key_file" or names this, never both',
     ),
     ArgumentSpec(
       name: 'run_answer',
@@ -130,6 +143,9 @@ final class TailnetJoinCredential extends IrreversibleStep {
   /// Where the credential is put for the caller, before any slot is filled.
   final String keyFile;
 
+  /// The name of the answer holding that path instead, or null while the row writes it.
+  final String? keyFileAnswer;
+
   /// The name of the answer whose value fills the slot of the same name, or null.
   final String? runAnswer;
 
@@ -149,6 +165,9 @@ final class TailnetJoinCredential extends IrreversibleStep {
 
   @override
   Future<CheckResult> check(StepContext context) async {
+    if (_unreadable(context) case final String refusal) {
+      return CheckResult.blocked(refusal);
+    }
     final _Coordinator? coordinator = await _users(context);
     if (coordinator == null) {
       return CheckResult.blocked(
@@ -169,7 +188,7 @@ final class TailnetJoinCredential extends IrreversibleStep {
         'key is dead": that would mint on every hiccup and leave live credentials behind',
       );
     }
-    final String file = _filled(context, <String>[keyFile]).single;
+    final String file = _keyPathOf(context);
     if (usable.isNotEmpty && await context.files.exists(file)) {
       final String held = (await context.files.read(file)).trim();
       // BY PREFIX, because the listing does not carry credentials. What it prints under `key` is
@@ -201,6 +220,9 @@ final class TailnetJoinCredential extends IrreversibleStep {
 
   @override
   Future<void> apply(StepContext context) async {
+    if (_unreadable(context) case final String refusal) {
+      throw StateError(refusal);
+    }
     final List<String> admin = _filled(context, invocation);
     final String name = _name(context);
 
@@ -232,7 +254,7 @@ final class TailnetJoinCredential extends IrreversibleStep {
     // Taken out of the listing instead, what reached the machine was 28 bytes of a key's opening
     // and tailscale refused it: "failed to parse auth-key: key too short, expected at least 77
     // chars after prefix, got 16" (apps4, 2026-08-29).
-    final String keyPath = _filled(context, <String>[keyFile]).single;
+    final String keyPath = _keyPathOf(context);
     final String standing = await context.files.exists(keyPath)
         ? (await context.files.read(keyPath)).trim()
         : '';
@@ -273,11 +295,41 @@ final class TailnetJoinCredential extends IrreversibleStep {
       }
     }
 
-    final String file = _filled(context, <String>[keyFile]).single;
+    final String file = _keyPathOf(context);
     await context.files.write(file, '$key\n', mode: _keyFileMode);
   }
 
   /// The machine's name at the coordinator, read out of the run under the name the row gave.
+  /// Where the credential is put, as this row states it or as the run answers it.
+  ///
+  /// A path this step composes for itself is reachable by nothing else: the slots are filled here
+  /// and the result never leaves. Named through an answer instead, the same path is a value a later
+  /// row can be derived from, which is what lets one run mint a credential and spend it.
+  String _keyPathOf(StepContext context) {
+    if (keyFileAnswer case final String named) {
+      return context.answers.has(named) ? context.answers.text(named).trim() : '';
+    }
+    return _filled(context, <String>[keyFile]).single;
+  }
+
+  /// Why this row cannot be read at all, or null where it can.
+  String? _unreadable(StepContext context) {
+    if (keyFile.isNotEmpty && keyFileAnswer != null) {
+      return 'this row states "key_file" AND names "key_file_answer", and one row puts the '
+          'credential in one file - write the path, or name the answer holding it, never both';
+    }
+    if (keyFile.isEmpty && keyFileAnswer == null) {
+      return 'no file to put the credential in was given - the row states "key_file", or names '
+          '"key_file_answer" where the path stands as an answer a later row reads the credential '
+          'out of';
+    }
+    if (keyFileAnswer != null && _keyPathOf(context).isEmpty) {
+      return 'this run holds no answer called "$keyFileAnswer", and that is where this row says '
+          'the path of the credential file comes from';
+    }
+    return null;
+  }
+
   String _name(StepContext context) => context.answers.text(userAnswer).trim();
 
   /// [words] with the slots of the two named answers filled: the one [runAnswer] names and the

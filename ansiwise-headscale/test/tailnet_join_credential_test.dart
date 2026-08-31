@@ -320,6 +320,115 @@ void main() {
     expect(shell.ran.where((String c) => c.contains('k-secret')), isEmpty);
     expect(files.contents['/run/join-key'], 'k-secret\n');
   });
+
+  /// The same row with the path named through an ANSWER instead of written into the row — the shape
+  /// a run states when a LATER row has to read that same file, because a path this step composes
+  /// for itself reaches nothing else.
+  const TailnetJoinCredential named = TailnetJoinCredential(
+    invocation: <String>['exec-into', '<stage>', 'headscale'],
+    needsRoot: false,
+    userAnswer: 'machine',
+    ttl: '24h',
+    keyFileAnswer: 'key_file',
+    runAnswer: 'stage',
+  );
+
+  /// A context whose run also answers where the credential goes.
+  StepContext contextAnswering(FakeShell shell, FakeFiles files, Map<String, Object> answers) =>
+      StepContext(
+        shell: shell,
+        files: files,
+        http: FakeHttp(),
+        clock: FakeClock(),
+        entropy: FakeEntropy(),
+        log: const _SilentLog(),
+        step: const StepName('tailnet_join_credential'),
+        arguments: Arguments.none,
+        answers: Arguments(answers),
+        facts: Facts.none,
+      );
+
+  /// A coordinator holding the user and no redeemable key, which mints on demand.
+  FakeShell minting() {
+    final FakeShell shell = FakeShell()
+      ..answers(
+        '$admin users list -o json',
+        '[{"id":7,"name":"m1","created_at":{"seconds":1788008991,"nanos":1}}]',
+      )
+      ..answers('$admin preauthkeys list -o json', 'null')
+      ..answers(
+        '$admin preauthkeys create --user 7 --expiration 24h -o json',
+        '{"id":1,"key":"k-answered","created_at":{"seconds":1788009710,"nanos":1},"expiration":{"seconds":4102444800,"nanos":0},"user":{"id":7,"name":"m1"}}',
+      );
+    return shell;
+  }
+
+  test('the path the run ANSWERS is where the credential is staged', () async {
+    // The innocent case of this pair, and the whole point of the argument: the path stands as an
+    // answer, so a later row of the same run can be derived from it and read the credential out.
+    final FakeFiles files = FakeFiles();
+    final StepContext context = contextAnswering(minting(), files, <String, Object>{
+      'machine': 'm1',
+      'stage': 't1',
+      'key_file': '/run/answered-key',
+    });
+
+    expect(await named.check(context), isA<Ready>());
+    await named.apply(context);
+
+    expect(files.contents['/run/answered-key'], 'k-answered\n');
+    expect(files.contents.containsKey('/run/join-key'), isFalse);
+  });
+
+  test('PLANTED DEFECT: a row that states the path AND names an answer is refused', () async {
+    // Two sources for one file is two decisions, and neither of them is this step's to take.
+    const TailnetJoinCredential both = TailnetJoinCredential(
+      invocation: <String>['exec-into', '<stage>', 'headscale'],
+      needsRoot: false,
+      userAnswer: 'machine',
+      ttl: '24h',
+      keyFile: '/run/join-key',
+      keyFileAnswer: 'key_file',
+      runAnswer: 'stage',
+    );
+    final CheckResult answer = await both.check(
+      contextAnswering(minting(), FakeFiles(), <String, Object>{
+        'machine': 'm1',
+        'stage': 't1',
+        'key_file': '/run/answered-key',
+      }),
+    );
+    expect(answer, isA<Blocked>());
+    expect((answer as Blocked).reason, contains('never both'));
+  });
+
+  test(
+    'PLANTED DEFECT: a row that states neither is refused before the coordinator is asked',
+    () async {
+      const TailnetJoinCredential neither = TailnetJoinCredential(
+        invocation: <String>['exec-into', '<stage>', 'headscale'],
+        needsRoot: false,
+        userAnswer: 'machine',
+        ttl: '24h',
+        runAnswer: 'stage',
+      );
+      final FakeShell shell = minting();
+      final CheckResult answer = await neither.check(
+        contextAnswering(shell, FakeFiles(), <String, Object>{'machine': 'm1', 'stage': 't1'}),
+      );
+      expect(answer, isA<Blocked>());
+      expect((answer as Blocked).reason, contains('no file to put the credential in'));
+      expect(shell.ran, isEmpty);
+    },
+  );
+
+  test('a run holding no such answer is refused, and the refusal names it', () async {
+    final CheckResult answer = await named.check(
+      contextAnswering(minting(), FakeFiles(), <String, Object>{'machine': 'm1', 'stage': 't1'}),
+    );
+    expect(answer, isA<Blocked>());
+    expect((answer as Blocked).reason, contains('key_file'));
+  });
 }
 
 final class _SilentLog implements Logger {
