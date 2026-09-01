@@ -254,7 +254,7 @@ final class RemoveCalicoRulesFromOtherBackend extends IrreversibleStep {
     final CommandResult dumped = await context.shell.run(
       Command.detailed(
         _save(backend),
-        arguments: <String>[..._lockWait, '-t', table],
+        arguments: <String>['-t', table],
         observes: true,
         elevated: true,
       ),
@@ -352,6 +352,16 @@ final class RemoveCalicoRulesFromOtherBackend extends IrreversibleStep {
   /// that fails: nobody can tell it from a machine that stopped answering. This many seconds is far
   /// longer than the agent holds the lock for one write and short enough that a real deadlock is
   /// still reported as one.
+  ///
+  /// **THE RULE PROGRAM ONLY. `iptables-save` HAS NO `-w`.** It is a different program with its own
+  /// options, and handed one it does not know it refuses the whole call. Measured on apps6 on
+  /// 2026-09-01, with this flag on both: every dump came back refused, [_readTable] therefore read
+  /// an EMPTY ruleset, the step concluded there was nothing to sweep and reported `ok` — while 125
+  /// agent lines stood untouched in the abandoned backend. The machine then had two rule sets
+  /// judging the same packets, which is the exact failure this step exists to prevent, and the
+  /// ingress could not reach the API and died in a loop.
+  ///
+  /// A green verdict from a check that cannot go red is what rules.md §0 forbids, and this was one.
   static const List<String> _lockWait = <String>['-w', '30'];
 
   /// The dump program of [backend].

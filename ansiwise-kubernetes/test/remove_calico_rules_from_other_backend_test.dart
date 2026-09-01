@@ -81,13 +81,18 @@ void main() {
     );
     expect(await _drive(step, machine.contextFor(under)), isA<Satisfied>());
 
-    expect(machine.waited, isNotEmpty, reason: 'the step made no packet-filter call at all');
+    expect(machine.ruled, isNotEmpty, reason: 'the step made no rule call at all');
     expect(
-      machine.waited.every((bool each) => each),
+      machine.ruled.every((bool each) => each),
       isTrue,
       reason:
-          '${machine.waited.where((bool e) => !e).length} of '
-          '${machine.waited.length} calls went at the lock without waiting',
+          '${machine.ruled.where((bool e) => !e).length} of '
+          '${machine.ruled.length} rule calls went at the lock without waiting',
+    );
+    expect(
+      machine.dumped.any((bool each) => each),
+      isFalse,
+      reason: 'a dump asked to wait, and iptables-save refuses the whole call when it is handed -w',
     );
   });
 
@@ -280,7 +285,20 @@ final class _Machine implements Shell {
       return CommandResult(exitCode: 0, stdout: pinnedTo, stderr: '', elapsed: Duration.zero);
     }
     if (command.executable == 'iptables-$backend-save') {
-      waited.add(_waits(command.arguments));
+      dumped.add(_waits(command.arguments));
+      // THE DUMP PROGRAM HAS NO `-w`, AND REFUSES THE WHOLE CALL WHEN HANDED ONE. It is a different
+      // program from the rule program beside it, with its own options. This fake accepted the flag
+      // until 2026-09-01, and that is why a step that had stopped sweeping anything at all still
+      // went green here: it read an empty ruleset from a refused dump, concluded there was nothing
+      // to remove, and said so. A fake that is kinder than the tool it stands for proves nothing.
+      if (_waits(command.arguments)) {
+        return const CommandResult(
+          exitCode: 2,
+          stdout: '',
+          stderr: "iptables-save: unrecognized option -w",
+          elapsed: Duration.zero,
+        );
+      }
       return CommandResult(
         exitCode: 0,
         stdout: ruleset.dump(command.arguments.last),
@@ -289,13 +307,13 @@ final class _Machine implements Shell {
       );
     }
     if (command.executable == 'iptables-$backend') {
-      waited.add(_waits(command.arguments));
+      ruled.add(_waits(command.arguments));
       return ruleset.apply(_withoutWait(command.arguments)) ??
           const CommandResult(exitCode: 0, stdout: '', stderr: '', elapsed: Duration.zero);
     }
     // The other backend's programs: a machine that never painted there answers with an empty dump.
     if (command.executable.startsWith('iptables-')) {
-      waited.add(_waits(command.arguments));
+      dumped.add(_waits(command.arguments));
       return CommandResult(
         exitCode: 0,
         stdout: '*${command.arguments.last}\nCOMMIT\n',
@@ -306,9 +324,13 @@ final class _Machine implements Shell {
     return const CommandResult(exitCode: 0, stdout: '', stderr: '', elapsed: Duration.zero);
   }
 
-  /// Whether every packet-filter call this step made asked to WAIT for the lock — one entry per
-  /// call, in the order they were made.
-  final List<bool> waited = <bool>[];
+  /// Whether each RULE call asked to wait for the lock, in the order they were made. The rule
+  /// program takes `-w`; every one of its calls should carry it.
+  final List<bool> ruled = <bool>[];
+
+  /// The same for each DUMP call — where the flag must never appear, because that program does not
+  /// know it and refuses the whole call when handed one.
+  final List<bool> dumped = <bool>[];
 
   /// Whether [argv] opens with the wait flag and a bound.
   static bool _waits(List<String> argv) =>
