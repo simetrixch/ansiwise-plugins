@@ -254,7 +254,7 @@ final class RemoveCalicoRulesFromOtherBackend extends IrreversibleStep {
     final CommandResult dumped = await context.shell.run(
       Command.detailed(
         _save(backend),
-        arguments: <String>['-t', table],
+        arguments: <String>[..._lockWait, '-t', table],
         observes: true,
         elevated: true,
       ),
@@ -336,6 +336,24 @@ final class RemoveCalicoRulesFromOtherBackend extends IrreversibleStep {
       _other ??
       (throw StateError('no measurement said which backend this machine filters packets with'));
 
+  /// WAIT FOR THE PACKET-FILTER LOCK INSTEAD OF LOSING TO IT.
+  ///
+  /// Both programs this step runs take `/run/xtables.lock` for the length of one call, and so does
+  /// the network agent — which is writing its own rules the whole time this runs. Without a wait the
+  /// loser is told `Resource temporarily unavailable` and gives up, and the step dies partway
+  /// through a table it has already begun to empty.
+  ///
+  /// **IT IS A RACE, WHICH IS WHY IT LOOKED FINE.** Measured on apps6 on 2026-09-01: this step had
+  /// run green twice that day on the same machine and then failed on the third — `iptables-legacy -t
+  /// nat -X cali-fip-dnat returned 4`, seventy chains into the sweep. The install stopped at three of
+  /// five programs. A retry would very likely have passed and taught nothing.
+  ///
+  /// BOUNDED, NOT ENDLESS. `-w` with no number waits forever, and a step that hangs is worse than one
+  /// that fails: nobody can tell it from a machine that stopped answering. This many seconds is far
+  /// longer than the agent holds the lock for one write and short enough that a real deadlock is
+  /// still reported as one.
+  static const List<String> _lockWait = <String>['-w', '30'];
+
   /// The dump program of [backend].
   static String _save(String backend) => 'iptables-$backend-save';
 
@@ -346,7 +364,11 @@ final class RemoveCalicoRulesFromOtherBackend extends IrreversibleStep {
   static bool _names(String value, String wanted) => value.toLowerCase() == wanted.toLowerCase();
 
   Future<void> _mustRun(StepContext context, String backend, List<String> argv) async {
-    final Command command = Command.detailed(_rules(backend), arguments: argv, elevated: true);
+    final Command command = Command.detailed(
+      _rules(backend),
+      arguments: <String>[..._lockWait, ...argv],
+      elevated: true,
+    );
     final CommandResult answer = await context.shell.run(command);
     if (!answer.ok) {
       throw CommandFailed(

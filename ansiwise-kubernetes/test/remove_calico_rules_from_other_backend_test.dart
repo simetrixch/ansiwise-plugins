@@ -60,6 +60,37 @@ void main() {
     );
   });
 
+  test('EVERY packet-filter call waits for the lock, dump and rule alike', () async {
+    // THE RACE THIS STEP LOST. Both programs take /run/xtables.lock for one call, and so does the
+    // network agent, which is writing its own rules the whole time this runs. Measured on apps6 on
+    // 2026-09-01: the step had run green twice that day and failed on the third, seventy chains into
+    // the sweep — `iptables-legacy -t nat -X cali-fip-dnat returned 4`, "Resource temporarily
+    // unavailable". The install stopped at three of five programs, and a retry would very likely
+    // have passed and taught nothing. So the check is not "does it clean up" — the cases above ask
+    // that — but "did it ever ask to wait", of every single call.
+    final _Backend legacy = _Backend()
+      ..builtIn('filter', 'FORWARD', <String>[
+        '-m comment --comment "cali:wUHhoiAYhphO9Mso" -j cali-FORWARD',
+      ])
+      ..chain('filter', 'cali-FORWARD', <String>['-j cali-from-wl-dispatch'])
+      ..chain('filter', 'cali-from-wl-dispatch', <String>['-j DROP']);
+    final _Machine machine = _machine(legacy, pinnedTo: 'NFT');
+
+    const RemoveCalicoRulesFromOtherBackend step = RemoveCalicoRulesFromOtherBackend(
+      backend: 'nft',
+    );
+    expect(await _drive(step, machine.contextFor(under)), isA<Satisfied>());
+
+    expect(machine.waited, isNotEmpty, reason: 'the step made no packet-filter call at all');
+    expect(
+      machine.waited.every((bool each) => each),
+      isTrue,
+      reason:
+          '${machine.waited.where((bool e) => !e).length} of '
+          '${machine.waited.length} calls went at the lock without waiting',
+    );
+  });
+
   test('the backend the agent DOES write to is untouched', () async {
     final _Backend nft = _Backend()
       ..builtIn('filter', 'FORWARD', <String>[
@@ -249,6 +280,7 @@ final class _Machine implements Shell {
       return CommandResult(exitCode: 0, stdout: pinnedTo, stderr: '', elapsed: Duration.zero);
     }
     if (command.executable == 'iptables-$backend-save') {
+      waited.add(_waits(command.arguments));
       return CommandResult(
         exitCode: 0,
         stdout: ruleset.dump(command.arguments.last),
@@ -257,11 +289,13 @@ final class _Machine implements Shell {
       );
     }
     if (command.executable == 'iptables-$backend') {
-      return ruleset.apply(command.arguments) ??
+      waited.add(_waits(command.arguments));
+      return ruleset.apply(_withoutWait(command.arguments)) ??
           const CommandResult(exitCode: 0, stdout: '', stderr: '', elapsed: Duration.zero);
     }
     // The other backend's programs: a machine that never painted there answers with an empty dump.
     if (command.executable.startsWith('iptables-')) {
+      waited.add(_waits(command.arguments));
       return CommandResult(
         exitCode: 0,
         stdout: '*${command.arguments.last}\nCOMMIT\n',
@@ -271,6 +305,17 @@ final class _Machine implements Shell {
     }
     return const CommandResult(exitCode: 0, stdout: '', stderr: '', elapsed: Duration.zero);
   }
+
+  /// Whether every packet-filter call this step made asked to WAIT for the lock — one entry per
+  /// call, in the order they were made.
+  final List<bool> waited = <bool>[];
+
+  /// Whether [argv] opens with the wait flag and a bound.
+  static bool _waits(List<String> argv) =>
+      argv.length >= 2 && argv[0] == '-w' && int.tryParse(argv[1]) != null;
+
+  /// [argv] with the wait flag taken off, which is what the real program parses past.
+  static List<String> _withoutWait(List<String> argv) => _waits(argv) ? argv.sublist(2) : argv;
 }
 
 /// A log that keeps what it was told.
