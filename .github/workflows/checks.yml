@@ -1,0 +1,86 @@
+# =============================================================================
+# checks — every package of this repository is linted and tested here. Nothing is
+# built, tagged or released.
+# =============================================================================
+#
+# WHAT THIS REPOSITORY IS. The steps that touch a real machine, and the passive
+# parts of ansiwise-cli they belong to. It produces no binary and has no release
+# of its own: the product names the COMMIT it was built from, and that commit is
+# what a build resolves. So there is nothing here to publish — only something to
+# judge.
+#
+# ONE PACKAGE AT A TIME, BECAUSE THAT IS HOW THEY STAND. A dozen packages share
+# this tree and each carries its own manifest and its own tests. A single run at
+# the root would resolve one dependency graph for all of them and report about a
+# thing that does not exist.
+#
+# WHY IT IS JUDGED HERE AS WELL. The release loads this tree and judges it before
+# it builds anything, so a red package stops a release before a binary exists.
+# That is the verdict that decides; this one answers earlier, on a push, so a
+# package is found red where it was written.
+#
+# THE SAME THING RUNS LOCALLY. build.sh and build.ps1 in the root of this
+# repository do what the job below does, in the same order.
+name: checks
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: checks-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  gate:
+    name: every package
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # THE PIN IS READ OUT OF THE TREE, not written out here. Every gate of this
+      # organisation names one Dart version in tool/gate/pins.dart, and that file
+      # is one text shared by all of them. This repository carries no gate of its
+      # own, so it reads the pin out of the part that does — the alternative is a
+      # second spelling of one version, which is what drifts.
+      - id: pin
+        name: read the pinned Dart version
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(curl -fsSL \
+            https://raw.githubusercontent.com/simetrixch/ansiwise-core/master/tool/gate/pins.dart \
+            | sed -n "s/^const String dartVersion = '\(.*\)';\$/\1/p")"
+          test -n "$version" || { echo "checks: FAIL — no Dart pin could be read"; exit 1; }
+          echo "dart=$version" >> "$GITHUB_OUTPUT"
+          echo "checks: the pinned Dart is $version"
+
+      - uses: dart-lang/setup-dart@7654d458321ee25acccccfdb86cd48bd95768ff1 # v1.8.0
+        with:
+          sdk: ${{ steps.pin.outputs.dart }}
+
+      - name: analyse, format and test every package
+        shell: bash
+        run: |
+          set -euo pipefail
+          failed=0
+          for manifest in */pubspec.yaml; do
+            package="${manifest%/pubspec.yaml}"
+            [ -d "$package/test" ] || continue
+            echo "::group::$package"
+            (
+              cd "$package"
+              dart pub get
+              dart analyze --fatal-infos
+              dart format --output=none --set-exit-if-changed .
+              dart test
+            ) || failed=1
+            echo "::endgroup::"
+          done
+          # EVERY PACKAGE IS RUN BEFORE ANYTHING IS REPORTED, so one red package
+          # does not hide the state of the eleven behind it. A run that stopped at
+          # the first would have to be started again to learn the rest.
+          test "$failed" -eq 0 || { echo "checks: FAIL — a package above is red"; exit 1; }

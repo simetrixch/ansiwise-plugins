@@ -5,56 +5,56 @@ application of it — which tenant, which cluster, which file path a product dec
 row's to say. Nothing here produces a binary: the composition root that compiles one is
 [ansiwise-cli](https://github.com/simetrixch/ansiwise-cli), and it depends on these.
 
+## This repository is not released
+
+It is a passive part of ansiwise-cli. It carries no version, cuts no tag, publishes nothing, and
+builds nothing. What names it is the COMMIT the product was built from, written into
+[ansiwise-cli](https://github.com/simetrixch/ansiwise-cli)'s manifest by its `release/release.sh`
+when a release is cut — and a commit is the stronger name anyway, because a tag can be moved onto
+another tree while a commit cannot.
+
+Until 2026-09-01 this repository had a release of its own. It built nothing: it turned a tag into a
+release page no resolver reads, because a git dependency resolves out of the TAG. What that release
+really cost was the order between it and the others — one behaviour fix took four rounds, and the
+refs drifted between them, until the twelve packages here stood on one commit of ansiwise-checks
+while the cli and the core stood on another and nothing said so.
+
 ## Adding a package
 
 Make a directory named `ansiwise-<tool>` with a `pubspec.yaml` in it. That is the whole of it:
 
-- the release finds it and bumps it with the others — `release/tool/release_packages.dart` walks
-  every `ansiwise-*/` directory rather than reading a list somebody maintains;
-- the gate runs its `dart test` — `.github/workflows/release.yml` walks every directory holding a
-  `pubspec.yaml`;
-- the tag a consumer pins already carries it, and the release page already lists it.
+- `.github/workflows/checks.yml` walks every directory holding a `pubspec.yaml` and a `test/`, so a
+  new package is analysed, formatted and tested without being added to a list;
+- `build.sh` and `build.ps1` walk the same directories, so the same run happens locally;
+- the product picks up the packages it wants by path, at the commit its manifest names.
 
 There is no register to add it to, in this repository or in the workflow.
 
-## What a release is
-
-**One tag for the whole repository**, under the grammar every release of everything is cut under:
-`<major>.<minor>.<patch>-<channel>-<ts14>`, channel one of `alpha`, `beta`, `stable`. These packages
-are libraries — they compile to no file and nobody downloads one — so the release attaches nothing
-and the tree at the tag IS the release.
-
-It is one tag rather than one per package because a git dependency names a REF and a PATH: one ref
-serves all twelve and each consumer picks the paths it wants. One tag per package would let a
-consumer hold two packages of this repository at two refs, which pub refuses to resolve —
-`release/tool/release_packages.dart` carries the answer pub gave when it was asked.
-
-## Cutting one
+## Judging it
 
 ```
-cd release
-dart run tool/release.dart                        what has been released, and what could come next
-dart run tool/release.dart <version> <channel>    push the tag, which starts the release
-dart run tool/release.dart help                   what a release is, and what it is not
+./build.sh          analyse, format and test every package — the whole repository
+./build.ps1         the same on Windows
 ```
 
-With no arguments it changes nothing. With a version and a channel it sets that version across every
-package here, stamps the tag into every dependency one package here declares on another, commits
-both, and pushes an annotated tag. The GitHub Release, its notes and the pre-release marking are the
-workflow's work.
+Every package is run before anything is reported, so one red package does not hide the state of the
+eleven behind it. `.github/workflows/checks.yml` does the same on a push, and the release of
+ansiwise-cli does it once more before it builds anything — a red package stops a release before a
+binary exists.
 
 ## Taking one
 
-A consumer names the tag as the ref of a git dependency, one entry per package it wants:
+A consumer names a commit as the ref of a git dependency, one entry per package it wants:
 
 ```yaml
 dependencies:
   ansiwise_helm:
     git:
       url: https://github.com/simetrixch/ansiwise-plugins.git
-      ref: <tag>
+      ref: <commit>
       path: ansiwise-helm
 ```
 
-Every package of this repository a consumer holds is pinned to the SAME ref. The release page of each
-tag spells out the block for every package standing at it.
+Every package of this repository a consumer holds is pinned to the SAME ref: a git dependency names
+a REF and a PATH, one ref serves all twelve, and holding two packages of one repository at two refs
+is something pub refuses to resolve.
