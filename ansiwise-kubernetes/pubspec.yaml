@@ -16,7 +16,7 @@ publish_to: none
 # compiles the executable a machine is given. Named because a clone of this repository alone cannot
 # build anything, and nothing else said where to look.
 repository: https://github.com/simetrixch/ansiwise-plugins
-version: 0.8.102
+version: 0.8.103
 
 environment:
   sdk: ^3.12.0
