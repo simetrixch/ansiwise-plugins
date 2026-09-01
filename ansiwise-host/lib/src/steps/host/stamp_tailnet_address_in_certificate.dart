@@ -102,10 +102,14 @@ final class StampTailnetAddressInCertificate extends ReversibleStep<String?> {
       kind: ArgumentKind.textList,
       required: false,
       describes:
-          'the command that answers once the machine is serving again after the re-sign, run '
-          'once and required to succeed — a re-sign restarts what serves, and reporting done '
-          'while it is still coming back turns the caller\'s next act into a failure about the '
-          'wrong thing. Leave it off where the re-sign itself waits',
+          'the command that answers once the machine is SERVING again after the re-sign, asked '
+          'over and over until it does. A re-sign restarts what serves, and reporting done while '
+          'it is still coming back turns the next caller\'s act into a failure about the wrong '
+          'thing. GIVE IT A COMMAND THAT ASKS THE THING THE NEXT CALLER WILL USE, never one that '
+          'reports a neighbouring readiness: measured on apps6 on 2026-09-01, a settling command '
+          'that waited for the NODE succeeded while the API server was still refusing, and the '
+          'next program died on "connection refused" twenty-five seconds later. Leave it off '
+          'where the re-sign itself waits',
     ),
     ArgumentSpec(
       name: 'wait_seconds',
@@ -222,7 +226,7 @@ final class StampTailnetAddressInCertificate extends ReversibleStep<String?> {
     if (after != before || !await _certificateNames(context, address)) {
       await _mustRun(context, resign);
       if (settledBy.isNotEmpty) {
-        await _mustRun(context, settledBy);
+        await _settle(context);
       }
     }
   }
@@ -357,6 +361,49 @@ final class StampTailnetAddressInCertificate extends ReversibleStep<String?> {
     }
     return RegExp('IP Address:${RegExp.escape(address)}(?![0-9])').hasMatch(read.stdout);
   }
+
+  /// Asks [settledBy] until it answers, or gives up after [waitSeconds] and says what never came
+  /// back.
+  ///
+  /// **ASKING ONCE WAS THE DEFECT.** A command asked once reports the state at that instant, and the
+  /// instant after a re-sign is the one in which what serves is still coming back. Measured on apps6
+  /// on 2026-09-01: this step re-signed, its settling command reported the node ready, and
+  /// twenty-five seconds later the next program was refused by an API server that had not finished
+  /// restarting. Waiting is what the argument's own words promise, and asking once could not keep
+  /// that promise.
+  ///
+  /// The budget is the same [waitSeconds] the re-sign is given, so a row states one number and both
+  /// halves of this step obey it.
+  Future<void> _settle(StepContext context) async {
+    final int attempts = (waitSeconds / _settlePause.inSeconds).ceil();
+    CommandResult? last;
+    for (int attempt = 0; attempt < attempts; attempt++) {
+      last = await context.shell.run(
+        Command.detailed(
+          settledBy.first,
+          arguments: settledBy.sublist(1),
+          elevated: elevated,
+          timeout: Duration(seconds: waitSeconds),
+        ),
+      );
+      if (last.exitCode == 0) {
+        return;
+      }
+      await context.clock.sleep(_settlePause);
+    }
+    throw CommandFailed(
+      argv: settledBy,
+      exitCode: last?.exitCode ?? 1,
+      stdout: last?.stdout ?? '',
+      stderr:
+          '${last?.stderr ?? ''}\n'
+          'asked for ${waitSeconds}s after the re-sign and it never answered: what this step '
+          'restarted is not serving again, and the next caller would fail about something else',
+    );
+  }
+
+  /// How long between two askings of the settling command.
+  static const Duration _settlePause = Duration(seconds: 3);
 
   Future<void> _mustRun(StepContext context, List<String> argv) async {
     final CommandResult answer = await context.shell.run(
