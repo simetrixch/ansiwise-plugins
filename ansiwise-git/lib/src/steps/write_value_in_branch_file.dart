@@ -139,11 +139,24 @@ final class WriteValueInBranchFile extends ReversibleStep<String?> {
     if (target.refusal case final String refusal) {
       throw StateError(refusal);
     }
-    await context.files.write(
-      '$repository/${target.file}',
-      _withValue(target.contents!, target.wanted!),
-      mode: fileMode,
-    );
+    // A PATH THAT IS NOT THERE IS SAID, NOT PASSED OVER. `_withValue` leaves the file untouched
+    // where a nested key cannot be reached, because the alternative — appending it at the head of
+    // the file — is what once made a values file carry the same key twice with two different
+    // values, silently, with every chart reading the wrong one. Writing it back unchanged would be
+    // the same silence in a quieter form: a green step over a file that says what it said before.
+    //
+    // The question asked is whether the LINE exists, never whether the contents changed: a file
+    // already carrying the wanted value changes by nothing either, and that one is finished rather
+    // than broken.
+    if (_path.length > 1 && _lineOf(target.contents!.split('\n')) < 0) {
+      throw StateError(
+        '${target.file} carries no "$key" to write into: the path names a block this file does not '
+        'open, and a key inside a block is never appended — at the head of the file it would mean '
+        'something else, and the file would answer one question twice',
+      );
+    }
+    final String written = _withValue(target.contents!, target.wanted!);
+    await context.files.write('$repository/${target.file}', written, mode: fileMode);
   }
 
   /// The file as it stood before this ran, or null where there was none to change.
@@ -222,24 +235,108 @@ final class WriteValueInBranchFile extends ReversibleStep<String?> {
     return const <String, String>{};
   }
 
-  /// What [contents] records under this key, or null where it records nothing.
-  String? _valueIn(String contents) {
-    for (final String line in contents.split('\n')) {
-      if (line.startsWith('$key:')) {
-        return line.substring(key.length + 1).trim();
+  /// The segments of [key]: one for a key at the head of a line, more for one inside a block.
+  ///
+  /// **A DOT IS A PATH AND NEVER PART OF A NAME.** No key this platform writes carries one, and a
+  /// step that had to be told which of the two a dot meant would be told it in a program file — one
+  /// more thing to state, and one more thing to state wrongly.
+  List<String> get _path => key.split('.');
+
+  /// Which line of [lines] carries this key, or -1 where none does.
+  ///
+  /// **WHY THIS WALKS RATHER THAN SEARCHES.** The first shape of this step matched the key at the
+  /// HEAD of a line only — and where a file carried it inside a block, the search failed and the
+  /// write appended a second key at the head of the file instead. Measured on apps5 on 2026-09-01: a
+  /// values file ended up carrying `clusterIssuer` twice, nested under `global:` with the old value
+  /// and at the top with the new one, and every chart went on reading the old. Nothing said so; the
+  /// run was green.
+  ///
+  /// So a path is walked block by block: each segment is looked for INSIDE the block its parent
+  /// opened, which is the region of deeper-indented lines following the parent's own line. A segment
+  /// found at the wrong depth is no match, and a path whose parent block is absent is no match
+  /// either — the write refuses rather than inventing a structure.
+  int _lineOf(List<String> lines) {
+    int from = 0;
+    int until = lines.length;
+    int depth = -1;
+    for (int segment = 0; segment < _path.length; segment++) {
+      final int found = _headOf(lines, _path[segment], from, until, depth);
+      if (found < 0) {
+        return -1;
       }
+      if (segment == _path.length - 1) {
+        return found;
+      }
+      depth = _indentOf(lines[found]);
+      from = found + 1;
+      until = _endOfBlock(lines, from, depth);
     }
-    return null;
+    return -1;
   }
 
-  /// [contents] with this key holding [value]: the existing line replaced, or the line appended.
+  /// The line in `[from, until)` opening [name] one level inside a parent indented [outer], or -1.
+  ///
+  /// [outer] is -1 for the head of the file, where a key stands at no indent at all.
+  int _headOf(List<String> lines, String name, int from, int until, int outer) {
+    for (int i = from; i < until; i++) {
+      final String bare = lines[i].trimLeft();
+      if (bare.isEmpty || bare.startsWith('#')) {
+        continue;
+      }
+      final int indent = _indentOf(lines[i]);
+      if (outer < 0 ? indent != 0 : indent <= outer) {
+        continue;
+      }
+      if (bare.startsWith('$name:')) {
+        return i;
+      }
+    }
+    return -1;
+  }
+
+  /// Where the block opened at [outer] ends: the first line at that depth or shallower, or the end.
+  int _endOfBlock(List<String> lines, int from, int outer) {
+    for (int i = from; i < lines.length; i++) {
+      final String bare = lines[i].trimLeft();
+      if (bare.isEmpty || bare.startsWith('#')) {
+        continue;
+      }
+      if (_indentOf(lines[i]) <= outer) {
+        return i;
+      }
+    }
+    return lines.length;
+  }
+
+  /// How far [line] is indented.
+  int _indentOf(String line) => line.length - line.trimLeft().length;
+
+  /// What [contents] records under this key, or null where it records nothing.
+  String? _valueIn(String contents) {
+    final List<String> lines = contents.split('\n');
+    final int at = _lineOf(lines);
+    if (at < 0) {
+      return null;
+    }
+    return lines[at].trimLeft().substring(_path.last.length + 1).trim();
+  }
+
+  /// [contents] with this key holding [value]: the line replaced where it stands, keeping the
+  /// indentation it already has — or, for a key at the head of the file that is not there, appended.
+  ///
+  /// **A KEY INSIDE A BLOCK IS NEVER APPENDED.** Appending would put it at the head of the file,
+  /// where it means something else, and the file would then say the same thing twice with two
+  /// values. Where such a path cannot be found this returns [contents] unchanged, and the step
+  /// reports it — a refusal an operator reads, instead of a second key nobody sees.
   String _withValue(String contents, String value) {
     final List<String> lines = contents.split('\n');
-    for (int i = 0; i < lines.length; i++) {
-      if (lines[i].startsWith('$key:')) {
-        lines[i] = '$key: $value';
-        return lines.join('\n');
-      }
+    final int at = _lineOf(lines);
+    if (at >= 0) {
+      lines[at] = '${' ' * _indentOf(lines[at])}${_path.last}: $value';
+      return lines.join('\n');
+    }
+    if (_path.length > 1) {
+      return contents;
     }
     final String body = contents.endsWith('\n') || contents.isEmpty ? contents : '$contents\n';
     return '$body$key: $value\n';
