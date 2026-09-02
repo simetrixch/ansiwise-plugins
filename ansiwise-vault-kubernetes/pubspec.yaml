@@ -33,16 +33,15 @@ dependencies:
   # Both tools, because the step is about both. The store package supplies how Vault is read and
   # where an installation's own facts about it stand; the cluster package supplies the composer that
   # spells the kubectl invocation, which is the one place an invocation of it is put together.
+  # THE TWO SIBLINGS THIS ONE COMPOSES, BY PATH AND NOT BY REF. All three stand in one checkout, so
+  # a path always names the tree they were fetched with. A ref here would have to name the commit
+  # this file is part of, which cannot be written before that commit exists — so it names an older
+  # one, and a consumer holding this package and either sibling is asked to resolve two different
+  # commits of one repository, which pub refuses.
   ansiwise_vault:
-    git:
-      url: https://github.com/simetrixch/ansiwise-plugins.git
-      ref: 0.8.104-stable-20260901205004
-      path: ansiwise-vault
+    path: ../ansiwise-vault
   ansiwise_kubernetes:
-    git:
-      url: https://github.com/simetrixch/ansiwise-plugins.git
-      ref: 0.8.104-stable-20260901205004
-      path: ansiwise-kubernetes
+    path: ../ansiwise-kubernetes
 
 dev_dependencies:
   test: ^1.31.2
