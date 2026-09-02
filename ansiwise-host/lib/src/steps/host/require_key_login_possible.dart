@@ -146,8 +146,8 @@ final class RequireKeyLoginPossible extends ObservingStep {
 
     // A READING THAT COULD NOT BE TAKEN IS NOT A VERDICT ABOUT THE MACHINE. These permissions are
     // what sshd decides a key login on, so a run that could not read them has measured nothing about
-    // the login — and this sentence used to stand inside "a key login would not work", which is a
-    // statement about the machine made out of a look nobody managed to take.
+    // the login — and putting that sentence inside "a key login would not work" is a statement
+    // about the machine made out of a look nobody managed to take.
     if (unread.isNotEmpty) {
       return CheckResult.blocked(
         'whether a key login would work could not be judged: ${unread.join('; ')}. sshd decides a '

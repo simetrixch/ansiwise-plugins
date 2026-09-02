@@ -406,8 +406,9 @@ void main() {
     });
 
     test('at most ONE shape comes off, so two of them cannot eat into the version', () {
-      // The defect this replaced: every shape was stripped in turn, so a tag beginning with one of
-      // them and holding another lost both and was compared as a number no tool answers with.
+      // The defect this closes: stripping every shape in turn makes a tag beginning with one of
+      // them and holding another lose both, and it is then compared as a number no tool answers
+      // with.
       expect(RequireCliToolVersions.bare('vjq-1.7', pinPrefixes), 'jq-1.7');
     });
 

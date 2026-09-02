@@ -104,7 +104,7 @@ const Map<StepName, RegisteredStep> kubernetesSteps = <StepName, RegisteredStep>
   ),
   StepName('remove_calico_rules_from_other_backend'): RegisteredStep(
     name: StepName('remove_calico_rules_from_other_backend'),
-    source: 'lib/src/steps/remove_calico_rules_from_other_backend.dart:42',
+    source: 'lib/src/steps/remove_calico_rules_from_other_backend.dart:41',
     create: RemoveCalicoRulesFromOtherBackend.fromArguments,
     arguments: RemoveCalicoRulesFromOtherBackend.arguments,
   ),

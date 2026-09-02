@@ -20,7 +20,7 @@ import 'kubectl.dart';
 /// **This waits for the class rather than reporting that there was none.** The addon produces it
 /// shortly after it is switched on, so a step that looked once and moved on would leave a first
 /// install with no default at all — correct only if somebody comes back and runs the program a
-/// second time, which nothing arranges. Waiting is the deliberate departure from what this replaces.
+/// second time, which nothing arranges.
 final class SetDefaultStorageClass extends ReversibleStep<DefaultStorageClassBefore> {
   /// Waits up to [timeoutSeconds] for a class and marks the first one as the default.
   const SetDefaultStorageClass({
@@ -228,10 +228,10 @@ final class SetDefaultStorageClass extends ReversibleStep<DefaultStorageClassBef
 /// Which storage class carried the default mark before a run marked one, as far as it could be read.
 ///
 /// **Three states, because the undo acts on exactly one of them.** A cluster that arrived WITH a
-/// default keeps it, whichever class it is; a cluster that arrived without one has the mark this run
-/// made taken off again. The third is neither, and it is the one that used to be missing: a cluster
-/// whose classes could not be read came back as the same empty map a cluster with no default does,
-/// so the undo took the mark off a class this run may never have marked, while cleaning up after
+/// default keeps it, whichever class it is; a cluster that arrived without one has the mark this
+/// run made taken off again. The third is neither, and it is the one easiest to lose: a cluster
+/// whose classes could not be read, taken as the same empty map a cluster with no default gives,
+/// has the undo take the mark off a class this run may never have marked, while cleaning up after
 /// some other step failed.
 final class DefaultStorageClassBefore {
   /// Records that no class of this cluster carried the mark, so this run made the one that does.

@@ -116,13 +116,13 @@ final class HelmRelease extends IrreversibleStep {
   @override
   Future<CheckResult> check(StepContext context) async {
     // EVERY DECISION TO ACT NAMES WHAT IT READ, at info, because the default record keeps nothing
-    // quieter. The run this was added for had an upgrade exit 0 and install nothing: the step then
-    // failed its own post-check, and the record held four exit codes and not one measurement —
-    // output is kept only for a command that failed or a row that said `keep_output`, and every
-    // command had answered 0. An operator reading that record could not see what the step saw, and
-    // the unwind then sent them to the repository row above, where nothing was wrong. These lines
-    // are the measurement: what the listing named, which chart was held against which, so a reader
-    // sees why the step decided the work was still to do.
+    // quieter. An upgrade that exits 0 and installs nothing makes the step fail its own post-check,
+    // and the record then holds exit codes and not one measurement — output is kept only for a
+    // command that failed or a row that said `keep_output`, and every command answered 0. An
+    // operator reading that record cannot see what the step saw, and the unwind sends them to the
+    // repository row above, where nothing is wrong. These lines are the measurement: what the
+    // listing named, which chart was held against which, so a reader sees why the step decided the
+    // work was still to do.
     final List<Map<String, Object?>>? releases = await _releases(context);
     final Map<String, Object?>? installed = _entryFor(releases);
     if (installed == null) {
@@ -210,13 +210,13 @@ final class HelmRelease extends IrreversibleStep {
 
   /// Puts what the upgrade ANSWERED into the record, at exit zero as much as at any other.
   ///
-  /// **An exit code is not a measurement, and this is the row where that cost the most.** A helm
-  /// upgrade that returned zero and installed nothing left a record of four exit codes: the output
-  /// of a command is kept only when it failed or when the program row said `keep_output`, and every
-  /// command here had answered zero. The step then failed its own post-check, the run unwound, and
-  /// the namespace the unwind took back carried the release's own record away with it — so by the
-  /// time anybody looked, the machine said the release had never been there. Nothing left could tell
-  /// an upgrade that did nothing from one whose work was removed after it.
+  /// **An exit code is not a measurement, and this is the row where that matters most.** A helm
+  /// upgrade that returns zero and installs nothing leaves a record of exit codes and nothing else:
+  /// the output of a command is kept only when it failed or when the program row said
+  /// `keep_output`, and every command here answered zero. The step then fails its own post-check,
+  /// the run unwinds, and the namespace the unwind takes back carries the release's own record away
+  /// with it — so by the time anybody looks, the machine says the release was never there. Nothing
+  /// left can tell an upgrade that did nothing from one whose work was removed after it.
   ///
   /// helm answers with its own report, and the line that decides is `STATUS`. Read from what THIS
   /// command wrote rather than from a later question to the machine: a later question is answered by
@@ -270,10 +270,10 @@ final class HelmRelease extends IrreversibleStep {
     if (lines.length <= kept) {
       return 'it wrote "${lines.join(' / ')}"';
     }
-    // THE TAIL, and the framework decided this before this step existed: a tool says why it stopped
-    // at the END of what it wrote (ansiwise-core recording_ports.dart:59). Keeping the head here
-    // would drop exactly the lines a reader came for, and would disagree with what the record does
-    // with the same command's output one row over.
+    // THE TAIL, the way the framework already decides it: a tool says why it stopped at the END of
+    // what it wrote (ansiwise-core recording_ports.dart:59). Keeping the head here would drop
+    // exactly the lines a reader came for, and would disagree with what the record does with the
+    // same command's output one row over.
     final int dropped = lines.length - kept;
     return 'it wrote "${lines.skip(dropped).join(' / ')}" after $dropped line(s) more';
   }
@@ -346,8 +346,8 @@ final class HelmRelease extends IrreversibleStep {
   /// OBSERVING, like the listing above it and for the same reason: asking a release what values it
   /// holds changes nothing. Undeclared, the planning ports refuse it — and because the refusal
   /// happens inside `check`, the whole step becomes unmeasurable in the two modes whose entire
-  /// purpose is measuring, while reporting something else entirely. It cost a machine run to find,
-  /// and what made it findable was `keep_output: true` on the row putting the refusal in the record.
+  /// purpose is measuring, while reporting something else entirely. What makes such a refusal
+  /// findable is `keep_output: true` on the row, which puts it in the record.
   Future<Object?> _currentValues(StepContext context) async {
     final CommandResult got = await context.shell.run(
       helm.observing(<String>['get', 'values', release, '--namespace', namespace, '-o', 'json']),

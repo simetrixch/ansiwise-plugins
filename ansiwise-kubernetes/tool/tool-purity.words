@@ -19,8 +19,8 @@
 # of every word on it and the check could never pass. That tool/ stays out of the scan is asserted
 # by a counter-probe of its own.
 
-# The product this package was cut out of, the platform it stands on, and the organisation behind
-# both. This block stands on every list in this tree, word for word.
+# The product built on this package, the platform it stands on, and the organisation behind both.
+# This block stands on every list in this tree, word for word.
 hostyour
 digita
 digitacloud

@@ -13,13 +13,13 @@ import 'kubectl.dart';
 /// whose volume names a missing Secret never starts, so "no certificate" is not a weaker
 /// installation, it is no installation. Such a cluster issues from an authority of its own — and
 /// then every step that reaches one of its addresses is refused by a root the machine does not
-/// have. Measured on apps5 on 2026-08-31 with the engine at 0.7.4: against a certificate signed by
+/// have. Measured on a real machine with the engine at 0.7.4: against a certificate signed by
 /// an authority present nowhere but that machine, a run ended `exit 1, 0 proven`; with the same
 /// authority in `/etc/ssl/certs/ca-certificates.crt` and nothing else changed, `exit 0, 1 proven`.
 /// The engine follows the machine, so putting the root there is the whole of what is needed, and no
 /// row anywhere has to be told to accept anything.
 ///
-/// **WHY NOT A FLAG ON THE ROWS INSTEAD.** The alternative was to let the rows that dial this
+/// **WHY NOT A FLAG ON THE ROWS INSTEAD.** The alternative is to let the rows that dial this
 /// installation accept whatever certificate they are shown while it has no public one. There are
 /// about fifty of them, the flag would have to come off every one of them again the day the
 /// installation gets its real certificates, and a flag left behind is a row that never checks

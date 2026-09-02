@@ -372,8 +372,7 @@ final class GitClone extends IrreversibleStep {
     // make it with elevation, own it as the answer says, and every git command afterwards is an
     // ordinary one.
     //
-    // `-R` because this also corrects a tree that is ALREADY there under the wrong owner, which is
-    // what a machine left by an earlier shape of this row looks like.
+    // `-R` because this also corrects a tree that is ALREADY there under the wrong owner.
     if (ownerAnswer case final String name) {
       if (context.answers.optionalText(name) case final String account) {
         await _mustRunAs(context, <String>[
@@ -440,21 +439,19 @@ final class GitClone extends IrreversibleStep {
 
   /// Hands the checkout to the account the row names, AFTER git has written into it.
   ///
-  /// **THE ORDER IS THE WHOLE OF IT, and it used to be the other way round.** The directory is made
-  /// and handed over before git is asked anything, because a checkout under a path only root may
-  /// write cannot be created by the account that has to use it — that part is right and stays. What
-  /// was wrong is that the hand-over ALSO ran there and nowhere else: git then wrote the repository
-  /// into a directory that had just been handed over, and every file it made — the whole of `.git`
-  /// among them — came out belonging to whoever ran it. Which is root: a program of this kind is
+  /// **THE ORDER IS THE WHOLE OF IT.** The directory is made and handed over before git is asked
+  /// anything, because a checkout under a path only root may write cannot be created by the account
+  /// that has to use it. Handing over ONLY there is not enough: git then writes the repository into
+  /// a directory that has just been handed over, and every file it makes — the whole of `.git`
+  /// among them — comes out belonging to whoever ran it. Which is root: a program of this kind is
   /// started elevated, so a row that asks for no elevation of its own is still a root process.
   ///
-  /// So the account was given an empty directory and root kept the repository inside it, on every
-  /// machine, from the first install. Nothing met it while only elevated programs drove that
-  /// checkout; the first caller that was not root was refused by git outright, four programs and one
-  /// run kind later.
+  /// So the account is left an empty directory and root keeps the repository inside it, on every
+  /// machine, from the first install. Nothing meets that while only elevated programs drive the
+  /// checkout; the first caller that is not root is refused by git outright.
   ///
-  /// `-R` and unconditional: it also corrects a tree left under the wrong owner by an earlier shape
-  /// of this row, and it costs one command over a tree this row has just written anyway.
+  /// `-R` and unconditional: it also corrects a tree already standing under the wrong owner, and it
+  /// costs one command over a tree this row has just written anyway.
   Future<void> _handOver(StepContext context) async {
     if (ownerAnswer case final String name) {
       if (context.answers.optionalText(name) case final String account) {
@@ -655,17 +652,17 @@ final class GitClone extends IrreversibleStep {
   /// and the two settings files are root's to read; this question is a different one, and the two
   /// commands that answer it in [apply] — `install -d` and `chown -R` — are already elevated
   /// whatever the row said. A checkout inside a directory only root may enter answers `stat` with
-  /// "Permission denied" to anybody else, and that empty answer used to read here as "no other
-  /// owner": the one reading that makes this step skip the hand-over it exists to perform. Nothing
-  /// new is asked of the machine by this — a row naming an owner already needs the elevation those
-  /// two commands run at.
+  /// "Permission denied" to anybody else, and to anything that does not check, that empty answer
+  /// reads as "no other owner": the reading that makes this step skip the hand-over it exists to
+  /// perform. Nothing new is asked of the machine by this — a row naming an owner already needs the
+  /// elevation those two commands run at.
   ///
   /// A path that is not there yet is "no other owner": there is nothing to hand over, and the clone
-  /// below makes it. That is now a MEASURED answer rather than an assumed one — root can stat
-  /// anything that is there, so `stat` answering nothing over a path the files port still finds is a
-  /// reading that could not be taken, and it is refused as one. An ABSENT `.git` beside a worktree
-  /// that IS there is that same "nothing to hand over": a directory that is not a repository yet is
-  /// what the clone below turns into one.
+  /// below makes it. That is a MEASURED answer rather than an assumed one — root can stat anything
+  /// that is there, so `stat` answering nothing over a path the files port still finds is a reading
+  /// that could not be taken, and it is refused as one. An ABSENT `.git` beside a worktree that IS
+  /// there is that same "nothing to hand over": a directory that is not a repository yet is what
+  /// the clone below turns into one.
   Future<({String? owner, String? refusal})> _ownedByAnother(StepContext context) async {
     if (ownerAnswer case final String name) {
       if (context.answers.optionalText(name) case final String account) {

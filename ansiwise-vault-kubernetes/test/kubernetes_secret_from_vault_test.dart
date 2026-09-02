@@ -423,8 +423,8 @@ void main() {
 
   /// What the check measures, which is the FIELDS and not the existence of an object.
   ///
-  /// The defect this replaces: the check ran `-o name` and reported satisfied on anything that came
-  /// back, saying the Secret carried what the entry held while never having looked. Measured on a
+  /// The defect this closes: a check running `-o name` reports satisfied on anything that comes
+  /// back, saying the Secret carries what the entry holds while never having looked. Measured on a
   /// live installation as an entry of six fields against a Secret of five, satisfied five runs in a
   /// row — so the innocent case below and the two red ones are the same measurement written as
   /// tests.
@@ -472,7 +472,7 @@ void main() {
     });
 
     test('a Secret holding a value the entry has since rotated is work to do', () async {
-      // Existence has not changed, so the defect this replaces could not see this one either.
+      // Existence has not changed, so a check reading only existence cannot see this one either.
       final FakeShell shell = FakeShell()
         ..answers(
           readingFields,

@@ -48,18 +48,17 @@ tool-purity: test/checks/tool_purity_test.dart
 
 # An argument a step accepts is an argument something reads. A row naming one the step declares and
 # never reads is ACCEPTED and then ignored — the row runs, does nothing about it, and reports
-# success. It happened twice in one day before this check existed.
+# success.
 declared-arguments: test/checks/declared_arguments_test.dart
 
 # What a row grants a step is carried all the way to the act: no step reads an argument it does not
-# declare, and a file carrying the elevation field passes it to every files-port call. Ten
-# undeclared reads and four dropped calls each cost a real machine run to find on one day.
+# declare, and a file carrying the elevation field passes it to every files-port call.
 carried-arguments: test/checks/carried_arguments_test.dart
 
 # A reading that could not be taken never becomes a satisfied answer. A refused command comes back
 # looking exactly like "there is nothing there", and the refusal is followed from the branch it
-# opens, through every bare value it is folded into, to the claim it reaches. One measurement folded
-# three refused readings into the null that means "this machine steers nothing", and eight steps
-# then answered Satisfied over a machine nobody had measured.
+# opens, through every bare value it is folded into, to the claim it reaches. A measurement that
+# folds a refused reading into the null that means "this machine steers nothing" makes every step
+# behind it answer Satisfied over a machine nobody measured.
 refused-reading: test/checks/refused_reading_test.dart
 captured-refusal: test/checks/captured_refusal_test.dart

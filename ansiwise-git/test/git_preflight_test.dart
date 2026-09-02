@@ -7,8 +7,8 @@ import 'git_checkout.dart';
 
 /// What has to be true about a checkout before anything is written into it.
 ///
-/// Both refusals exist because a run used to get all the way to the end and fail there: no committer
-/// identity discovered at the commit, no write access discovered at the push.
+/// Both refusals exist because without them a run gets all the way to the end and fails there: no
+/// committer identity discovered at the commit, no write access discovered at the push.
 void main() {
   group('a commit needs somebody to be made as', () {
     test('a name and a mailbox are enough', () async {
@@ -118,8 +118,8 @@ void main() {
     });
 
     test('the name of the remote is the row\'s, and nothing here assumes one', () async {
-      // The step used to have the name written into it in three places, so a checkout whose remote
-      // was called anything else was refused for a remote it did have.
+      // A name written into the step rather than taken from the row refuses a checkout whose remote
+      // is called anything else, for a remote it does have.
       const RequirePushableRemote named = RequirePushableRemote(
         repository: repository,
         remote: 'upstream',

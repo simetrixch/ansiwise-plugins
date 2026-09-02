@@ -173,8 +173,8 @@ final class RegistryMirror {
   /// A profile is named for the machine the run stands on, so the slot spelled like
   /// [thisMachineAnswer] is filled from that answer, and the one spelled like [runAnswer] from that.
   ///
-  /// Measured on a real deployment (2026-08-29): read without filling them, the path kept the slot
-  /// — `clusters/active/<fqdn>.yaml` — no such file existed, and both steps of this family reported
+  /// Measured on a real deployment: read without filling them, the path kept the slot —
+  /// `clusters/active/<fqdn>.yaml` — no such file existed, and both steps of this family reported
   /// themselves satisfied and wrote no mirror at all. Every machine of that installation went on
   /// pulling from the public registry, and nothing said so.
   String profileIn(StepContext context) =>

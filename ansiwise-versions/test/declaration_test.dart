@@ -4,10 +4,10 @@ import 'package:test/test.dart';
 /// The declaration grammar: everything it accepts is carried whole, and everything it does not is
 /// refused by name, all problems at once.
 ///
-/// The refusals are the point, not a nicety. The predecessor of this pair let a report parse a
-/// stamper's source, and a rename silently emptied the report; here the shared file is the only
-/// coupling, so a typo in it must be a loud stop — `stamp:` for `stamps:` accepted quietly would
-/// be a pin nothing ever writes, with no symptom anywhere.
+/// The refusals are the point, not a nicety. A report that parses a stamper's source to learn where
+/// a pin is written is emptied silently by a rename; here the shared file is the only coupling, so
+/// a typo in it must be a loud stop — `stamp:` for `stamps:` accepted quietly would be a pin
+/// nothing ever writes, with no symptom anywhere.
 void main() {
   const String whole = '''
 appliances:

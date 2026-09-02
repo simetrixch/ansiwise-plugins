@@ -256,9 +256,9 @@ void main() {
 
   test('THE PLANTED DEFECT: a dry run shows no file it could not read', () async {
     // The half that goes wrong with no elevation involved and nothing thrown to correct it. A plan
-    // is what an operator reads to decide, and `before` used to be the empty text for a file
-    // holding a colleague's key - the one sentence in the mode whose whole purpose is to say what
-    // is there.
+    // is what an operator reads to decide, and `before` coming back as the empty text for a file
+    // holding a colleague's key is exactly the one sentence in the mode whose whole purpose is to
+    // say what is there.
     final _Session session = machine();
     final _Lookups files = holdingTheKey(content: '$key\n$colleague\n');
 

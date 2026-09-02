@@ -100,10 +100,10 @@ final class RemoveExistingClusterIssuer extends IrreversibleStep {
   ///
   /// Shared with the step that applies it, so both ask the same question of the cluster.
   ///
-  /// A cluster that could not be asked used to come back as the same false a cluster without the
-  /// issuer does, and the check above answered "there is no $name to take away" over it - on a row
-  /// an operator reaches by asking for a rebuild, so what they were told is that the rebuild
-  /// happened. See [Kubectl.readOne].
+  /// A cluster that could not be asked must not come back as the same false a cluster without the
+  /// issuer does, or the check above answers "there is no $name to take away" over it - on a row an
+  /// operator reaches by asking for a rebuild, so what they are told is that the rebuild happened.
+  /// See [Kubectl.readOne].
   static Future<({bool? there, String? refusal})> exists(
     StepContext context,
     Kubectl kubectl,

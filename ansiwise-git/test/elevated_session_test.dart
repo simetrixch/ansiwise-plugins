@@ -93,9 +93,9 @@ void main() {
   });
 
   test('and the search the check makes reaches it the same way', () async {
-    // The innocent neighbour INSIDE the defect's own file: this call already carried the row's
-    // answer before the rewrite did, and it is unaffected either way. Without it a red result here
-    // could mean the session refuses everything.
+    // The innocent neighbour INSIDE the defect's own file: this call carries the row's answer
+    // independently of the defect beside it, so a red result here would mean the session refuses
+    // everything.
     final _Session session = machine();
 
     expect(

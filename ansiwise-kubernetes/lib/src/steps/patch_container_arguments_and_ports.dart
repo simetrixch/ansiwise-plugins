@@ -469,8 +469,8 @@ final class PatchContainerArgumentsAndPorts extends ReversibleStep<ContainerAddi
   /// The workload as the cluster holds it, null when the cluster holds no such workload, or why
   /// neither could be read.
   ///
-  /// A cluster that could not be asked used to come back as the same null a cluster without the
-  /// workload does, and the check answered "there is no $kind $name in $namespace, so what installs
+  /// A cluster that could not be asked must not come back as the same null a cluster without the
+  /// workload does, or the check answers "there is no $kind $name in $namespace, so what installs
   /// it is not up and there is nothing to patch" over it. See [Kubectl.readOne].
   Future<({_Workload? workload, String? refusal})> _read(StepContext context) async {
     final ({String? answer, String? refusal}) read = await kubectl.readOne(

@@ -189,7 +189,7 @@ void _slots() {
   group('a path carrying a slot', () {
     // INVENTED, like every other fixture here. A path naming one product's checkout would be that
     // product's fact living in a package that has to serve any of them — and the check that says so
-    // reports it, which is how this fixture came to be written twice.
+    // reports it.
     const KeyIsTrue bound = KeyIsTrue(
       path: '/etc/subject/settings.<stage>',
       key: 'SUBJECT_ON',

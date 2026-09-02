@@ -33,10 +33,10 @@ import 'reapply_calico_manifest.dart';
 /// measured it. Reading the machine again in this package would be a second answer to one question,
 /// and two answers can disagree with nothing to report it.
 ///
-/// **Only the agent's configuration is touched, and never the rules themselves.** An earlier version
-/// of this emptied the other backend's tables, and on a working machine that took the translation
-/// rules for published ports with it and broke the ingress path silently. The agent removes its own
-/// stale rules when it repaints; nothing here has to.
+/// **Only the agent's configuration is touched, and never the rules themselves.** Emptying the
+/// other backend's tables takes the translation rules for published ports with it and breaks the
+/// ingress path on a working machine, silently. The agent removes its own stale rules when it
+/// repaints; nothing here has to.
 ///
 /// **The agent's pods are replaced after the pin, and what that is worth is stated rather than
 /// assumed.** The agent reads this parameter when it starts and restarts itself when the value

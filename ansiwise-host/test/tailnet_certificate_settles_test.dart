@@ -5,7 +5,7 @@ import 'package:test/test.dart';
 
 /// Waiting for what the re-sign restarted, and the failure that made this necessary.
 ///
-/// THE PLANTED CASE IS THE ONE THAT HAPPENED. Measured on apps6 on 2026-09-01: this step re-signed
+/// THE PLANTED CASE IS THE ONE THAT HAPPENED. Measured on a real machine: this step re-signed
 /// the serving certificate, its settling command reported success, and twenty-five seconds later the
 /// next program was refused by an API server that had not finished restarting — `the connection to
 /// the server 127.0.0.1:16443 was refused`. A command asked ONCE can only report the instant it was

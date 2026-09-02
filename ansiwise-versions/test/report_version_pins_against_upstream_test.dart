@@ -80,8 +80,8 @@ dependencies:
   FakeHttp networkOn() {
     final FakeHttp http = FakeHttp();
     // The image's tag list, PAGINATED, with the newest tag on the second page and the first page
-    // topped by an older one — the exact shape that once made a one-page reader report a version
-    // two minors old.
+    // topped by an older one — the exact shape that makes a one-page reader report a version two
+    // minors old.
     http.answers(
       'GET https://hub.docker.com/v2/repositories/library/widget/tags'
       '?page_size=100&ordering=last_updated',
@@ -217,7 +217,7 @@ entries:
   });
 
   test('a pin whose shape is stable is never told about a release candidate', () async {
-    // Measured on a real project 2026-08-26: its release list interleaves series, and a release
+    // Measured on a real project: its release list interleaves series, and a release
     // candidate stands above every stable version published before it. So two readings that look
     // right are wrong here — the FIRST matching entry is a back-patch of an older series, and the
     // maximum over EVERY entry is the candidate. Only the maximum over what the pattern admits is
@@ -296,7 +296,7 @@ entries:
   });
 
   test('a page whose Link header opens with rel="prev" is not walked backwards', () async {
-    // The header below is the real shape, measured 2026-08-26 on page two of a release list:
+    // The header below is the real shape, measured on page two of a release list:
     // prev, then next, then last, then first. A reader taking the FIRST address in the header
     // goes back to page one, forward to page two, back again — and stops only when the host
     // refuses. Anonymously that budget is sixty requests an hour for the whole report, so one pin

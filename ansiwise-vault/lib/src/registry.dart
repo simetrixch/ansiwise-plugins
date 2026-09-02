@@ -63,7 +63,7 @@ const Map<StepName, RegisteredStep> vaultSteps = <StepName, RegisteredStep>{
   ),
   StepName('vault_auth_role'): RegisteredStep(
     name: StepName('vault_auth_role'),
-    source: 'lib/src/steps/vault_auth_role.dart:23',
+    source: 'lib/src/steps/vault_auth_role.dart:22',
     create: VaultAuthRole.fromArguments,
     arguments: VaultAuthRole.arguments,
     answers: VaultAuthRole.answers,

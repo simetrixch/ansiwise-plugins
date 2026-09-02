@@ -276,14 +276,12 @@ void main() {
       // first, because a checkout under a path only root may write cannot be created by the account
       // that has to use it. The hand-over comes LAST, because git writes the repository into that
       // directory in between — and a program of this kind is started elevated, so a row that asks
-      // for no elevation of its own is still a root process. Handing over first gave the account an
-      // empty directory and left root owning the `.git` inside it, on every machine, from the first
-      // install. Nothing met it while only elevated programs drove that checkout; the first caller
-      // that was not root was refused by git outright.
+      // for no elevation of its own is still a root process. Handing over first leaves the account
+      // an empty directory and root owning the `.git` inside it, on every machine, from the first
+      // install. Nothing meets that while only elevated programs drive the checkout; the first
+      // caller that is not root is refused by git outright.
       //
-      // This check used to pin the order the other way round, which is why it went red on the fix
-      // rather than on the defect — the order is asserted here so the next reader cannot quietly
-      // put it back.
+      // The order is asserted here so the next reader cannot quietly put it back.
       const GitClone owned = GitClone(
         repository: path,
         host: host,
@@ -315,8 +313,8 @@ void main() {
     });
 
     test('a checkout standing under the WRONG owner is work, not a satisfied machine', () async {
-      // What a machine left by an earlier shape of this row looks like: the tree is there, on the
-      // right branch, at the right tip — and git will not read a word of it.
+      // What a checkout standing under the wrong owner looks like: the tree is there, on the right
+      // branch, at the right tip — and git will not read a word of it.
       const GitClone owned = GitClone(
         repository: path,
         host: host,
@@ -327,9 +325,9 @@ void main() {
       );
       // EVERYTHING ELSE MATCHES, which is the whole point: the tree is there, its remote is right,
       // it is on the branch and at the tip. Only the owner is wrong, so a check that missed that
-      // would call this machine finished. The first shape of this test used the shared `standing`
-      // fixture, whose remote is the settings-based address — so it passed for the wrong reason and
-      // stayed green when the ownership reading was taken out.
+      // would call this machine finished. The shared `standing` fixture cannot serve here: its
+      // remote is the settings-based address, so this case would pass for the wrong reason and stay
+      // green with the ownership reading taken out.
       final FakeShell shell = FakeShell();
       shell
         ..answers('stat -c %U $path', 'root\n')

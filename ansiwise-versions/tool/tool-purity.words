@@ -20,8 +20,8 @@
 # the byte, so a list written into test/checks/tool_purity_test.dart would itself be an occurrence
 # of every word on it and the check could never pass.
 
-# The product this package serves first, the platform it stands on, and the organisation behind
-# both. This block stands on every list in this tree, word for word.
+# The product built on this package, the platform it stands on, and the organisation behind both.
+# This block stands on every list in this tree, word for word.
 hostyour
 digita
 digitacloud

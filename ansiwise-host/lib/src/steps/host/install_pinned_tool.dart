@@ -11,8 +11,8 @@ import 'require_cli_tool_versions.dart';
 ///
 /// **Nothing here resolves a latest release.** [url] carries the pin in a marked slot instead of a
 /// version of its own, so what is fetched and what the machine is held against are one value that
-/// cannot come apart. Two machines set up a month apart used to get different tools and neither
-/// could be built again.
+/// cannot come apart. Two machines set up a month apart would otherwise get different tools, and
+/// neither could be built again.
 ///
 /// **A release that arrives packed is unpacked into place; one that IS the binary is fetched
 /// straight to where it goes.** [archive] says which of the two this is, and it is also where the

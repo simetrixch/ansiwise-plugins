@@ -106,9 +106,9 @@ void main() {
 
   group('what it refuses to say anything about', () {
     test('a provider whose own flow broke, which is not the same as a closed one', () async {
-      // The two used to be one answer in every tool that reads a status code: a provider that could
-      // not run its flow would have been reported as an installation somebody holds, which is a
-      // true-sounding sentence about something nothing looked at.
+      // A tool that reads only a status code folds the two into one answer: a provider that could
+      // not run its flow is reported as an installation somebody holds, which is a true-sounding
+      // sentence about something nothing looked at.
       final ({StepContext context, _WhatItSaid said}) it = contextOn(
         providerStandingOn('ak-stage-flow-error'),
       );

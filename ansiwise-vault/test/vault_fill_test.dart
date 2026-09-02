@@ -100,7 +100,7 @@ void main() {
       secrets: secretsPath,
     );
 
-    test('an empty variable is no longer a refusal, it is something to make', () async {
+    test('an empty variable is not a refusal, it is something to make', () async {
       // Without this the run stops and tells an operator to invent an OIDC client secret by hand,
       // which is how a weak one gets into the one component everything authenticates against.
       final ScriptedHttp http = ScriptedHttp(
@@ -117,9 +117,9 @@ void main() {
 
     test('a read that FAILED is not an entry that holds nothing', () async {
       // THE PLANTED DEFECT, and it is the one that destroys something. A 403 while a policy is being
-      // written is not 404, so it used to fall to the same side as "there is nothing there" — and
-      // what followed was a fresh secret over a live one, with the run reporting success because
-      // from the step's own view it wrote what was missing.
+      // written is not 404, so folded to the same side as "there is nothing there" it is followed
+      // by a fresh secret over a live one, with the run reporting success because from the step's
+      // own view it wrote what was missing.
       for (final int status in <int>[403, 500]) {
         final ScriptedHttp http = ScriptedHttp(
           (HttpRequest request, int nth) => request.method == 'GET'
@@ -902,9 +902,9 @@ void main() {
 
     test('a read that FAILED does not drop what the role preserves', () async {
       // THE PLANTED DEFECT, and here it takes away an authorisation rather than a credential. A 403
-      // or a 500 is not 404, so it used to fall to the same side as "this role does not exist yet" —
-      // and the write that followed carried only what THIS run knew about, silently narrowing a role
-      // that other runs and other programs had widened. preserve_list exists exactly to stop that.
+      // or a 500 is not 404, so folded to the same side as "this role does not exist yet" it is
+      // followed by a write carrying only what THIS run knew about, silently narrowing a role that
+      // other runs and other programs had widened. preserve_list exists exactly to stop that.
       for (final int status in <int>[403, 500]) {
         final ScriptedHttp http = ScriptedHttp(
           (HttpRequest request, int nth) => request.method == 'GET'

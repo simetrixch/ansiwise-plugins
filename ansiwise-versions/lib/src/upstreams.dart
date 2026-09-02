@@ -6,20 +6,20 @@
 /// the reason — because a version appearing on the internet, or a feed being down, must never turn
 /// a tree red, or red stops meaning "the tree is sound".
 ///
-/// Four lessons are load-bearing here and named where they bite — three from the predecessor, and
-/// a fourth measured on this reader after it shipped:
+/// Four lessons are load-bearing here and named where they bite, each measured against a real
+/// upstream:
 ///
 /// - **An image is published by a REGISTRY**, and a project can tag a release with no image
 ///   behind it, so for an image the registry's tag list is asked and never the release feed.
 /// - **A tag list is paginated and unsorted.** One page is not an answer, and the maximum is not
-///   the last entry: every page is followed and the maximum is taken over all of them. The
-///   predecessor once reported an image's newest tag as one two minors old, because the newer
-///   tags fell outside the one page it read.
+///   the last entry: every page is followed and the maximum is taken over all of them. A reader
+///   that stops at one page reports an image's newest tag as one two minors old, because the
+///   newer tags fall outside the page it read.
 /// - **The pattern decides what is comparable.** A tag list carries every shape a project ever
 ///   published, so each candidate must match the declared pattern whole before it competes.
 /// - **A feed's own word "latest" is not the newest.** `releases/latest` on github.com answers
 ///   only the newest release a project did NOT mark a pre-release, and 404 where it marked every
-///   one of them. Measured 2026-08-26 against a project cutting every release on a pre-release
+///   one of them. Measured against a project cutting every release on a pre-release
 ///   channel: that endpoint answered 404 while the whole list served five entries. So the whole
 ///   list is asked, and the declared pattern is what says which entries a pin competes against.
 library;
@@ -451,7 +451,7 @@ String? _challengeField(String challenge, String field) {
 ///
 /// The address is taken from the link-value whose own `rel` is `next`, never from the first
 /// address in the header. A header carries several link-values and their order is the server's
-/// choice: measured 2026-08-26, page two of a release list on github.com opens with `rel="prev"`
+/// choice: measured against a real release list, page two on github.com opens with `rel="prev"`
 /// pointing back at page one. Taking the first address there walks page one, page two, page one
 /// again — until the host stops answering, which on an anonymous budget of sixty requests an hour
 /// is the whole report, not just the pin being read.

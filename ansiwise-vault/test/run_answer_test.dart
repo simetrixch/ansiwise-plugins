@@ -3,22 +3,24 @@ import 'package:ansiwise_core/testing.dart';
 import 'package:ansiwise_vault/ansiwise_vault.dart';
 import 'package:test/test.dart';
 
-/// The one axis a product may run the same Vault layout along more than once, and the demotion of
-/// its name out of this package.
+/// The one axis a product may run the same Vault layout along more than once, and why its name is
+/// not this package's to spell.
 ///
-/// **What this used to be.** Every registry entry declared the answer `stage`, every path and every
-/// policy rule was filled from a slot spelled `<stage>`, and the policy step read that answer
-/// unconditionally. Vault has no such thing: a product with three environments wants one tree per
-/// environment, one with three regions wants one per region, and one with neither wants a single
-/// tree — so a vendor whose product has no stage could not use the package at all, because the
-/// resolver refuses a program that does not declare an answer a step says it reads.
+/// **WHY NO NAME IS SPELLED HERE.** Declaring the answer `stage` in every registry entry, filling
+/// every path and every policy rule from a slot spelled `<stage>`, and having the policy step read
+/// that answer unconditionally names something Vault has no notion of: a product with three
+/// environments wants one tree per environment, one with three regions wants one per region, and
+/// one with neither wants a single tree — so a vendor whose product has no stage could not use the
+/// package at all, because the resolver refuses a program that does not declare an answer a step
+/// says it reads.
 ///
-/// **What it is now.** The row names the answer under `run_answer`, and the slot is derived from
-/// that name so the two cannot come apart. Leaving it off is a first-class case and not a mistake.
+/// **What the row says instead.** It names the answer under `run_answer`, and the slot is derived
+/// from that name so the two cannot come apart. Leaving it off is a first-class case and not a
+/// mistake.
 ///
 /// The tests below are the two directions of that: a product WITH such an axis gets its value in
 /// every path and rule, and a product WITHOUT one is not refused for lacking a name this package
-/// used to insist on.
+/// does not insist on.
 void main() {
   const String repository = '/srv/checkout';
   const String url = 'https://vault.example.com';
@@ -94,9 +96,9 @@ void main() {
 
   group('a product with no such axis', () {
     test('is refused by nothing this package declares', () {
-      // The refusal that used to make the package unusable: the resolver holds a program to every
-      // answer a registry entry says its step reads, so one name here made that name mandatory for
-      // every vendor. There is none now.
+      // The refusal that would make the package unusable: the resolver holds a program to every
+      // answer a registry entry says its step reads, so one name here makes that name mandatory for
+      // every vendor. There is none.
       final Set<String> read = <String>{
         for (final RegisteredStep entry in vaultRegistry.steps.values) ...entry.answers,
       };

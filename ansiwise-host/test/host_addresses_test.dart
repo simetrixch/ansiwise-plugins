@@ -117,9 +117,9 @@ void main() {
   });
 
   group('the output a real node actually writes', () {
-    // READ OFF A LIVE CLUSTER NODE on 2026-08-26 and kept field for field. Every other line in this
-    // file is a shape this file invented, and a parser is only ever wrong about the shapes nobody
-    // showed it. Two things here that no invented line carried:
+    // READ OFF A LIVE CLUSTER NODE and kept field for field. Every other line in this file is a
+    // shape this file invented, and a parser is only ever wrong about the shapes nobody showed it.
+    // Two things here that no invented line carried:
     //
     //   * the address is configured /26, so a step publishing the prefix it FOUND would name the
     //     whole segment the node shares with every other host on the wire;

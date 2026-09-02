@@ -3,21 +3,14 @@
 Twelve packages, one per TOOL. Each declares steps for the tool it is named after and knows no
 application of it — which tenant, which cluster, which file path a product decides is a program
 row's to say. Nothing here produces a binary: the composition root that compiles one is
-[ansiwise-cli](https://github.com/simetrixch/ansiwise-cli), and it depends on these.
+ansiwise-cli, and it depends on these.
 
 ## This repository is not released
 
 It is a passive part of ansiwise-cli. It carries no version, cuts no tag, publishes nothing, and
-builds nothing. What names it is the COMMIT the product was built from, written into
-[ansiwise-cli](https://github.com/simetrixch/ansiwise-cli)'s manifest by its `release/release.sh`
-when a release is cut — and a commit is the stronger name anyway, because a tag can be moved onto
-another tree while a commit cannot.
-
-Until 2026-09-01 this repository had a release of its own. It built nothing: it turned a tag into a
-release page no resolver reads, because a git dependency resolves out of the TAG. What that release
-really cost was the order between it and the others — one behaviour fix took four rounds, and the
-refs drifted between them, until the twelve packages here stood on one commit of ansiwise-checks
-while the cli and the core stood on another and nothing said so.
+builds nothing. What names it is the COMMIT the product was built from, written into ansiwise-cli's
+manifest by its `release/release.sh` when a release is cut — and a commit is the stronger name
+anyway, because a tag can be moved onto another tree while a commit cannot.
 
 ## Adding a package
 

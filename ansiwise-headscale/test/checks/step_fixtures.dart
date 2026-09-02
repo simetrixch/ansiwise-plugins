@@ -22,7 +22,7 @@ final Map<String, Fixture> stepFixtures = <String, Fixture>{
   // listing carries one — the state change the real coordinator makes, without which the second
   // run could never find the credential standing.
   'tailnet_join_credential': (FakeShell shell, FakeFiles files, FakeHttp http) {
-    // AS THE COORDINATOR REALLY ANSWERS, read off a live one on 2026-08-29 (headscale v0.29.2):
+    // AS THE COORDINATOR REALLY ANSWERS, read off a live one (headscale v0.29.2):
     // the key listing takes NO user and carries every user's keys, each entry naming its own owner,
     // and a moment is a `{seconds, nanos}` pair rather than a timestamp.
     shell.answers(

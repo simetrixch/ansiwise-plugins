@@ -156,7 +156,7 @@ final class RequireCliToolVersions extends ObservingStep {
   ///
   /// The third is not hypothetical: a binary built outside a release answers a word rather than a
   /// number, deliberately, so that nothing compares it to a pin. A developer's build on a machine
-  /// is exactly that, and it used to be reported as absent.
+  /// is exactly that.
   static Future<({String? version, String problem})> installedVersion(
     StepContext context,
     String tool,

@@ -7,7 +7,7 @@
 /// writes `to: 'o'brien@example.com'`, where the quoting the template opened ends four characters
 /// early and everything after it is read as something nobody wrote.
 ///
-/// **The failure lands nowhere near the value.** Measured 2026-08-27 against
+/// **The failure lands nowhere near the value.** Measured against
 /// `alertRecipients: ['<recipients>']`: with a plain address the file reads back as a mapping
 /// holding a one-entry list, and with the apostrophe in it the reader raises a parse error naming
 /// the line the flow sequence opened on. The whole file is one document, so what is lost is not the

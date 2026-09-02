@@ -13,10 +13,10 @@ import 'package:ansiwise_core/ansiwise_core.dart';
 /// first step — the one deciding whether an answer had to be given at all — cannot wait for a file
 /// that does not exist yet. That is the case this exists for, and the only one.
 ///
-/// **WHY NOT A COMPARISON WRITTEN INTO THE PROGRAM FILE.** That is what it replaces. A row used to
-/// say `stated_when: {answer: build_plane, equals_answer: fqdn}`, which is a condition living in a
-/// file beside the registered ones — and the moment a file can compare, it can compare anything.
-/// Registered, the comparison is a class with a probe, and the file writes one bare name.
+/// **WHY NOT A COMPARISON WRITTEN INTO THE PROGRAM FILE.** A row saying
+/// `stated_when: {answer: build_plane, equals_answer: fqdn}` puts a condition in a file beside the
+/// registered ones — and the moment a file can compare, it can compare anything. Registered, the
+/// comparison is a class with a probe, and the file writes one bare name.
 ///
 /// **WHY NOT ONE CONDITION AND A NEGATION.** A `not:` in a program file is an operator, and an
 /// operator is the beginning of the language a program file may not become. So there are two

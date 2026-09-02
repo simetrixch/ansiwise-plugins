@@ -126,8 +126,9 @@ RUN echo built
   });
 
   test('a declaration site the tree lost is a refusal naming it, and nothing is written', () async {
-    // The planted defect: the chart no longer declares the dependency the declaration stamps.
-    // The predecessor printed success here and the pin went nowhere.
+    // The planted defect: the chart no longer declares the dependency the declaration stamps. A
+    // stamper matching loosely prints success here while the pin goes nowhere, which is exactly
+    // what the refusal above prevents.
     final FakeFiles files = filesOn();
     files.contents['/srv/alpha/parts/bundle/Chart.yaml'] = chart.replaceFirst(
       '- name: widget',

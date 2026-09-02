@@ -127,10 +127,10 @@ void main() {
   });
 
   test('a provider that refuses the question does not become a provider that has nothing', () async {
-    // THE SHAPE THIS CATCHES, and it cost a real diagnosis. A run whose credential had not reached
-    // the provider yet reported that the provider carried no group of that name — a true-sounding
-    // sentence about something the step had never been allowed to look at. Whoever read it went
-    // looking for the group, which was there all along.
+    // THE SHAPE THIS CATCHES. A run whose credential has not reached the provider yet reports that
+    // the provider carries no group of that name — a true-sounding sentence about something the
+    // step was never allowed to look at, and whoever reads it goes looking for a group that is
+    // there all along.
     final _Provider provider = _Provider(members: <String>[], refusesWith: 403);
 
     final CheckResult answer = await step.check(contextOn(provider));

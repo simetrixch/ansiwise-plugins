@@ -106,7 +106,7 @@ final class StampTailnetAddressInCertificate extends ReversibleStep<String?> {
           'over and over until it does. A re-sign restarts what serves, and reporting done while '
           'it is still coming back turns the next caller\'s act into a failure about the wrong '
           'thing. GIVE IT A COMMAND THAT ASKS THE THING THE NEXT CALLER WILL USE, never one that '
-          'reports a neighbouring readiness: measured on apps6 on 2026-09-01, a settling command '
+          'reports a neighbouring readiness: measured on a real machine, a settling command '
           'that waited for the NODE succeeded while the API server was still refusing, and the '
           'next program died on "connection refused" twenty-five seconds later. Leave it off '
           'where the re-sign itself waits',
@@ -365,12 +365,12 @@ final class StampTailnetAddressInCertificate extends ReversibleStep<String?> {
   /// Asks [settledBy] until it answers, or gives up after [waitSeconds] and says what never came
   /// back.
   ///
-  /// **ASKING ONCE WAS THE DEFECT.** A command asked once reports the state at that instant, and the
-  /// instant after a re-sign is the one in which what serves is still coming back. Measured on apps6
-  /// on 2026-09-01: this step re-signed, its settling command reported the node ready, and
+  /// **ASKING ONCE IS THE DEFECT.** A command asked once reports the state at that instant, and the
+  /// instant after a re-sign is the one in which what serves is still coming back. Measured on a
+  /// real machine: this step re-signed, its settling command reported the node ready, and
   /// twenty-five seconds later the next program was refused by an API server that had not finished
-  /// restarting. Waiting is what the argument's own words promise, and asking once could not keep
-  /// that promise.
+  /// restarting. Waiting is what the argument's own words promise, and asking once cannot keep that
+  /// promise.
   ///
   /// The budget is the same [waitSeconds] the re-sign is given, so a row states one number and both
   /// halves of this step obey it.

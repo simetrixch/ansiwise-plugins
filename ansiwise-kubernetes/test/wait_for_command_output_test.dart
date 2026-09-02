@@ -228,7 +228,7 @@ final class _WedgedShell implements Shell {
     final Duration? timeout = command.timeout;
     if (timeout == null) {
       // The planted case this probe exists for: without a per-poll deadline the call would simply
-      // never complete, and the test would hang the way the run used to.
+      // never complete, and the test would hang the way the run does.
       return Completer<CommandResult>().future;
     }
     throw TimeoutException('${command.argv.join(' ')} did not finish and was killed', timeout);

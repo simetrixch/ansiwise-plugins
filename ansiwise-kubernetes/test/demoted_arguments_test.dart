@@ -3,13 +3,13 @@ import 'package:ansiwise_checks/ansiwise_checks.dart';
 import 'package:ansiwise_kubernetes/ansiwise_kubernetes.dart';
 import 'package:test/test.dart';
 
-/// The values that used to be decided here and are now stated by whoever runs the steps.
+/// The values this package does not decide, and that whoever runs the steps states instead.
 ///
-/// Each was a fact about how ONE installation put its cluster together: the file a rendered issuer
+/// Each is a fact about how ONE installation put its cluster together: the file a rendered issuer
 /// stands in, the namespace a certificate service was installed into, the names its release gave
 /// the deployments, and what the issuer itself is called and asks. None of them is mandated by
-/// cert-manager, so a value here agreed with the cluster in front of it only for as long as nobody
-/// named a release differently.
+/// cert-manager, so a value here agrees with the cluster in front of it only for as long as nobody
+/// names a release differently.
 ///
 /// **A demotion nothing measures is a demotion that comes back.** A default is one line, and adding
 /// it back breaks nothing anybody would notice: every row that already states the value goes on
@@ -26,13 +26,12 @@ void main() {
     ],
     // What the issuer is called, which authority it asks, which ingress answers the challenge, and
     // where the rendered file goes. cert-manager mandates none of the four: each is one product's
-    // choice, and a value here made this package make that choice for every caller.
+    // choice, and a value here makes this package make that choice for every caller.
     //
-    // The authority went one step further and is now the NAME of an answer rather than a value the
-    // row writes out, because it differs between two installations running the same program: one
-    // that exists to be proven registers with a staging service, one that serves registers with the
-    // production one. What this suite holds is unchanged — declared, required, no default — and the
-    // name it holds it under moved with the demotion.
+    // The authority goes one step further: it is the NAME of an answer rather than a value the row
+    // writes out, because it differs between two installations running the same program: one that
+    // exists to be proven registers with a staging service, one that serves registers with the
+    // production one. What this suite holds of it is the same — declared, required, no default.
     'write_cluster_issuer_manifest': <String>[
       'name',
       'acme_server_answer',

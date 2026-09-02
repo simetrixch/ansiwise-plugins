@@ -36,13 +36,13 @@ void main() {
         '$here\n',
       );
     }
-    // WHAT THE REAL COMMAND ANSWERS, and the arrangement here was wrong in a way that let a real
-    // defect through. An annotated tag is an object of its own, and a remote answers with BOTH its
-    // id and the commit it dereferences to — but only where the pattern matches the peeled ref too.
+    // WHAT THE REAL COMMAND ANSWERS, and the arrangement here is what lets a real defect through or
+    // catches it. An annotated tag is an object of its own, and a remote answers with BOTH its id
+    // and the commit it dereferences to — but only where the pattern matches the peeled ref too.
     // Asked for the exact name it answers with the object id alone, and a step reading that
-    // compares a tag object against a commit and reports a tag that has moved. This fixture used to
-    // supply both lines for the exact pattern, which no remote does, so the step passed here and
-    // failed on the first real tag it ever cut.
+    // compares a tag object against a commit and reports a tag that has moved. A fixture supplying
+    // both lines for the exact pattern, which no remote does, lets the step pass here and fail on
+    // the first real tag it cuts.
     shell.answers(
       'git -C $repository ls-remote --tags $remote refs/tags/$tag*',
       onRemote == null ? '' : 'ffffffffffff\trefs/tags/$tag\n$onRemote\trefs/tags/$tag^{}\n',

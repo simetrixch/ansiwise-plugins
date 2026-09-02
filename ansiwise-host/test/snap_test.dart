@@ -165,10 +165,10 @@ void main() {
 
   group('a snap that is installed and switched off', () {
     test('is switched back on rather than installed over', () async {
-      // `snap install` answers "already installed" for exactly this state, and the run used to die
-      // on it with nothing saying which state the machine was in. The snap on the machine carries
-      // its own data directory, so installing over it would be a much larger act than switching it
-      // back on.
+      // `snap install` answers "already installed" for exactly this state, and a run installing
+      // over it dies there with nothing saying which state the machine was in. The snap on the
+      // machine carries its own data directory, so installing over it would be a much larger act
+      // than switching it back on.
       final HostMachine machine = switchedOff(tracking: channel);
       final StepContext context = machine.contextFor(under);
 

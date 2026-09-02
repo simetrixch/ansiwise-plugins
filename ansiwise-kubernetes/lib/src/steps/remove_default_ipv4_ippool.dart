@@ -59,10 +59,10 @@ final class RemoveDefaultIpv4Ippool extends IrreversibleStep {
   /// manifest's value is consumed once at creation, so a machine can carry a correctly stamped
   /// manifest and still run on the old pool. Every convergence question in this phase is asked here.
   ///
-  /// A cluster that could not be asked used to come back as the same null a cluster with no pool
-  /// does, and the check below answered "there is no $poolName, so there is none to delete" over it
-  /// — a row that ships immediately after the cluster comes up, which is exactly when an API server
-  /// does not answer. The pod-network conversion then silently did not happen and the row stood
+  /// A cluster that could not be asked must not come back as the same null a cluster with no pool
+  /// does, or the check below answers "there is no $poolName, so there is none to delete" over it —
+  /// a row that ships immediately after the cluster comes up, which is exactly when an API server
+  /// does not answer. The pod-network conversion then silently does not happen and the row stands
   /// proven. See [Kubectl.readOne] for how the two are told apart.
   static Future<({String? cidr, String? refusal})> liveCidr(
     StepContext context,

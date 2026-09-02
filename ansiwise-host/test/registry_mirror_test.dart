@@ -22,9 +22,9 @@ void main() {
   const String mirrorHost = 'mirror.$mirrorMachine';
   // NAMED FOR THE MACHINE, with the slot every real program's path carries: the profile of one
   // installation is named for that installation, so a program file shipped to every installation
-  // spells the name as a slot. It stood here without one, and a path whose slot is never filled
-  // was therefore a path no test could notice going unread (measured on a real deployment,
-  // 2026-08-29: both steps reported themselves satisfied and wrote no mirror at all).
+  // spells the name as a slot. Without one here, a path whose slot is never filled is a path no
+  // test can notice going unread (measured on a real deployment: both steps reported themselves
+  // satisfied and wrote no mirror at all).
   const String profilePath = '$repository/clusters/active/$thisMachine.yaml';
   const String secretsPath = '$repository/secrets/secrets.$tier';
   const String certsDirectory = '/var/lib/containerd/certs.d';
@@ -269,9 +269,9 @@ void main() {
         reason: 'what the plan says instead is named, so an empty diff cannot pass for a redaction',
       );
       // BOTH sides. This plan is taken over a file the apply above already wrote, so `before` is
-      // the machine's own text — and every assertion here used to look only at what the step
-      // composed. The record writes `before` out, and the redactor hides the values of
-      // declared-secret ANSWERS; this one comes off a machine, so nothing hid it.
+      // the machine's own text, and an assertion looking only at what the step composed would miss
+      // it. The record writes `before` out, and the redactor hides the values of declared-secret
+      // ANSWERS; this one comes off a machine, so nothing hides it.
       expect(plan.before, isNot(contains(credential)));
       expect(
         plan.before,

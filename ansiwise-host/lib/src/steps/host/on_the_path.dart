@@ -3,13 +3,13 @@ import 'package:ansiwise_core/ansiwise_core.dart';
 /// Asking whether a command is on the path, in the one way that works on a machine.
 ///
 /// **`command` IS NOT AN EXECUTABLE.** It is a POSIX shell builtin, and on Linux there is no
-/// `/usr/bin/command` to start. Three steps used to ask by running it directly, and every one of them
-/// failed on every machine with `ProcessException: No such file or directory` — including the first
-/// step of the first program, which carries `on_failure: exit`, so nothing behind it ever ran.
+/// `/usr/bin/command` to start. A step that asks by running it directly fails on every machine with
+/// `ProcessException: No such file or directory` — and where such a step is the first of a program
+/// and carries `on_failure: exit`, nothing behind it runs at all.
 ///
-/// It went unseen for as long as it did because a fake shell answers an argv without executing it: a
-/// suite can be wholly green over a command that cannot exist. The lesson is not about this builtin.
-/// It is that a step naming an executable has made a claim about a machine, and only a machine can
+/// A suite does not catch it, because a fake shell answers an argv without executing it: a suite
+/// can be wholly green over a command that cannot exist. The lesson is not about this builtin. It
+/// is that a step naming an executable has made a claim about a machine, and only a machine can
 /// answer it.
 ///
 /// **Why the builtin rather than `which`.** `command -v` is in POSIX and is therefore in every shell
@@ -33,8 +33,8 @@ Command onThePath(String name) => Command.observing(
 /// [onThePath] as a fake shell keys it: the command joined by spaces.
 ///
 /// Exported so a test answers the question the STEP asks rather than a string somebody typed. The
-/// two drifting apart is how the builtin above went unnoticed — a fixture keyed on the old call
-/// answered it happily, and a suite keyed on the code cannot.
+/// two drifting apart is how a defect like the builtin above goes unnoticed — a fixture keyed on a
+/// call of its own answers happily, and a suite keyed on the code cannot.
 String onThePathKey(String name) {
   final Command asked = onThePath(name);
   return <String>[asked.executable, ...asked.arguments].join(' ');

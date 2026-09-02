@@ -17,15 +17,15 @@ import 'host_fixture.dart';
 /// declares carries an answer, and it fills IN PLACE so that every key keeps the paragraph
 /// explaining it.
 ///
-/// **Which of two values wins, and why that was turned around.** This step used to leave any key
-/// alone that held a value at all, so that a value somebody typed could not be taken back by an
-/// answer. That protected a way of working which has since been abolished: a credential reaches an
-/// installation through the answers a run is given and through nothing else, never through a file
-/// somebody edits on the machine. Under the old rule an operator who rotated a token, put the new
-/// one in the answers and ran the programs again got every step green and an installation still
-/// using the old one — measured on a machine carrying five GitHub tokens that all answered 401.
+/// **Which of two values wins.** Leaving alone any key that holds a value at all would keep a value
+/// somebody typed from being taken back by an answer, and that protects a way of working this
+/// platform does not have: a credential reaches an installation through the answers a run is given
+/// and through nothing else, never through a file somebody edits on the machine. Under such a rule
+/// an operator who rotated a token, put the new one in the answers and ran the programs again gets
+/// every step green and an installation still using the old one — measured on a machine carrying
+/// five GitHub tokens that all answered 401.
 ///
-/// So the answer wins now, and only ever over a key it HAS an answer for: a value under a key no
+/// So the answer wins, and only ever over a key it HAS an answer for: a value under a key no
 /// answer names is still untouched, because this run was told nothing about it. Where a value is
 /// replaced rather than supplied, the row says which key — never which value, since these files hold
 /// credentials.
@@ -131,9 +131,9 @@ void main() {
 
   group('which of two values wins', () {
     test('a value that disagrees with the answer is replaced by it', () async {
-      // THE DEFECT THIS CLOSES. The file held one value and the run was told another, and the row
-      // used to call that finished — so a rotated credential never reached the installation and
-      // every step reported green. Measured on a machine carrying five tokens that answered 401.
+      // THE DEFECT THIS CLOSES. The file holds one value and the run was told another, and a row
+      // calling that finished leaves a rotated credential that never reaches the installation while
+      // every step reports green. Measured on a machine carrying five tokens that answered 401.
       final HostMachine machine = machineWith(
         existing: template.replaceFirst('DEPLOY_ENV=""', 'DEPLOY_ENV="staging-by-hand"'),
       );
@@ -162,7 +162,7 @@ void main() {
     });
 
     test('THE INNOCENT NEIGHBOUR: a key no answer names is left exactly as it was typed', () async {
-      // The half of the old rule that stands. This run was told nothing about such a key, so it has
+      // The half of that rule that stands. This run was told nothing about such a key, so it has
       // nothing to say about it — and a writer that rendered the whole file would take it back.
       final HostMachine machine = machineWith(
         existing: '$template\n# Something only this installation knows.\nHAND_WRITTEN="kept"\n',

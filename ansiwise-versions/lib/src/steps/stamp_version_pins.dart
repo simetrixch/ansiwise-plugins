@@ -13,9 +13,9 @@ import '../trees.dart';
 /// and `diff` afterwards shows exactly the version tokens that moved.
 ///
 /// **Every site must be found, or the run stops.** A stamper that skips what it cannot find
-/// reports success over a pin that went nowhere — the predecessor did exactly that for a chart
-/// dependency, and for a build argument in a sibling repository whose miss would have frozen an
-/// image's clients at whatever the file said that day. So an anchor that is missing, a file that
+/// reports success over a pin that went nowhere — measured on a chart dependency, and on a build
+/// argument in a sibling repository whose miss would have frozen an image's clients at whatever the
+/// file said that day. So an anchor that is missing, a file that
 /// is not there, and a tree label the row did not map are each a refusal naming everything wrong
 /// at once, before anything is written.
 ///

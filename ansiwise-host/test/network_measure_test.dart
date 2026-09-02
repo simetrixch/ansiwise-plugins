@@ -134,9 +134,9 @@ void main() {
 
   group("the machine's packet-filtering backend", () {
     test('a machine this cannot be read from answers nothing, not a backend', () async {
-      // It used to answer the modern backend here, which made "the machine filters with nft" and
-      // "nothing on this machine could be read" the same sentence — and the caller had no way to
-      // tell them apart afterwards.
+      // Answering the modern backend here would make "the machine filters with nft" and "nothing on
+      // this machine could be read" the same sentence, with no way for the caller to tell them
+      // apart afterwards.
       final HostMachine machine = HostMachine()
         ..shell.fails('readlink -f /etc/alternatives/iptables')
         ..shell.fails('readlink -f /usr/sbin/iptables');

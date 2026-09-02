@@ -49,11 +49,10 @@ void main() {
   test(
     'a machine with no coordinator user is ready, and the apply creates, mints and stages',
     () async {
-      // JSON `null`, WHICH IS WHAT A FRESH COORDINATOR REALLY WRITES — measured on apps3
-      // (2026-08-29), at exit 0. This case scripted an empty ARRAY, a shape headscale does not
-      // emit, so it proved a reading nothing performs while the real one went unread: the run
-      // stopped saying the admin surface had not answered, on the very first slave an
-      // installation ever adds.
+      // JSON `null`, WHICH IS WHAT A FRESH COORDINATOR REALLY WRITES — measured on a real machine,
+      // at exit 0. Scripting an empty ARRAY instead, a shape headscale does not emit, proves a
+      // reading nothing performs while the real one goes unread: the run stops, saying the admin
+      // surface had not answered, on the very first slave an installation ever adds.
       final FakeShell shell = FakeShell()..answers('$admin users list -o json', 'null');
       shell.changes('$admin users create m1', () {
         shell.answers(
@@ -203,9 +202,8 @@ void main() {
       // THE FAILURE THIS HOLDS. The coordinator lists a key it would still redeem, and the file
       // holds nothing — a machine whose credential was minted by somebody else's run, or by a hand.
       // Taken out of the listing, what reaches the machine is the key's first characters, and
-      // tailscale refuses it: "key too short, expected at least 77 chars after prefix, got 16"
-      // (apps4, 2026-08-29). The whole of a key is answered only by create, so a mint is the only
-      // way to have one.
+      // tailscale refuses it: "key too short, expected at least 77 chars after prefix, got 16". The
+      // whole of a key is answered only by create, so a mint is the only way to have one.
       final FakeShell shell = FakeShell()
         ..answers('$admin users list -o json', '[{"id":7,"name":"m1"}]')
         ..answers(

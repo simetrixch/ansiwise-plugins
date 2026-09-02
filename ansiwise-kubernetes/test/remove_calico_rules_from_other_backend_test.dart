@@ -48,26 +48,26 @@ void main() {
       ],
       reason:
           'THE INNOCENT NEIGHBOURS: the distribution\'s own forwarding rules for the pod network '
-          'sit in the same chain, one on each side of the jump that goes, and both stay — the '
-          'earlier version of this idea emptied the table and took them with it',
+          'sit in the same chain, one on each side of the jump that goes, and both stay — '
+          'emptying the table would take them with it',
     );
     expect(
       legacy.rulesOf('nat', 'POSTROUTING'),
       <String>['-m comment --comment "CNI portfwd requiring masquerade" -j CNI-HOSTPORT-MASQ'],
       reason:
-          'the translation rule for a published port is what broke the ingress path silently last '
-          'time, so it is asserted by name',
+          'the translation rule for a published port is what an emptied table breaks silently, so '
+          'it is asserted by name',
     );
   });
 
   test('EVERY packet-filter call waits for the lock, dump and rule alike', () async {
-    // THE RACE THIS STEP LOST. Both programs take /run/xtables.lock for one call, and so does the
-    // network agent, which is writing its own rules the whole time this runs. Measured on apps6 on
-    // 2026-09-01: the step had run green twice that day and failed on the third, seventy chains into
-    // the sweep — `iptables-legacy -t nat -X cali-fip-dnat returned 4`, "Resource temporarily
-    // unavailable". The install stopped at three of five programs, and a retry would very likely
-    // have passed and taught nothing. So the check is not "does it clean up" — the cases above ask
-    // that — but "did it ever ask to wait", of every single call.
+    // THE RACE THIS STEP LOSES. Both programs take /run/xtables.lock for one call, and so does the
+    // network agent, which is writing its own rules the whole time this runs. Measured on a real
+    // machine: the step ran green twice and failed on the third, seventy chains into the sweep —
+    // `iptables-legacy -t nat -X cali-fip-dnat returned 4`, "Resource temporarily unavailable". The
+    // install stopped at three of five programs, and a retry would very likely have passed and
+    // taught nothing. So the check is not "does it clean up" — the cases above ask that — but "did
+    // it ever ask to wait", of every single call.
     final _Backend legacy = _Backend()
       ..builtIn('filter', 'FORWARD', <String>[
         '-m comment --comment "cali:wUHhoiAYhphO9Mso" -j cali-FORWARD',
@@ -287,10 +287,10 @@ final class _Machine implements Shell {
     if (command.executable == 'iptables-$backend-save') {
       dumped.add(_waits(command.arguments));
       // THE DUMP PROGRAM HAS NO `-w`, AND REFUSES THE WHOLE CALL WHEN HANDED ONE. It is a different
-      // program from the rule program beside it, with its own options. This fake accepted the flag
-      // until 2026-09-01, and that is why a step that had stopped sweeping anything at all still
-      // went green here: it read an empty ruleset from a refused dump, concluded there was nothing
-      // to remove, and said so. A fake that is kinder than the tool it stands for proves nothing.
+      // program from the rule program beside it, with its own options. A fake that accepted the
+      // flag would let a step which had stopped sweeping anything at all still go green here: it
+      // reads an empty ruleset from a refused dump, concludes there is nothing to remove, and says
+      // so. A fake that is kinder than the tool it stands for proves nothing.
       if (_waits(command.arguments)) {
         return const CommandResult(
           exitCode: 2,

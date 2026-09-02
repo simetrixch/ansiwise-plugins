@@ -16,7 +16,7 @@ import '../steps/host/key_value_file.dart';
 /// sees the value — the two words are the whole of what this reads. `TRUE`, `yes`, `1` and `on` are
 /// refused along with `ture`, and that is the point of the rule rather than an oversight in it.
 ///
-/// The alternative was a forgiving set, and it loses on the case that matters. A set is a table an
+/// The alternative is a forgiving set, and it loses on the case that matters. A set is a table an
 /// operator has to know, and a value outside whichever table was chosen reads as FALSE — so a typed
 /// `ture` switches a whole phase of an installation off, the run stays green, and the only trace is
 /// one line in a record saying a condition did not hold. That is the failure this condition exists

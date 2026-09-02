@@ -15,10 +15,10 @@ import 'package:ansiwise_core/ansiwise_core.dart';
 /// **WHAT IT IS FOR.** Everything on this platform that accepts a browser login decides on a group
 /// carried in the token's claim. On a fresh installation the only person who exists is the account
 /// the provider's own bootstrap made, and nothing has put them into the platform's group — so the
-/// first operator is refused by every one of those services. That gap used to be closed by having
-/// the provider INVENT the group name in the claim for anybody it considered privileged, which
-/// admits people on a value computed at token time rather than on a membership anyone can look at.
-/// This step closes it by making the membership real.
+/// first operator is refused by every one of those services. Closing that gap by having the
+/// provider INVENT the group name in the claim for anybody it considers privileged admits people on
+/// a value computed at token time rather than on a membership anyone can look at. This step closes
+/// it by making the membership real.
 ///
 /// **The account and the group are the row's, never this package's.** Which account a provider's
 /// bootstrap creates is a fact about that provider, and which group a platform admits on is a fact
@@ -305,11 +305,10 @@ final class GroupMembership extends ReversibleStep<bool> {
   /// query that matched nothing with an empty page and status 200, so a step that only checked the
   /// status would go on to read a member list out of nothing.
   ///
-  /// **"IT REFUSED THE QUESTION" AND "IT HAS NO SUCH THING" ARE DIFFERENT ANSWERS.** They were one
-  /// here, and it cost a real diagnosis: a run whose credential had not reached the provider yet
-  /// reported that the provider carried no group of that name — a true-sounding sentence about
-  /// something the step had never been allowed to look at. Whoever read it went looking for the
-  /// group, which was there all along.
+  /// **"IT REFUSED THE QUESTION" AND "IT HAS NO SUCH THING" ARE DIFFERENT ANSWERS.** Folded into
+  /// one, a run whose credential has not reached the provider yet reports that the provider carries
+  /// no group of that name — a true-sounding sentence about something the step was never allowed to
+  /// look at, and whoever reads it goes looking for a group that is there all along.
   Future<_Answer> _one(StepContext context, _Reach reach, String query) async {
     final String url = '${reach.url}/api/v3/$query';
     final HttpAnswer answer = await context.http.send(

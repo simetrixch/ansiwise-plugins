@@ -74,13 +74,12 @@ void main() {
     expect(machine.said.join('\n'), contains('next login'));
   });
 
-  // THE ROW MAY STATE A NUMBER, and until this was held it could not. A group that belongs to
-  // something outside this machine is known to it by number only — a process elsewhere writes a
-  // file onto the host carrying a group number, and the host was never told a name. The membership
-  // used to be read out of `groups`, which prints NAMES, so a row stating a number was compared
-  // against a list the number can never appear in: `usermod` succeeded, the account WAS a member,
-  // and the framework reported "the step ran and the machine is still not in the state it produces"
-  // on that run and on every run after it.
+  // THE ROW MAY STATE A NUMBER. A group that belongs to something outside this machine is known to
+  // it by number only — a process elsewhere writes a file onto the host carrying a group number,
+  // and the host was never told a name. Read the membership out of `groups`, which prints NAMES,
+  // and a row stating a number is compared against a list the number can never appear in: `usermod`
+  // succeeds, the account IS a member, and the framework reports "the step ran and the machine is
+  // still not in the state it produces" on that run and on every run after it.
   test('a row naming the group by number reads the membership it produced', () async {
     const AddUserToGroup byNumber = AddUserToGroup(group: '65532');
     final HostMachine machine = HostMachine();

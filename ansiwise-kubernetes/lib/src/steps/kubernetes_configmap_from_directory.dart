@@ -133,11 +133,11 @@ final class KubernetesConfigmapFromDirectory extends ReversibleStep<bool> {
       // discover nothing — which looks exactly like a release that came up correctly.
       return CheckResult.blocked('$directory holds no file, so the ConfigMap would carry no key');
     }
-    // NO FILE IS INVOLVED, AND THAT IS THE CORRECTION. This used to ask `diff --filename` about the
-    // staged file — which is composed inside apply and removed again in its own finally, so at check
-    // time it never exists. The step could not answer its own postcondition on any machine: every
-    // run reported "the cluster could not be asked", naming a path that was never meant to outlive
-    // the apply that made it.
+    // NO FILE IS INVOLVED. Asking `diff --filename` about the staged file cannot work: it is
+    // composed inside apply and removed again in its own finally, so at check time it never exists.
+    // The step then cannot answer its own postcondition on any machine — every run reports "the
+    // cluster could not be asked", naming a path that was never meant to outlive the apply that
+    // made it.
     //
     // Both sides are read instead, as JSON, and only the DATA is compared. The object the cluster
     // holds carries a resource version, a creation time and a managed-fields record that change on

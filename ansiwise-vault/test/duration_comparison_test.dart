@@ -6,7 +6,7 @@
 /// role is rewritten on every run and reported as never right, on a Vault that is doing exactly what
 /// it was told.
 ///
-/// Measured on a real machine on 2026-08-17: the role step stopped a run partway through, with
+/// Measured on a real machine: the role step stopped a run partway through, with
 /// Vault holding precisely the value the row had just written.
 library;
 

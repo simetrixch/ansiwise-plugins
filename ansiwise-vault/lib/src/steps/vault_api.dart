@@ -269,7 +269,7 @@ final class VaultUnreadable extends VaultReading {
 ///
 /// The body is decoded here rather than by each caller, because deciding that an answer is
 /// UNDERSTANDABLE and deciding what it says are the same act: an answer whose body will not decode
-/// is exactly the case that used to pass for empty.
+/// is exactly the case that would otherwise pass for empty.
 VaultReading readingOf(HttpAnswer answer, {required String path}) {
   if (isAbsent(answer)) {
     return const VaultAbsent();

@@ -15,9 +15,9 @@ void main() {
   const String manifestPath = '/var/lib/subject/manifest.yaml';
   const String podCidr = '10.244.0.0/16';
 
-  // INVENTED, and that is the change this file records. The name used to be a constant of the
-  // step, so the package knew what one product calls its address pool. It is an argument now, and
-  // a probe that borrowed a real one would put that knowledge back.
+  // INVENTED. Held as a constant of the step, the name would make this package know what one
+  // product calls its address pool. It is an argument, and a probe that borrowed a real one would
+  // put that knowledge back.
   const String variable = 'SUBJECT_RANGE';
 
   /// `0600` — what a program row states for an argument file a privileged service reads.

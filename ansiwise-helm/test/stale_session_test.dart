@@ -106,8 +106,8 @@ void main() {
   });
 
   test('a chart repository is registered the same way', () async {
-    // The row above the release, which has no elevation of any kind before this change: its add and
-    // its listing reach the same command and are refused by the same group.
+    // The row above the release takes the same answer: its add and its listing reach the same
+    // command and are refused by the same group.
     final _WrappedHelm machine = _WrappedHelm(admits: admits, sessionCarries: const <String>{})
       ..putTheAccountIn(admits)
       ..answers(repositories, '[{"name":"example-charts","url":"https://charts.example.test"}]');

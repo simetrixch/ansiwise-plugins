@@ -7,12 +7,12 @@ import 'git_checkout.dart';
 
 /// A key that stands INSIDE a block, and the failure this shape exists to end.
 ///
-/// THE PLANTED CASE IS THE ONE THAT HAPPENED. Before a path could be walked, this step matched a key
-/// only at the head of a line: a file carrying it under `global:` was not matched, and the write
-/// appended a SECOND key at the head of the file. Measured on apps5 on 2026-09-01 — a values file
-/// carried `clusterIssuer` twice, nested with the old value and at the top with the new one, every
-/// chart went on reading the old, and the run was green. So the cases below check not only that the
-/// right line changes but that no second one appears.
+/// THE PLANTED CASE IS THE ONE THAT HAPPENED. Matching a key only at the head of a line leaves a
+/// file carrying it under `global:` unmatched, and the write appends a SECOND key at the head of
+/// the file. Measured on a real machine — a values file carried `clusterIssuer` twice, nested with
+/// the old value and at the top with the new one, every chart went on reading the old, and the run
+/// was green. So the cases below check not only that the right line changes but that no second one
+/// appears.
 void main() {
   const String file = 'clusters/platform/values-common.yaml';
   const String wanted = 'platform-acme';

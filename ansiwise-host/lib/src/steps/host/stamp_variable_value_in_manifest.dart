@@ -8,7 +8,7 @@ import 'package:ansiwise_core/ansiwise_core.dart';
 ///
 /// **WHICH variable, and what reads it afterwards, is the row's to say.** Both arrive as arguments:
 /// this knows a file of that shape, and nothing about what the value means to whatever consumes it.
-/// It used to name one — the address pool of one network plugin — and that put a product's fact in a
+/// Naming one here — the address pool of one network plugin, say — would put a product's fact in a
 /// package that has to serve any of them.
 ///
 /// **What this file decides, and what it does not.** Whatever reads a manifest ONCE, at creation,

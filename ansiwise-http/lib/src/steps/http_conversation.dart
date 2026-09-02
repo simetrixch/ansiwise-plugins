@@ -57,7 +57,7 @@ final class Unreadable extends HttpReading {
 ///
 /// The body is decoded here rather than by each caller, because deciding that an answer is
 /// understandable and deciding what it says are the same act: an answer whose body will not decode
-/// is exactly the case that used to pass for empty.
+/// is exactly the case that would otherwise pass for empty.
 HttpReading readingOf(HttpAnswer answer, {required String url}) {
   if (answer.status == 404) {
     return const NothingThere();

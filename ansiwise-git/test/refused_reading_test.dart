@@ -17,8 +17,8 @@ import 'git_checkout.dart';
 /// **AN EMPTY ANSWER AND A NON-ZERO EXIT ARE DIFFERENT THINGS, and the git plumbing here is careful
 /// about which is which.** `ls-remote` writes nothing at exit zero for a name the remote does not
 /// publish, and `ls-files` writes nothing at exit zero for a pathspec the index matches nothing
-/// against. Those empty answers keep their meaning throughout; what changed is that a non-zero exit
-/// no longer joins them.
+/// against. Those empty answers keep their meaning throughout, and a non-zero exit never joins
+/// them.
 ///
 /// **Why it is measured here rather than in each step's own file.** Both steps carry the property,
 /// the property is one sentence, and a case written twice in two files is a case that stops agreeing

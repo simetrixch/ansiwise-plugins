@@ -141,9 +141,9 @@ final class WriteValueInBranchFile extends ReversibleStep<String?> {
     }
     // A PATH THAT IS NOT THERE IS SAID, NOT PASSED OVER. `_withValue` leaves the file untouched
     // where a nested key cannot be reached, because the alternative — appending it at the head of
-    // the file — is what once made a values file carry the same key twice with two different
-    // values, silently, with every chart reading the wrong one. Writing it back unchanged would be
-    // the same silence in a quieter form: a green step over a file that says what it said before.
+    // the file — makes a values file carry the same key twice with two different values, silently,
+    // with every chart reading the wrong one. Writing it back unchanged would be the same silence
+    // in a quieter form: a green step over a file that says what it said before.
     //
     // The question asked is whether the LINE exists, never whether the contents changed: a file
     // already carrying the wanted value changes by nothing either, and that one is finished rather
@@ -244,12 +244,11 @@ final class WriteValueInBranchFile extends ReversibleStep<String?> {
 
   /// Which line of [lines] carries this key, or -1 where none does.
   ///
-  /// **WHY THIS WALKS RATHER THAN SEARCHES.** The first shape of this step matched the key at the
-  /// HEAD of a line only — and where a file carried it inside a block, the search failed and the
-  /// write appended a second key at the head of the file instead. Measured on apps5 on 2026-09-01: a
-  /// values file ended up carrying `clusterIssuer` twice, nested under `global:` with the old value
-  /// and at the top with the new one, and every chart went on reading the old. Nothing said so; the
-  /// run was green.
+  /// **WHY THIS WALKS RATHER THAN SEARCHES.** Matching the key at the HEAD of a line only fails
+  /// where a file carries it inside a block, and the write then appends a second key at the head of
+  /// the file instead. Measured on a real machine: a values file ended up carrying `clusterIssuer`
+  /// twice, nested under `global:` with the old value and at the top with the new one, and every
+  /// chart went on reading the old. Nothing said so; the run was green.
   ///
   /// So a path is walked block by block: each segment is looked for INSIDE the block its parent
   /// opened, which is the region of deeper-indented lines following the parent's own line. A segment

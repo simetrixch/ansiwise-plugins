@@ -3,12 +3,12 @@ import 'package:ansiwise_checks/ansiwise_checks.dart';
 import 'package:ansiwise_host/ansiwise_host.dart';
 import 'package:test/test.dart';
 
-/// The values that used to be decided here and are now stated by whoever runs the steps.
+/// The values this package does not decide, and that whoever runs the steps states instead.
 ///
-/// Each of these stood in this package as a `defaultValue` — a file name, a routing table, a packet
-/// mark, a rule number, the shape a release tag is written with, the command a cluster hands its
-/// credentials over with. Every one of them is a value another vendor, on another machine, would
-/// want different, and a default made this package decide it for them.
+/// Each of these could stand in this package as a `defaultValue` — a file name, a routing table, a
+/// packet mark, a rule number, the shape a release tag is written with, the command a cluster hands
+/// its credentials over with. Every one of them is a value another vendor, on another machine,
+/// would want different, and a default makes this package decide it for them.
 ///
 /// **A demotion nothing measures is a demotion that comes back.** A default is one line, and the
 /// next person adding it back would break nothing anybody would notice: every row that already
@@ -31,11 +31,11 @@ void main() {
     // Where such a file goes and who may read it. Both are decided by what the file is FOR, which
     // is the one thing this step is built never to know, so neither may carry an answer here.
     'create_file_from_template': <String>['path', 'file_mode'],
-    // An empty list here used to mean "switch nothing off", which is a row that does nothing at
-    // all: a program wanting no addon switched off leaves the row out. Absent-or-stated instead, so
-    // a row that forgot the list is refused rather than quietly running for nothing. The three
-    // commands used to be spelled in this package under the name of one product's cluster snap;
-    // which snap runs a cluster is the product's substrate choice, so each command is the row's.
+    // An empty list here would mean "switch nothing off", which is a row that does nothing at all:
+    // a program wanting no addon switched off leaves the row out. Absent-or-stated instead, so a
+    // row that forgot the list is refused rather than quietly running for nothing. Spelling the
+    // three commands in this package would name one product's cluster snap; which snap runs a
+    // cluster is the product's substrate choice, so each command is the row's.
     'disable_addons': <String>['addons', 'status_command', 'enable_command', 'disable_command'],
     'enable_addons': <String>['status_command', 'enable_command', 'disable_command'],
     'export_kubeconfig': <String>['credentials_command'],

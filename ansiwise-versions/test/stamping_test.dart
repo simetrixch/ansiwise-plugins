@@ -146,8 +146,8 @@ dependencies:
     });
 
     test('refuses a dependency the chart does not declare — the silent-miss defect', () {
-      // The planted defect this kind exists for: the predecessor's stamper matched nothing and
-      // printed success, and the pin went nowhere.
+      // The planted defect this kind exists for: a stamper that matches nothing prints success,
+      // and the pin goes nowhere.
       const ChartDependencyStamp missing = ChartDependencyStamp(
         tree: 'alpha',
         file: 'Chart.yaml',

@@ -122,10 +122,10 @@ final class GitPush extends IrreversibleStep {
     // step exists to make the branch reachable — so what is asserted is that it IS reachable, at the
     // commit this checkout stands on, rather than that a command was content.
     //
-    // TWO READINGS THAT COULD NOT BE TAKEN USED TO SATISFY IT. Both answered null where the command
-    // failed, null equals null, and the assertion passed over two questions nobody managed to put —
+    // TWO READINGS THAT COULD NOT BE TAKEN WOULD SATISFY IT. Both answer null where the command
+    // fails, null equals null, and the assertion passes over two questions nobody managed to put —
     // which is a green verdict from a check that cannot go red, in the one place this step proves it
-    // did its work. A reading that did not answer is now a failure of its own, naming which of the
+    // did its work. So a reading that did not answer is a failure of its own, naming which of the
     // two it was and what git said.
     final ({String? commit, String? refusal}) local = await _localTip(context, branch);
     if (local.refusal case final String refusal) {
@@ -193,7 +193,8 @@ final class GitPush extends IrreversibleStep {
   /// **AN EMPTY ANSWER IS AN ANSWER HERE AND A NON-ZERO EXIT IS NOT.** `ls-remote` writes nothing at
   /// exit zero for a name the remote does not publish, so the empty answer keeps meaning that. A
   /// non-zero exit is the remote not having been reached — no credential, no network, a host key it
-  /// would not accept — and it used to come back as the same null the empty answer does.
+  /// would not accept — and it is kept apart, because the same null would read as a remote that
+  /// simply does not publish the branch.
   Future<({String? commit, String? refusal})> _remoteTip(StepContext context, String branch) async {
     final CommandResult answer = await context.shell.run(
       Command.detailed(

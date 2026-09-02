@@ -5,16 +5,16 @@
 /// parses a document: the file is lines, the site is found by anchors and keys, and the edit
 /// replaces the value token on exactly one line.
 ///
-/// **Every site must be FOUND, and found ONCE.** The predecessor's chart stamper matched with a
-/// pattern that quietly did nothing when the dependency was not there — the run printed success
-/// and the pin went nowhere. Here a site that matches no line, or more than one, is a refusal
+/// **Every site must be FOUND, and found ONCE.** A chart stamper that matches with a pattern doing
+/// nothing when the dependency is absent prints success while the pin goes nowhere. Here a site
+/// that matches no line, or more than one, is a refusal
 /// naming the file and what was looked for, so a declaration that drifted from its tree stops the
 /// stamp instead of thinning it.
 ///
 /// **Line endings survive.** These trees are edited on Windows too, and a working copy may carry
 /// CRLF. Each line's carriage return is kept apart from its body and put back on the way out, so
-/// stamping a file never rewrites lines the stamp had nothing to say about — which is what once
-/// left a sibling repository dirty after every run and invited an accidental commit.
+/// stamping a file never rewrites lines the stamp had nothing to say about — rewriting them leaves
+/// a repository dirty after every run and invites an accidental commit.
 library;
 
 import 'declaration.dart';

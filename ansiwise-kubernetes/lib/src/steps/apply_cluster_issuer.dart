@@ -6,13 +6,13 @@ import 'kubectl.dart';
 /// Whether it can then actually issue anything is a different question, asked by the step after
 /// this: the object is accepted long before the account behind it is registered.
 ///
-/// **WHAT IS COMPARED IS THE ISSUER, NOT ITS NAME.** This step used to report itself satisfied the
-/// moment an object of this name stood in the cluster, and that made an installation unable to
-/// change its mind. The two things the manifest decides — which authority the account is registered
-/// with, and the mailbox that authority writes to — are ANSWERS, so a run given different ones
-/// renders a different manifest. An installation whose answers had moved went on being told there
-/// was nothing to do, and its certificates kept coming from the authority it had moved away from:
-/// they all still appeared, so nothing anywhere reported it.
+/// **WHAT IS COMPARED IS THE ISSUER, NOT ITS NAME.** Reporting satisfied the moment an object of
+/// this name stands in the cluster makes an installation unable to change its mind. The two things
+/// the manifest decides — which authority the account is registered with, and the mailbox that
+/// authority writes to — are ANSWERS, so a run given different ones renders a different manifest.
+/// An installation whose answers have moved goes on being told there is nothing to do, and its
+/// certificates keep coming from the authority it moved away from: they all still appear, so
+/// nothing anywhere reports it.
 ///
 /// The name is no evidence at all, and cannot be made into any. What an issuer is CALLED is a fact
 /// about the installation, written by a program row and stable across every answer the operator
@@ -115,8 +115,8 @@ final class ApplyClusterIssuer extends ReversibleStep<ClusterIssuerBefore> {
   /// The authority and the mailbox the issuer in the cluster carries, null where there is no such
   /// issuer, or why neither could be read.
   ///
-  /// A cluster that could not be asked used to come back as the same null a cluster without the
-  /// issuer does, and [capture] reads that null as "this run created it" — which sends the undo to
+  /// A cluster that could not be asked must not come back as the same null a cluster without the
+  /// issuer does: [capture] reads that null as "this run created it" — which sends the undo to
   /// DELETE an issuer that was already there, and every certificate on the cluster is issued by it.
   /// See [Kubectl.readOne].
   Future<({({String server, String email})? issuer, String? refusal})> _live(
@@ -235,9 +235,9 @@ final class ApplyClusterIssuer extends ReversibleStep<ClusterIssuerBefore> {
 /// **Three states, because the undo does three different things.** An issuer that was not there is
 /// one this run created and the undo deletes it; an issuer that was there is one every certificate
 /// on the cluster is issued by, so what the undo puts back is the pair of values this run wrote
-/// over. The third is neither, and it is the one that used to be missing: a cluster that could not
-/// be asked came back as the same null a cluster without the issuer does, and the undo deleted a
-/// live issuer over it while cleaning up after some other step failed.
+/// over. The third is neither, and it is the one easiest to lose: a cluster that could not be
+/// asked, read as the same null a cluster without the issuer gives, sends the undo to delete a live
+/// issuer while cleaning up after some other step failed.
 final class ClusterIssuerBefore {
   /// Records that the cluster held no such issuer, so this run created it.
   const ClusterIssuerBefore.none() : registration = null, unmeasured = false;

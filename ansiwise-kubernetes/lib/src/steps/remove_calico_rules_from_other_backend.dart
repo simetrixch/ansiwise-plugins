@@ -12,18 +12,17 @@ import 'kubectl.dart';
 ///
 /// That abandoned set is not inert. Its workload dispatch chain admits the interfaces that existed
 /// when it was frozen and ends in a DROP for every other, so it passes exactly the pods that were
-/// already running and discards everything created afterwards. Measured on a from-zero install
-/// (apps3, 2026-08-26): the older set's `cali-from-wl-dispatch` had dropped 4256 packets, every
-/// drop counter in the pinned set stood at 0, a pod started after the pin reached neither another
-/// pod, nor the node, nor the cluster's own API address, and the older set still listed an
-/// interface belonging to a pod that no longer existed. None of it reads as a filtering fault: the
-/// ingress controller simply never became ready.
+/// already running and discards everything created afterwards. Measured on a from-zero install: the
+/// older set's `cali-from-wl-dispatch` had dropped 4256 packets, every drop counter in the pinned
+/// set stood at 0, a pod started after the pin reached neither another pod, nor the node, nor the
+/// cluster's own API address, and the older set still listed an interface belonging to a pod that
+/// no longer existed. None of it reads as a filtering fault: the ingress controller simply never
+/// became ready.
 ///
-/// **Why this is not the earlier version of this idea.** One did exist, inside the pinning step,
-/// and it EMPTIED the other backend's tables. That took the port-translation rules for published
-/// ports with it and broke the ingress path on a working machine, silently — the same tables carry
-/// the distribution's own forwarding rules for the pod network and the translation chains for a
-/// published port, and none of that belongs to the agent.
+/// **Why this does not simply EMPTY the other backend's tables.** Emptying them takes the
+/// port-translation rules for published ports with it and breaks the ingress path on a working
+/// machine, silently — the same tables carry the distribution's own forwarding rules for the pod
+/// network and the translation chains for a published port, and none of that belongs to the agent.
 ///
 /// So nothing here empties a table. It removes the agent's OWN chains, by their name, and the
 /// jumps that reach them, by their position in the built-in chain — and it can touch nothing else,
@@ -343,10 +342,11 @@ final class RemoveCalicoRulesFromOtherBackend extends IrreversibleStep {
   /// loser is told `Resource temporarily unavailable` and gives up, and the step dies partway
   /// through a table it has already begun to empty.
   ///
-  /// **IT IS A RACE, WHICH IS WHY IT LOOKED FINE.** Measured on apps6 on 2026-09-01: this step had
-  /// run green twice that day on the same machine and then failed on the third — `iptables-legacy -t
-  /// nat -X cali-fip-dnat returned 4`, seventy chains into the sweep. The install stopped at three of
-  /// five programs. A retry would very likely have passed and taught nothing.
+  /// **IT IS A RACE, WHICH IS WHY IT LOOKS FINE.** Measured on a real machine: this step ran green
+  /// twice on the same machine and then failed on the third —
+  /// `iptables-legacy -t nat -X cali-fip-dnat returned 4`, seventy chains into the sweep. The
+  /// install stopped at three of five programs. A retry would very likely have passed and taught
+  /// nothing.
   ///
   /// BOUNDED, NOT ENDLESS. `-w` with no number waits forever, and a step that hangs is worse than one
   /// that fails: nobody can tell it from a machine that stopped answering. This many seconds is far
@@ -354,14 +354,14 @@ final class RemoveCalicoRulesFromOtherBackend extends IrreversibleStep {
   /// still reported as one.
   ///
   /// **THE RULE PROGRAM ONLY. `iptables-save` HAS NO `-w`.** It is a different program with its own
-  /// options, and handed one it does not know it refuses the whole call. Measured on apps6 on
-  /// 2026-09-01, with this flag on both: every dump came back refused, [_readTable] therefore read
-  /// an EMPTY ruleset, the step concluded there was nothing to sweep and reported `ok` — while 125
+  /// options, and handed one it does not know it refuses the whole call. Measured on a real
+  /// machine, with this flag on both: every dump came back refused, [_readTable] therefore read an
+  /// EMPTY ruleset, the step concluded there was nothing to sweep and reported `ok` — while 125
   /// agent lines stood untouched in the abandoned backend. The machine then had two rule sets
   /// judging the same packets, which is the exact failure this step exists to prevent, and the
   /// ingress could not reach the API and died in a loop.
   ///
-  /// A green verdict from a check that cannot go red is what rules.md §0 forbids, and this was one.
+  /// A green verdict from a check that cannot go red is what rules.md §0 forbids.
   static const List<String> _lockWait = <String>['-w', '30'];
 
   /// The dump program of [backend].

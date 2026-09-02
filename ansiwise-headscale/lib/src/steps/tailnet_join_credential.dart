@@ -251,9 +251,9 @@ final class TailnetJoinCredential extends IrreversibleStep {
     // redeem, by their opening; it never carries a credential. So the only place a whole key lives
     // is the file this step wrote, and a standing key is handed back only when THAT file holds it.
     //
-    // Taken out of the listing instead, what reached the machine was 28 bytes of a key's opening
-    // and tailscale refused it: "failed to parse auth-key: key too short, expected at least 77
-    // chars after prefix, got 16" (apps4, 2026-08-29).
+    // Taken out of the listing instead, what reaches the machine is 28 bytes of a key's opening and
+    // tailscale refuses it: "failed to parse auth-key: key too short, expected at least 77 chars
+    // after prefix, got 16".
     final String keyPath = _keyPathOf(context);
     final String standing = await context.files.exists(keyPath)
         ? (await context.files.read(keyPath)).trim()
@@ -403,8 +403,8 @@ final class TailnetJoinCredential extends IrreversibleStep {
         // NO USER FLAG. The coordinator's `preauthkeys list` takes none — it lists every key there
         // is, and which user each belongs to is a field of the entry. Asked with one it answers
         // "unknown flag: --user" and exits 1, which this step then reports as the surface having
-        // stopped answering (measured against headscale v0.29.2 on 2026-08-29, on the first slave
-        // an installation ever added). `create` below still takes it; only the listing lost it.
+        // stopped answering (measured against headscale v0.29.2). `create` below still takes it;
+        // the listing does not.
         arguments: <String>[...admin.sublist(1), 'preauthkeys', 'list', '-o', 'json'],
         elevated: needsRoot,
       ),
@@ -465,12 +465,12 @@ final class TailnetJoinCredential extends IrreversibleStep {
   /// **AN EMPTY LISTING IS AN ANSWER, AND IT IS THE FIRST ONE EVERY INSTALLATION GIVES.** The
   /// coordinator writes JSON `null` for a listing with nothing in it — a fresh installation's user
   /// list and a fresh user's key list alike — so reading that as silence reads "there is nobody
-  /// yet" as "there is nothing there". Measured on apps3 (2026-08-29): `users list -o json` answered
+  /// yet" as "there is nothing there". Measured on a real machine: `users list -o json` answered
   /// `null` at exit 0, and the run stopped saying the admin surface had not answered, on the very
   /// first slave an installation ever adds.
   ///
-  /// **ONE READING FOR BOTH LISTINGS.** The key listing had learned this and the user listing had
-  /// not, which is how a step comes to believe two different things about one surface.
+  /// **ONE READING FOR BOTH LISTINGS.** Teaching one listing this and not the other is how a step
+  /// comes to believe two different things about one surface.
   ///
   /// Silence is a non-zero exit — the caller's to judge — or output that is neither a list nor that
   /// empty answer.
@@ -487,9 +487,9 @@ final class TailnetJoinCredential extends IrreversibleStep {
   ///
   /// **IT WRITES A PAIR AND NOT A TIMESTAMP**: `{"seconds": …, "nanos": …}`, seconds since the
   /// epoch — the shape its protocol carries. Read as a string this is not a string at all, so the
-  /// check simply did not run, and an EXPIRED key was handed back as one the coordinator would
-  /// still redeem (headscale v0.29.2, measured 2026-08-29). A string is still accepted, because a
-  /// coordinator that states one is stating the same fact.
+  /// check simply does not run, and an EXPIRED key is handed back as one the coordinator would
+  /// still redeem (headscale v0.29.2). A string is still accepted, because a coordinator that
+  /// states one is stating the same fact.
   ///
   /// Nanoseconds are dropped: what this decides is whether a moment has passed, and no key's life
   /// is measured that finely.
@@ -533,9 +533,9 @@ final class _Coordinator {
 
 /// What the coordinator prints where a key's remainder was taken out.
 ///
-/// Measured on headscale v0.29.2 (2026-08-29): every listed key is its first 24 characters and then
-/// this, the same for every one of them. It is what makes a listing readable without making it a
-/// place credentials are handed out from.
+/// Measured on headscale v0.29.2: every listed key is its first 24 characters and then this, the
+/// same for every one of them. It is what makes a listing readable without making it a place
+/// credentials are handed out from.
 const String _redaction = '***';
 
 /// Whether [held] is a WHOLE key the coordinator still redeems, told from the values it lists.
@@ -546,9 +546,8 @@ const String _redaction = '***';
 /// marker taken off, and that is what this compares.
 ///
 /// **AND A CREDENTIAL NEVER CARRIES THE MARKER.** A file that came to hold a listed value — written
-/// by a run that took the listing for a credential, which is how apps3's came to hold one — would
-/// otherwise be recognised as the key it merely names, handed back for ever, and refused by the
-/// machine every time with "key too short".
+/// by a run that took the listing for a credential — would otherwise be recognised as the key it
+/// merely names, handed back for ever, and refused by the machine every time with "key too short".
 ///
 /// A coordinator that prints keys whole is still read correctly: nothing was redacted, so the value
 /// is its own opening and an exact match is a match.

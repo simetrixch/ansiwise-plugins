@@ -11,14 +11,14 @@ import '../steps/host/key_value_file.dart';
 /// that certificates are "on", they name the authority, and every row that acts on that choice asks
 /// whether the name is the one it belongs to.
 ///
-/// **WHY NOT A BOOLEAN BESIDE THE NAME.** That was the first shape, and it is what this replaces: a
-/// switch said whether an authority was public while a name said which one, and the two could not be
-/// kept in step. Measured on apps5 on 2026-09-01: the switch was turned on, the object under the one
-/// name was rewritten from the cluster's own authority to the public one, and not a single
-/// certificate was re-issued — because the certificate service watches the NAME a certificate
-/// references and never the specification behind it. A cluster then served certificates signed by an
-/// authority the same run had deleted, and every application went on reporting itself healthy.
-/// A name that IS the choice cannot drift from it.
+/// **WHY NOT A BOOLEAN BESIDE THE NAME.** A switch saying whether an authority is public while a
+/// name says which one is two things that cannot be kept in step. Measured on a real machine: the
+/// switch was turned on, the object under the one name was rewritten from the cluster's own
+/// authority to the public one, and not a single certificate was re-issued — because the
+/// certificate service watches the NAME a certificate references and never the specification behind
+/// it. A cluster then served certificates signed by an authority the same run had deleted, and
+/// every application went on reporting itself healthy. A name that IS the choice cannot drift from
+/// it.
 ///
 /// **THE VALUE IS STATED BY THE BINDING, NOT BY A SECOND KEY.** `keys_compare` exists for facts that
 /// are a relation between two things an operator wrote; this is not one. The value here belongs to

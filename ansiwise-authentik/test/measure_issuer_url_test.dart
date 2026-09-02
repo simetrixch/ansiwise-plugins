@@ -5,11 +5,11 @@ import 'package:test/test.dart';
 
 /// The address an application's tokens are issued at, composed the way this provider composes it.
 ///
-/// **What this replaces, and why it is code rather than a line in a file.** The address used to be
-/// built by a format string in a program file — a file that can build a string is a file that can
-/// compute, and then what gets debugged is the file. Deriving it from an answer was not open either:
-/// the framework's derivation rules are a closed set that leaves out joining two values on purpose,
-/// because a join is where an expression language starts.
+/// **Why it is code rather than a line in a file.** A format string in a program file would build
+/// the address there, and a file that can build a string is a file that can compute — then what
+/// gets debugged is the file. Deriving it from an answer is not open either: the framework's
+/// derivation rules are a closed set that leaves out joining two values on purpose, because a join
+/// is where an expression language starts.
 ///
 /// So it is composed here, typed and measured. The one shape this package is allowed to know is the
 /// PROVIDER'S own path, the same for every application it stands in front of. Which application,

@@ -9,11 +9,10 @@ import 'vault_profile.dart';
 /// namespace, holding which annotation, gets what. It is one object and it is written as one — a
 /// field that is a map stays a map, and a field that is a list stays a list.
 ///
-/// **The whole role goes in one body, and that is the fix for a real failure.** The shell this
-/// replaces passed the role's fields as separate parameters through a shell inside a container, and
-/// that shell collapsed a map field's escaped braces into a plain string. Vault answered that it
-/// expected a map and got a string, on a role whose text looked right in the file. There is nothing
-/// to collapse here.
+/// **The whole role goes in one body, and that is the fix for a real failure.** Passing the role's
+/// fields as separate parameters through a shell inside a container lets that shell collapse a map
+/// field's escaped braces into a plain string. Vault then answers that it expected a map and got a
+/// string, on a role whose text looked right in the file. There is nothing to collapse here.
 ///
 /// **Writing a role replaces it whole, so a list field has to arrive complete.** Nothing about a
 /// role write adds to what is there. A list recomputed from a program file alone therefore drops
@@ -287,10 +286,10 @@ final class VaultAuthRole extends ReversibleStep<Map<String, Object?>?> {
   /// What Vault holds at [rolePath], told apart into absent, held, and unreadable.
   ///
   /// THE THIRD CASE IS WHY THIS RETURNS A READING AND NOT A MAP. An answer that is neither 404 nor
-  /// understandable used to fall to the same side as "this role does not exist yet", and what
-  /// followed was a write of everything this run knew about — over a role that already carried rows
-  /// other runs and other programs had put there. `preserve_list` exists exactly to keep those, and
-  /// a blind read defeated it while the step reported success.
+  /// understandable, folded to the same side as "this role does not exist yet", is followed by a
+  /// write of everything this run knows about — over a role that already carries rows other runs
+  /// and other programs put there. `preserve_list` exists exactly to keep those, and a blind read
+  /// defeats it while the step reports success.
   Future<VaultReading> _reading(
     StepContext context,
     String url,

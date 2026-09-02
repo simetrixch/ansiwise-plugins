@@ -2,12 +2,11 @@
 /// where its upstream lives.
 ///
 /// **One declaration, two readers, and that is the whole reason this grammar exists.** The step
-/// that stamps the pins and the step that reports them against upstream both read this one file.
-/// The predecessor of this pair had the report parse the stamper's own source to learn where a pin
-/// was written; renaming one function there silently turned the report's whole charts section into
-/// "stamped nowhere" — the report kept working and stopped being true, which is the worst failure
-/// shape there is. Here both sides read the same data, so they cannot disagree about what a
-/// component is.
+/// that stamps the pins and the step that reports them against upstream both read this one file. A
+/// report that parses the stamper's own source to learn where a pin is written turns its whole
+/// charts section into "stamped nowhere" the moment one function there is renamed — it keeps
+/// working and stops being true, which is the worst failure shape there is. Here both sides read
+/// the same data, so they cannot disagree about what a component is.
 ///
 /// **The file is the product's, the grammar is this package's.** A declaration file lives in a
 /// product tree and names that product's components, files and registries — everything this
@@ -39,8 +38,8 @@
 /// **Everything unknown is refused, and every problem is reported at once.** A loader that ignores
 /// what it does not recognise turns a typo into a stamp that silently went missing — `stamp:` for
 /// `stamps:` would pin a version nothing ever writes, with no symptom until the drift is found by
-/// hand. That is the exact failure the predecessor had, so this parser refuses any key it does not
-/// know, anywhere, and collects the whole list before throwing.
+/// hand. So this parser refuses any key it does not know, anywhere, and collects the whole list
+/// before throwing.
 library;
 
 import 'package:yaml/yaml.dart';

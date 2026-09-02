@@ -6,10 +6,10 @@ import 'host_fixture.dart';
 
 /// Whether two answers of one run carry the same value.
 ///
-/// **What this replaces, and why it could not stay where it was.** A program row used to write
-/// `stated_when: {answer: a, equals_answer: b}` — a comparison living in a file beside the registered
-/// conditions, and the moment a file can compare it can compare anything. Registered, the comparison
-/// is a class with these probes, and the file writes one bare name.
+/// **Why the comparison is registered rather than written into a program file.** A program row
+/// writing `stated_when: {answer: a, equals_answer: b}` puts a comparison in a file beside the
+/// registered conditions, and the moment a file can compare it can compare anything. Registered,
+/// the comparison is a class with these probes, and the file writes one bare name.
 ///
 /// **Why it reads the RUN and not a file, which is what the other two conditions do.** A file is
 /// written by a step, and a step runs after the answers are validated. The question this answers —

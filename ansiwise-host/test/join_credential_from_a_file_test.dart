@@ -117,7 +117,7 @@ void main() {
   test('the join stages the credential the file held, and the run closes green', () async {
     final ({RunRecord closed, FakeShell shell, List<String> staged}) ran = await joinOn(
       // With the newline the mint leaves behind, because that is what a file holding a credential
-      // actually contains — and it is what the step used to have to strip for itself.
+      // actually contains — and it is what the step would otherwise have to strip for itself.
       <String, String>{keyFile: '$credential\n'},
     );
 

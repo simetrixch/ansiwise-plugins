@@ -16,9 +16,9 @@ publish_to: none
 
 # WHERE THE BINARY THIS PACKAGE ENDS UP IN IS COMPOSED. Nothing here produces one: a plugin declares
 # steps, and which plugins a binary carries is decided by a composition root that depends on them.
-# That root is github.com/simetrixch/ansiwise-cli, and `dart run tool/build.dart` there is what
-# compiles the executable a machine is given. Named because a clone of this repository alone cannot
-# build anything, and nothing else said where to look.
+# That root is ansiwise-cli, and `dart run tool/build.dart` there is what compiles the executable a
+# machine is given. Named because a clone of this repository alone cannot build anything, and
+# nothing else said where to look.
 repository: https://github.com/simetrixch/ansiwise-plugins
 version: 0.8.104
 
@@ -29,7 +29,7 @@ dependencies:
   ansiwise_core:
     git:
       url: https://github.com/simetrixch/ansiwise-core.git
-      ref: 0.7.3-stable-20260831002636
+      ref: b8a1ea9b2c2c3007017f8a0dbf178b6ed2be84e2
   # Both tools, because the step is about both. The store package supplies how Vault is read and
   # where an installation's own facts about it stand; the cluster package supplies the composer that
   # spells the kubectl invocation, which is the one place an invocation of it is put together.
@@ -53,5 +53,5 @@ dev_dependencies:
   ansiwise_checks:
     git:
       url: https://github.com/simetrixch/ansiwise-checks.git
-      ref: 0.7.2-stable-20260831002805
+      ref: d25834f81db75c59b6a21157df856e04730e028f
       path: registry

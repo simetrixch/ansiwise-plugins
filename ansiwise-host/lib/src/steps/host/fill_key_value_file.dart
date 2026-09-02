@@ -341,7 +341,7 @@ final class FillKeyValueFile extends ReversibleStep<String?> {
   /// The keys this run writes: every one nobody has answered, and every one answered DIFFERENTLY.
   ///
   /// THE SECOND HALF IS WHAT MAKES A CREDENTIAL REPLACEABLE. Without it a key holding any value at
-  /// all counted as done, whatever the run had been told — so an operator who rotated a token, put
+  /// all counts as done, whatever the run had been told — so an operator who rotated a token, put
   /// the new one in the answers and ran the programs again got every step green and an installation
   /// still using the old one. Measured on a machine carrying five GitHub tokens that answered 401,
   /// where correcting the answers would have changed nothing and the row would have reported

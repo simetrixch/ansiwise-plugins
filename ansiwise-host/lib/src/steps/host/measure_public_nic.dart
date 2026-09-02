@@ -174,8 +174,8 @@ final class MeasurePublicNic extends ObservingStep {
   ///
   /// Without it the drop-in cannot be keyed the way the installer's own file is keyed, so it would
   /// become a second declaration of the interface rather than folding into the one that is there.
-  /// That is why an unreadable one stops the whole phase rather than being worked around — and it
-  /// used to say so and then return null, which is the value that means nothing has to be steered.
+  /// That is why an unreadable one stops the whole phase rather than being worked around: saying so
+  /// and then returning null hands back the value that means nothing has to be steered.
   ///
   /// [device] is the name the routes above answered with, so the kernel has it. A file that is not
   /// there, or one that is there and empty, is therefore a reading that was not taken.
