@@ -6,11 +6,15 @@ import 'vault_profile.dart';
 
 /// Takes one member out of one list field of one auth role, and touches nothing else of it.
 ///
-/// **The shrinking half of `preserve_list`, and its own step for the same reason.** A role write
-/// replaces the role whole, so the role step widens its list field by whatever the live role
+/// **The shrinking half of `preserve_list`, and its own step for the same reason.** Naming a list
+/// in a role write replaces that list whole, so the role step unions in whatever the live role
 /// carries — which is exactly right for building and exactly wrong for removing: a member unioned
 /// back in can never leave. This step reads the live role, drops the one member the row names, and
 /// writes everything else back verbatim.
+///
+/// **A row that wants a whole list gone does not need this step.** Vault leaves a field the request
+/// does not name exactly as it stands, so a list is emptied by NAMING it empty in the row that owns
+/// the role — one statement in the declaration, where this step is a second writer beside it.
 ///
 /// **A list that would become empty is refused, not written.** A role whose binding list names
 /// nothing refuses every caller with a message about their own token — worse than the stale member,

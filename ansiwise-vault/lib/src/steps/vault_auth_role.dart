@@ -14,11 +14,18 @@ import 'vault_profile.dart';
 /// field's escaped braces into a plain string. Vault then answers that it expected a map and got a
 /// string, on a role whose text looked right in the file. There is nothing to collapse here.
 ///
-/// **Writing a role replaces it whole, so a list field has to arrive complete.** Nothing about a
-/// role write adds to what is there. A list recomputed from a program file alone therefore drops
-/// every member something else put there after the file was written — and the callers those
-/// members admitted are then refused with "not authorized" and no line naming why. [preserveList]
-/// is the field where that happened, read back from the live role and unioned in before the write.
+/// **A ROLE WRITE REPLACES WHAT THE BODY NAMES, AND NOTHING ELSE.** Vault assigns a field only
+/// where the request carries its key, so a field the body leaves out keeps whatever the role
+/// already holds — for ever, however often this runs. A row that means a field to be empty has to
+/// NAME it empty; leaving it out says nothing. The one exception is
+/// `bound_service_account_namespace_selector`, which Vault assigns whether the request names it or
+/// not, so a write that omits it empties it.
+///
+/// **A list this row DOES name arrives complete or not at all.** Naming it replaces it whole, so a
+/// list recomputed from a program file alone drops every member something else put there after the
+/// file was written — and the callers those members admitted are then refused with "not authorized"
+/// and no line naming why. [preserveList] is the field where that happens, read back from the live
+/// role and unioned in before the write.
 final class VaultAuthRole extends ReversibleStep<Map<String, Object?>?> {
   /// Writes the role [role] on auth mount [mount] of the Vault the profile in [repository] names.
   const VaultAuthRole({
@@ -155,8 +162,28 @@ final class VaultAuthRole extends ReversibleStep<Map<String, Object?>?> {
         return const CheckResult.ready();
       }
     }
+    // WHAT WAS PROVEN, AND NOT MORE. Every field this run names agrees with the live role; a field
+    // it does not name was never looked at, and Vault leaves such a field standing. So the role
+    // HOLDS what this run writes, which is not the same as BEING it.
+    //
+    // A list or a map nobody here declares is named in the same breath, because that is the shape
+    // that admits callers this run knows nothing about — and a reader of the record would otherwise
+    // have to read Vault themselves to learn of it. It is reported and not decided on: the verdict
+    // stays satisfied, nothing is written, and a run converges. A row that wants such a field gone
+    // says so by naming it empty.
+    final List<String> undeclared = <String>[
+      for (final MapEntry<String, Object?> field in current.entries)
+        if (!wanted.containsKey(field.key) &&
+            ((field.value is List && (field.value! as List<Object?>).isNotEmpty) ||
+                (field.value is Map && (field.value! as Map<Object?, Object?>).isNotEmpty)))
+          field.key,
+    ]..sort();
+    final String also = undeclared.isEmpty
+        ? ''
+        : '. It also holds ${undeclared.join(', ')}, which nothing here declares — '
+              'name the field empty in the row that owns this role to have it written away';
     return CheckResult.satisfied(
-      'the role "${written.role}" on ${written.mount}/ is what this run writes',
+      'the role "${written.role}" on ${written.mount}/ holds every field this run writes$also',
     );
   }
 
@@ -211,7 +238,7 @@ final class VaultAuthRole extends ReversibleStep<Map<String, Object?>?> {
 
   /// The role Vault holds at this path right now, or null when it holds none.
   ///
-  /// Read before the write, because a write replaces the role whole — including [preserveList],
+  /// Read before the write, because naming a list replaces it whole — including [preserveList],
   /// whose members something else put there. The undo writes these fields back, and deletes the role
   /// only where Vault held none: a role that was already there is what a caller logs in against, and
   /// removing it refuses that caller with "not authorized" and no line naming why.
