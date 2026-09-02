@@ -156,10 +156,15 @@ final class RemoveTailnetUser extends IrreversibleStep {
 
     // The nodes, collected whole before the first delete: the coordinator refuses to destroy a
     // user that still owns one, and a node deleted mid-listing must not hide its siblings.
+    // BY NAME HERE AND BY IDENTIFIER BELOW, which is the coordinator's own split and not a
+    // preference. `nodes list --user` resolves a user by NAME and answers `user not found` for a
+    // number, while `users destroy --identifier` takes the number. One value for both asks the
+    // listing about a user that does not exist, and a removal then stops on a coordinator that is
+    // answering perfectly.
     final CommandResult listed = await context.shell.run(
       Command.observing(
         admin.first,
-        arguments: <String>[...admin.sublist(1), 'nodes', 'list', '--user', uid, '-o', 'json'],
+        arguments: <String>[...admin.sublist(1), 'nodes', 'list', '--user', name, '-o', 'json'],
         elevated: needsRoot,
       ),
     );

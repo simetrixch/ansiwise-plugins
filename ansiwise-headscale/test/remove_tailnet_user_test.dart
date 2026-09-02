@@ -51,11 +51,11 @@ void main() {
     expect(await step.check(contextOn(shell)), isA<Satisfied>());
   });
 
-  test('nodes are deleted before the user, and the user goes by its id', () async {
+  test('the nodes are listed by NAME and the user destroyed by its id', () async {
     final FakeShell shell = FakeShell()
       ..answers('$admin users list -o json', '[{"name":"m1","id":7}]')
       ..answers(
-        '$admin nodes list --user 7 -o json',
+        '$admin nodes list --user m1 -o json',
         '[{"id":3,"name":"m1"},{"id":5,"name":"m1-b"}]',
       );
 
@@ -78,7 +78,7 @@ void main() {
     // again, while one that had already destroyed the user could not be.
     final FakeShell shell = FakeShell()
       ..answers('$admin users list -o json', '[{"name":"m1","id":7}]')
-      ..fails('$admin nodes list --user 7 -o json', stderr: 'connection refused');
+      ..fails('$admin nodes list --user m1 -o json', stderr: 'connection refused');
 
     await expectLater(step.apply(contextOn(shell)), throwsA(isA<StateError>()));
 
@@ -89,7 +89,7 @@ void main() {
   test('a node delete the coordinator refuses stops the run before the user is touched', () async {
     final FakeShell shell = FakeShell()
       ..answers('$admin users list -o json', '[{"name":"m1","id":7}]')
-      ..answers('$admin nodes list --user 7 -o json', '[{"id":3,"name":"m1"}]')
+      ..answers('$admin nodes list --user m1 -o json', '[{"id":3,"name":"m1"}]')
       ..fails('$admin nodes delete --identifier 3 --force', stderr: 'still online');
 
     await expectLater(step.apply(contextOn(shell)), throwsA(isA<CommandFailed>()));
@@ -100,7 +100,7 @@ void main() {
   test('a machine with no nodes still has its user destroyed — the keys go with it', () async {
     final FakeShell shell = FakeShell()
       ..answers('$admin users list -o json', '[{"name":"m1","id":7}]')
-      ..answers('$admin nodes list --user 7 -o json', 'null');
+      ..answers('$admin nodes list --user m1 -o json', 'null');
 
     await step.apply(contextOn(shell));
 
