@@ -43,6 +43,19 @@ while read -r local_ref local_sha remote_ref remote_sha; do
     *) range="$local_sha" ;;
   esac
 
+  # A remote sha this checkout does not carry cannot be measured from. git rev-list would fail, the
+  # loop would read zero commits, and a forced push over an unfetched remote would pass the message
+  # rule with nothing read at all.
+  case "$remote_sha" in
+    *[!0]*)
+      if ! git cat-file -e "${remote_sha}^{commit}" 2>/dev/null; then
+        echo "REFUSED: the commit $remote_sha that $remote_ref points at is not in this checkout, so the commits being pushed cannot be listed."
+        echo "Run git fetch, then push again."
+        exit 1
+      fi
+      ;;
+  esac
+
   # A merge commit carries the subjects of both sides and is not judged on its own message.
   for sha in $(git rev-list --no-merges "$range" 2>/dev/null); do
     message="$(git log -1 --format=%B "$sha")"
@@ -65,13 +78,17 @@ while read -r local_ref local_sha remote_ref remote_sha; do
 
     # A change that only EXPLAINS the system needs no issue. The test is what the commit touched,
     # never which words are in its message. A commit that touched nothing does not pass here.
+    #
+    # The name is read without its folders, because the rule is about the file and not about where
+    # it stands: docs/LICENSE explains as much as LICENSE does. LICENSE* is one pattern, so
+    # LICENSE-MIT and LICENSE.txt are both a licence.
     explains=1
     touched=0
     while IFS= read -r path; do
       [ -n "$path" ] || continue
       touched=1
-      case "$path" in
-        *.md|LICENSE|LICENSE.*) ;;
+      case "${path##*/}" in
+        *.md|LICENSE*) ;;
         *) explains=0 ;;
       esac
     done <<EOF
@@ -99,20 +116,32 @@ if [ -n "$bad" ]; then
   exit 1
 fi
 
-# No push without the three team modes. The check lives in the tooling checkout beside this one,
-# found by name whatever case the directory carries, because a checkout cloned on a
+# No push without the three team modes. The check lives in the tooling checkout beside the MAIN
+# checkout, found by name whatever case the directory carries, because a checkout cloned on a
 # case-insensitive filesystem keeps the case whoever cloned it typed. A push whose modes cannot be
 # checked does not leave the machine.
+#
+# THE SIBLINGS STAND BESIDE THE MAIN CHECKOUT, and this hook also runs from a worktree. An issue is
+# worked in a worktree under ../.worktrees/<repo>/, whose own parent directory holds nothing but
+# other worktrees, so a search beside the working tree finds no tooling there. The common git
+# directory is the main checkout's .git from either place, and it is what the neighbourhood is
+# measured from.
 modes_check=""
 tooling=""
-for sibling in ../*/; do
+common="$(git rev-parse --git-common-dir)" || exit 1
+case "$common" in
+  /*|[A-Za-z]:*) ;;
+  *) common="$root/$common" ;;
+esac
+main_checkout="$(cd "$common/.." && pwd)" || exit 1
+for sibling in "$main_checkout"/../*/; do
   [ -d "$sibling" ] || continue
   case "$(basename "$sibling" | tr '[:upper:]' '[:lower:]')" in
-    simetrix-gh) tooling="$sibling"; modes_check="${sibling}bin/team-modes-check.sh" ;;
+    simetrix-gh) tooling="$(cd "$sibling" && pwd)"; modes_check="$tooling/bin/team-modes-check.sh" ;;
   esac
 done
 if [ -z "$tooling" ]; then
-  echo "REFUSED: the tooling checkout (simetrix-gh) is not beside this one, so the team modes cannot be checked."
+  echo "REFUSED: the tooling checkout (simetrix-gh) is not beside $main_checkout, so the team modes cannot be checked."
   exit 1
 fi
 if [ ! -f "$modes_check" ]; then
