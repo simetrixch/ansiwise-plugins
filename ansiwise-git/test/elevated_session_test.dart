@@ -19,13 +19,13 @@ import 'git_checkout.dart';
 /// this one. Nothing but a command arriving elevated widens what this session may reach, and what it
 /// refuses it refuses in the tool's own words.
 void main() {
-  const String path = '/srv/records/state.conf';
-  const String pattern = 'before';
-  const String replacement = 'after';
-  const String grep = 'grep -q -E $pattern $path';
-  const String sed = 'sed -i -E s/$pattern/$replacement/g $path';
+  const String sourcePath = 'rendered/values.yaml';
+  const String destination = '/srv/records/values.yaml';
+  const String committed = 'name: one';
+  const String readBranch = 'git -C $repository rev-parse --abbrev-ref HEAD';
+  const String readCommitted = 'git -C $repository show HEAD:$sourcePath';
 
-  /// The account this run was started as, and the group the file at [path] belongs to.
+  /// The account this run was started as, and the group the checkout belongs to.
   const String recordsGroup = 'records';
 
   /// The step as the registry builds it from a row, so the answer travels the path a row travels.
@@ -34,29 +34,30 @@ void main() {
   /// step through its factory, and a factory that dropped the value would be invisible to a test
   /// that put the field in by hand.
   Step rowSaying({required bool elevated}) => gitRegistry
-      .step(const StepName('replace_regex_in_tracked_file'))!
+      .step(const StepName('copy_branch_file'))!
       .create(
         Arguments(<String, Object>{
-          'path': path,
-          'pattern': pattern,
-          'replacement': replacement,
+          'repository': repository,
+          'path': sourcePath,
+          'destination': destination,
+          'file_mode': 420,
           'elevated': elevated,
         }),
       );
 
-  /// A machine where [path] belongs to root, so both tools that touch it refuse anybody else.
+  /// A machine where the checkout belongs to root, so git refuses anybody else both questions.
   _Session machine({Set<String> groupsAtLogin = const <String>{}}) =>
       _Session(const <String, _RootOnly>{
-        grep: _RootOnly(
-          answersRoot: '',
-          refusal: 'grep: $path: Permission denied',
-          refusedExitCode: 2,
+        readBranch: _RootOnly(
+          answersRoot: '$base\n',
+          refusal: "fatal: detected dubious ownership in repository at '$repository'",
+          refusedExitCode: 128,
           orTheGroup: recordsGroup,
         ),
-        sed: _RootOnly(
-          answersRoot: '',
-          refusal: "sed: couldn't open temporary file /srv/records/sedXXXX: Permission denied",
-          refusedExitCode: 4,
+        readCommitted: _RootOnly(
+          answersRoot: committed,
+          refusal: "fatal: cannot change to '$repository': Permission denied",
+          refusedExitCode: 128,
           orTheGroup: recordsGroup,
         ),
       }, groupsAtLogin: groupsAtLogin);
@@ -68,17 +69,15 @@ void main() {
     clock: FakeClock(),
     entropy: FakeEntropy(),
     log: const SilentLog(),
-    step: const StepName('replace_regex_in_tracked_file'),
+    step: const StepName('copy_branch_file'),
     arguments: Arguments.none,
     answers: Arguments.none,
     facts: Facts.none,
   );
 
-  FakeFiles fileHolding(String text) => FakeFiles(<String, String>{path: text});
-
-  test('the rewrite a row granted root reaches the machine as root', () async {
+  test('the reading a row granted root reaches the machine as root', () async {
     final _Session session = machine();
-    final FakeFiles files = fileHolding('$pattern\n');
+    final FakeFiles files = FakeFiles();
     final Step step = rowSaying(elevated: true);
 
     expect(await step.check(contextFor(session, files)), isA<Ready>());
@@ -89,44 +88,34 @@ void main() {
       isEmpty,
       reason: 'a command this session refused is one that ran as the operator',
     );
-    expect(session.carriedOut, contains(sed));
+    expect(session.carriedOut, contains(readCommitted));
+    expect(files.contents[destination], committed);
   });
 
-  test('and the search the check makes reaches it the same way', () async {
+  test('and the branch the check reads first reaches it the same way', () async {
     // The innocent neighbour INSIDE the defect's own file: this call carries the row's answer
-    // independently of the defect beside it, so a red result here would mean the session refuses
+    // independently of the one beside it, so a red result here would mean the session refuses
     // everything.
     final _Session session = machine();
 
-    expect(
-      await rowSaying(elevated: true).check(contextFor(session, fileHolding('$pattern\n'))),
-      isA<Ready>(),
-    );
-    expect(session.carriedOut, contains(grep));
+    expect(await rowSaying(elevated: true).check(contextFor(session, FakeFiles())), isA<Ready>());
+    expect(session.carriedOut, contains(readBranch));
   });
 
-  test(
-    'the same rewrite under a row that grants nothing is refused in the tool\'s own words',
-    () async {
-      // What a dropped answer looks like from the machine's side, and the reason the assertions above
-      // are worth anything: the step is correct, the row simply granted no root, and the session says
-      // so as sed says it.
-      final _Session session = machine();
-      final FakeFiles files = fileHolding('$pattern\n');
-      final Step step = rowSaying(elevated: false);
+  test('the same copy under a row that grants nothing is refused by the machine', () async {
+    // What a dropped answer looks like from the machine's side, and the reason the assertions above
+    // are worth anything: the step is correct, the row simply granted no root, and git refuses the
+    // reading the whole copy rests on.
+    final _Session session = machine();
 
-      await expectLater(
-        () async => step.apply(contextFor(session, files)),
-        throwsA(
-          isA<CommandFailed>().having(
-            (CommandFailed failure) => failure.toString(),
-            'what the tool said',
-            contains('Permission denied'),
-          ),
-        ),
-      );
-    },
-  );
+    final CheckResult answer = await rowSaying(
+      elevated: false,
+    ).check(contextFor(session, FakeFiles()));
+
+    expect(session.refused, contains(readBranch));
+    expect(answer, isA<Blocked>(), reason: '$answer');
+    expect((answer as Blocked).reason, contains(repository));
+  });
 
   group('the reading a row cannot grant, because the row is about something else', () {
     /// Where the first checkout of an installation stands, under a directory only root may enter.
@@ -200,15 +189,15 @@ void main() {
 
   test('THE SESSION AND NOT THE FLAG: a session already in the group needs no elevation', () async {
     // What makes this machine a session rather than a reading of `Command.elevated`. The same
-    // unelevated rewrite goes through here, because the account this session began as was already
-    // in the group that owns the file — and it would go through on a real machine for the same
+    // unelevated copy goes through here, because the account this session began as was already in
+    // the group that owns the checkout, and it would go through on a real machine for the same
     // reason. A shell that only read the flag could not tell these two runs apart.
     final _Session session = machine(groupsAtLogin: <String>{recordsGroup});
 
-    await rowSaying(elevated: false).apply(contextFor(session, fileHolding('$pattern\n')));
+    await rowSaying(elevated: false).apply(contextFor(session, FakeFiles()));
 
     expect(session.refused, isEmpty);
-    expect(session.carriedOut, contains(sed));
+    expect(session.carriedOut, contains(readCommitted));
   });
 }
 

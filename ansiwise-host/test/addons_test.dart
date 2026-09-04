@@ -4,8 +4,8 @@ import 'package:test/test.dart';
 
 import 'host_fixture.dart';
 
-/// The addons of a cluster snap: reading which are on, switching them on and off, and waiting for
-/// them. The three commands come from the row, as they would in a program file.
+/// The addons of a cluster snap: reading which are on, switching them on, and waiting for them. The
+/// three commands come from the row, as they would in a program file.
 void main() {
   const StepName under = StepName('under_test');
 
@@ -40,13 +40,6 @@ void main() {
 
   /// A step wired the way a program row wires it.
   EnableAddons enabling(List<String> addons) => EnableAddons(
-    addons: addons,
-    statusCommand: statusCommand,
-    enableCommand: enableCommand,
-    disableCommand: disableCommand,
-  );
-
-  DisableAddons disabling(List<String> addons) => DisableAddons(
     addons: addons,
     statusCommand: statusCommand,
     enableCommand: enableCommand,
@@ -271,59 +264,6 @@ void main() {
       expect(plan.summary, contains('would wait up to 30s'));
       expect(plan.summary, contains('ingress'));
       expect(machine.clock.elapsed, Duration.zero);
-    });
-  });
-
-  group('switching the addons off', () {
-    test('the one that comes on by itself is switched off', () async {
-      final HostMachine machine = HostMachine();
-      machine.shell
-        ..answers(statusKey, status(on: <String>['rbac', 'registry'], off: <String>[]))
-        ..changes('cluster disable registry', () {
-          machine.shell.answers(statusKey, status(on: <String>['rbac'], off: <String>['registry']));
-        });
-
-      final DisableAddons step = disabling(<String>['registry']);
-      final StepContext context = machine.contextFor(under);
-
-      expect(await step.check(context), isA<Ready>());
-      await step.apply(context);
-      expect(await step.check(context), isA<Satisfied>());
-      expect(machine.changing, <String>['cluster disable registry']);
-    });
-
-    test('the plan is the disable command the row wrote, with what is still on', () async {
-      final HostMachine machine = HostMachine()
-        ..shell.answers(statusKey, status(on: <String>['registry'], off: <String>[]));
-
-      final StepPlan plan = await disabling(<String>['registry']).plan(machine.contextFor(under));
-      expect((plan as ArgvPlan).argv, <String>[...disableCommand, 'registry']);
-    });
-
-    test('the undo switches back on with the enable command the row wrote', () async {
-      final HostMachine machine = HostMachine()
-        ..shell.answers(statusKey, status(on: <String>['registry'], off: <String>[]));
-
-      final DisableAddons step = disabling(<String>['registry']);
-      final StepContext context = machine.contextFor(under);
-      final List<String> captured = await step.capture(context);
-      await step.undo(context, captured);
-      expect(machine.changing, <String>['cluster enable registry']);
-    });
-
-    test('an addon that is already off is skipped', () async {
-      final HostMachine machine = HostMachine()
-        ..shell.answers(statusKey, status(on: <String>['rbac'], off: <String>['registry']));
-
-      expect(
-        await disabling(<String>['registry']).check(machine.contextFor(under)),
-        isA<Satisfied>(),
-      );
-      expect(machine.changing, isEmpty);
-    });
-
-    test('a row that names none is a step with nothing to do, not an error', () async {
-      expect(await disabling(<String>[]).check(HostMachine().contextFor(under)), isA<Satisfied>());
     });
   });
 }

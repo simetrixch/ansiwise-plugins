@@ -6,11 +6,9 @@
 /// something again. So there is nothing an address could be asked afterwards that would prove the
 /// first one worked, and the value that came back is the only evidence there is.
 ///
-/// **THERE IS NO ALREADY-PROBE HERE, AND THAT IS A DECISION.** `send_http_request` is gated on a
-/// read at the row's own `already_url`, which is what makes a second run of that row do nothing.
-/// This kind cannot have one, and putting one in would be a claim nobody can keep: what a row would
-/// have to read is the value the request hands back, and no address holds it. So rerunning a program
-/// RE-SENDS. A second create is answered by the other end's own refusal, the row fails loudly, and
+/// **THERE IS NO ALREADY-PROBE HERE, AND THAT IS A DECISION.** A step of this kind cannot have one,
+/// and putting one in would be a claim nobody can keep: what a row would have to read is the value
+/// the request hands back, and no address holds it. So rerunning a program RE-SENDS. A second create is answered by the other end's own refusal, the row fails loudly, and
 /// an operator sees it — which is the honest outcome and the one a caller of this kind asked for.
 /// A quiet second one, made and published as though it were the first, is the alternative — and
 /// it is worse in every way.

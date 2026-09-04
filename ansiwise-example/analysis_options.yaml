@@ -1,3 +1,0 @@
-# The framework ships the rule set it holds itself to, and a plugin is held to the same one. A
-# copy would be a second truth: the first edit on either side splits them, and nothing reports it.
-include: package:ansiwise_checks_tree/analysis_options.yaml

@@ -1,23 +1,11 @@
 import 'package:ansiwise_core/ansiwise_core.dart';
 
-import 'create_directory.dart';
-
 /// Makes a directory at the path a program row names and leaves it belonging to an ACCOUNT this
 /// machine carries, at the mode the row names.
 ///
-/// **THE SIBLING OF `create_directory`, AND THE DIFFERENCE IS WHO WRITES THERE.** That step takes
-/// the owner and the group as NUMBERS, because the process it makes a directory for is very often a
-/// container carrying the number its image runs as — a number that lives in the image's own account
-/// database and in no account on the machine, so there is no name to give. This one is for the other
-/// writer: a real account on this machine, named in an answer, whose number is not the caller's to
-/// know. Which number an installation gave its operator is that machine's own fact, and a program
-/// file that wrote one would be right on one machine and silently wrong on the next.
-///
-/// **WHY THE TWO ARE TWO STEPS AND NOT ONE WITH A CHOICE.** Every argument of a step in this tree is
-/// required, and that is what lets the idempotence probe build every registered step and drive it
-/// against a fake machine — a check that keeps each of them honest about being applied twice. A
-/// single step whose owner came as EITHER two numbers OR a name would have to make both optional,
-/// and it would drop out of that coverage the moment it did. Measured: it does.
+/// **THE ACCOUNT IS A NAME, AND THE NUMBERS ARE READ OFF THE MACHINE.** Which number an
+/// installation gave its operator is that machine's own fact, and a program file that wrote one
+/// would be right on one machine and silently wrong on the next.
 ///
 /// **WHAT ASKED FOR IT.** A machine's platform state is made by programs that run as root and is
 /// then driven by a Manager that reaches the machine as the operator, and every place those two
@@ -29,10 +17,10 @@ import 'create_directory.dart';
 /// either way. So this step carries no elevation flag: there is no shape of it that is not elevated,
 /// and a flag that only ever takes one value is a question nobody should be asked.
 ///
-/// **IT RE-APPLIES**, for the reason its sibling does: a directory another party reached first — a
-/// mount made on demand, an earlier program that ran as root — carries the wrong owner, and the
-/// account then starts against a directory it cannot write while everything reports itself healthy.
-/// Correcting it is safe because what stands here is a directory, not the data underneath one.
+/// **IT RE-APPLIES.** A directory another party reached first — a mount made on demand, an earlier
+/// program that ran as root — carries the wrong owner, and the account then starts against a
+/// directory it cannot write while everything reports itself healthy. Correcting it is safe because
+/// what stands here is a directory, not the data underneath one.
 ///
 /// **AN ACCOUNT THIS MACHINE DOES NOT CARRY IS A REFUSAL, never a guess.** A directory handed to a
 /// number nobody has is a directory nobody can write, and a run that did it would report it done.
@@ -268,4 +256,49 @@ final class HandDirectoryToAccount extends ReversibleStep<DirectoryBefore> {
   /// The bits of `stat -c %f` that are the permissions, which is what `chmod` sets and what the
   /// mode argument states.
   static const int _modeBits = 0xfff;
+}
+
+/// What stood at the path before [HandDirectoryToAccount] ran, which is what its undo puts back.
+///
+/// Three states and not two, because "the reading was not taken" is neither of the other two and
+/// must never be mistaken for one of them. Every value here is an instruction to an undo: one of
+/// them removes a directory, one of them re-owns it, and the third one refuses to do either.
+final class DirectoryBefore {
+  /// Records that nothing stood at the path, so what the run makes is the run's to remove.
+  const DirectoryBefore.nothing()
+    : owner = null,
+      group = null,
+      mode = null,
+      refusal = null,
+      absent = true;
+
+  /// Records the [owner], the [group] and the [mode] a directory already standing there carried.
+  const DirectoryBefore.carrying({
+    required int this.owner,
+    required int this.group,
+    required int this.mode,
+  }) : refusal = null,
+       absent = false;
+
+  /// Records that the machine could not be read, so the undo puts nothing back and says why.
+  const DirectoryBefore.unread(String this.refusal)
+    : owner = null,
+      group = null,
+      mode = null,
+      absent = false;
+
+  /// The number that owned it, or null where nothing stood there or nothing was read.
+  final int? owner;
+
+  /// The number of the group it belonged to, under the same condition as [owner].
+  final int? group;
+
+  /// The permission bits it carried, under the same condition as [owner].
+  final int? mode;
+
+  /// Why the machine could not be read, or null where it was.
+  final String? refusal;
+
+  /// Whether nothing stood at the path.
+  final bool absent;
 }

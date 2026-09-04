@@ -9,13 +9,13 @@
 # "Building" it means proving it — analysing, formatting and testing every
 # package that carries tests.
 #
-# ONE PACKAGE AT A TIME, BECAUSE THAT IS HOW THEY STAND. A dozen packages share
+# ONE PACKAGE AT A TIME, BECAUSE THAT IS HOW THEY STAND. Eleven packages share
 # this tree and each carries its own manifest. A single run at the root would
 # resolve one dependency graph for all of them and report about a thing that does
 # not exist.
 #
 # EVERY PACKAGE RUNS BEFORE ANYTHING IS REPORTED, so one red package does not
-# hide the state of the eleven behind it.
+# hide the state of the ten behind it.
 #
 # Windows twin: build.ps1 in this folder. The two are held to answering
 # identically.

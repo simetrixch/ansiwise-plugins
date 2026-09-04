@@ -5,7 +5,8 @@ import 'package:test/test.dart';
 
 import 'scripted_http.dart';
 
-/// The conversation as a PROGRAM: a row reads a field out of one answer, and a later row takes it
+/// The conversation as a PROGRAM: a row publishes a field out of one answer, and a later row takes
+/// it
 /// — through the framework's own wiring, with nothing computed in any file.
 void main() {
   ProgramStep row(
@@ -25,8 +26,9 @@ void main() {
   test('a later row takes its address from the field an earlier row read', () {
     final ResolvedProgram resolved = const ProgramResolver(httpRegistry).resolve(
       programOf(<ProgramStep>[
-        row('measure_http_field', <String, Object>{
-          'url': 'https://one.example/api/things/a1',
+        row('exchange_http_field', <String, Object>{
+          'method': 'POST',
+          'url': 'https://one.example/api/things',
           'field': 'links.watch',
         }),
         row(
@@ -36,13 +38,16 @@ void main() {
             'field': 'state',
             'until': <String>['present'],
           },
-          reads: <String, MeasurementName>{'url': const MeasurementName('http_field')},
+          reads: <String, MeasurementName>{'url': const MeasurementName('http_exchanged_field')},
         ),
       ]),
     );
 
     expect(resolved.steps, hasLength(2));
-    expect(resolved.steps[1].measured.single.measurement, const MeasurementName('http_field'));
+    expect(
+      resolved.steps[1].measured.single.measurement,
+      const MeasurementName('http_exchanged_field'),
+    );
   });
 
   test('a row taking a field nothing publishes is refused before anything runs', () {
@@ -56,7 +61,7 @@ void main() {
               'field': 'state',
               'until': <String>['present'],
             },
-            reads: <String, MeasurementName>{'url': const MeasurementName('http_field')},
+            reads: <String, MeasurementName>{'url': const MeasurementName('http_exchanged_field')},
           ),
         ]),
       ),
@@ -79,11 +84,13 @@ void main() {
       expect(
         () => const ProgramResolver(httpRegistry).resolve(
           programOf(<ProgramStep>[
-            row('measure_http_field', <String, Object>{
+            row('exchange_http_field', <String, Object>{
+              'method': 'POST',
               'url': 'https://one.example/a',
               'field': 'x',
             }),
-            row('measure_http_field', <String, Object>{
+            row('exchange_http_field', <String, Object>{
+              'method': 'POST',
               'url': 'https://one.example/b',
               'field': 'y',
             }),
@@ -143,21 +150,11 @@ void main() {
       return http.sent;
     }
 
-    /// One row of each kind, each naming [socket] or leaving it off.
+    /// Every row kind that sends while its check runs, each naming [socket] or leaving it off.
+    ///
+    /// One today. The two exchange kinds send from their APPLY and nothing at all from their check,
+    /// which is what their kind means, so a request of theirs is not what this group measures.
     Map<String, Map<String, Object>> rowsNaming(String? socket) => <String, Map<String, Object>>{
-      'measure_http_field': <String, Object>{
-        'url': address,
-        'field': 'state',
-        'socket_path': ?socket,
-      },
-      'send_http_request': <String, Object>{
-        'method': 'POST',
-        'url': address,
-        'already_url': address,
-        'already_field': 'state',
-        'already_value': 'absent',
-        'socket_path': ?socket,
-      },
       'wait_for_http_field': <String, Object>{
         'waiting_for': 'the thing to be present',
         'url': address,
@@ -195,9 +192,11 @@ void main() {
         expect(
           () => const ProgramResolver(httpRegistry).resolve(
             programOf(<ProgramStep>[
-              row('measure_http_field', <String, Object>{
+              row('wait_for_http_field', <String, Object>{
+                'waiting_for': 'the thing to be present',
                 'url': address,
                 'field': 'state',
+                'until': <String>['present'],
                 'socket_paths': socketFile,
               }),
             ]),
@@ -263,9 +262,11 @@ void main() {
     }
 
     test('a slot of the socket file is filled from the answer the row names', () async {
-      final List<HttpRequest> sent = await requestsOf('measure_http_field', <String, Object>{
+      final List<HttpRequest> sent = await requestsOf('wait_for_http_field', <String, Object>{
+        'waiting_for': 'the thing to be present',
         'url': 'https://one.example/api/things/a1',
         'field': 'state',
+        'until': <String>['present'],
         'socket_path': '<admin-socket>',
         'values': <String, Object?>{
           'admin-socket': <String, Object?>{'answer': 'admin_socket_path'},
@@ -279,9 +280,11 @@ void main() {
     test(
       'a socket file still carrying a slot is refused rather than opened by that name',
       () async {
-        final List<HttpRequest> sent = await requestsOf('measure_http_field', <String, Object>{
+        final List<HttpRequest> sent = await requestsOf('wait_for_http_field', <String, Object>{
+          'waiting_for': 'the thing to be present',
           'url': 'https://one.example/api/things/a1',
           'field': 'state',
+          'until': <String>['present'],
           'socket_path': '<admin-socket>',
         });
 
@@ -359,7 +362,8 @@ void main() {
     test('a slot of the address is filled from what an earlier row published', () async {
       final ResolvedProgram resolved = const ProgramResolver(httpRegistry).resolve(
         programOf(<ProgramStep>[
-          row('measure_http_field', <String, Object>{
+          row('exchange_http_field', <String, Object>{
+            'method': 'POST',
             'url': 'https://one.example/api/things',
             'field': 'id',
           }),
@@ -369,7 +373,7 @@ void main() {
             'field': 'state',
             'until': <String>['present'],
             'values': <String, Object?>{
-              'thing-id': <String, Object?>{'measured': 'http_field'},
+              'thing-id': <String, Object?>{'measured': 'http_exchanged_field'},
             },
           }),
         ]),
@@ -377,7 +381,7 @@ void main() {
 
       expect(
         resolved.steps[1].measuredSlots.single.measurement,
-        const MeasurementName('http_field'),
+        const MeasurementName('http_exchanged_field'),
       );
 
       // What the engine hands the step once the earlier row has published: the value written in

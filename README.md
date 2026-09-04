@@ -1,6 +1,6 @@
 # ansiwise-plugins
 
-Twelve packages, one per TOOL. Each declares steps for the tool it is named after and knows no
+Eleven packages, one per TOOL. Each declares steps for the tool it is named after and knows no
 application of it — which tenant, which cluster, which file path a product decides is a program
 row's to say. Nothing here produces a binary: the composition root that compiles one is
 ansiwise-cli, and it depends on these.
@@ -31,7 +31,7 @@ There is no register to add it to, in this repository or in the workflow.
 ```
 
 Every package is run before anything is reported, so one red package does not hide the state of the
-eleven behind it. `.github/workflows/checks.yml` does the same on a push, and the release of
+ten behind it. `.github/workflows/checks.yml` does the same on a push, and the release of
 ansiwise-cli does it once more before it builds anything — a red package stops a release before a
 binary exists.
 
@@ -49,5 +49,5 @@ dependencies:
 ```
 
 Every package of this repository a consumer holds is pinned to the SAME ref: a git dependency names
-a REF and a PATH, one ref serves all twelve, and holding two packages of one repository at two refs
+a REF and a PATH, one ref serves all eleven, and holding two packages of one repository at two refs
 is something pub refuses to resolve.

@@ -6,21 +6,18 @@
 /// OFF THE MACHINE. Which number an installation gave its operator is that machine's own fact —
 /// 1000 on one, 1001 on the next — so a program file that wrote a number would be right on one
 /// machine and silently wrong on the next, and the directory would end up belonging to somebody
-/// else while everything reported itself done. This is the whole difference from `create_directory`,
-/// whose owner is a number because the process writing there is a container carrying the number its
-/// image runs as, for which the machine has no account at all.
+/// else while everything reported itself done.
 ///
 /// AN ACCOUNT THIS MACHINE DOES NOT CARRY IS A REFUSAL. It is the case worth being sure about: a
 /// step that guessed would hand the directory to a number nobody has, which is a directory nobody
 /// can write, and the run would report it done.
 ///
-/// THE UNDO IS THE OTHER HALF, and it is the sibling's: a directory this run MADE is removed; one it
-/// found and only handed over is put back to the numbers it was carrying; and one it could not read
-/// before it acted is left standing.
+/// THE UNDO IS THE OTHER HALF: a directory this run MADE is removed; one it found and only handed
+/// over is put back to the numbers it was carrying; and one it could not read before it acted is
+/// left standing.
 library;
 
 import 'package:ansiwise_core/ansiwise_core.dart';
-import 'package:ansiwise_host/src/steps/host/create_directory.dart';
 import 'package:ansiwise_host/src/steps/host/hand_directory_to_account.dart';
 import 'package:test/test.dart';
 

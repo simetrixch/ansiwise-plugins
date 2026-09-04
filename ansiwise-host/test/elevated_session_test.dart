@@ -24,7 +24,8 @@ void main() {
   const String dropIn = '/etc/ssh/sshd_config.d/50-no-password.conf';
   const String askSshd = 'sshd -T';
   const String readPasswdEntry = 'getent passwd $user';
-  const String askResolver = 'resolvectl status';
+  const String dataFilesystem = '/mnt/data';
+  const String askMountpoint = 'mountpoint -q $dataFilesystem';
 
   /// The group whose members may read the account database, which every account is in.
   const String everybody = 'users';
@@ -40,8 +41,8 @@ void main() {
   ///
   /// `sshd -T` and `stat` are root's to have — sshd resolves its configuration out of the host keys
   /// and every file an Include names, and the operator's `.ssh` is `0700`. `getent passwd` and
-  /// `resolvectl status` are not: both read something every account on the machine may read, which
-  /// is what makes them the innocent neighbours here.
+  /// `mountpoint` are not: both read something every account on the machine may read, which is
+  /// what makes them the innocent neighbours here.
   _Session machine() => _Session(
     <String, _RootOnly>{
       askSshd: const _RootOnly(
@@ -73,10 +74,7 @@ void main() {
         refusedExitCode: 1,
       ),
     },
-    answeredToAnybody: <String, String>{
-      readPasswdEntry: '$user:x:1000:1000::$home:/bin/bash\n',
-      askResolver: 'Global\n       DNS Servers: 185.12.64.1 185.12.64.2\n',
-    },
+    answeredToAnybody: <String, String>{readPasswdEntry: '$user:x:1000:1000::$home:/bin/bash\n'},
   );
 
   /// The step as the registry builds it from a row, so the answer travels the path a row travels.
@@ -99,7 +97,7 @@ void main() {
     answers: const Arguments(<String, Object>{
       'operator_user': user,
       'operator_public_key': key,
-      'storage_mount': '',
+      'storage_mount': dataFilesystem,
     }),
     facts: Facts.none,
     measurements: const _DiscardedMeasurements(),
@@ -155,24 +153,21 @@ void main() {
   });
 
   test('THE INNOCENT NEIGHBOUR: what any account may read is read under either answer', () async {
-    // The sites answered `elevated: false`. Both commands read something world-readable, so the
-    // session hands them over whichever account asks — and neither row's answer changes what comes
-    // back. A red result above therefore means an elevation was dropped, not that this session
-    // refuses everything.
+    // The sites answered `elevated: false`. `mountpoint` asks the machine's own mount table,
+    // which every account may read, so the session hands the command over whichever account
+    // asks, and neither row's answer changes what comes back. A red result above therefore
+    // means an elevation was dropped, not that this session refuses everything.
     for (final bool granted in <bool>[false, true]) {
       final _Session session = machine();
-      final Step step = rowFor('measure_host_upstream_resolvers', <String, Object>{
-        'resolv_conf': '/etc/resolv.conf',
-        'elevated': granted,
-      });
+      final Step step = rowFor('require_storage_mount', <String, Object>{'elevated': granted});
 
       final CheckResult answer = await step.check(
-        contextFor('measure_host_upstream_resolvers', session, FakeFiles()),
+        contextFor('require_storage_mount', session, FakeFiles()..directories.add(dataFilesystem)),
       );
 
-      expect(answer, isA<Satisfied>(), reason: 'under elevated: $granted — $answer');
+      expect(answer, isA<Satisfied>(), reason: 'under elevated: $granted, $answer');
       expect(session.refused, isEmpty);
-      expect(session.carriedOut, contains(askResolver));
+      expect(session.carriedOut, contains(askMountpoint));
     }
   });
 

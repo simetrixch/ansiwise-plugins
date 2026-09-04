@@ -8,7 +8,6 @@ import 'steps/kubernetes_namespace.dart';
 import 'steps/kubernetes_object_irreversible.dart';
 import 'steps/kubernetes_object_reversible.dart';
 import 'steps/oidc_admins_binding.dart';
-import 'steps/patch_configmap_key.dart';
 import 'steps/patch_container_arguments_and_ports.dart';
 import 'steps/reapply_calico_manifest.dart';
 import 'steps/recycle_kube_system_pod_ips.dart';
@@ -83,12 +82,6 @@ const Map<StepName, RegisteredStep> kubernetesSteps = <StepName, RegisteredStep>
     source: 'lib/src/steps/recycle_kube_system_pod_ips.dart:26',
     create: RecycleKubeSystemPodIps.fromArguments,
     arguments: RecycleKubeSystemPodIps.arguments,
-  ),
-  StepName('patch_configmap_key'): RegisteredStep(
-    name: StepName('patch_configmap_key'),
-    source: 'lib/src/steps/patch_configmap_key.dart:36',
-    create: PatchConfigmapKey.fromArguments,
-    arguments: PatchConfigmapKey.arguments,
   ),
   StepName('align_calico_backend'): RegisteredStep(
     name: StepName('align_calico_backend'),

@@ -7,57 +7,9 @@ import 'git_checkout.dart';
 
 /// What has to be true about a checkout before anything is written into it.
 ///
-/// Both refusals exist because without them a run gets all the way to the end and fails there: no
-/// committer identity discovered at the commit, no write access discovered at the push.
+/// The refusal exists because without it a run gets all the way to the end and fails there: no
+/// write access discovered at the push.
 void main() {
-  group('a commit needs somebody to be made as', () {
-    test('a name and a mailbox are enough', () async {
-      final CheckResult answer = await const RequireGitIdentity(
-        repository,
-      ).check(contextOn(shell: checkout()));
-      expect(answer, isA<Satisfied>());
-    });
-
-    test('both missing are named at once, not one per run', () async {
-      final FakeShell shell = checkout()
-        ..fails('git -C $repository config --get user.name')
-        ..fails('git -C $repository config --get user.email');
-
-      final CheckResult answer = await const RequireGitIdentity(
-        repository,
-      ).check(contextOn(shell: shell));
-      expect((answer as Blocked).reason, contains('user.name'));
-      expect(answer.reason, contains('user.email'));
-    });
-
-    test('a value set to nothing is not a value', () async {
-      final FakeShell shell = checkout()
-        ..answers('git -C $repository config --get user.email', '   \n');
-
-      final CheckResult answer = await const RequireGitIdentity(
-        repository,
-      ).check(contextOn(shell: shell));
-      expect((answer as Blocked).reason, contains('user.email'));
-      expect(answer.reason, isNot(contains('user.name')));
-    });
-
-    test('a path that is no checkout is refused as that, not as a missing identity', () async {
-      final FakeShell shell = checkout()..fails('git -C $repository rev-parse --git-dir');
-
-      final CheckResult answer = await const RequireGitIdentity(
-        repository,
-      ).check(contextOn(shell: shell));
-      expect((answer as Blocked).reason, contains('no git checkout'));
-      expect(answer.reason, isNot(contains('user.name')));
-    });
-
-    test('it only measures, and changes nothing', () async {
-      final FakeShell shell = checkout();
-      await const RequireGitIdentity(repository).check(contextOn(shell: shell));
-      expect(shell.commands.where((Command c) => !c.observes), isEmpty);
-    });
-  });
-
   group('push ability is proven before the work, and with a dry run', () {
     const RequirePushableRemote gate = RequirePushableRemote(
       repository: repository,

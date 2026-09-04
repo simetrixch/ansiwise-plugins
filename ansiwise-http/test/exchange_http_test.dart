@@ -7,13 +7,12 @@ import 'scripted_http.dart';
 
 /// One changing request whose ANSWER is the whole of what it did.
 ///
-/// **What is different from the step next door**, and every test here is about one of the three:
+/// **What this kind cannot do, and every test here is about one of the three:**
 ///
-/// - there is NO already-probe. `send_http_request` reads the row's own `already_url` before it acts
-///   and again afterwards as its proof; nothing an address could be asked says whether an exchange
-///   has happened, because what would have to be read is the value the request handed back. So the
-///   check sends nothing, answers only about the row, and never answers satisfied — and a second run
-///   sends the request again, loudly.
+/// - there is NO already-probe. Nothing an address could be asked says whether an exchange has
+///   happened, because what would have to be read is the value the request handed back. So the
+///   check sends nothing, answers only about the row, and never answers satisfied — and a second
+///   run sends the request again, loudly.
 /// - the proof is what it PUBLISHED. The engine reads that off the run's own measurements; what this
 ///   file measures is that the value really is published, from the answer to this row's own request.
 /// - a read is not an exchange. The protocol's own words for a request that changes are the only

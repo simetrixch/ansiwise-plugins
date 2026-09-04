@@ -9,7 +9,7 @@
 # what a build resolves. So there is nothing here to publish — only something to
 # judge.
 #
-# ONE PACKAGE AT A TIME, BECAUSE THAT IS HOW THEY STAND. A dozen packages share
+# ONE PACKAGE AT A TIME, BECAUSE THAT IS HOW THEY STAND. Eleven packages share
 # this tree and each carries its own manifest and its own tests. A single run at
 # the root would resolve one dependency graph for all of them and report about a
 # thing that does not exist.
@@ -81,6 +81,6 @@ jobs:
             echo "::endgroup::"
           done
           # EVERY PACKAGE IS RUN BEFORE ANYTHING IS REPORTED, so one red package
-          # does not hide the state of the eleven behind it. A run that stopped at
+          # does not hide the state of the ten behind it. A run that stopped at
           # the first would have to be started again to learn the rest.
           test "$failed" -eq 0 || { echo "checks: FAIL — a package above is red"; exit 1; }

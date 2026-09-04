@@ -20,7 +20,6 @@ export 'src/steps/measure_vault_url.dart';
 export 'src/steps/remove_vault_auth_method.dart';
 export 'src/steps/remove_vault_kv_entry.dart';
 export 'src/steps/remove_vault_policy.dart';
-export 'src/steps/remove_vault_role_member.dart';
 export 'src/steps/require_vault_login.dart';
 export 'src/steps/ssh_key.dart';
 export 'src/steps/vault_api.dart';

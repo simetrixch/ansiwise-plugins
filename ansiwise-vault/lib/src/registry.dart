@@ -5,7 +5,6 @@ import 'steps/measure_vault_url.dart';
 import 'steps/remove_vault_auth_method.dart';
 import 'steps/remove_vault_kv_entry.dart';
 import 'steps/remove_vault_policy.dart';
-import 'steps/remove_vault_role_member.dart';
 import 'steps/require_vault_login.dart';
 import 'steps/vault_auth_method.dart';
 import 'steps/vault_auth_role.dart';
@@ -138,12 +137,6 @@ const Map<StepName, RegisteredStep> vaultSteps = <StepName, RegisteredStep>{
     source: 'lib/src/steps/remove_vault_kv_entry.dart:18',
     create: RemoveVaultKvEntry.fromArguments,
     arguments: RemoveVaultKvEntry.arguments,
-  ),
-  StepName('remove_vault_role_member'): RegisteredStep(
-    name: StepName('remove_vault_role_member'),
-    source: 'lib/src/steps/remove_vault_role_member.dart:23',
-    create: RemoveVaultRoleMember.fromArguments,
-    arguments: RemoveVaultRoleMember.arguments,
   ),
 };
 

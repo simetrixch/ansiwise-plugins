@@ -37,7 +37,6 @@ const Set<String> notCoveredByAFakeMachine = <String>{
   'remove_vault_auth_method',
   'remove_vault_kv_entry',
   'remove_vault_policy',
-  'remove_vault_role_member',
   'vault_auth_method',
   'vault_auth_role',
   'vault_init',

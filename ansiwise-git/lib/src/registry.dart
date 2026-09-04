@@ -9,13 +9,10 @@ import 'steps/git_identity.dart';
 import 'steps/git_commit.dart';
 import 'steps/git_merge_ref.dart';
 import 'steps/git_push.dart';
-import 'steps/git_tag.dart';
 import 'steps/write_value_in_branch_file.dart';
 import 'steps/git_push_credential.dart';
 import 'steps/measure_value_in_branch_file.dart';
-import 'steps/require_git_identity.dart';
 import 'steps/require_pushable_remote.dart';
-import 'steps/replace_regex_in_tracked_file.dart';
 import 'steps/branch/stamp_placeholder_in_tracked_files.dart';
 
 /// Every step this plugin contributes, keyed by the name a program file writes.
@@ -29,12 +26,6 @@ import 'steps/branch/stamp_placeholder_in_tracked_files.dart';
 /// answer a program never declared therefore cannot reach them, and each step refuses the same case
 /// itself, naming the answer its row pointed at.
 const Map<StepName, RegisteredStep> gitSteps = <StepName, RegisteredStep>{
-  StepName('require_git_identity'): RegisteredStep(
-    name: StepName('require_git_identity'),
-    source: 'lib/src/steps/require_git_identity.dart:12',
-    create: RequireGitIdentity.fromArguments,
-    arguments: RequireGitIdentity.arguments,
-  ),
   StepName('require_pushable_remote'): RegisteredStep(
     name: StepName('require_pushable_remote'),
     source: 'lib/src/steps/require_pushable_remote.dart:25',
@@ -96,21 +87,13 @@ const Map<StepName, RegisteredStep> gitSteps = <StepName, RegisteredStep>{
     create: GitPush.fromArguments,
     arguments: GitPush.arguments,
   ),
-  // Beside the push, because a tag is pushed the moment it is made: a tag that exists in one
-  // checkout and nowhere else is a statement nothing else can resolve.
-  // Before either of them, in a program that means it: a checkout resolves a remote name to
-  // whatever it last saw, and both the tag and the merge below read such a name.
+  // Before the push, in a program that means it: a checkout resolves a remote name to whatever it
+  // last saw, and the merge reads such a name.
   StepName('git_fetch'): RegisteredStep(
     name: StepName('git_fetch'),
     source: 'lib/src/steps/git_fetch.dart:25',
     create: GitFetch.fromArguments,
     arguments: GitFetch.arguments,
-  ),
-  StepName('git_tag'): RegisteredStep(
-    name: StepName('git_tag'),
-    source: 'lib/src/steps/git_tag.dart:22',
-    create: GitTag.fromArguments,
-    arguments: GitTag.arguments,
   ),
   // The writing half of measure_value_in_branch_file, and registered as its mirror: what one reads,
   // the other writes, so a value recorded by one operation and read by the next cannot come to be
@@ -128,12 +111,6 @@ const Map<StepName, RegisteredStep> gitSteps = <StepName, RegisteredStep>{
     source: 'lib/src/steps/git_push_credential.dart:35',
     create: GitPushCredential.fromArguments,
     arguments: GitPushCredential.arguments,
-  ),
-  StepName('replace_regex_in_tracked_file'): RegisteredStep(
-    name: StepName('replace_regex_in_tracked_file'),
-    source: 'lib/src/steps/replace_regex_in_tracked_file.dart:7',
-    create: ReplaceRegexInTrackedFile.fromArguments,
-    arguments: ReplaceRegexInTrackedFile.arguments,
   ),
   StepName('stamp_placeholder_in_tracked_files'): RegisteredStep(
     name: StepName('stamp_placeholder_in_tracked_files'),

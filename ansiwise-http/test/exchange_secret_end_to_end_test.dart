@@ -23,7 +23,7 @@ import 'scripted_http.dart';
 ///
 /// **The innocent neighbour is the same conversation with the same network, published by the kind
 /// that does NOT declare a credential** — and there the value IS in the record, in the line the
-/// sending row writes about what it read. That line is the surface: an interface that echoes a
+/// watching row writes about what it read. That line is the surface: an interface that echoes a
 /// session identifier back in a status field is entirely ordinary, and the redactor is the only
 /// thing between it and a world-readable file.
 void main() {
@@ -31,21 +31,17 @@ void main() {
   const String credential = 'sess-9f2b-this-must-be-in-no-record';
 
   const String sessions = 'https://one.example/api/sessions';
-  const String things = 'https://one.example/api/things';
   const String thing = 'https://one.example/api/things/a1';
 
-  /// The other end: it hands back a credential, echoes it once in the state it reports, and then
-  /// reports the state the sending row is waiting for.
+  /// The other end: it hands back a credential, and reports it as the state of the thing.
   ScriptedHttp otherEnd() => ScriptedHttp((HttpRequest request, int nth) {
     if (request.url == sessions) {
       return answerOf(201, '{"data":{"credential":"$credential"}}');
     }
     if (request.url == thing) {
-      // ECHOED BACK, which is what makes this test bite. The row that reads it writes what it found
-      // into the record, and only the redactor stands between that line and the file.
-      return nth == 0
-          ? answerOf(200, '{"state":"$credential"}')
-          : answerOf(200, '{"state":"present"}');
+      // ECHOED BACK, which is what makes this test bite. The row that watches this address writes
+      // what it found into the record, and only the redactor stands between that line and the file.
+      return answerOf(200, '{"state":"$credential"}');
     }
     return answerOf(201, '{}');
   });
@@ -60,16 +56,19 @@ void main() {
     }),
   );
 
-  ProgramStep sending({Map<String, MeasurementName> reads = const <String, MeasurementName>{}}) =>
+  /// The watching row: it carries the credential as a bearer and reports the state it finds.
+  ///
+  /// `until_present` rather than a value, so what ends the wait is the field carrying anything at
+  /// all - which is what puts the value it read into the line the record keeps.
+  ProgramStep watching({Map<String, MeasurementName> reads = const <String, MeasurementName>{}}) =>
       ProgramStep(
-        step: const StepName('send_http_request'),
+        step: const StepName('wait_for_http_field'),
         onFailure: OnFailure.exit,
         arguments: const Arguments(<String, Object>{
-          'method': 'POST',
-          'url': things,
-          'already_url': thing,
-          'already_field': 'state',
-          'already_value': 'present',
+          'waiting_for': 'the thing to report a state',
+          'url': thing,
+          'field': 'state',
+          'until_present': true,
         }),
         reads: reads,
       );
@@ -140,7 +139,7 @@ void main() {
     final ({List<String> lines, ScriptedHttp http, RunRecord record}) run = await runOf(
       <ProgramStep>[
         exchanging('exchange_http_secret'),
-        sending(
+        watching(
           reads: const <String, MeasurementName>{
             'bearer': MeasurementName('http_exchanged_secret'),
           },
@@ -153,11 +152,13 @@ void main() {
       0,
       reason: 'both rows have to have worked for the rest to mean much',
     );
+    final Iterable<HttpRequest> watched = run.http.sent.where(
+      (HttpRequest each) => each.url == thing,
+    );
+    expect(watched, isNotEmpty, reason: 'the watching row has to have asked for the rest to bite');
     expect(
-      run.http.sent
-          .where((HttpRequest each) => each.url == things)
-          .map((HttpRequest each) => each.headers['authorization']),
-      <String>['Bearer $credential'],
+      watched.map((HttpRequest each) => each.headers['authorization']),
+      everyElement('Bearer $credential'),
       reason:
           'the value really rode the second request, or a record without it in would say nothing at '
           'all',
@@ -168,7 +169,7 @@ void main() {
     final ({List<String> lines, ScriptedHttp http, RunRecord record}) run = await runOf(
       <ProgramStep>[
         exchanging('exchange_http_secret'),
-        sending(
+        watching(
           reads: const <String, MeasurementName>{
             'bearer': MeasurementName('http_exchanged_secret'),
           },
@@ -193,7 +194,7 @@ void main() {
     // Same conversation, same network, same echoing answer. What changes is one word in one row —
     // which kind asked for the value — and with it whether anything registered the value at all.
     final ({List<String> lines, ScriptedHttp http, RunRecord record}) run = await runOf(
-      <ProgramStep>[exchanging('exchange_http_field'), sending()],
+      <ProgramStep>[exchanging('exchange_http_field'), watching()],
     );
 
     expect(run.record.exitCode, 0);
@@ -212,7 +213,7 @@ void main() {
     final ({List<String> lines, ScriptedHttp http, RunRecord record}) run = await runOf(
       <ProgramStep>[
         exchanging('exchange_http_secret'),
-        sending(
+        watching(
           reads: const <String, MeasurementName>{
             'bearer': MeasurementName('http_exchanged_secret'),
           },
@@ -238,7 +239,7 @@ void main() {
             roles: const <Role>[],
             steps: <ProgramStep>[
               exchanging('exchange_http_field'),
-              sending(
+              watching(
                 reads: const <String, MeasurementName>{
                   'bearer': MeasurementName('http_exchanged_field'),
                 },

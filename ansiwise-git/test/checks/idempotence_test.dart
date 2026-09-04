@@ -30,18 +30,14 @@ Future<void> main() => auditIdempotence(
 /// A name leaves this list by gaining a fixture in a fixtures map that arranges the fake machine for
 /// it. A name arrives here only by somebody adding it, which is the point: a step written tomorrow
 /// either brings its fixture or is written down as unproven.
-/// **Two more arrived with the steps that moved into this package, and each is here for its own
+/// **One more arrived with the steps that moved into this package, and it is here for its own
 /// measured reason** — not because the list was the quick way to make the audit green.
 ///
 /// `stamp_placeholder_in_tracked_files` refuses for exactly the reason `git_branch` does: the value
 /// it writes comes from an answer whose NAME the row chooses, and a probe holds no answers. What
 /// measures it instead is test/stamp_placeholder_in_tracked_files_test.dart, which drives both of
 /// its rows over a fake checkout.
-///
-/// `replace_regex_in_tracked_file` is blocked before it starts, because the file it is told to
-/// modify has to exist and a probe hands it a one-character path. **Nothing else measures it**, and
-/// that is stated here rather than left to be discovered: it came out of the dissolved package
-/// without a test of its own.
+
 const Set<String> notCoveredByAFakeMachine = <String>{
   'git_branch',
   // The two files this step reads which repository and which credential out of stand at paths its
@@ -87,14 +83,6 @@ const Set<String> notCoveredByAFakeMachine = <String>{
   // the same commit is satisfied before it sends.
   'git_commit',
   'git_push',
-  // The same shape once more, and the reason is the checkout rather than the answers: a probe hands
-  // every text argument one identical value, so the tag, the ref and the remote would all be that
-  // one character — and a checkout that is not there refuses before anything is tagged. What
-  // measures it instead is test/git_tag_test.dart, over a fake checkout that answers the way a real
-  // one does: a second run finds the tag already on the same commit here AND on the remote and asks
-  // for nothing, a tag standing on another commit is refused rather than moved, and the undo takes
-  // back only a tag this run made.
-  'git_tag',
   // The credential it writes comes from an answer or from a file whose NAME its row chooses, and a
   // probe holds no answers and hands every text argument the same one-character value — so it is
   // handed BOTH sources at once, which the row's own shape refusal rightly rejects before this
@@ -109,6 +97,5 @@ const Set<String> notCoveredByAFakeMachine = <String>{
   // already recorded and has nothing to do, a file already carrying the key is edited where the line
   // stands rather than gaining a second one, and the undo puts back exactly what was there.
   'write_value_in_branch_file',
-  'replace_regex_in_tracked_file',
   'stamp_placeholder_in_tracked_files',
 };

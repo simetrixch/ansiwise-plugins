@@ -17,7 +17,6 @@ export 'src/steps/kubernetes_namespace.dart';
 export 'src/steps/kubernetes_object_irreversible.dart';
 export 'src/steps/kubernetes_object_reversible.dart';
 export 'src/steps/oidc_admins_binding.dart';
-export 'src/steps/patch_configmap_key.dart';
 export 'src/steps/patch_container_arguments_and_ports.dart';
 export 'src/steps/reapply_calico_manifest.dart';
 export 'src/steps/recycle_kube_system_pod_ips.dart';

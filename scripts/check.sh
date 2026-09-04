@@ -19,7 +19,7 @@ echo "check: every package analysed, formatted and tested."
 
 # dart is named here rather than left to build.sh. build.sh runs each package in a subshell, so a
 # missing dart reaches the screen as "dart: command not found" under a package heading, and the
-# run then walks the eleven behind it and says a package is red. A skipped check must never read
+# run then walks the ten behind it and says a package is red. A skipped check must never read
 # like a check that ran.
 command -v dart >/dev/null 2>&1 \
   || fail "bash build.sh — dart is not on this machine, so no package was analysed, formatted or tested. The version this organisation pins stands in ../ansiwise-core/tool/gate/pins.dart."

@@ -4,9 +4,9 @@ import 'package:test/test.dart';
 
 import 'host_fixture.dart';
 
-/// One flag in a process's argument file, and the three measurements the network work asks of a
-/// machine: its real name servers, its packet-filtering backend, and the source ports it opens its
-/// own outgoing connections from.
+/// One flag in a process's argument file, and the two measurements the network work asks of a
+/// machine: its packet-filtering backend, and the source ports it opens its own outgoing
+/// connections from.
 void main() {
   const StepName under = StepName('under_test');
   const String argsPath = '/etc/proxy/args';
@@ -67,68 +67,6 @@ void main() {
       await proxyMode.apply(context);
       await proxyMode.undo(context, captured);
       expect(machine.files.contents[argsPath], '--proxy-mode=ipvs\n');
-    });
-  });
-
-  group("the machine's real name servers", () {
-    test(
-      'the system resolver is asked first, and the resolver file only when it says nothing',
-      () async {
-        // Reading the file first answers with the local stub, which no pod can reach — and the
-        // detection is then finished with a value that does not work.
-        final HostMachine machine = HostMachine();
-        machine.shell.answers(
-          'resolvectl status',
-          'Global\n  DNS Servers: 185.12.64.1 185.12.64.2\n  DNSSEC setting: no\n',
-        );
-        machine.files.contents['/etc/resolv.conf'] = 'nameserver 127.0.0.53\n';
-
-        expect(await MeasureHostUpstreamResolvers.measure(machine.contextFor(under)), <String>[
-          '185.12.64.1',
-          '185.12.64.2',
-        ]);
-      },
-    );
-
-    test('the local stub is dropped from BOTH sources', () async {
-      final HostMachine machine = HostMachine();
-      machine.shell.answers('resolvectl status', 'Global\n  DNS Servers: 127.0.0.53\n');
-      machine.files.contents['/etc/resolv.conf'] = 'nameserver 127.0.0.53\nnameserver 9.9.9.9\n';
-
-      expect(await MeasureHostUpstreamResolvers.measure(machine.contextFor(under)), <String>[
-        '9.9.9.9',
-      ]);
-    });
-
-    test('an address carrying the interface it is valid on comes back without it', () async {
-      final HostMachine machine = HostMachine();
-      machine.shell.answers('resolvectl status', '  DNS Servers: fe80::1%eth0\n');
-      expect(await MeasureHostUpstreamResolvers.measure(machine.contextFor(under)), <String>[
-        'fe80::1',
-      ]);
-    });
-
-    test('the same address named twice is named once', () async {
-      final HostMachine machine = HostMachine();
-      machine.shell.answers(
-        'resolvectl status',
-        '  DNS Servers: 185.12.64.1 185.12.64.2\n  Current DNS Server: 185.12.64.1\n',
-      );
-      expect(await MeasureHostUpstreamResolvers.measure(machine.contextFor(under)), <String>[
-        '185.12.64.1',
-        '185.12.64.2',
-      ]);
-    });
-
-    test('a machine naming nothing a pod could reach is refused', () async {
-      final HostMachine machine = HostMachine();
-      machine.shell.answers('resolvectl status', '  DNS Servers: 127.0.0.53\n');
-      machine.files.contents['/etc/resolv.conf'] = 'nameserver 127.0.0.53\n';
-
-      const MeasureHostUpstreamResolvers step = MeasureHostUpstreamResolvers(
-        resolvConf: '/etc/resolv.conf',
-      );
-      expect(await step.check(machine.contextFor(under)), isA<Blocked>());
     });
   });
 

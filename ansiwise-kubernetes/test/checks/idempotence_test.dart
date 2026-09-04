@@ -45,10 +45,9 @@ const Set<String> notCoveredByAFakeMachine = <String>{
   'kubernetes_configmap_from_directory',
   'kubernetes_namespace',
   'oidc_admins_binding',
-  // Both leave their postcondition behind with a kubectl call: the value of a key and the pods of a
-  // workload are read back out of the cluster, and a fake shell answers a command rather than
-  // carrying it out. Named here rather than counted as passing.
-  'patch_configmap_key',
+  // It leaves its postcondition behind with a kubectl call: the pods of a workload are read back
+  // out of the cluster, and a fake shell answers a command rather than carrying it out. Named here
+  // rather than counted as passing.
   'patch_container_arguments_and_ports',
   'reapply_calico_manifest',
   // The same placeholder problem as the two calico rows above, and one more on top of it. Its

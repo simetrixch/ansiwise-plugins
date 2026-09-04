@@ -8,11 +8,8 @@ import 'steps/host/add_shell_alias.dart';
 import 'steps/host/add_user_to_group.dart';
 import 'steps/host/apply_netplan.dart';
 import 'steps/host/clean_package_cache.dart';
-import 'steps/host/create_directory.dart';
-import 'steps/host/create_file_from_template.dart';
 import 'steps/host/create_group.dart';
 import 'steps/host/create_storage_directory.dart';
-import 'steps/host/disable_addons.dart';
 import 'steps/host/disable_password_login.dart';
 import 'steps/host/enable_addons.dart';
 import 'steps/host/enable_service.dart';
@@ -29,7 +26,6 @@ import 'steps/host/link_storage_path.dart';
 import 'steps/host/measure_host_iptables_backend.dart';
 import 'steps/host/measure_host_addresses.dart';
 import 'steps/host/measure_host_local_port_range.dart';
-import 'steps/host/measure_host_upstream_resolvers.dart';
 import 'steps/host/measure_public_nic.dart';
 import 'steps/host/remove_snap.dart';
 import 'steps/host/remove_unused_packages.dart';
@@ -43,7 +39,6 @@ import 'steps/host/require_netplan_merged.dart';
 import 'steps/host/require_pinned_ubuntu.dart';
 import 'steps/host/require_registry_pull_credential.dart';
 import 'steps/host/require_storage_mount.dart';
-import 'steps/host/restart_stale_service.dart';
 import 'steps/host/set_process_flag.dart';
 import 'steps/host/set_process_flags.dart';
 import 'steps/host/stamp_tailnet_address_in_certificate.dart';
@@ -53,7 +48,6 @@ import 'steps/host/tailnet_leave.dart';
 import 'steps/host/tailnet_logout.dart';
 import 'steps/host/tailnet_reconnect.dart';
 import 'steps/host/wait_for_addons_enabled.dart';
-import 'steps/host/wait_for_http.dart';
 import 'steps/host/write_connmark_nft_table.dart';
 import 'steps/host/write_containerd_registry_mirror.dart';
 import 'steps/host/write_file_from_template.dart';
@@ -218,18 +212,6 @@ const Map<StepName, RegisteredStep> hostSteps = <StepName, RegisteredStep>{
     create: WaitForAddonsEnabled.fromArguments,
     arguments: WaitForAddonsEnabled.arguments,
   ),
-  StepName('wait_for_http'): RegisteredStep(
-    name: StepName('wait_for_http'),
-    source: 'lib/src/steps/host/wait_for_http.dart:18',
-    create: WaitForHttp.fromArguments,
-    arguments: WaitForHttp.arguments,
-  ),
-  StepName('disable_addons'): RegisteredStep(
-    name: StepName('disable_addons'),
-    source: 'lib/src/steps/host/disable_addons.dart:16',
-    create: DisableAddons.fromArguments,
-    arguments: DisableAddons.arguments,
-  ),
   // The group an account is put into, which has to be on the machine before anything can name it.
   StepName('create_group'): RegisteredStep(
     name: StepName('create_group'),
@@ -244,15 +226,6 @@ const Map<StepName, RegisteredStep> hostSteps = <StepName, RegisteredStep>{
     create: AddUserToGroup.fromArguments,
     arguments: AddUserToGroup.arguments,
     answers: AddUserToGroup.answers,
-  ),
-  // The one step that changes nothing on disk and everything about what is RUNNING. A replaced
-  // executable leaves a service on the inode it started from, so a machine can report itself at a
-  // pin and be serving what stood there before.
-  StepName('restart_stale_service'): RegisteredStep(
-    name: StepName('restart_stale_service'),
-    source: 'lib/src/steps/host/restart_stale_service.dart:27',
-    create: RestartStaleService.fromArguments,
-    arguments: RestartStaleService.arguments,
   ),
   StepName('enable_service'): RegisteredStep(
     name: StepName('enable_service'),
@@ -274,21 +247,11 @@ const Map<StepName, RegisteredStep> hostSteps = <StepName, RegisteredStep>{
     arguments: ExportKubeconfig.arguments,
     answers: ExportKubeconfig.answers,
   ),
-  // A directory a workload requires, left at the numbers that workload writes as. The only step
-  // here that takes an owner: every other one that makes a directory either makes it so a file it
-  // is about to write has somewhere to go, or makes the one the cluster's volumes live under.
-  StepName('create_directory'): RegisteredStep(
-    name: StepName('create_directory'),
-    source: 'lib/src/steps/host/create_directory.dart:41',
-    create: CreateDirectory.fromArguments,
-    arguments: CreateDirectory.arguments,
-  ),
-  // The same directory for the other kind of writer: a real account on this machine, named in an
-  // answer because which number an installation gave it is that machine's own fact. Two steps and
-  // not one with a choice, so that neither has an optional argument.
+  // A directory a real account on this machine has to be able to write into. The account is named in
+  // an answer, because which number an installation gave it is that machine's own fact.
   StepName('hand_directory_to_account'): RegisteredStep(
     name: StepName('hand_directory_to_account'),
-    source: 'lib/src/steps/host/hand_directory_to_account.dart:39',
+    source: 'lib/src/steps/host/hand_directory_to_account.dart:27',
     create: HandDirectoryToAccount.fromArguments,
     arguments: HandDirectoryToAccount.arguments,
   ),
@@ -390,18 +353,6 @@ const Map<StepName, RegisteredStep> hostSteps = <StepName, RegisteredStep>{
     arguments: ActivatePublicSrcRouting.arguments,
   ),
   // Measurements the network conversion of a cluster asks for.
-  StepName('measure_host_upstream_resolvers'): RegisteredStep(
-    name: StepName('measure_host_upstream_resolvers'),
-    source: 'lib/src/steps/host/measure_host_upstream_resolvers.dart:21',
-    create: MeasureHostUpstreamResolvers.fromArguments,
-    arguments: MeasureHostUpstreamResolvers.arguments,
-    publishes: <MeasurementSpec>[
-      MeasurementSpec(
-        name: MeasurementName('upstream_servers'),
-        describes: 'the name servers this machine forwards to',
-      ),
-    ],
-  ),
   StepName('measure_host_iptables_backend'): RegisteredStep(
     name: StepName('measure_host_iptables_backend'),
     source: 'lib/src/steps/host/measure_host_iptables_backend.dart:13',
@@ -447,12 +398,6 @@ const Map<StepName, RegisteredStep> hostSteps = <StepName, RegisteredStep>{
   // The file system as a tool. It declares no answer of its own: which file, where it goes and
   // which axis a caller wants one of them per are read out of the row, so this package carries no
   // name of any file a product keeps.
-  StepName('create_file_from_template'): RegisteredStep(
-    name: StepName('create_file_from_template'),
-    source: 'lib/src/steps/host/create_file_from_template.dart:25',
-    create: CreateFileFromTemplate.fromArguments,
-    arguments: CreateFileFromTemplate.arguments,
-  ),
   StepName('write_file_from_template'): RegisteredStep(
     name: StepName('write_file_from_template'),
     source: 'lib/src/steps/host/write_file_from_template.dart:28',

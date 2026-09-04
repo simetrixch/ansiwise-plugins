@@ -8,9 +8,9 @@
   THIS REPOSITORY BUILDS NOTHING. It holds the steps that touch a real machine, as passive parts of
   ansiwise-cli: no binary, no release, no tag of its own. "Building" it means proving it.
 
-  ONE PACKAGE AT A TIME, BECAUSE THAT IS HOW THEY STAND. A dozen packages share this tree and each
+  ONE PACKAGE AT A TIME, BECAUSE THAT IS HOW THEY STAND. Eleven packages share this tree and each
   carries its own manifest. EVERY PACKAGE RUNS BEFORE ANYTHING IS REPORTED, so one red package does
-  not hide the state of the eleven behind it.
+  not hide the state of the ten behind it.
 #>
 $ErrorActionPreference = 'Continue'
 Set-Location (git rev-parse --show-toplevel)

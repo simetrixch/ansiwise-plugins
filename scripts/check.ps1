@@ -24,7 +24,7 @@ function Fail($message) { Write-Host "check: FAIL — $message"; exit 1 }
 Write-Host "check: every package analysed, formatted and tested."
 
 # dart is named here rather than left to build.ps1. build.ps1 reads the exit code of each dart
-# call, so a missing one leaves twelve packages reported as red and the reason on a line above
+# call, so a missing one leaves eleven packages reported as red and the reason on a line above
 # each of them. A skipped check must never read like a check that ran.
 if (-not (Get-Command dart -ErrorAction SilentlyContinue)) {
   Fail "./build.ps1 — dart is not on this machine, so no package was analysed, formatted or tested. The version this organisation pins stands in ../ansiwise-core/tool/gate/pins.dart."

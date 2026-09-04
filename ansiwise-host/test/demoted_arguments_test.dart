@@ -28,15 +28,8 @@ void main() {
     'apply_netplan': <String>['table'],
     'require_cli_tool_versions': <String>['pin_prefixes'],
     'require_netplan_merged': <String>['installer_key', 'drop_in_key'],
-    // Where such a file goes and who may read it. Both are decided by what the file is FOR, which
-    // is the one thing this step is built never to know, so neither may carry an answer here.
-    'create_file_from_template': <String>['path', 'file_mode'],
-    // An empty list here would mean "switch nothing off", which is a row that does nothing at all:
-    // a program wanting no addon switched off leaves the row out. Absent-or-stated instead, so a
-    // row that forgot the list is refused rather than quietly running for nothing. Spelling the
-    // three commands in this package would name one product's cluster snap; which snap runs a
-    // cluster is the product's substrate choice, so each command is the row's.
-    'disable_addons': <String>['addons', 'status_command', 'enable_command', 'disable_command'],
+    // Spelling the three commands in this package would name one product's cluster snap; which snap
+    // runs a cluster is the product's substrate choice, so each command is the row's.
     'enable_addons': <String>['status_command', 'enable_command', 'disable_command'],
     'export_kubeconfig': <String>['credentials_command'],
     'install_pinned_tool': <String>['pin_prefixes'],

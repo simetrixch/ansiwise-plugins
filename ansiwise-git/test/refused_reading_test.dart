@@ -285,76 +285,7 @@ void main() {
   });
 
   group('a remote that could not be reached is not a remote that publishes nothing', () {
-    const String tag = 'v1.2.3';
     const String commit = '0f9fef51a0e1e0b6c9e21c1f0a0b0c0d0e0f0a0b';
-
-    /// The tagging row of a release program: the checkout as text, the tag, and the remote.
-    Step taggingRow() => gitRegistry
-        .step(const StepName('git_tag'))!
-        .create(
-          const Arguments(<String, Object>{
-            'repository': repository,
-            'tag': tag,
-            'ref': 'HEAD',
-            'message': 'what this run released',
-            'remote': remote,
-          }),
-        );
-
-    /// What the remote is asked about the tag, as the step composes it.
-    const String askRemote = 'git -C $repository ls-remote --tags $remote refs/tags/$tag*';
-
-    /// A checkout that carries the commit and answers every local question about the tag.
-    FakeShell taggableCheckout() => FakeShell()
-      ..answers('git check-ref-format refs/tags/$tag', '')
-      ..answers('git -C $repository rev-parse --quiet --verify HEAD^{commit}', '$commit\n')
-      ..fails('git -C $repository rev-parse --quiet --verify refs/tags/$tag^{commit}');
-
-    test('THE PLANTED DEFECT: an undo leaves a tag it could not read alone', () async {
-      // capture answers "the tag was already there, here or on the remote", and its false half is
-      // what runs `push --delete`. Answered false out of a refused ls-remote, an undo deletes a tag
-      // somebody else published - against the doc that says exactly that is not this run's to do.
-      final FakeShell shell = taggableCheckout()
-        ..fails(askRemote, exitCode: 128, stderr: 'fatal: Could not read from remote repository.');
-      final ReversibleStep<Object?> step = taggingRow() as ReversibleStep<Object?>;
-      final StepContext context = contextOn(shell: shell, files: FakeFiles());
-
-      final Object? captured = await step.capture(context);
-      await step.undo(context, captured);
-
-      expect(captured, isTrue, reason: 'a reading nobody took must not read as "it was not there"');
-      expect(
-        shell.ran,
-        isNot(contains('git -C $repository push --delete $remote $tag')),
-        reason: 'the undo deleted a tag it never measured',
-      );
-    });
-
-    test('THE PLANTED DEFECT: the check refuses rather than pushing over it', () async {
-      final CheckResult answer = await taggingRow().check(
-        contextOn(
-          shell: taggableCheckout()
-            ..fails(
-              askRemote,
-              exitCode: 128,
-              stderr: 'fatal: Could not read from remote repository.',
-            ),
-          files: FakeFiles(),
-        ),
-      );
-
-      expect(answer, isA<Blocked>(), reason: '$answer');
-    });
-
-    test('THE INNOCENT CASE: a remote that answers and carries no such tag is tagged', () async {
-      // `ls-remote` writes nothing at exit zero for a pattern it matches nothing against, and that
-      // empty answer keeps meaning a remote without the tag.
-      final CheckResult answer = await taggingRow().check(
-        contextOn(shell: taggableCheckout()..answers(askRemote, ''), files: FakeFiles()),
-      );
-
-      expect(answer, isA<Ready>(), reason: answer is Blocked ? answer.reason : '$answer');
-    });
 
     test('THE PLANTED DEFECT: a push proves nothing over two readings nobody took', () async {
       // The postcondition of git_push compares what this checkout stands on with what the remote
