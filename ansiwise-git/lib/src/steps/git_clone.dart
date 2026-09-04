@@ -29,6 +29,12 @@ import 'recorded_value.dart';
 /// difference: the remote address is set, the branch is fetched, and the local branch is placed on
 /// the fetched tip. What that costs is stated in the irreversible reason: a position the checkout
 /// stood on before is kept nowhere.
+///
+/// **A WORKING TREE THAT IS NOT CLEAN REFUSES THE ROW, where there is a difference to correct.**
+/// Placing the branch is `checkout -B`, and an uncommitted change that does not collide with it is
+/// carried onto the placed branch without a word — into whatever commits next. So the tree is asked,
+/// and it is asked only where the placement would happen: a checkout already standing on the
+/// published tip is finished, and an edit somebody left there is not this row's business.
 final class GitClone extends IrreversibleStep {
   /// Clones into [repository] the repository the machine's own settings name, on [branch].
   const GitClone({
@@ -280,6 +286,37 @@ final class GitClone extends IrreversibleStep {
       return const CheckResult.ready();
     }
 
+    final CheckResult placement = await _placement(
+      context,
+      source: source,
+      url: url,
+      standsOn: standsOn,
+    );
+    if (placement is! Ready) {
+      return placement;
+    }
+    // ASKED LAST, AND ONLY WHERE THERE IS WORK. What [apply] does to an existing checkout is
+    // `checkout -B` onto the fetched tip, and where an uncommitted change does not collide git
+    // carries it silently onto the branch being placed — so what the next commit records is
+    // something nobody declared. A checkout already standing on the published tip changes nothing,
+    // and there an edit somebody left in the tree is none of this row's business.
+    //
+    // The two paths above this one are not asked: a path holding no repository has no uncommitted
+    // work, and a checkout belonging to another account is one this row hands over before it asks
+    // git anything at all.
+    return await _uncommitted(context) ?? placement;
+  }
+
+  /// Whether the checkout is where this row says, or why it cannot be told.
+  ///
+  /// Held apart from [check] so the working tree is asked exactly once, and only where the answer is
+  /// that there is work to do.
+  Future<CheckResult> _placement(
+    StepContext context, {
+    required _Reading source,
+    required String url,
+    required String standsOn,
+  }) async {
     final CommandResult remote = await _observe(context, <String>[
       '-C',
       repository,
@@ -335,6 +372,31 @@ final class GitClone extends IrreversibleStep {
       return const CheckResult.ready();
     }
     return CheckResult.satisfied('$repository stands on the published tip of $standsOn');
+  }
+
+  /// Why this checkout may not be placed over, or null where its working tree is clean.
+  Future<CheckResult?> _uncommitted(StepContext context) async {
+    final CommandResult dirty = await _observe(context, <String>[
+      '-C',
+      repository,
+      'status',
+      '--porcelain',
+    ]);
+    if (!dirty.ok) {
+      return CheckResult.blocked(
+        'the state of the working tree at $repository could not be read, and this row would place '
+        'the branch over it: '
+        '${dirty.stderr.trim().isEmpty ? 'git exited ${dirty.exitCode}' : dirty.stderr.trim()}',
+      );
+    }
+    if (dirty.trimmed.isNotEmpty) {
+      return CheckResult.blocked(
+        'the working tree at $repository is not clean, and this row places the branch over it — '
+        'what does not collide is carried onto the placed branch and lands in whatever commits '
+        'next: ${dirty.trimmed.split('\n').join(', ')}',
+      );
+    }
+    return null;
   }
 
   @override

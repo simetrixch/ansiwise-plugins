@@ -1,15 +1,19 @@
 /// Steps that drive git in one checkout: what has to be true before a commit, what has to be true
-/// before a push, and cutting a branch.
+/// before a push, and cutting, standing on and deleting a branch. Beside them the conditions a
+/// program row is gated on, which ask git a question and change nothing.
 ///
 /// This package knows the tool and never an application of it. Which checkout, which remote, which
 /// branch is cut from which, and where the name of a new branch is read from — all of that is a
 /// program row's to say.
 library;
 
+export 'src/conditions/remote_has_branch.dart';
 export 'src/registry.dart';
 export 'src/steps/copy_branch_file.dart';
 export 'src/steps/branch/remove_branch_file.dart';
+export 'src/steps/delete_local_branch.dart';
 export 'src/steps/git_branch.dart';
+export 'src/steps/git_checkout_branch.dart';
 export 'src/steps/git_clone.dart';
 export 'src/steps/git_fetch.dart';
 export 'src/steps/git_identity.dart';

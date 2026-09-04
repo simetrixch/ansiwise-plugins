@@ -3,7 +3,8 @@ import 'package:ansiwise_core/ansiwise_core.dart';
 import 'registry.dart';
 
 /// What this plugin teaches the framework: how to drive git in one checkout — measure that it can
-/// commit, measure that it could push, and cut a branch.
+/// commit, measure that it could push, cut a branch, stand on one a remote publishes, delete one —
+/// and how to ask git whether a remote publishes a branch, which is a condition rather than a step.
 ///
 /// It knows the TOOL and nothing of any product kept in a checkout — where the checkout stands,
 /// which remote it pushes to, which branch a new one is cut from, and which answer the new name is

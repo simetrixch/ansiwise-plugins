@@ -1,18 +1,81 @@
 import 'package:ansiwise_checks/ansiwise_checks.dart';
 import 'package:ansiwise_checks/audits.dart';
+import 'package:ansiwise_core/testing.dart';
 import 'package:ansiwise_git/ansiwise_git.dart';
 
 /// idempotence — every step of [gitRegistry], run twice against a fake machine.
 ///
-/// No step of this package is arranged with a fixture, and none of them could be: the two gates only
-/// measure, so a fake answers them the same way twice without any arrangement, and the one step that
-/// changes something is named in the ledger below for a reason no arrangement of a fake shell
-/// reaches.
+/// Two steps are arranged with a fixture and the rest are named in the ledger below. What decides
+/// which is whether the probe's own values can reach the step at all: it hands every text argument
+/// one identical character and holds an answer under that same word, so a step whose whole subject
+/// is a checkout at a path its row names is refused before it does anything — unless the fake
+/// machine is arranged to answer as that checkout. The two arranged here are the two that ask
+/// nothing else of the machine.
 Future<void> main() => auditIdempotence(
   gitRegistry,
-  fixtures: const <String, Fixture>{},
+  fixtures: stepFixtures,
   notCoveredByAFakeMachine: notCoveredByAFakeMachine,
 );
+
+/// The checkout the probe's own values point at: every text argument is [plausibleText], and the
+/// answer the row's `name_answer` points at holds the same word.
+const String probedCheckout = plausibleText;
+
+/// See [probedCheckout] — the branch name, which is that same word.
+const String probedBranch = plausibleText;
+
+/// The commit the arranged remote publishes the branch on.
+const String probedTip = 'a1a1a1';
+
+/// The fake machine each named step meets, so that a second run can be measured at all.
+///
+/// **The effect of each command is the effect the real one has**, and no entry is registered for a
+/// command that changes nothing here: a `changes` with an empty body would tell the audit that the
+/// work happened while the fake machine stood exactly as it was, which is the reading the audit
+/// exists to refuse.
+final Map<String, Fixture> stepFixtures = <String, Fixture>{
+  'git_checkout_branch': (FakeShell shell, FakeFiles files, FakeHttp http) {
+    shell
+      ..answers('git -C $probedCheckout rev-parse --abbrev-ref HEAD', 'somewhere-else\n')
+      ..answers(
+        'git -C $probedCheckout ls-remote --heads origin refs/heads/$probedBranch',
+        '$probedTip\trefs/heads/$probedBranch\n',
+      )
+      ..answers('git -C $probedCheckout status --porcelain', '')
+      ..fails('git -C $probedCheckout rev-parse --quiet --verify refs/heads/$probedBranch^{commit}')
+      ..changes(
+        'git -C $probedCheckout fetch origin '
+        '+refs/heads/$probedBranch:refs/remotes/origin/$probedBranch',
+        () => shell.answers(
+          'git -C $probedCheckout rev-parse --quiet --verify '
+              'refs/remotes/origin/$probedBranch^{commit}',
+          '$probedTip\n',
+        ),
+      )
+      ..changes('git -C $probedCheckout checkout -B $probedBranch origin/$probedBranch', () {
+        shell
+          ..answers('git -C $probedCheckout rev-parse --abbrev-ref HEAD', '$probedBranch\n')
+          ..answers(
+            'git -C $probedCheckout rev-parse --quiet --verify refs/heads/$probedBranch^{commit}',
+            '$probedTip\n',
+          );
+      });
+  },
+  'delete_local_branch': (FakeShell shell, FakeFiles files, FakeHttp http) {
+    shell
+      ..answers(
+        'git -C $probedCheckout rev-parse --verify --quiet refs/heads/$probedBranch',
+        '$probedTip\n',
+      )
+      ..answers('git -C $probedCheckout rev-parse --abbrev-ref HEAD', 'somewhere-else\n')
+      ..changes(
+        'git -C $probedCheckout branch -D $probedBranch',
+        () => shell.fails(
+          'git -C $probedCheckout rev-parse --verify --quiet refs/heads/$probedBranch',
+        ),
+      );
+  },
+};
 
 /// The steps a fake machine cannot exercise, each named because an audit that quietly covers nothing
 /// reads like a pass.

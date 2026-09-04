@@ -175,6 +175,48 @@ void main() {
     );
   });
 
+  group('a working tree that is not clean', () {
+    /// What the row asks the checkout about its own working tree.
+    const String asking = 'git -c safe.directory=$path -C $path status --porcelain';
+
+    /// A commit that is not the published tip, so the row has the branch to place.
+    const String behind = 'f6c1a2d90b7e8f3a4c5d6e7f8a9b0c1d2e3f4a5b';
+
+    test('PLANTED DEFECT: work over an unclean tree is refused, naming what stands there', () async {
+      // `checkout -B` carries an uncommitted change that does not collide onto the branch it places,
+      // and it lands in whatever commits next. Nothing said so before this refusal.
+      final FakeShell shell = standing(localTip: behind)..answers(asking, ' M values.yaml\n');
+
+      final CheckResult result = await step.check(contextOn(shell: shell, files: settings()));
+      expect((result as Blocked).reason, contains('values.yaml'));
+      expect(shell.ran, isNot(contains('git -c safe.directory=$path -C $path fetch origin $base')));
+    });
+
+    test('a reading that could not be taken is refused, not read as a clean tree', () async {
+      final FakeShell shell = standing(localTip: behind)
+        ..fails(asking, exitCode: 128, stderr: 'fatal: not a git repository');
+
+      final CheckResult result = await step.check(contextOn(shell: shell, files: settings()));
+      expect((result as Blocked).reason, contains('could not be read'));
+    });
+
+    test('a checkout already on the published tip is not asked at all', () async {
+      // A row that would change nothing must not start refusing because somebody left an edit in
+      // the tree. The reading is placed after the placement questions precisely for this.
+      final FakeShell shell = standing()..answers(asking, ' M values.yaml\n');
+
+      expect(await step.check(contextOn(shell: shell, files: settings())), isA<Satisfied>());
+      expect(shell.ran, isNot(contains(asking)));
+    });
+
+    test('INNOCENT CASE: a clean tree with work to do is ready, and was really asked', () async {
+      final FakeShell shell = standing(localTip: behind);
+
+      expect(await step.check(contextOn(shell: shell, files: settings())), isA<Ready>());
+      expect(shell.ran, contains(asking));
+    });
+  });
+
   // ---------------------------------------------------------------------------------------------
   // THE FIRST CHECKOUT OF AN INSTALLATION, which has no earlier program to have written a file.
   //
