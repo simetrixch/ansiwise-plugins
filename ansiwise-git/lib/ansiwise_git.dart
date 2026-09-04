@@ -10,7 +10,6 @@ library;
 export 'src/conditions/remote_has_branch.dart';
 export 'src/registry.dart';
 export 'src/steps/copy_branch_file.dart';
-export 'src/steps/branch/remove_branch_file.dart';
 export 'src/steps/delete_local_branch.dart';
 export 'src/steps/git_branch.dart';
 export 'src/steps/git_checkout_branch.dart';
