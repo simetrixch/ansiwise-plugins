@@ -23,7 +23,7 @@ dependencies:
   ansiwise_core:
     git:
       url: https://github.com/simetrixch/ansiwise-core.git
-      ref: a11d358266c6c6b9ab9406216dd2080e8d80c2d7
+      ref: 65e715f9f844be64a6f61ae697ed2ba40aa1522d
   # The steps read the profile a deployment wrote, and that file is YAML. A plugin that reads its
   # own files declares the parser itself rather than leaning on a transitive dependency it does
   # not control.
@@ -46,5 +46,5 @@ dev_dependencies:
   ansiwise_checks:
     git:
       url: https://github.com/simetrixch/ansiwise-checks.git
-      ref: 80dde83d57244c0d3c168ad0fd7e25ffa69094b2
+      ref: d3ff17852ec0a4ce0128d9397a8959830b9a0f39
       path: registry
