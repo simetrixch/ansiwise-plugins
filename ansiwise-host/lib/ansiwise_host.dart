@@ -21,7 +21,7 @@ export 'src/steps/host/clean_package_cache.dart';
 export 'src/steps/host/hand_directory_to_account.dart';
 export 'src/steps/host/create_group.dart';
 export 'src/steps/host/create_storage_directory.dart';
-export 'src/steps/host/disable_password_login.dart';
+export 'src/steps/host/password_login.dart';
 export 'src/steps/host/enable_addons.dart';
 export 'src/steps/host/enable_service.dart';
 export 'src/steps/host/export_kubeconfig.dart';

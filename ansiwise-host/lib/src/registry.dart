@@ -11,7 +11,7 @@ import 'steps/host/apply_netplan.dart';
 import 'steps/host/clean_package_cache.dart';
 import 'steps/host/create_group.dart';
 import 'steps/host/create_storage_directory.dart';
-import 'steps/host/disable_password_login.dart';
+import 'steps/host/password_login.dart';
 import 'steps/host/enable_addons.dart';
 import 'steps/host/enable_service.dart';
 import 'steps/host/export_kubeconfig.dart';
@@ -131,11 +131,22 @@ const Map<StepName, RegisteredStep> hostSteps = <StepName, RegisteredStep>{
     arguments: RequireKeyLoginPossible.arguments,
     answers: RequireKeyLoginPossible.answers,
   ),
+  // TWO NAMES OVER ONE CLASS, for the reason the condition pairs of this package carry: closing the
+  // door and opening it again are the same capability at two values — the same drop-in, the same
+  // reload, the same question to sshd, and one word different in each. The opening direction is
+  // what a person needs after a key is lost, and it is not made safer by living in somebody's shell
+  // script instead of in a row a dry run can show.
   StepName('disable_password_login'): RegisteredStep(
     name: StepName('disable_password_login'),
-    source: 'lib/src/steps/host/disable_password_login.dart:15',
-    create: DisablePasswordLogin.fromArguments,
-    arguments: DisablePasswordLogin.arguments,
+    source: 'lib/src/steps/host/password_login.dart:38',
+    create: PasswordLogin.refusing,
+    arguments: PasswordLogin.arguments,
+  ),
+  StepName('enable_password_login'): RegisteredStep(
+    name: StepName('enable_password_login'),
+    source: 'lib/src/steps/host/password_login.dart:38',
+    create: PasswordLogin.allowing,
+    arguments: PasswordLogin.arguments,
   ),
   // Snaps.
   StepName('remove_snap'): RegisteredStep(

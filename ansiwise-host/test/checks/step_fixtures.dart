@@ -162,8 +162,9 @@ final Map<String, Fixture> stepFixtures = <String, Fixture>{
     });
   },
 
-  // sshd keeps answering `yes` until the reload, which is exactly the silent failure the step is
-  // built around — a drop-in nothing reads leaves the password working.
+  // sshd keeps answering the old setting until the reload, which is exactly the silent failure the
+  // step is built around — a drop-in nothing reads leaves the door where it was. One fixture per
+  // direction, because each starts from the machine the other one leaves behind.
   'disable_password_login': (FakeShell shell, FakeFiles files, FakeHttp http) {
     shell.answers(
       'sshd -T',
@@ -173,6 +174,19 @@ final Map<String, Fixture> stepFixtures = <String, Fixture>{
       shell.answers(
         'sshd -T',
         'port 22\npasswordauthentication no\nkbdinteractiveauthentication no\n',
+      );
+    });
+  },
+
+  'enable_password_login': (FakeShell shell, FakeFiles files, FakeHttp http) {
+    shell.answers(
+      'sshd -T',
+      'port 22\npasswordauthentication no\nkbdinteractiveauthentication no\n',
+    );
+    shell.changes('systemctl reload ssh', () {
+      shell.answers(
+        'sshd -T',
+        'port 22\npasswordauthentication yes\nkbdinteractiveauthentication yes\n',
       );
     });
   },

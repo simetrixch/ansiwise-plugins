@@ -11,4 +11,5 @@ export 'src/steps/exchange_http_field.dart';
 export 'src/steps/exchange_http_secret.dart';
 export 'src/steps/http_conversation.dart';
 export 'src/steps/http_exchange.dart';
+export 'src/steps/measure_http_status.dart';
 export 'src/steps/wait_for_http_field.dart';

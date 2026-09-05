@@ -2,6 +2,7 @@ import 'package:ansiwise_core/ansiwise_core.dart';
 
 import 'steps/exchange_http_field.dart';
 import 'steps/exchange_http_secret.dart';
+import 'steps/measure_http_status.dart';
 import 'steps/wait_for_http_field.dart';
 
 /// Every step this plugin contributes, keyed by the name a program file writes.
@@ -36,6 +37,17 @@ const Map<StepName, RegisteredStep> httpSteps = <StepName, RegisteredStep>{
         secret: true,
       ),
     ],
+  ),
+  // THE OTHER WAY TO ASK, and the one the waiting step cannot do. That one reads a field of a
+  // decoded answer and calls everything outside the two-hundreds "not yet"; this one decides on the
+  // status itself, which for a service whose state IS its status is the only reading that tells
+  // "not there yet" from "there and sealed".
+  StepName('measure_http_status'): RegisteredStep(
+    name: StepName('measure_http_status'),
+    source: 'lib/src/steps/measure_http_status.dart:26',
+    create: MeasureHttpStatus.fromArguments,
+    arguments: MeasureHttpStatus.arguments,
+    publishes: MeasureHttpStatus.publishes,
   ),
   StepName('wait_for_http_field'): RegisteredStep(
     name: StepName('wait_for_http_field'),

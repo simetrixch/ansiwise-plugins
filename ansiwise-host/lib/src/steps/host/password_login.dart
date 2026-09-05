@@ -1,25 +1,62 @@
 import 'package:ansiwise_core/ansiwise_core.dart';
 
-/// Closes the password door, once the key door is known to work.
+/// Closes the password door, or opens it again.
 ///
-/// **This step is its own program on purpose.** The machine cannot prove that the operator's key
+/// **ONE capability at two values, and the row picks.** Both directions write the same drop-in, run
+/// the same reload and ask sshd the same question; what differs is the one word written and the one
+/// word the answer is read for. That is a value and not a kind, so it is one class under two
+/// registered names — `disable_password_login` and `enable_password_login` — exactly as
+/// `key_is_true.dart` carries two names over one reading.
+///
+/// **Closing it is its own program on purpose.** The machine cannot prove that the operator's key
 /// login works — the private half is on their laptop and never comes here. So the proof is theirs:
-/// they connect with the key, and only then do they run this. A program that installed the key and
+/// they connect with the key, and only then do they run it. A program that installed the key and
 /// took the password away in one pass would be a program that locks somebody out of a machine they
 /// can no longer reach, and no gate on this machine could catch it.
 ///
+/// **Opening it again is what a person needs after a key is lost**, and it is refused today only
+/// because nobody wrote it. It is not made safer by living in somebody's shell script instead of in
+/// a program row a dry run can show: a row states which file it writes and how sshd is reloaded, and
+/// the run record carries both.
+///
 /// **The verdict comes from sshd's own resolved configuration, never from the file.** A drop-in in a
 /// directory nothing includes changes nothing, and sshd says nothing about being ignored — the
-/// password simply keeps working. Asking `sshd -T` afterwards is what turns that silence into a
-/// failure.
-final class DisablePasswordLogin extends ReversibleStep<String?> {
-  /// Writes the setting into [dropIn].
-  const DisablePasswordLogin({required this.dropIn, required this.reload, this.elevated = false});
+/// password simply keeps working, or keeps being refused. Asking `sshd -T` afterwards is what turns
+/// that silence into a failure.
+///
+/// **Both settings move together, in both directions.** A machine whose keyboard-interactive door
+/// is open is a machine that takes a password, whatever `PasswordAuthentication` says, so closing
+/// one and leaving the other is a door that reads as closed and is not. The inverse holds for the
+/// same reason, and it is what makes the two directions undo one another exactly.
+///
+/// **The drop-in is the file the ROW names, and nothing else on the machine is touched.** A machine
+/// that also carries a file of some other name, written by something else, keeps it: this step
+/// neither reads nor removes it, so on such a machine two files state the door and sshd resolves
+/// both. The `sshd -T` check is what makes that visible — it reports what sshd actually resolved,
+/// so a duplicate that disagrees leaves this step reporting Ready for ever rather than reporting
+/// success over a door it did not move.
+final class PasswordLogin extends ReversibleStep<String?> {
+  /// Writes the setting for [allowed] into [dropIn].
+  const PasswordLogin({
+    required this.dropIn,
+    required this.reload,
+    required this.allowed,
+    this.elevated = false,
+  });
 
-  /// Builds the step from what the program gave it.
-  factory DisablePasswordLogin.fromArguments(Arguments arguments) => DisablePasswordLogin(
+  /// The direction that closes the door.
+  factory PasswordLogin.refusing(Arguments arguments) =>
+      PasswordLogin._from(arguments, allowed: false);
+
+  /// The direction that opens it again.
+  factory PasswordLogin.allowing(Arguments arguments) =>
+      PasswordLogin._from(arguments, allowed: true);
+
+  /// Builds either direction from what the program gave it.
+  factory PasswordLogin._from(Arguments arguments, {required bool allowed}) => PasswordLogin(
     dropIn: arguments.text('drop_in'),
     reload: arguments.textList('reload'),
+    allowed: allowed,
     elevated: arguments.has('elevated') && arguments.flag('elevated'),
   );
 
@@ -59,12 +96,23 @@ final class DisablePasswordLogin extends ReversibleStep<String?> {
   /// The command that makes sshd re-read its configuration.
   final List<String> reload;
 
-  /// What the file says.
-  static const String content =
-      '# Written by ansiwise. Password authentication is off; this machine is\n'
-      '# reached by key. Remove this file and reload sshd to put it back.\n'
-      'PasswordAuthentication no\n'
-      'KbdInteractiveAuthentication no\n';
+  /// Whether this direction opens the door or closes it.
+  ///
+  /// Not configuration and never in a file: it is decided by which of the two registered names the
+  /// program row wrote.
+  final bool allowed;
+
+  /// What sshd's own word for this direction is, which is what the file says and what the resolved
+  /// configuration is read for.
+  String get setting => allowed ? 'yes' : 'no';
+
+  /// What the file says, for this direction.
+  String get content =>
+      '# Written by ansiwise. Password authentication is ${allowed ? 'on' : 'off'}; this machine\n'
+      '# is reached ${allowed ? 'by password or by key' : 'by key'}. Remove this file and reload\n'
+      '# sshd to put it back.\n'
+      'PasswordAuthentication $setting\n'
+      'KbdInteractiveAuthentication $setting\n';
 
   /// Whether the drop-in belongs to root, so every read and write of it is elevated.
   final bool elevated;
@@ -77,11 +125,13 @@ final class DisablePasswordLogin extends ReversibleStep<String?> {
       );
     }
 
-    final bool off =
-        settings['passwordauthentication'] == 'no' &&
-        settings['kbdinteractiveauthentication'] == 'no';
-    return off
-        ? const CheckResult.satisfied('sshd already refuses a password')
+    final bool stands =
+        settings['passwordauthentication'] == setting &&
+        settings['kbdinteractiveauthentication'] == setting;
+    return stands
+        ? CheckResult.satisfied(
+            allowed ? 'sshd already accepts a password' : 'sshd already refuses a password',
+          )
         : const CheckResult.ready();
   }
 
@@ -130,7 +180,7 @@ final class DisablePasswordLogin extends ReversibleStep<String?> {
       await context.files.write(dropIn, captured, mode: _configFile, elevated: elevated);
     }
     // Reloading is part of taking it back. A file removed while sshd still holds the old setting
-    // leaves a machine that refuses a password for a reason nothing on disk explains any more.
+    // leaves a machine whose door stands one way for a reason nothing on disk explains any more.
     await context.shell.run(
       Command.detailed(reload.first, arguments: reload.sublist(1), elevated: true),
     );
