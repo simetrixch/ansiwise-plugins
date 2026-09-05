@@ -187,6 +187,12 @@ final class WaitForHttpField extends ObservingStep {
     ArgumentSpec(
       name: 'timeout_seconds',
       kind: ArgumentKind.integer,
+      band: IntegerBand.between(
+        least: 1,
+        most: 86400,
+        because:
+            'a bound of zero seconds gives up before it looks, and one longer than a day outlives the run it bounds',
+      ),
       required: false,
       defaultValue: 300,
       describes: 'how long the state is given before the wait reports that it did not happen',
@@ -194,6 +200,12 @@ final class WaitForHttpField extends ObservingStep {
     ArgumentSpec(
       name: 'interval_seconds',
       kind: ArgumentKind.integer,
+      band: IntegerBand.between(
+        least: 1,
+        most: 3600,
+        because:
+            'a gap of zero seconds asks without pausing, and one longer than an hour is a wait rather than a gap between looks',
+      ),
       required: false,
       defaultValue: 5,
       describes: 'how long to leave between asks',

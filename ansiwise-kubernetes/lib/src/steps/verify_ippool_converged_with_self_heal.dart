@@ -47,6 +47,12 @@ final class VerifyIppoolConvergedWithSelfHeal extends IrreversibleStep {
     ArgumentSpec(
       name: 'timeout_seconds',
       kind: ArgumentKind.integer,
+      band: IntegerBand.between(
+        least: 1,
+        most: 86400,
+        because:
+            'a bound of zero seconds gives up before it looks, and one longer than a day outlives the run it bounds',
+      ),
       describes: 'how long the pool is given to come back on the new range',
       required: false,
       defaultValue: 180,
@@ -54,6 +60,12 @@ final class VerifyIppoolConvergedWithSelfHeal extends IrreversibleStep {
     ArgumentSpec(
       name: 'interval_seconds',
       kind: ArgumentKind.integer,
+      band: IntegerBand.between(
+        least: 1,
+        most: 3600,
+        because:
+            'a gap of zero seconds asks without pausing, and one longer than an hour is a wait rather than a gap between looks',
+      ),
       describes: 'how long to leave between looks at the pool',
       required: false,
       defaultValue: 5,
@@ -61,6 +73,12 @@ final class VerifyIppoolConvergedWithSelfHeal extends IrreversibleStep {
     ArgumentSpec(
       name: 'rollout_timeout_seconds',
       kind: ArgumentKind.integer,
+      band: IntegerBand.between(
+        least: 1,
+        most: 86400,
+        because:
+            'a bound of zero seconds gives up before it looks, and one longer than a day outlives the run it bounds',
+      ),
       describes: 'how long the network agent is given to be replaced when the pool is healed',
       required: false,
       defaultValue: 120,

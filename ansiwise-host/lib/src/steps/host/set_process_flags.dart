@@ -58,6 +58,12 @@ final class SetProcessFlags extends ReversibleStep<String?> {
     ArgumentSpec(
       name: 'file_mode',
       kind: ArgumentKind.integer,
+      band: IntegerBand.between(
+        least: 0,
+        most: 4095,
+        because:
+            'a permission mode is twelve bits, so 4095 is 0o7777 and nothing outside it is a mode',
+      ),
       describes: 'the permissions the argument file is written with (e.g. 384)',
     ),
     ArgumentSpec(
@@ -75,6 +81,12 @@ final class SetProcessFlags extends ReversibleStep<String?> {
     ArgumentSpec(
       name: 'ready_timeout_seconds',
       kind: ArgumentKind.integer,
+      band: IntegerBand.between(
+        least: 1,
+        most: 86400,
+        because:
+            'a bound of zero seconds gives up before it looks, and one longer than a day outlives the run it bounds',
+      ),
       required: false,
       defaultValue: 120,
       describes: 'how long to keep asking before giving up on the restarted process',

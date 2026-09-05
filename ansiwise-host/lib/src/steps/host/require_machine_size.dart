@@ -24,11 +24,23 @@ final class RequireMachineSize extends ObservingStep {
     ArgumentSpec(
       name: 'vcpu',
       kind: ArgumentKind.integer,
+      band: IntegerBand.between(
+        least: 1,
+        most: 4096,
+        because:
+            'a floor of zero processors refuses no machine, and a product that needs more than four thousand on one machine is a figure nobody meant',
+      ),
       describes: 'the fewest processors the product fits on',
     ),
     ArgumentSpec(
       name: 'memory_kilobytes',
       kind: ArgumentKind.integer,
+      band: IntegerBand.between(
+        least: 65536,
+        most: 68719476736,
+        because:
+            '64 MiB is below what a kernel and a userland run on, so a smaller floor is a unit mistake, and 64 TiB is above the largest single machine sold',
+      ),
       describes: 'the least memory, as /proc/meminfo reports it after kernel reservations',
     ),
   ];

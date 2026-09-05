@@ -83,6 +83,12 @@ final class FileFromVault extends ReversibleStep<bool> {
     ArgumentSpec(
       name: 'file_mode',
       kind: ArgumentKind.integer,
+      band: IntegerBand.between(
+        least: 0,
+        most: 4095,
+        because:
+            'a permission mode is twelve bits, so 4095 is 0o7777 and nothing outside it is a mode',
+      ),
       describes:
           'the permissions the file is written with, as the number the machine stores — 384 is '
           'the mode of a file only its owner may read, which is what a materialized credential '

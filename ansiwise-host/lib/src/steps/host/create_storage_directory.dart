@@ -21,6 +21,12 @@ final class CreateStorageDirectory extends IrreversibleStep {
     ArgumentSpec(
       name: 'mode',
       kind: ArgumentKind.integer,
+      band: IntegerBand.between(
+        least: 0,
+        most: 4095,
+        because:
+            'a permission mode is twelve bits, so 4095 is 0o7777 and nothing outside it is a mode',
+      ),
       describes: 'the permission bits it is made with, as a decimal number',
       required: false,
       // 0755 as a number, because a program file writes a value and not a notation.

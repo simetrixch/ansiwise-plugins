@@ -56,6 +56,12 @@ final class HandDirectoryToAccount extends ReversibleStep<DirectoryBefore> {
     ArgumentSpec(
       name: 'mode',
       kind: ArgumentKind.integer,
+      band: IntegerBand.between(
+        least: 0,
+        most: 4095,
+        because:
+            'a permission mode is twelve bits, so 4095 is 0o7777 and nothing outside it is a mode',
+      ),
       describes:
           'the permission bits it ends up with, as a decimal number — 493 is 0755, the mode of a '
           'directory anyone on the machine may read and its owner may write',

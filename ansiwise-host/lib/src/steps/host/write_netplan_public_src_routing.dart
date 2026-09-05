@@ -67,6 +67,12 @@ final class WriteNetplanPublicSrcRouting extends ReversibleStep<String?>
     ArgumentSpec(
       name: 'table',
       kind: ArgumentKind.integer,
+      band: IntegerBand.between(
+        least: 1,
+        most: 4294967295,
+        because:
+            'a routing table is numbered in 32 bits, and 0 is the unspecified table, which names none',
+      ),
       describes:
           'the routing table whose only route is the public gateway, free of every table this '
           'machine already routes with',

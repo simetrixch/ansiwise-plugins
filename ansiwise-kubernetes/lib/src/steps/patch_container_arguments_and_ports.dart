@@ -106,6 +106,12 @@ final class PatchContainerArgumentsAndPorts extends ReversibleStep<ContainerAddi
     ArgumentSpec(
       name: 'rollout_timeout_seconds',
       kind: ArgumentKind.integer,
+      band: IntegerBand.between(
+        least: 1,
+        most: 86400,
+        because:
+            'a bound of zero seconds gives up before it looks, and one longer than a day outlives the run it bounds',
+      ),
       describes: 'how long the replacements are given to come up',
       required: false,
       defaultValue: 90,

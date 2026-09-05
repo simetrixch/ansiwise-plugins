@@ -61,12 +61,24 @@ final class VaultInit extends IrreversibleStep {
     ArgumentSpec(
       name: 'key_shares',
       kind: ArgumentKind.integer,
+      band: IntegerBand.between(
+        least: 1,
+        most: 255,
+        because:
+            'a Shamir share is indexed by a non-zero byte, so 255 is the most that can exist, and a split into fewer than one part is no split',
+      ),
       defaultValue: 5,
       describes: 'how many unseal keys the quorum is split into',
     ),
     ArgumentSpec(
       name: 'key_threshold',
       kind: ArgumentKind.integer,
+      band: IntegerBand.between(
+        least: 1,
+        most: 255,
+        because:
+            'a Shamir share is indexed by a non-zero byte, so 255 is the most that can exist, and a threshold below one would need no key at all',
+      ),
       defaultValue: 3,
       describes: 'how many of those keys have to be fed back to unseal',
     ),

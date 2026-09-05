@@ -24,6 +24,12 @@ final class ApplyNetplan extends IrreversibleStep {
     ArgumentSpec(
       name: 'table',
       kind: ArgumentKind.integer,
+      band: IntegerBand.between(
+        least: 1,
+        most: 4294967295,
+        because:
+            'a routing table is numbered in 32 bits, and 0 is the unspecified table, which names none',
+      ),
       describes:
           'the routing table whose only route is the public gateway, as the drop-in that holds it '
           'numbers it',

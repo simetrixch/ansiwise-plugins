@@ -77,6 +77,12 @@ final class RestartCertManagerAndReapplyClusterIssuer extends IrreversibleStep {
     ArgumentSpec(
       name: 'settle_seconds',
       kind: ArgumentKind.integer,
+      band: IntegerBand.between(
+        least: 1,
+        most: 3600,
+        because:
+            'a pause of zero seconds is no pause, and one longer than an hour is a wait rather than a settle',
+      ),
       describes: 'how long the restarted service is left before the issuer is applied again',
       required: false,
       defaultValue: 15,
@@ -84,6 +90,12 @@ final class RestartCertManagerAndReapplyClusterIssuer extends IrreversibleStep {
     ArgumentSpec(
       name: 'wait_seconds',
       kind: ArgumentKind.integer,
+      band: IntegerBand.between(
+        least: 1,
+        most: 86400,
+        because:
+            'a bound of zero seconds gives up before it looks, and one longer than a day outlives the run it bounds',
+      ),
       describes: 'how long the second registration is given, after which the run reports a failure',
       required: false,
       defaultValue: 60,
@@ -91,6 +103,12 @@ final class RestartCertManagerAndReapplyClusterIssuer extends IrreversibleStep {
     ArgumentSpec(
       name: 'interval_seconds',
       kind: ArgumentKind.integer,
+      band: IntegerBand.between(
+        least: 1,
+        most: 3600,
+        because:
+            'a gap of zero seconds asks without pausing, and one longer than an hour is a wait rather than a gap between looks',
+      ),
       describes: 'how long to leave between looks',
       required: false,
       defaultValue: 10,

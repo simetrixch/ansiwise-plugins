@@ -75,6 +75,12 @@ final class WritePublicSrcRoutingUnit extends ReversibleStep<String?> with FileS
     ArgumentSpec(
       name: 'table',
       kind: ArgumentKind.integer,
+      band: IntegerBand.between(
+        least: 1,
+        most: 4294967295,
+        because:
+            'a routing table is numbered in 32 bits, and 0 is the unspecified table, which names none',
+      ),
       describes:
           'the routing table the marked replies are steered into, as the drop-in that holds the '
           'public gateway numbers it',
@@ -82,6 +88,12 @@ final class WritePublicSrcRoutingUnit extends ReversibleStep<String?> with FileS
     ArgumentSpec(
       name: 'priority',
       kind: ArgumentKind.integer,
+      band: IntegerBand.between(
+        least: 0,
+        most: 4294967295,
+        because:
+            'a rule priority is numbered in 32 bits, and 0 is the first rule the machine reads',
+      ),
       describes: 'the number the rule keyed on the mark is installed at, as the script installs it',
     ),
     // ASKED, never assumed. Whether the file this row points at belongs to root is a property of

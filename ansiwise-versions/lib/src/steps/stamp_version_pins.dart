@@ -70,6 +70,12 @@ final class StampVersionPins extends ReversibleStep<Map<String, String>> {
     ArgumentSpec(
       name: 'file_mode',
       kind: ArgumentKind.integer,
+      band: IntegerBand.between(
+        least: 0,
+        most: 4095,
+        because:
+            'a permission mode is twelve bits, so 4095 is 0o7777 and nothing outside it is a mode',
+      ),
       required: false,
       defaultValue: 420,
       describes:

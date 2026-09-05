@@ -70,6 +70,12 @@ final class StampVariableValueInManifest extends ReversibleStep<String?> {
     ArgumentSpec(
       name: 'file_mode',
       kind: ArgumentKind.integer,
+      band: IntegerBand.between(
+        least: 0,
+        most: 4095,
+        because:
+            'a permission mode is twelve bits, so 4095 is 0o7777 and nothing outside it is a mode',
+      ),
       describes:
           'the permissions the manifest and its backup are written with, as the number the machine '
           'stores — 384 is the owner-only mode a file read by a privileged service wants',

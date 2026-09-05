@@ -78,6 +78,12 @@ final class WriteFileFromTemplate extends ReversibleStep<String?> with FileStep,
     ArgumentSpec(
       name: 'file_mode',
       kind: ArgumentKind.integer,
+      band: IntegerBand.between(
+        least: 0,
+        most: 4095,
+        because:
+            'a permission mode is twelve bits, so 4095 is 0o7777 and nothing outside it is a mode',
+      ),
       describes:
           'the permissions the file is written with, as the number the machine stores — 420 is the '
           'mode of a file anyone on the machine may read, 384 of one only its owner may',

@@ -120,6 +120,12 @@ const List<ArgumentSpec> exchangeArguments = <ArgumentSpec>[
   ArgumentSpec(
     name: 'timeout_seconds',
     kind: ArgumentKind.integer,
+    band: IntegerBand.between(
+      least: 1,
+      most: 86400,
+      because:
+          'a bound of zero seconds gives up before it looks, and one longer than a day outlives the run it bounds',
+    ),
     required: false,
     defaultValue: 30,
     describes:

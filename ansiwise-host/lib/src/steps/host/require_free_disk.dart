@@ -25,6 +25,12 @@ final class RequireFreeDisk extends ObservingStep {
     ArgumentSpec(
       name: 'gigabytes',
       kind: ArgumentKind.integer,
+      band: IntegerBand.between(
+        least: 1,
+        most: 1048576,
+        because:
+            'a floor of zero refuses no disk, and one above a petabyte names no file system an installation stands on',
+      ),
       describes: 'the least free space the installation needs there',
     ),
   ];
