@@ -16,9 +16,9 @@ anyway, because a tag can be moved onto another tree while a commit cannot.
 
 Make a directory named `ansiwise-<tool>` with a `pubspec.yaml` in it. That is the whole of it:
 
-- `.github/workflows/checks.yml` walks every directory holding a `pubspec.yaml` and a `test/`, so a
-  new package is analysed, formatted and tested without being added to a list;
-- `build.sh` walks the same directories, so the same run happens locally;
+- `build.sh` walks every directory holding a `pubspec.yaml` and a `test/`, so a new package is
+  analysed, formatted and tested without being added to a list;
+- `.github/workflows/checks.yml` runs that same file on a push, so there is one walk and not two;
 - the product picks up the packages it wants by path, at the commit its manifest names.
 
 There is no register to add it to, in this repository or in the workflow.
@@ -30,10 +30,11 @@ There is no register to add it to, in this repository or in the workflow.
 ./build.ps1         the Windows entry point; it starts build.sh and nothing else
 ```
 
-Every package is run before anything is reported, so one red package does not hide the state of the
-ten behind it. `.github/workflows/checks.yml` does the same on a push, and the release of
-ansiwise-cli does it once more before it builds anything — a red package stops a release before a
-binary exists.
+The packages run at once, each in a process of its own, and each one's output is printed whole and
+in directory order. Every package is run before anything is reported, so one red package does not
+hide the state of the ten behind it. `.github/workflows/checks.yml` runs this same file on a push,
+and the release of ansiwise-cli runs it once more before it builds anything — a red package stops a
+release before a binary exists.
 
 ## Taking one
 
