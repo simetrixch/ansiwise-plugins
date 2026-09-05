@@ -4,6 +4,8 @@ import 'package:yaml/yaml.dart';
 
 import 'package:ansiwise_core/ansiwise_core.dart';
 
+import 'yaml_file.dart';
+
 /// Where the mirror a machine pulls its images through is written down, and what it is reached with.
 ///
 /// Two steps need the same answer for different reasons. The gate refuses a machine whose credential
@@ -229,15 +231,7 @@ final class RegistryMirror {
     } on YamlException {
       return null;
     }
-    YamlNode? at = document;
-    for (final String key in mirrorHostKey.split('.')) {
-      if (at case final YamlMap map) {
-        at = map.nodes[key];
-        continue;
-      }
-      return null;
-    }
-    if (at?.value case final String host) {
+    if (yamlNodeAt(document, mirrorHostKey)?.value case final String host) {
       return host.trim().isEmpty ? null : host.trim();
     }
     return null;

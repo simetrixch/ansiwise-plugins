@@ -3,6 +3,7 @@ import 'conditions/key_has_value.dart';
 import 'conditions/key_is_true.dart';
 import 'conditions/answers_compare.dart';
 import 'conditions/keys_compare.dart';
+import 'conditions/yaml_key_has_value.dart';
 import 'steps/host/activate_public_src_routing.dart';
 import 'steps/host/add_shell_alias.dart';
 import 'steps/host/add_user_to_group.dart';
@@ -485,6 +486,25 @@ const Map<PredicateName, RegisteredPredicate> hostConditions = <PredicateName, R
     create: KeyHasValue.differing,
     describes: 'whether a key in a KEY=value file carries anything but one stated value',
     arguments: KeyHasValue.arguments,
+  ),
+  // The same third shape over the other file grammar this package reads. A `KEY=value` file is what
+  // a shell sources; a YAML file is what a declarative tree is written in, and the six entries above
+  // answer ConditionUnanswerable on one — a file of no `KEY=value` lines carries no line assigning
+  // anything. The path is dotted, because a YAML file nests and a `KEY=value` file does not.
+  PredicateName('yaml_key_has_value'): RegisteredPredicate.taking(
+    name: PredicateName('yaml_key_has_value'),
+    source: 'lib/src/conditions/yaml_key_has_value.dart:44',
+    create: YamlKeyHasValue.matching,
+    describes: 'whether a key of a YAML file, at a dotted path, carries one stated value',
+    arguments: YamlKeyHasValue.arguments,
+  ),
+  PredicateName('yaml_key_lacks_value'): RegisteredPredicate.taking(
+    name: PredicateName('yaml_key_lacks_value'),
+    source: 'lib/src/conditions/yaml_key_has_value.dart:44',
+    create: YamlKeyHasValue.differing,
+    describes:
+        'whether a key of a YAML file, at a dotted path, carries anything but one stated value',
+    arguments: YamlKeyHasValue.arguments,
   ),
   // Two names for one comparison, because a `not:` behind `when:` would be an operator and an
   // operator is where a program file starts being a language.
