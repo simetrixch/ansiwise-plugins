@@ -1,164 +1,26 @@
 #!/usr/bin/env bash
-# The checks run here, on this machine, before anything leaves it.
+# NOT A GATE. The push gate of every repository of this organisation is one file, simetrix-gh's
+# hooks/pre-push, and this finds it and hands it git's own standard input unread. Nothing is
+# decided here, so this file cannot come to a different verdict than the one beside it in the
+# next repository.
 #
-# A check somebody else's machine runs is a check the person who wrote the code does not watch:
-# they push, they walk away, and the failure arrives later addressed to nobody. So every package
-# is analysed, formatted and tested at the push, and a red one keeps the commits local.
+# Installed once per clone with:  git config core.hooksPath .githooks
 #
-# The messages of the pushed commits are read too. Work is done on master, so a commit's issue
-# number may stand anywhere in the message rather than at the front of the subject. A commit that
-# names none has to be one of three other things, and each of them is checked for by itself.
-
+# THE NEIGHBOURHOOD IS MEASURED FROM THE MAIN CHECKOUT, NOT FROM THIS TREE. Work is done in a
+# worktree under `../.worktrees/<repo>/`, and the only thing standing beside a worktree is
+# another worktree. `--git-common-dir` points into the main checkout's `.git` from a worktree as
+# well as from the checkout itself, so one line answers for both.
+#
+# THE TOOLING CHECKOUT IS FOUND BY NAME, WITHOUT CASE. A checkout is regularly cased differently
+# from the repository it came from, and an exact match reports a present one as absent.
 set -uo pipefail
-
-root="$(git rev-parse --show-toplevel)" || exit 1
-cd "$root" || exit 1
-# Git exports GIT_DIR, GIT_WORK_TREE and GIT_INDEX_FILE to a hook. A check that starts git itself in
-# a temporary directory - a test that runs git init and git remote add - would then act on THIS
-# repository instead of its own. The hook has changed into the tree by now, so git finds it by
-# the working directory and nothing below needs the variables.
-unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_PREFIX GIT_COMMON_DIR
-
-head_sha="$(git rev-parse HEAD)" || exit 1
-pushed=0
-bad=""
-
-# Git writes one line per ref being pushed: local ref, local sha, remote ref, remote sha.
-while read -r local_ref local_sha remote_ref remote_sha; do
-  [ -n "${local_ref:-}" ] || continue
-
-  # An all-zero local sha is a ref being deleted. There is no commit to judge, and a push that only
-  # deletes refs runs no checks at all.
-  case "$local_sha" in
-    *[!0]*) ;;
-    *) continue ;;
-  esac
-  pushed=$((pushed + 1))
-
-  if [ "$local_sha" != "$head_sha" ]; then
-    echo "REFUSED: $local_ref is not the checked-out commit, so the checks below would not describe what is being pushed."
-    echo "Check that commit out and push it again."
-    exit 1
-  fi
-
-  # An all-zero remote sha is a branch the remote does not have yet, so there is no "before" to
-  # compare against and every commit reachable from the local sha is being pushed.
-  case "$remote_sha" in
-    *[!0]*) range="$remote_sha..$local_sha" ;;
-    *) range="$local_sha" ;;
-  esac
-
-  # A remote sha this checkout does not carry cannot be measured from. git rev-list would fail, the
-  # loop would read zero commits, and a forced push over an unfetched remote would pass the message
-  # rule with nothing read at all.
-  case "$remote_sha" in
-    *[!0]*)
-      if ! git cat-file -e "${remote_sha}^{commit}" 2>/dev/null; then
-        echo "REFUSED: the commit $remote_sha that $remote_ref points at is not in this checkout, so the commits being pushed cannot be listed."
-        echo "Run git fetch, then push again."
-        exit 1
-      fi
-      ;;
-  esac
-
-  # A merge commit carries the subjects of both sides and is not judged on its own message.
-  for sha in $(git rev-list --no-merges "$range" 2>/dev/null); do
-    message="$(git log -1 --format=%B "$sha")"
-    subject="$(git log -1 --format=%s "$sha")"
-
-    # The ordinary case: the issue number stands somewhere in the message.
-    case "$message" in
-      *"#"[0-9]*) continue ;;
-    esac
-
-    # A release stamp carries no issue. It stamps a version onto a state already reviewed.
-    case "$subject" in
-      "release:"*) continue ;;
-    esac
-
-    # A trailer that names the reason there is no issue, and who asked for it.
-    if printf '%s\n' "$message" | grep -q '^No-issue:[[:space:]]*[^[:space:]]'; then
-      continue
-    fi
-
-    # A change that only EXPLAINS the system needs no issue. The test is what the commit touched,
-    # never which words are in its message. A commit that touched nothing does not pass here.
-    #
-    # The name is read without its folders, because the rule is about the file and not about where
-    # it stands: docs/LICENSE explains as much as LICENSE does. LICENSE* is one pattern, so
-    # LICENSE-MIT and LICENSE.txt are both a licence.
-    explains=1
-    touched=0
-    while IFS= read -r path; do
-      [ -n "$path" ] || continue
-      touched=1
-      case "${path##*/}" in
-        *.md|LICENSE*) ;;
-        *) explains=0 ;;
-      esac
-    done <<EOF
-$(git show --name-only --format= "$sha")
-EOF
-    if [ "$touched" -eq 1 ] && [ "$explains" -eq 1 ]; then
-      continue
-    fi
-
-    bad="$bad
-  $(git log -1 --format='%h %s' "$sha")"
-  done
+main="$(cd "$(git rev-parse --git-common-dir)/.." && git rev-parse --show-toplevel)"
+for entry in "$(dirname "$main")"/*; do
+  [ -d "$entry" ] || continue
+  [ "$(printf '%s' "${entry##*/}" | tr '[:upper:]' '[:lower:]')" = 'simetrix-gh' ] || continue
+  [ -f "$entry/hooks/pre-push" ] \
+    || { echo "pre-push: REFUSED — $entry/hooks/pre-push is missing, so nothing judged this push." >&2; exit 1; }
+  exec bash "$entry/hooks/pre-push" "$@"
 done
-
-if [ "$pushed" -eq 0 ]; then
-  echo "pre-push: nothing to check, no commits are being pushed."
-  exit 0
-fi
-
-if [ -n "$bad" ]; then
-  echo "REFUSED: every pushed commit names the issues it touches, unless it is a release stamp, or"
-  echo "explains only, or carries a No-issue: trailer saying who asked for it and why."
-  echo "These are none of those:$bad"
-  echo "Reword them, then push again."
-  exit 1
-fi
-
-# No push without the three team modes. The check lives in the tooling checkout beside the MAIN
-# checkout, found by name whatever case the directory carries, because a checkout cloned on a
-# case-insensitive filesystem keeps the case whoever cloned it typed. A push whose modes cannot be
-# checked does not leave the machine.
-#
-# THE SIBLINGS STAND BESIDE THE MAIN CHECKOUT, and this hook also runs from a worktree. An issue is
-# worked in a worktree under ../.worktrees/<repo>/, whose own parent directory holds nothing but
-# other worktrees, so a search beside the working tree finds no tooling there. The common git
-# directory is the main checkout's .git from either place, and it is what the neighbourhood is
-# measured from.
-modes_check=""
-tooling=""
-common="$(git rev-parse --git-common-dir)" || exit 1
-case "$common" in
-  /*|[A-Za-z]:*) ;;
-  *) common="$root/$common" ;;
-esac
-main_checkout="$(cd "$common/.." && pwd)" || exit 1
-for sibling in "$main_checkout"/../*/; do
-  [ -d "$sibling" ] || continue
-  case "$(basename "$sibling" | tr '[:upper:]' '[:lower:]')" in
-    simetrix-gh) tooling="$(cd "$sibling" && pwd)"; modes_check="$tooling/bin/team-modes-check.sh" ;;
-  esac
-done
-if [ -z "$tooling" ]; then
-  echo "REFUSED: the tooling checkout (simetrix-gh) is not beside $main_checkout, so the team modes cannot be checked."
-  exit 1
-fi
-if [ ! -f "$modes_check" ]; then
-  echo "REFUSED: $modes_check is missing, so the team modes cannot be checked."
-  exit 1
-fi
-bash "$modes_check" || { echo "REFUSED: a team mode is missing; the lines above say which one and how to install it."; exit 1; }
-
-# The wait is announced here and not earlier, so a push that is refused above is not first promised
-# a run it never gets.
-echo "pre-push: every package of this repository is analysed, formatted and tested here. Around two minutes, longer the first time, when each package resolves its dependencies."
-
-bash scripts/check.sh || { echo "REFUSED: a check failed."; exit 1; }
-
-echo "pre-push: every check passed."
+echo "pre-push: REFUSED — no simetrix-gh checkout stands beside $main, and the push gate of every repository lives there, at hooks/pre-push." >&2
+exit 1
