@@ -17,8 +17,8 @@
 # EVERY PACKAGE RUNS BEFORE ANYTHING IS REPORTED, so one red package does not
 # hide the state of the ten behind it.
 #
-# Windows twin: build.ps1 in this folder. The two are held to answering
-# identically.
+# Windows entry point: build.ps1 in this folder. It is a shim that starts
+# THIS file, so there is no second spelling of this build to keep true.
 set -euo pipefail
 
 cd "$(git rev-parse --show-toplevel)"

@@ -18,7 +18,7 @@ Make a directory named `ansiwise-<tool>` with a `pubspec.yaml` in it. That is th
 
 - `.github/workflows/checks.yml` walks every directory holding a `pubspec.yaml` and a `test/`, so a
   new package is analysed, formatted and tested without being added to a list;
-- `build.sh` and `build.ps1` walk the same directories, so the same run happens locally;
+- `build.sh` walks the same directories, so the same run happens locally;
 - the product picks up the packages it wants by path, at the commit its manifest names.
 
 There is no register to add it to, in this repository or in the workflow.
@@ -27,7 +27,7 @@ There is no register to add it to, in this repository or in the workflow.
 
 ```
 ./build.sh          analyse, format and test every package — the whole repository
-./build.ps1         the same on Windows
+./build.ps1         the Windows entry point; it starts build.sh and nothing else
 ```
 
 Every package is run before anything is reported, so one red package does not hide the state of the
