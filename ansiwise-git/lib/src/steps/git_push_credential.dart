@@ -17,7 +17,7 @@ import 'recorded_value.dart';
 /// to anybody who can read the tree. The store file this step writes is one file inside the git
 /// directory, at mode `0600`, and git is the only thing that reads it.
 ///
-/// **What it costs, said rather than glossed.** The credential IS at rest on this machine, in that
+/// **What it costs.** The credential IS at rest on this machine, in that
 /// one owner-only file, for as long as the checkout stands, and a rotated credential reaches it
 /// only by this row running again. It is a second copy of a value that is already at rest on the
 /// same machine, at the same mode, in the settings file an earlier program of this installation

@@ -252,9 +252,9 @@ final class WriteValueInBranchFile extends ReversibleStep<String?> {
   ///
   /// **WHY THIS WALKS RATHER THAN SEARCHES.** Matching the key at the HEAD of a line only fails
   /// where a file carries it inside a block, and the write then appends a second key at the head of
-  /// the file instead. Measured on a real machine: a values file ended up carrying `clusterIssuer`
-  /// twice, nested under `global:` with the old value and at the top with the new one, and every
-  /// chart went on reading the old. Nothing said so; the run was green.
+  /// the file instead. A values file then carries `clusterIssuer` twice — nested under `global:`
+  /// with the old value and at the top with the new one — and every chart goes on reading the old.
+  /// Nothing says so; the run is green.
   ///
   /// So a path is walked block by block: each segment is looked for INSIDE the block its parent
   /// opened, which is the region of deeper-indented lines following the parent's own line. A segment

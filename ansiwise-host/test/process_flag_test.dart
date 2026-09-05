@@ -48,7 +48,7 @@ void main() {
   });
 
   group('waiting for the restarted process to answer again', () {
-    // Found on a real machine and findable nowhere else. A service manager reports success when it
+    // Findable on a real machine and nowhere else. A service manager reports success when it
     // has ACCEPTED the restart, not when the thing is serving — so the step returned, and the very
     // next row asked the process a question 234 milliseconds later and got a failure carrying no
     // output at all, which it reported as something true about its own subject and false about the

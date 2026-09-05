@@ -59,8 +59,8 @@ import 'steps/host/write_public_src_routing_unit.dart';
 /// Every step this plugin carries, from the names a program file writes to the classes that
 /// implement them.
 ///
-/// Written by hand, because Dart compiled ahead of time has no reflection. That is not a workaround
-/// — it is what lets a check count this against the classes on disk in both directions: no step
+/// Written by hand, because Dart compiled ahead of time has no reflection, which is what lets a
+/// check count this against the classes on disk in both directions: no step
 /// exists unregistered, and no entry points at a class that is gone.
 ///
 /// The `source` of each entry is the line its class is declared on. It is what the record reports

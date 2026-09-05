@@ -847,9 +847,8 @@ void main() {
       final Object? sent = jsonDecode(written.body ?? '');
       expect(sent, isA<Map<String, Object?>>());
       if (sent case final Map<String, Object?> object) {
-        // The expensive incident this shape exists for: sent as separate parameters through a
-        // shell, this field arrived as text and the store answered that it expected a map and got
-        // a string.
+        // The shape this exists for: sent as separate parameters through a shell, this field
+        // arrives as text and the store answers that it expected a map and got a string.
         expect(object['bound_claims'], isA<Map<String, Object?>>());
         expect(object['user_claim'], 'preferred_username');
       }

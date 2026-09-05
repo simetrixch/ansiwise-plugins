@@ -8,7 +8,7 @@ import 'vault_profile.dart';
 /// Mints an ed25519 key pair into one entry of the store, beside the fingerprint of the host key
 /// this machine presents.
 ///
-/// **What could not be written before this step existed.** The entry a caller needs in order to
+/// **What no other row can write.** The entry a caller needs in order to
 /// reach a machine over SSH carries two values, and neither of the two ways a row has of filling an
 /// entry can produce them. A hand-filled input is a file of `KEY=value` lines, so it cannot hold a
 /// private key, which is many lines. And the generator beside it makes a random value, which is a

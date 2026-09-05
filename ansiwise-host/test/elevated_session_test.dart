@@ -7,9 +7,9 @@ import 'package:test/test.dart';
 ///
 /// **Why the session and not the field.** A test that reads `Command.elevated` back off the command
 /// a step composed proves the step wrote a value down; it says nothing about the account the command
-/// then runs as. The failure this whole audit exists for is exactly that gap: the value was written
-/// in one place, dropped one call later, and the run went out as the operator with the record saying
-/// root had been granted.
+/// then runs as. The failure this whole audit exists for is exactly that gap: the value is written
+/// in one place, dropped one call later, and the run goes out as the operator with the record saying
+/// root was granted.
 ///
 /// So the machine here is a SESSION. [_Session] answers as the account a run was started as, its
 /// supplementary groups fixed when it was constructed — a process reads its groups once, when the

@@ -4,7 +4,7 @@ import 'on_the_path.dart';
 
 /// Puts on the machine the two things every tool download needs, and judges by the tools themselves.
 ///
-/// **The package manager's answer is not the verdict, and this is the incident.** Automatic updates
+/// **The package manager's answer is not the verdict.** Automatic updates
 /// hold the package lock for minutes after a machine boots, so an install exits with a failure on a
 /// freshly provisioned machine that already carries both of these — and the server release ships
 /// both. Reading that answer would skip every tool below over a lock, on a machine where nothing was

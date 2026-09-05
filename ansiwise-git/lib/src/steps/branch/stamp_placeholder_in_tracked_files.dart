@@ -282,8 +282,8 @@ final class StampPlaceholderInTrackedFiles extends ReversibleStep<List<String>> 
   /// This row refuses while [refuseOnBranch] is checked out, and only a step BEFORE it moves off
   /// that branch.
   ///
-  /// Measured on a machine rather than reasoned about: a program that cuts a branch and then stamps
-  /// it reported the stamp as failed under `--mode test`, because in that mode the branch is never
+  /// Measured on a machine: a program that cuts a branch and then stamps
+  /// it reports the stamp as failed under `--mode test`, because in that mode the branch is never
   /// actually cut and the refusal is still true. That answer is honest about the machine and wrong
   /// about the program, so the record marks it DECLARED instead of counting it against the run.
   final String refuseOnBranch;

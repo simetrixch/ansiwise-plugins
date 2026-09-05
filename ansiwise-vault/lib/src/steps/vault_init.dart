@@ -16,13 +16,13 @@ import 'vault_profile.dart';
 /// say is only WHERE the profile and the file stand — the layout, which has no default because no
 /// product's layout is this package's to assume.
 ///
-/// **The credential file is never written over.** Three separate incidents in the shell this
-/// replaces were the same one: a placeholder written into an existing credential file, destroying
-/// the only copy of the quorum. So a file that is already there ends this step, on every branch, and
-/// the one thing that is never done to it is a write.
+/// **The credential file is never written over.** A placeholder written into an
+/// existing credential file destroys the only copy of the quorum. So a file that is
+/// already there ends this step, on every branch, and the one thing that is never done
+/// to it is a write.
 ///
-/// **An answer that cannot be read is not proof that Vault is uninitialized.** That is the third of
-/// those incidents and the least obvious: the reading transiently returns nothing on a Vault that is
+/// **An answer that cannot be read is not proof that Vault is uninitialized**, and this is the least
+/// obvious way to lose a quorum: the reading transiently returns nothing on a Vault that is
 /// initialized, and treating nothing as "not yet" lands the run on the branch that mints a second
 /// quorum over the storage of the first. Here an unreadable answer blocks the step and says so.
 ///

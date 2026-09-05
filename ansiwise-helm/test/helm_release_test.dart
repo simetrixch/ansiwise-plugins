@@ -197,10 +197,10 @@ void main() {
     expect(log.informed.join('\n'), allOf(contains(path), contains('differ')));
   });
 
-  // WHAT THE UPGRADE ITSELF ANSWERED. The incident this package carries began with a helm upgrade
-  // that returned 0 and installed nothing: output is kept only for a failed command or a
-  // `keep_output` row, so the record held four exit codes and no measurement, and the unwind then
-  // took the namespace — and with it the release's own record — before anybody could look. What
+  // WHAT THE UPGRADE ITSELF ANSWERED. A helm upgrade that returns 0 and installs nothing is the
+  // shape this is about: output is kept only for a failed command or a `keep_output` row, so the
+  // record holds exit codes and no measurement, and the unwind then takes the namespace — and with
+  // it the release's own record — before anybody can look. What
   // helm SAID is the one thing that separates an upgrade that did nothing from one whose work was
   // removed after it, and these tests hold that the step says it.
 
@@ -250,8 +250,8 @@ void main() {
   });
 
   test('an upgrade that answers many lines and no status keeps the LAST of them', () async {
-    // The other half of the incident's question, and the half nothing could answer: whether helm
-    // said nothing, or said twelve lines nobody kept. Bounded, because the answer goes on one line
+    // The other half of that question, and the half a record without output cannot answer: whether
+    // helm said nothing, or said many lines nobody kept. Bounded, because the answer goes on one line
     // of a record — and bounded at the TAIL, because a tool says why it stopped at the end of what
     // it wrote (ansiwise-core recording_ports.dart:59). Keeping the head drops the line a reader
     // came for, and disagrees with what the record does with the same command's output one row over.

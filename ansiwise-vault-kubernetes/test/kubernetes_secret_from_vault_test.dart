@@ -301,10 +301,10 @@ void main() {
     // A SECRET NOTHING SELECTS ON CARRIES NO LABELS, and one that is selected on carries exactly the
     // ones the row names. The pair fails in opposite directions: drop the labels from the manifest
     // and the second goes red; write a labels block for a row that named none and the first does.
-    // Measured before this existed: a reader that resolves `$secret:key` against LABELLED Secrets
-    // only never saw an unlabelled one, so the reference stayed unresolved — and an unresolved
-    // reference travels as an EMPTY secret, which the far side reports as a credential that is
-    // wrong rather than one that is missing.
+    // A reader that resolves `$secret:key` against LABELLED Secrets only never sees an unlabelled
+    // one, so the reference stays unresolved — and an unresolved reference travels as an EMPTY
+    // secret, which the far side reports as a credential that is wrong rather than one that is
+    // missing.
     test('a row that names no label writes none', () {
       expect(step.manifestOf(const <String, String>{'k': 'v'}), isNot(contains('labels')));
     });

@@ -57,10 +57,10 @@ void main() {
     test(
       'a path this row names and the checkout does not hold is refused before anything is staged',
       () async {
-        // The shape that was found on a real machine: a directory was renamed in the tree, the rows
-        // that write into it followed, and this row went on naming the old name. git add refuses a
-        // pathspec matching nothing, so the run staged the paths before it and then died — with two
-        // files written, no commit, and git's message rather than this step's.
+        // The shape this reproduces: a directory is renamed in the tree, the rows that write into
+        // it follow, and this row goes on naming the old name. git add refuses a pathspec matching
+        // nothing, so the run stages the paths before it and then dies — with two files written, no
+        // commit, and git's message rather than this step's.
         const GitCommit naming = GitCommit(
           repository: repository,
           paths: <String>['clusters', 'cluster'],

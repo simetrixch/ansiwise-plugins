@@ -8,8 +8,8 @@ import 'package:test/test.dart';
 /// The steps that produce one Vault's quorum, and the file everything that reads from that Vault
 /// ultimately depends on.
 ///
-/// Every case here is an incident that happened: a placeholder written over a real quorum, an
-/// unreadable answer read as "not initialized yet", a root token echoed into a log. The first group
+/// Every case here is a way one Vault loses its quorum or its secrecy: a placeholder written over a
+/// real quorum, an unreadable answer read as "not initialized yet", a root token echoed into a log. The first group
 /// is about where the connection comes from — the address out of the profile, the credential file
 /// out of the stage answer — because a program file that carried either would ship one
 /// installation's values to every installation.

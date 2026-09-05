@@ -157,10 +157,9 @@ void main() {
   );
 
   test('the gate asks sshd AS ROOT, or it cannot read what sshd reads', () async {
-    // Measured on a machine before it was fixed. `sshd -T` does not skip a configuration file it
-    // may not read — it refuses the whole answer — and Ubuntu's installer drops in a root-only file.
-    // So the check reported "Permission denied" and could say nothing about a login it had every
-    // other means to judge.
+    // `sshd -T` does not skip a configuration file it may not read — it refuses the whole answer —
+    // and Ubuntu's installer drops in a root-only file. Asked unelevated, the check reports
+    // "Permission denied" and can say nothing about a login it has every other means to judge.
     //
     // Observing AND elevated: running as root does not make a command change anything, so this stays
     // something a dry run may perform. The two flags are independent for exactly this case.

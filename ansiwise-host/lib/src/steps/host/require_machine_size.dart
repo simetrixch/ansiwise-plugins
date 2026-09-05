@@ -7,8 +7,8 @@ import 'package:ansiwise_core/ansiwise_core.dart';
 ///
 /// **Memory is measured in kibibytes against 15,000,000 and not against 16 GiB.** `MemTotal` reports
 /// what is left after the kernel's own reservations — about 15.3 to 16.3 GiB on a real 16 GB
-/// machine — so a floor written as exactly 16 GiB refuses the very machines the minimum names. That
-/// was found on a real machine, and writing the round number back is how it comes back.
+/// machine — so a floor written as exactly 16 GiB refuses the very machines the minimum names, and
+/// writing the round number back is what brings that refusal back.
 ///
 /// The unit is what the kernel writes: `/proc/meminfo` labels the figure `kB` and means kibibytes,
 /// so the argument says kibibytes, nothing here converts, and both messages carry `KiB`.

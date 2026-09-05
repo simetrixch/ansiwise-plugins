@@ -182,9 +182,9 @@ void main() {
 /// **The defect this measures.** An installation's configuration is read ONCE, before a program is
 /// resolved, and it holds no answers — the axis is an answer, supplied per run. So a binding naming
 /// one value of that axis literally is right on exactly one kind of installation and refuses every
-/// other before its first step. Measured on a real installation: three conditions bound to the file
-/// of one stage, on a machine carrying the file of another, which left two of the three stages that
-/// product ships unable to run its last program at all.
+/// other before its first step: three conditions bound to the file of one stage, on a machine
+/// carrying the file of another, leave two of the three stages that product ships unable to run its
+/// last program at all.
 void _slots() {
   group('a path carrying a slot', () {
     // INVENTED, like every other fixture here. A path naming one product's checkout would be that

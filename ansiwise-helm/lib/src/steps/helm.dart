@@ -16,9 +16,9 @@ import 'package:ansiwise_core/ansiwise_core.dart';
 /// non-interactive shell does not load aliases and a fake shell answers an argv without needing the
 /// executable to exist at all.
 ///
-/// That is how it was found, on a real machine: a program demanded `helm`, the program before it had
-/// written the alias, and the gate passed while every release below it would have failed on a
-/// command that is not a command.
+/// So a program demanding `helm` on a machine where an earlier program wrote the alias
+/// passes its gate, and every release below it then fails on a command that is not a
+/// command.
 ///
 /// So the row says it, and one answer given once in a program's `defaults:` block reaches every helm
 /// row of that program.

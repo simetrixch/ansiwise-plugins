@@ -11,7 +11,7 @@ import 'on_the_path.dart';
 /// program say WHAT the machine is to carry instead of naming which of three commands to run at it.
 ///
 /// **A snap that is installed but switched off is invisible to the path and visible to snapd, and
-/// that pair is the whole incident.** `snap disable` leaves the snap installed and only removes its
+/// that pair is what this step is built around.** `snap disable` leaves the snap installed and only removes its
 /// entries from `/snap/bin`, so a presence test built on the path finds nothing and concludes the
 /// machine is clean — while `snap install` refuses the very same snap as already installed and the
 /// run dies there. The tracked channel is what tells the two states apart, and switching the snap

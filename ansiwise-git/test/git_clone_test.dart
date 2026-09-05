@@ -394,9 +394,9 @@ void main() {
       );
     });
 
-    // THE SHAPE THAT GOT PAST THIS CHECK AND STILL LOST, met on a real machine. The worktree had
-    // been handed to the operator account and the `.git` inside it was still the one that made it.
-    // This row read the OUTER directory, called the hand-over done, and apply never ran — so git
+    // THE SHAPE A CHECK OF THE OUTER DIRECTORY ALONE ADMITS: the worktree is handed to the
+    // operator account and the `.git` inside it still belongs to the account that made it.
+    // Such a row reads the OUTER directory, calls the hand-over done, and never applies — so git
     // went on refusing the repository to every caller but that one, with `fatal: detected dubious
     // ownership`, on a machine whose install had reported success.
     //

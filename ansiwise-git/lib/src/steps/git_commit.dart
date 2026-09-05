@@ -3,9 +3,9 @@ import 'package:ansiwise_core/ansiwise_core.dart';
 /// Records what a run wrote into the checkout it wrote it in.
 ///
 /// **Without this a program that writes files reports success and leaves them nowhere.** Measured on
-/// a machine: a run cut a branch, stamped every marker and wrote four files, ended `exit 0`, and left
-/// nineteen changed paths in a working tree. Nothing said the work was unfinished, because from every
-/// step's own point of view it was.
+/// a machine: a run cuts a branch, stamps every marker, writes four files, ends `exit 0`, and leaves
+/// every one of those paths changed in a working tree. Nothing says the work is unfinished, because
+/// from every step's own point of view it is.
 ///
 /// **The paths come from the row and are never "everything".** A blanket add sweeps up whatever else
 /// stands in the checkout — a file an operator was editing, a leftover from a run that failed — and

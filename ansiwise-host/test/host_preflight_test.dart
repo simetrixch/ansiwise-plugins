@@ -230,8 +230,8 @@ void main() {
     });
 
     test('one KiB below the floor is refused and one KiB above is accepted', () async {
-      // The boundary, written in the unit the argument names. The division by a million that used
-      // to stand here made 40,960,000 KiB and 40,000,000 KiB the same answer.
+      // The boundary, written in the unit the argument names. A division by a million makes
+      // 40,960,000 KiB and 40,000,000 KiB the same answer.
       final CheckResult below = await const RequireFreeDisk(
         path: '/',
         freeKibibytes: 40000000,
