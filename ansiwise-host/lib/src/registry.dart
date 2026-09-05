@@ -75,7 +75,7 @@ const Map<StepName, RegisteredStep> hostSteps = <StepName, RegisteredStep>{
   ),
   StepName('require_machine_size'): RegisteredStep(
     name: StepName('require_machine_size'),
-    source: 'lib/src/steps/host/require_machine_size.dart:12',
+    source: 'lib/src/steps/host/require_machine_size.dart:15',
     create: RequireMachineSize.fromArguments,
     arguments: RequireMachineSize.arguments,
   ),
@@ -87,7 +87,7 @@ const Map<StepName, RegisteredStep> hostSteps = <StepName, RegisteredStep>{
   ),
   StepName('require_free_disk'): RegisteredStep(
     name: StepName('require_free_disk'),
-    source: 'lib/src/steps/host/require_free_disk.dart:8',
+    source: 'lib/src/steps/host/require_free_disk.dart:13',
     create: RequireFreeDisk.fromArguments,
     arguments: RequireFreeDisk.arguments,
   ),

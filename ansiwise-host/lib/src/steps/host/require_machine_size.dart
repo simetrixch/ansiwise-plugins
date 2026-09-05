@@ -5,18 +5,21 @@ import 'package:ansiwise_core/ansiwise_core.dart';
 /// The floors come from the program row — they are the product's own sizing, which is why this
 /// step carries no numbers of its own — and they are measured with `nproc` and `/proc/meminfo`.
 ///
-/// **Memory is measured in kilobytes against 15,000,000 and not against 16 GiB.** `MemTotal` reports
+/// **Memory is measured in kibibytes against 15,000,000 and not against 16 GiB.** `MemTotal` reports
 /// what is left after the kernel's own reservations — about 15.3 to 16.3 GiB on a real 16 GB
 /// machine — so a floor written as exactly 16 GiB refuses the very machines the minimum names. That
 /// was found on a real machine, and writing the round number back is how it comes back.
+///
+/// The unit is what the kernel writes: `/proc/meminfo` labels the figure `kB` and means kibibytes,
+/// so the argument says kibibytes, nothing here converts, and both messages carry `KiB`.
 final class RequireMachineSize extends ObservingStep {
-  /// Refuses anything below [vcpu] processors or [memoryKilobytes] of memory.
-  const RequireMachineSize({required this.vcpu, required this.memoryKilobytes});
+  /// Refuses anything below [vcpu] processors or [memoryKibibytes] of memory.
+  const RequireMachineSize({required this.vcpu, required this.memoryKibibytes});
 
   /// Builds the step from what the program gave it.
   factory RequireMachineSize.fromArguments(Arguments arguments) => RequireMachineSize(
     vcpu: arguments.integer('vcpu'),
-    memoryKilobytes: arguments.integer('memory_kilobytes'),
+    memoryKibibytes: arguments.integer('memory_kibibytes'),
   );
 
   /// What this step accepts.
@@ -33,7 +36,7 @@ final class RequireMachineSize extends ObservingStep {
       describes: 'the fewest processors the product fits on',
     ),
     ArgumentSpec(
-      name: 'memory_kilobytes',
+      name: 'memory_kibibytes',
       kind: ArgumentKind.integer,
       band: IntegerBand.between(
         least: 65536,
@@ -41,15 +44,15 @@ final class RequireMachineSize extends ObservingStep {
         because:
             '64 MiB is below what a kernel and a userland run on, so a smaller floor is a unit mistake, and 64 TiB is above the largest single machine sold',
       ),
-      describes: 'the least memory, as /proc/meminfo reports it after kernel reservations',
+      describes: 'the least memory in KiB, as /proc/meminfo reports it after kernel reservations',
     ),
   ];
 
   /// The fewest processors the product fits on.
   final int vcpu;
 
-  /// The least memory, in kilobytes as `MemTotal` reports it.
-  final int memoryKilobytes;
+  /// The least memory, in kibibytes as `MemTotal` reports it.
+  final int memoryKibibytes;
 
   @override
   Future<CheckResult> check(StepContext context) async {
@@ -65,20 +68,20 @@ final class RequireMachineSize extends ObservingStep {
       return CheckResult.blocked('this machine has $found processors and the program needs $vcpu');
     }
 
-    final int? memory = await _memoryKilobytes(context);
+    final int? memory = await _memoryKibibytes(context);
     if (memory == null) {
       return const CheckResult.blocked('/proc/meminfo carries no MemTotal line to measure');
     }
-    if (memory < memoryKilobytes) {
+    if (memory < memoryKibibytes) {
       return CheckResult.blocked(
-        'this machine reports $memory kB of memory and the program needs $memoryKilobytes kB',
+        'this machine reports $memory KiB of memory and the program needs $memoryKibibytes KiB',
       );
     }
 
-    return CheckResult.satisfied('$found processors and $memory kB of memory');
+    return CheckResult.satisfied('$found processors and $memory KiB of memory');
   }
 
-  Future<int?> _memoryKilobytes(StepContext context) async {
+  Future<int?> _memoryKibibytes(StepContext context) async {
     if (!await context.files.exists(_memInfo)) {
       return null;
     }

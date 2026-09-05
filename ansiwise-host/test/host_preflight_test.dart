@@ -73,19 +73,21 @@ void main() {
     });
   });
 
-  group('memory is measured against 15,000,000 kB and not against 16 GiB', () {
+  group('memory is measured against 15,000,000 KiB and not against 16 GiB', () {
     FakeShell withProcessors(int count) => FakeShell()..answers('nproc', '$count\n');
 
-    FakeFiles withMemory(int kilobytes) => FakeFiles(<String, String>{
-      '/proc/meminfo': 'MemTotal:       $kilobytes kB\nMemFree:  100 kB\n',
+    // The kernel labels the figure `kB` and means kibibytes, which is what the argument says, so
+    // the number written here and the number a program row writes are the same unit.
+    FakeFiles withMemory(int kibibytes) => FakeFiles(<String, String>{
+      '/proc/meminfo': 'MemTotal:       $kibibytes kB\nMemFree:  100 kB\n',
     });
 
     test('a real 16 GB machine passes, though it reports less than 16 GiB', () async {
-      // 15,728,640 kB is 15 GiB — what a 16 GB machine has left after the kernel's reservations.
+      // 15,728,640 KiB is 15 GiB — what a 16 GB machine has left after the kernel's reservations.
       // A floor written as exactly 16 GiB would refuse the very machines the minimum names.
       final CheckResult answer = await const RequireMachineSize(
         vcpu: 8,
-        memoryKilobytes: 15000000,
+        memoryKibibytes: 15000000,
       ).check(contextOn(shell: withProcessors(8), files: withMemory(15728640)));
       expect(answer, isA<Satisfied>());
     });
@@ -93,7 +95,7 @@ void main() {
     test('a machine below the floor is refused, and the refusal carries both numbers', () async {
       final CheckResult answer = await const RequireMachineSize(
         vcpu: 8,
-        memoryKilobytes: 15000000,
+        memoryKibibytes: 15000000,
       ).check(contextOn(shell: withProcessors(8), files: withMemory(8000000)));
       expect((answer as Blocked).reason, contains('8000000'));
       expect(answer.reason, contains('15000000'));
@@ -103,7 +105,7 @@ void main() {
       final FakeFiles files = FakeFiles();
       final CheckResult answer = await const RequireMachineSize(
         vcpu: 8,
-        memoryKilobytes: 15000000,
+        memoryKibibytes: 15000000,
       ).check(contextOn(shell: withProcessors(2), files: files));
       expect((answer as Blocked).reason, contains('2 processors'));
     });
@@ -111,9 +113,26 @@ void main() {
     test('a machine that cannot be measured is refused, not passed', () async {
       final CheckResult answer = await const RequireMachineSize(
         vcpu: 8,
-        memoryKilobytes: 15000000,
+        memoryKibibytes: 15000000,
       ).check(contextOn(shell: FakeShell()..fails('nproc'), files: withMemory(16000000)));
       expect(answer, isA<Blocked>());
+    });
+
+    test('one KiB below the floor is refused and one KiB above is accepted', () async {
+      // The boundary, written in the unit the argument names. Nothing on this path converts, so
+      // the figure a program row states is the figure a machine is measured against.
+      final CheckResult below = await const RequireMachineSize(
+        vcpu: 8,
+        memoryKibibytes: 15000000,
+      ).check(contextOn(shell: withProcessors(8), files: withMemory(14999999)));
+      expect((below as Blocked).reason, contains('14999999 KiB'));
+      expect(below.reason, contains('15000000 KiB'));
+
+      final CheckResult above = await const RequireMachineSize(
+        vcpu: 8,
+        memoryKibibytes: 15000000,
+      ).check(contextOn(shell: withProcessors(8), files: withMemory(15000001)));
+      expect((above as Satisfied).because, contains('15000001 KiB'));
     });
   });
 
@@ -184,17 +203,19 @@ void main() {
   });
 
   group('free disk', () {
-    FakeShell dfReporting(int availableKilobytes) => FakeShell()
+    // `-k` makes every block 1024 bytes, so what df writes and what the argument names are one
+    // unit and the step converts nothing between them.
+    FakeShell dfReporting(int availableKibibytes) => FakeShell()
       ..answers(
         'df -Pk /',
         'Filesystem     1024-blocks     Used Available Capacity Mounted on\n'
-            '/dev/sda1        104857600 20971520 $availableKilobytes      21% /\n',
+            '/dev/sda1        104857600 20971520 $availableKibibytes      21% /\n',
       );
 
     test('enough room is satisfied', () async {
       final CheckResult answer = await const RequireFreeDisk(
         path: '/',
-        gigabytes: 60,
+        freeKibibytes: 60000000,
       ).check(contextOn(shell: dfReporting(80000000)));
       expect(answer, isA<Satisfied>());
     });
@@ -202,16 +223,33 @@ void main() {
     test('too little is refused with both numbers', () async {
       final CheckResult answer = await const RequireFreeDisk(
         path: '/',
-        gigabytes: 60,
+        freeKibibytes: 60000000,
       ).check(contextOn(shell: dfReporting(20000000)));
-      expect((answer as Blocked).reason, contains('20 GB'));
-      expect(answer.reason, contains('60 GB'));
+      expect((answer as Blocked).reason, contains('20000000 KiB'));
+      expect(answer.reason, contains('60000000 KiB'));
+    });
+
+    test('one KiB below the floor is refused and one KiB above is accepted', () async {
+      // The boundary, written in the unit the argument names. The division by a million that used
+      // to stand here made 40,960,000 KiB and 40,000,000 KiB the same answer.
+      final CheckResult below = await const RequireFreeDisk(
+        path: '/',
+        freeKibibytes: 40000000,
+      ).check(contextOn(shell: dfReporting(39999999)));
+      expect((below as Blocked).reason, contains('39999999 KiB'));
+      expect(below.reason, contains('40000000 KiB'));
+
+      final CheckResult above = await const RequireFreeDisk(
+        path: '/',
+        freeKibibytes: 40000000,
+      ).check(contextOn(shell: dfReporting(40000001)));
+      expect((above as Satisfied).because, contains('40000001 KiB'));
     });
 
     test('output it cannot read is refused, not treated as enough', () async {
       final CheckResult answer = await const RequireFreeDisk(
         path: '/',
-        gigabytes: 60,
+        freeKibibytes: 60000000,
       ).check(contextOn(shell: FakeShell()..answers('df -Pk /', 'nothing useful\n')));
       expect(answer, isA<Blocked>());
     });
