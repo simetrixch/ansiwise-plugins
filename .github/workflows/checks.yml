@@ -41,18 +41,18 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      # THE PIN IS READ OUT OF THE TREE, not written out here. Every gate of this
-      # organisation names one Dart version in tool/gate/pins.dart, and that file
-      # is one text shared by all of them. This repository carries no gate of its
-      # own, so it reads the pin out of the part that does — the alternative is a
-      # second spelling of one version, which is what drifts.
+      # THE PIN IS READ OUT OF THE TREE, not written out here. One Dart version is
+      # named for every gate of this organisation, in package:ansiwise_checks_gate.
+      # This repository carries no gate of its own and pins that package nowhere, so
+      # it reads master — the alternative is a second spelling of one version, which
+      # is what drifts.
       - id: pin
         name: read the pinned Dart version
         shell: bash
         run: |
           set -euo pipefail
           version="$(curl -fsSL \
-            https://raw.githubusercontent.com/simetrixch/ansiwise-core/master/tool/gate/pins.dart \
+            https://raw.githubusercontent.com/simetrixch/ansiwise-checks/master/gate/lib/src/pins.dart \
             | sed -n "s/^const String dartVersion = '\(.*\)';\$/\1/p")"
           test -n "$version" || { echo "checks: FAIL — no Dart pin could be read"; exit 1; }
           echo "dart=$version" >> "$GITHUB_OUTPUT"

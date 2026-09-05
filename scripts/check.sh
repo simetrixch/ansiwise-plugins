@@ -23,7 +23,7 @@ echo "check: every package analysed, formatted and tested."
 # run then walks the ten behind it and says a package is red. A skipped check must never read
 # like a check that ran.
 command -v dart >/dev/null 2>&1 \
-  || fail "bash build.sh — dart is not on this machine, so no package was analysed, formatted or tested. The version this organisation pins stands in ../ansiwise-core/tool/gate/pins.dart."
+  || fail "bash build.sh — dart is not on this machine, so no package was analysed, formatted or tested. The version this organisation pins stands in ../ansiwise-checks/gate/lib/src/pins.dart."
 
 bash build.sh || fail "bash build.sh — a package above is red."
 
