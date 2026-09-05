@@ -113,7 +113,8 @@ final class FillKeyValueFile extends ReversibleStep<String?> {
           'where each key\'s value comes from: KEY: {answer: name} for a value this run holds, or '
           'KEY: {file: path, key: name} for one a settings file on this machine records — and '
           'where the source holds several values and the file carries them on one line, '
-          'join: "," beside it',
+          'join: "," beside it. A file named per installation carries a slot and names the answer '
+          'that fills it: {file: "configs/config.<stage>", key: name, run_answer: stage}',
     ),
     elevationArgument,
   ];
@@ -368,6 +369,12 @@ final class FillKeyValueFile extends ReversibleStep<String?> {
 /// binding is refused where the row is read: two statements of one value is a pair that can
 /// disagree.
 ///
+/// **The file source may be named per installation, and `run_answer` says how.** A settings file
+/// carrying a slot — `configs/config.<stage>` — is read with that slot filled from the answer of
+/// that name, exactly as the step's own `run_answer` fills the path it WRITES. The two are separate
+/// because the file read and the file written are two files, each named for whatever its
+/// installation names it for.
+///
 /// **[join] and [split] are named properties of one entry and never expressions.** `join` says
 /// which text stands between several values written on one line — an answer holding a list is
 /// refused without it rather than written in whatever shape a list happens to print as. `split`
@@ -385,6 +392,7 @@ final class KeyBinding {
     this.measured,
     this.split,
     this.join,
+    this.runAnswer,
   });
 
   /// The name of the measurement that will fill this key, while it has not yet.
@@ -421,7 +429,21 @@ final class KeyBinding {
   final String? answer;
 
   /// The settings file the value is recorded in, or null where an answer holds it.
+  ///
+  /// It may carry a slot, and [runAnswer] says which answer fills it.
   final String? file;
+
+  /// WHICH answer fills the slot spelled with that name in [file], or null where it carries none.
+  ///
+  /// **A source file is named per installation as often as the file being written is.** A binding
+  /// pointed at `configs/config.dev` reads the right file on exactly one installation and reads
+  /// nothing on the next — and reading nothing here is silent: the key is simply not written, which
+  /// every later reader takes for "this installation has no such value". Pointed at
+  /// `configs/config.<stage>` with this naming `stage`, it reads the right file on all of them.
+  ///
+  /// It stands on the BINDING and not on the step, because the file a binding reads and the file
+  /// the step writes are two files and each is named for whatever the installation names it for.
+  final String? runAnswer;
 
   /// The key inside [file] whose value is taken.
   final String? key;
@@ -461,12 +483,31 @@ final class KeyBinding {
     return value.isEmpty ? null : value;
   }
 
+  /// The file this binding reads, with the slot filled from this run.
+  ///
+  /// A path still carrying a slot after the filling names no file, and is answered exactly like a
+  /// file that is not there: this installation has no such value. It is not refused here, because
+  /// every other way this binding can find nothing is the same silence and a single loud case among
+  /// them would stop the run that was going to fill the file.
+  String fileIn(StepContext context) {
+    if (runAnswer case final String name) {
+      if (context.answers.optionalText(name) case final String value) {
+        return filledSlots(file!, <String, String>{name: value});
+      }
+    }
+    return file!;
+  }
+
   /// The value the named file records under the named key, or null where it records none.
   Future<String?> _recorded(StepContext context, {required bool elevated}) async {
-    if (!await context.files.exists(file!, elevated: elevated)) {
+    final String file = fileIn(context);
+    if (leftoverSlotIn(file) != null) {
       return null;
     }
-    final String content = await context.files.read(file!, elevated: elevated);
+    if (!await context.files.exists(file, elevated: elevated)) {
+      return null;
+    }
+    final String content = await context.files.read(file, elevated: elevated);
     final RegExp line = RegExp('^[ \\t]*${RegExp.escape(key!)}[ \\t]*[:=][ \\t]*(.*)\$');
     for (final String each in content.split('\n')) {
       final RegExpMatch? match = line.firstMatch(each.trimRight());
@@ -500,8 +541,8 @@ final class KeyBinding {
       throw ArgumentError.value(
         declared,
         'values',
-        'is a mapping of KEY to {answer: name}, {measured: name} or {file: path, key: name}, each '
-            'optionally joined',
+        'is a mapping of KEY to {answer: name}, {measured: name} or {file: path, key: name, '
+            'run_answer: name}, each optionally joined',
       );
     }
     return <String, KeyBinding>{
@@ -544,6 +585,7 @@ final class KeyBinding {
     final Object? key = body['key'];
     final Object? split = body['split'];
     final Object? join = body['join'];
+    final Object? runAnswer = body['run_answer'];
     if ((answer is! String) == (file is! String)) {
       // Neither source, or both: either way nothing says where the one value comes from.
       throw ArgumentError.value(
@@ -560,11 +602,19 @@ final class KeyBinding {
         'reads a file and names no key, so nothing says which line of it holds the value',
       );
     }
-    if (answer is String && (key != null || split != null)) {
+    if (answer is String && (key != null || split != null || runAnswer != null)) {
       throw ArgumentError.value(
         body,
         entry.key,
-        'is filled from an answer, and "key" and "split" belong to the file source alone',
+        'is filled from an answer, and "key", "split" and "run_answer" belong to the file source '
+        'alone',
+      );
+    }
+    if (runAnswer != null && runAnswer is! String) {
+      throw ArgumentError.value(
+        runAnswer,
+        '${entry.key}.run_answer',
+        'is the name of the answer that fills the slot in the path',
       );
     }
     if (join != null && join is! String) {
@@ -591,6 +641,7 @@ final class KeyBinding {
       key: key as String?,
       split: split as String?,
       join: join as String?,
+      runAnswer: runAnswer as String?,
     );
   }
 }

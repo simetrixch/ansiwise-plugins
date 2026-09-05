@@ -32,4 +32,5 @@ export 'src/steps/set_default_storage_class.dart';
 export 'src/steps/trust_cluster_authority.dart';
 export 'src/steps/verify_ippool_converged_with_self_heal.dart';
 export 'src/steps/wait_for_command_output.dart';
+export 'src/steps/settings_value.dart';
 export 'src/steps/write_cluster_issuer_manifest.dart';

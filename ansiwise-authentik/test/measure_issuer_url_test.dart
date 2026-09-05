@@ -20,7 +20,13 @@ void main() {
 
   const MeasureIssuerUrl step = MeasureIssuerUrl(
     subdomain: 'entry',
-    domainAnswer: 'domain',
+    domain: SettingsValue(
+      what: 'the domain the provider is served on',
+      answer: 'domain',
+      key: null,
+      settingsPath: null,
+      runAnswer: null,
+    ),
     application: 'subject',
   );
 
@@ -77,7 +83,13 @@ void main() {
       // probe and this one would still find it.
       const MeasureIssuerUrl other = MeasureIssuerUrl(
         subdomain: 'gate',
-        domainAnswer: 'elsewhere',
+        domain: SettingsValue(
+          what: 'the domain the provider is served on',
+          answer: 'elsewhere',
+          key: null,
+          settingsPath: null,
+          runAnswer: null,
+        ),
         application: 'second',
       );
       final ({StepContext context, Map<MeasurementName, String> published}) it = runHolding(

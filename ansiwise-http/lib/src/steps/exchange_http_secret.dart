@@ -48,10 +48,10 @@ final class ExchangeHttpSecret extends ExchangeStep {
   String get irreversibleReason => exchangeIsIrreversible;
 
   @override
-  Future<CheckResult> check(StepContext context) async => row.readyOrBlocked(context);
+  Future<CheckResult> check(StepContext context) => row.readyOrBlocked(context);
 
   @override
-  Future<StepPlan> plan(StepContext context) async => row.planned(context);
+  Future<StepPlan> plan(StepContext context) => row.planned(context);
 
   @override
   Future<void> apply(StepContext context) async {

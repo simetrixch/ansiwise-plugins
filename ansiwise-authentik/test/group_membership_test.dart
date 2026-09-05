@@ -23,7 +23,13 @@ void main() {
 
   const GroupMembership step = GroupMembership(
     subdomain: 'idp',
-    domainAnswer: 'books_cluster',
+    domain: SettingsValue(
+      what: 'the domain the provider is served on',
+      answer: 'books_cluster',
+      key: null,
+      settingsPath: null,
+      runAnswer: null,
+    ),
     user: account,
     group: groupName,
     tokenPath: tokenPath,

@@ -1,5 +1,7 @@
 import 'package:ansiwise_core/ansiwise_core.dart';
 
+import 'settings_value.dart';
+
 /// Publishes the address an application's tokens are issued at, composed the way this provider
 /// composes it.
 ///
@@ -20,18 +22,24 @@ import 'package:ansiwise_core/ansiwise_core.dart';
 /// It only reads. Nothing on the machine changes, so a dry run performs it and the value is there
 /// for the rows that follow.
 final class MeasureIssuerUrl extends ObservingStep {
-  /// Publishes the issuer address of [application], served at [subdomain] of the domain the answer
-  /// named by [domainAnswer] holds.
+  /// Publishes the issuer address of [application], served at [subdomain] of the [domain] this run
+  /// holds or reads.
   const MeasureIssuerUrl({
     required this.subdomain,
-    required this.domainAnswer,
+    required this.domain,
     required this.application,
   });
 
   /// Builds the step from what the program gave it.
   factory MeasureIssuerUrl.fromArguments(Arguments arguments) => MeasureIssuerUrl(
     subdomain: arguments.text('subdomain'),
-    domainAnswer: arguments.text('domain_answer'),
+    domain: SettingsValue(
+      what: 'the domain the provider is served on',
+      answer: arguments.optionalText('domain_answer'),
+      key: arguments.optionalText('domain_key'),
+      settingsPath: arguments.optionalText('settings_path'),
+      runAnswer: arguments.optionalText('run_answer'),
+    ),
     application: arguments.text('application'),
   );
 
@@ -47,9 +55,40 @@ final class MeasureIssuerUrl extends ObservingStep {
     ArgumentSpec(
       name: 'domain_answer',
       kind: ArgumentKind.answerName,
+      required: false,
       describes:
           'the name of the answer holding the domain the provider is served on. Named rather than '
-          'written, because a run is what knows which installation this is',
+          'written, because a run is what knows which installation this is. Write "domain_key" '
+          'instead where a settings file of the machine already carries it',
+    ),
+    // THE OTHER SOURCE OF THE SAME VALUE. A domain handed to a row as an answer is a COPY of what a
+    // settings file of the machine already says, and a copy is what a caller gets wrong. A key
+    // names the one place the value stands, so there is nothing to keep in step. Where a row names
+    // both, the answer is read and the record says which key was not.
+    ArgumentSpec(
+      name: 'settings_path',
+      kind: ArgumentKind.text,
+      required: false,
+      describes:
+          'the settings file "domain_key" is read out of, as a path on the machine. It may carry '
+          'the slot "run_answer" names. Leave it off where the domain is answered',
+    ),
+    ArgumentSpec(
+      name: 'run_answer',
+      kind: ArgumentKind.answerName,
+      required: false,
+      describes:
+          'the name of the answer whose value fills the slot spelled with that same name in '
+          '"settings_path" — write "fqdn" here and a "<fqdn>" in the path is filled with the value '
+          'this run holds. Leave it off where the file is named the same on every installation',
+    ),
+    ArgumentSpec(
+      name: 'domain_key',
+      kind: ArgumentKind.text,
+      required: false,
+      describes:
+          'the key of that settings file the domain stands under, as a dotted path — each dot '
+          'descends one map. Write it instead of "domain_answer", never beside it',
     ),
     ArgumentSpec(
       name: 'application',
@@ -71,8 +110,8 @@ final class MeasureIssuerUrl extends ObservingStep {
   /// The label the provider is served under.
   final String subdomain;
 
-  /// The name of the answer holding the domain it is served on.
-  final String domainAnswer;
+  /// Where the domain it is served on comes from: an answer, or a key of a settings file.
+  final SettingsValue domain;
 
   /// The slug the provider registered the application under.
   final String application;
@@ -93,20 +132,11 @@ final class MeasureIssuerUrl extends ObservingStep {
   /// unfinished on every run for ever.
   @override
   Future<CheckResult> check(StepContext context) async {
-    if (!context.answers.has(domainAnswer)) {
-      return CheckResult.blocked(
-        'this run holds no answer called "$domainAnswer", and it is the domain the provider is '
-        'served on — without it there is no address to publish',
-      );
+    final ({String? value, String? refusal}) served = await domain.valueIn(context);
+    if (served.refusal case final String refusal) {
+      return CheckResult.blocked(refusal);
     }
-    final String domain = context.answers.text(domainAnswer);
-    if (domain.isEmpty) {
-      return CheckResult.blocked(
-        '"$domainAnswer" was answered with nothing, so the address would name a host that is only a '
-        'subdomain and a slash',
-      );
-    }
-    final String url = issuerFor(domain);
+    final String url = issuerFor(served.value!);
     context.measurements.publish(const MeasurementName('issuer_url'), url);
     return CheckResult.satisfied('tokens for $application are issued at $url');
   }

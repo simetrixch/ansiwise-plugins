@@ -2,6 +2,8 @@ import 'dart:convert';
 
 import 'package:ansiwise_core/ansiwise_core.dart';
 
+import 'settings_value.dart';
+
 /// Says whether this provider is still standing on its out-of-box flow, and at which address.
 ///
 /// **WHAT IT IS FOR.** A provider whose bootstrap account has no password answers its out-of-box
@@ -37,7 +39,7 @@ final class ReportOutOfBoxFlow extends ObservingStep {
   /// Reports the out-of-box flow of the provider served at [subdomain] of the answered domain.
   const ReportOutOfBoxFlow({
     required this.subdomain,
-    required this.domainAnswer,
+    required this.domain,
     this.acceptsAnyCertificate = false,
     this.timeoutSeconds = 30,
   });
@@ -45,7 +47,13 @@ final class ReportOutOfBoxFlow extends ObservingStep {
   /// Builds the step from what the program gave it.
   factory ReportOutOfBoxFlow.fromArguments(Arguments arguments) => ReportOutOfBoxFlow(
     subdomain: arguments.text('subdomain'),
-    domainAnswer: arguments.text('domain_answer'),
+    domain: SettingsValue(
+      what: 'the domain the provider is served on',
+      answer: arguments.optionalText('domain_answer'),
+      key: arguments.optionalText('domain_key'),
+      settingsPath: arguments.optionalText('settings_path'),
+      runAnswer: arguments.optionalText('run_answer'),
+    ),
     acceptsAnyCertificate:
         arguments.has('accepts_any_certificate') && arguments.flag('accepts_any_certificate'),
     timeoutSeconds: arguments.integer('timeout_seconds'),
@@ -63,9 +71,40 @@ final class ReportOutOfBoxFlow extends ObservingStep {
     ArgumentSpec(
       name: 'domain_answer',
       kind: ArgumentKind.answerName,
+      required: false,
       describes:
           'the name of the answer holding the domain the provider is served on. Named rather than '
-          'written, because a run is what knows which installation this is',
+          'written, because a run is what knows which installation this is. Write "domain_key" '
+          'instead where a settings file of the machine already carries it',
+    ),
+    // THE OTHER SOURCE OF THE SAME VALUE. A domain handed to a row as an answer is a COPY of what a
+    // settings file of the machine already says, and a copy is what a caller gets wrong. A key
+    // names the one place the value stands, so there is nothing to keep in step. Where a row names
+    // both, the answer is read and the record says which key was not.
+    ArgumentSpec(
+      name: 'settings_path',
+      kind: ArgumentKind.text,
+      required: false,
+      describes:
+          'the settings file "domain_key" is read out of, as a path on the machine. It may carry '
+          'the slot "run_answer" names. Leave it off where the domain is answered',
+    ),
+    ArgumentSpec(
+      name: 'run_answer',
+      kind: ArgumentKind.answerName,
+      required: false,
+      describes:
+          'the name of the answer whose value fills the slot spelled with that same name in '
+          '"settings_path" — write "fqdn" here and a "<fqdn>" in the path is filled with the value '
+          'this run holds. Leave it off where the file is named the same on every installation',
+    ),
+    ArgumentSpec(
+      name: 'domain_key',
+      kind: ArgumentKind.text,
+      required: false,
+      describes:
+          'the key of that settings file the domain stands under, as a dotted path — each dot '
+          'descends one map. Write it instead of "domain_answer", never beside it',
     ),
     ArgumentSpec(
       name: 'accepts_any_certificate',
@@ -108,8 +147,8 @@ final class ReportOutOfBoxFlow extends ObservingStep {
   /// The label the provider is served under.
   final String subdomain;
 
-  /// The name of the answer holding the domain it is served on.
-  final String domainAnswer;
+  /// Where the domain it is served on comes from: an answer, or a key of a settings file.
+  final SettingsValue domain;
 
   /// Whether a certificate that cannot be verified is accepted rather than ending the ask.
   final bool acceptsAnyCertificate;
@@ -128,21 +167,12 @@ final class ReportOutOfBoxFlow extends ObservingStep {
 
   @override
   Future<CheckResult> check(StepContext context) async {
-    if (!context.answers.has(domainAnswer)) {
-      return CheckResult.blocked(
-        'this run holds no answer called "$domainAnswer", and it is the domain the provider is '
-        'served on — without it there is no address to ask and none to name',
-      );
-    }
-    final String domain = context.answers.text(domainAnswer);
-    if (domain.isEmpty) {
-      return CheckResult.blocked(
-        '"$domainAnswer" was answered with nothing, so the address would name a host that is only a '
-        'subdomain and a slash',
-      );
+    final ({String? value, String? refusal}) served = await domain.valueIn(context);
+    if (served.refusal case final String refusal) {
+      return CheckResult.blocked(refusal);
     }
 
-    final String base = 'https://$subdomain.$domain';
+    final String base = 'https://$subdomain.${served.value}';
     final String flowAddress = flowAddressOn(base);
     final String executorAddress = executorAddressOn(base);
 

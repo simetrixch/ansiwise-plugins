@@ -2,6 +2,8 @@ import 'dart:convert';
 
 import 'package:ansiwise_core/ansiwise_core.dart';
 
+import 'settings_value.dart';
+
 /// Puts one account into one group of the identity provider, and takes it out again on an undo.
 ///
 /// **ADDITIVE, and that is the whole reason this is a step.** The provider's own declarative form
@@ -27,7 +29,7 @@ final class GroupMembership extends ReversibleStep<bool> {
   /// Puts [user] into [group] on the provider served at [subdomain] of the answered domain.
   const GroupMembership({
     required this.subdomain,
-    required this.domainAnswer,
+    required this.domain,
     required this.user,
     required this.group,
     required this.tokenPath,
@@ -37,7 +39,13 @@ final class GroupMembership extends ReversibleStep<bool> {
   /// Builds the step from what the program gave it.
   factory GroupMembership.fromArguments(Arguments arguments) => GroupMembership(
     subdomain: arguments.text('subdomain'),
-    domainAnswer: arguments.text('domain_answer'),
+    domain: SettingsValue(
+      what: 'the domain the provider is served on',
+      answer: arguments.optionalText('domain_answer'),
+      key: arguments.optionalText('domain_key'),
+      settingsPath: arguments.optionalText('settings_path'),
+      runAnswer: arguments.optionalText('run_answer'),
+    ),
     user: arguments.text('user'),
     group: arguments.text('group'),
     tokenPath: arguments.text('token_path'),
@@ -56,9 +64,40 @@ final class GroupMembership extends ReversibleStep<bool> {
     ArgumentSpec(
       name: 'domain_answer',
       kind: ArgumentKind.answerName,
+      required: false,
       describes:
           'the name of the answer holding the domain the provider is served on. Named rather than '
-          'written, because a run is what knows which installation this is',
+          'written, because a run is what knows which installation this is. Write "domain_key" '
+          'instead where a settings file of the machine already carries it',
+    ),
+    // THE OTHER SOURCE OF THE SAME VALUE. A domain handed to a row as an answer is a COPY of what a
+    // settings file of the machine already says, and a copy is what a caller gets wrong. A key
+    // names the one place the value stands, so there is nothing to keep in step. Where a row names
+    // both, the answer is read and the record says which key was not.
+    ArgumentSpec(
+      name: 'settings_path',
+      kind: ArgumentKind.text,
+      required: false,
+      describes:
+          'the settings file "domain_key" is read out of, as a path on the machine. It may carry '
+          'the slot "run_answer" names. Leave it off where the domain is answered',
+    ),
+    ArgumentSpec(
+      name: 'run_answer',
+      kind: ArgumentKind.answerName,
+      required: false,
+      describes:
+          'the name of the answer whose value fills the slot spelled with that same name in '
+          '"settings_path" — write "fqdn" here and a "<fqdn>" in the path is filled with the value '
+          'this run holds. Leave it off where the file is named the same on every installation',
+    ),
+    ArgumentSpec(
+      name: 'domain_key',
+      kind: ArgumentKind.text,
+      required: false,
+      describes:
+          'the key of that settings file the domain stands under, as a dotted path — each dot '
+          'descends one map. Write it instead of "domain_answer", never beside it',
     ),
     ArgumentSpec(
       name: 'user',
@@ -97,8 +136,8 @@ final class GroupMembership extends ReversibleStep<bool> {
   /// The label the provider is served under.
   final String subdomain;
 
-  /// The name of the answer holding the domain it is served on.
-  final String domainAnswer;
+  /// Where the domain it is served on comes from: an answer, or a key of a settings file.
+  final SettingsValue domain;
 
   /// The account this row puts into the group.
   final String user;
@@ -214,18 +253,9 @@ final class GroupMembership extends ReversibleStep<bool> {
 
   /// Where the provider is and what this run may ask it with, or why neither can be had.
   Future<_Reach> _reachable(StepContext context) async {
-    if (!context.answers.has(domainAnswer)) {
-      return _Reach.unreachable(
-        'this run holds no answer called "$domainAnswer", and it is the domain the provider is '
-        'served on — without it there is no address to ask',
-      );
-    }
-    final String domain = context.answers.text(domainAnswer);
-    if (domain.isEmpty) {
-      return _Reach.unreachable(
-        '"$domainAnswer" was answered with nothing, so the address would name a host that is only '
-        'a subdomain and a slash',
-      );
+    final ({String? value, String? refusal}) served = await domain.valueIn(context);
+    if (served.refusal case final String refusal) {
+      return _Reach.unreachable(refusal);
     }
     if (!await context.files.exists(tokenPath)) {
       return _Reach.unreachable(
@@ -241,7 +271,7 @@ final class GroupMembership extends ReversibleStep<bool> {
         'anonymous one — which says nothing about this row',
       );
     }
-    return _Reach(url: 'https://$subdomain.$domain', token: token);
+    return _Reach(url: 'https://$subdomain.${served.value}', token: token);
   }
 
   /// Who and which group the provider knows, and whether the one is already in the other.

@@ -122,7 +122,7 @@ const Map<StepName, RegisteredStep> kubernetesSteps = <StepName, RegisteredStep>
   // Rendered before it is applied, and both are given the same file under the same name.
   StepName('write_cluster_issuer_manifest'): RegisteredStep(
     name: StepName('write_cluster_issuer_manifest'),
-    source: 'lib/src/steps/write_cluster_issuer_manifest.dart:21',
+    source: 'lib/src/steps/write_cluster_issuer_manifest.dart:23',
     create: WriteClusterIssuerManifest.fromArguments,
     arguments: WriteClusterIssuerManifest.arguments,
     answers: WriteClusterIssuerManifest.answers,

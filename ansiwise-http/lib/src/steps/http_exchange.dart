@@ -207,22 +207,22 @@ final class ExchangeRow {
   /// back, and the engine reads it off the run's own measurements.
   ///
   /// It changes nothing and sends nothing, so a dry run reaches it too.
-  CheckResult readyOrBlocked(StepContext context) {
+  Future<CheckResult> readyOrBlocked(StepContext context) async {
     final ({String? refusal, String? value}) carried = _carried(context);
     if (carried.refusal case final String refusal) {
       return CheckResult.blocked(refusal);
     }
     final ({({String address, String? content, String? socket})? texts, String? refusal}) filled =
-        _filled(context);
+        await _filled(context);
     return filled.refusal == null
         ? const CheckResult.ready()
         : CheckResult.blocked(filled.refusal!);
   }
 
   /// What this row would send, for the plan an operator reads before starting.
-  StepPlan planned(StepContext context) {
+  Future<StepPlan> planned(StepContext context) async {
     final ({({String address, String? content, String? socket})? texts, String? refusal}) filled =
-        _filled(context);
+        await _filled(context);
     // A row whose texts refuse to fill has a blocked check, and its plan may still be asked. What
     // can honestly be said then is the request as the row wrote it, slots and all.
     return filled.texts == null
@@ -247,7 +247,7 @@ final class ExchangeRow {
       throw AnswerIncomplete(refusal);
     }
     final ({({String address, String? content, String? socket})? texts, String? refusal}) filled =
-        _filled(context);
+        await _filled(context);
     if (filled.refusal case final String refusal) {
       throw AnswerIncomplete(refusal);
     }
@@ -309,10 +309,13 @@ final class ExchangeRow {
   );
 
   /// The row's texts with every slot filled, or the refusal that stops the row.
-  ({({String address, String? content, String? socket})? texts, String? refusal}) _filled(
+  Future<({({String address, String? content, String? socket})? texts, String? refusal})> _filled(
     StepContext context,
-  ) {
-    final ({Map<String, String>? filled, String? refusal}) slots = slotValues(context, values);
+  ) async {
+    final ({Map<String, String>? filled, String? refusal}) slots = await slotValues(
+      context,
+      values,
+    );
     if (slots.refusal case final String refusal) {
       return (texts: null, refusal: refusal);
     }

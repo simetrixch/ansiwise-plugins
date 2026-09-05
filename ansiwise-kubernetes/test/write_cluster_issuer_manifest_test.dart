@@ -24,10 +24,22 @@ void main() {
   const WriteClusterIssuerManifest step = WriteClusterIssuerManifest(
     templatePath: templatePath,
     name: 'my-issuer',
-    acmeServerAnswer: authorityAnswer,
+    acmeServer: SettingsValue(
+      what: 'the certificate authority',
+      answer: authorityAnswer,
+      key: null,
+      settingsPath: null,
+      runAnswer: null,
+    ),
     ingressClass: 'public',
     path: manifestPath,
-    emailAnswer: mailboxAnswer,
+    email: SettingsValue(
+      what: 'the mailbox',
+      answer: mailboxAnswer,
+      key: null,
+      settingsPath: null,
+      runAnswer: null,
+    ),
   );
 
   /// The name the ROW gives the answer holding the mailbox.

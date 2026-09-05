@@ -11,13 +11,13 @@ import 'steps/report_out_of_box_flow.dart';
 const Map<StepName, RegisteredStep> authentikSteps = <StepName, RegisteredStep>{
   StepName('authentik_group_membership'): RegisteredStep(
     name: StepName('authentik_group_membership'),
-    source: 'lib/src/steps/group_membership.dart:26',
+    source: 'lib/src/steps/group_membership.dart:28',
     create: GroupMembership.fromArguments,
     arguments: GroupMembership.arguments,
   ),
   StepName('measure_issuer_url'): RegisteredStep(
     name: StepName('measure_issuer_url'),
-    source: 'lib/src/steps/measure_issuer_url.dart:22',
+    source: 'lib/src/steps/measure_issuer_url.dart:24',
     create: MeasureIssuerUrl.fromArguments,
     arguments: MeasureIssuerUrl.arguments,
     publishes: <MeasurementSpec>[
@@ -29,7 +29,7 @@ const Map<StepName, RegisteredStep> authentikSteps = <StepName, RegisteredStep>{
   ),
   StepName('report_out_of_box_flow'): RegisteredStep(
     name: StepName('report_out_of_box_flow'),
-    source: 'lib/src/steps/report_out_of_box_flow.dart:36',
+    source: 'lib/src/steps/report_out_of_box_flow.dart:38',
     create: ReportOutOfBoxFlow.fromArguments,
     arguments: ReportOutOfBoxFlow.arguments,
   ),

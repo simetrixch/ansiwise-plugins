@@ -302,7 +302,10 @@ final class WaitForHttpField extends ObservingStep {
     if (carried.refusal case final String refusal) {
       return _Stuck(refusal);
     }
-    final ({Map<String, String>? filled, String? refusal}) slots = slotValues(context, values);
+    final ({Map<String, String>? filled, String? refusal}) slots = await slotValues(
+      context,
+      values,
+    );
     if (slots.refusal case final String refusal) {
       return _Stuck(refusal);
     }

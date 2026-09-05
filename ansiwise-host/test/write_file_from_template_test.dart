@@ -336,6 +336,51 @@ void main() {
       },
     );
 
+    test('a file named per installation is read with its slot filled from this run', () async {
+      // THE POINT OF THE SLOT. A binding pointed at the file of one installation reads nothing on
+      // the next, and reading nothing here is silent: the key is not written, and every later
+      // reader takes that for "this installation has no such value".
+      const WriteFileFromTemplate perInstallation = WriteFileFromTemplate(
+        templatePath: templatePath,
+        path: path,
+        fileMode: 0x1a4,
+        values: <String, KeyBinding>{
+          'fqdn': KeyBinding(answer: 'fqdn'),
+          'build-plane': KeyBinding(
+            file: '/srv/records.<fqdn>.yaml',
+            key: 'plane',
+            runAnswer: 'fqdn',
+          ),
+          'alert-recipients': KeyBinding(answer: 'alert_recipients', join: ', '),
+          'note': KeyBinding(answer: 'note'),
+        },
+      );
+      final HostMachine machine = machineWith();
+      machine.files.contents['/srv/records.m1.example.com.yaml'] = 'plane: b1.example.com\n';
+
+      await perInstallation.apply(runWith(machine, answered));
+
+      expect(machine.files.contents[path], contains('plane: b1.example.com'));
+    });
+
+    test('THE INNOCENT NEIGHBOUR: a path with no slot is read exactly as written', () async {
+      final HostMachine machine = recording('plane: b1.example.com\nto: a@example.com\n');
+
+      await inheriting.apply(runWith(machine, answered));
+
+      expect(machine.files.contents[path], contains('plane: b1.example.com'));
+    });
+
+    test('a binding naming an answer and a run_answer is refused where the row is read', () {
+      expect(
+        () => KeyBinding.readFrom(<String, Object?>{
+          'fqdn': <String, Object?>{'answer': 'fqdn', 'run_answer': 'fqdn'},
+        }),
+        throwsArgumentError,
+        reason: 'there is no path on an answer source for a slot to stand in',
+      );
+    });
+
     test('a binding naming an answer AND a file is refused where the row is read', () {
       expect(
         () => KeyBinding.readFrom(<String, Object?>{

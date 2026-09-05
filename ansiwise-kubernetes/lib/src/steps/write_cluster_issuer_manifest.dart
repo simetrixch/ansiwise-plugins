@@ -1,5 +1,7 @@
 import 'package:ansiwise_core/ansiwise_core.dart';
 
+import 'settings_value.dart';
+
 /// Renders the cert-manager object every certificate on this cluster is issued by.
 ///
 /// It names the certificate authority, the address that receives the notices before a certificate
@@ -23,10 +25,10 @@ final class WriteClusterIssuerManifest extends ReversibleStep<String?> with File
   const WriteClusterIssuerManifest({
     required this.templatePath,
     required this.name,
-    required this.acmeServerAnswer,
+    required this.acmeServer,
     required this.ingressClass,
     required this.path,
-    required this.emailAnswer,
+    required this.email,
     this.elevated = false,
   });
 
@@ -35,10 +37,22 @@ final class WriteClusterIssuerManifest extends ReversibleStep<String?> with File
       WriteClusterIssuerManifest(
         templatePath: arguments.text('template'),
         name: arguments.text('name'),
-        acmeServerAnswer: arguments.text('acme_server_answer'),
+        acmeServer: SettingsValue(
+          what: 'the certificate authority every certificate on this cluster is issued by',
+          answer: arguments.optionalText('acme_server_answer'),
+          key: arguments.optionalText('acme_server_key'),
+          settingsPath: arguments.optionalText('settings_path'),
+          runAnswer: arguments.optionalText('run_answer'),
+        ),
         ingressClass: arguments.text('ingress_class'),
         path: arguments.text('issuer_manifest_path'),
-        emailAnswer: arguments.text('email_answer'),
+        email: SettingsValue(
+          what: 'the mailbox the certificate authority writes to before a certificate expires',
+          answer: arguments.optionalText('email_answer'),
+          key: arguments.optionalText('email_key'),
+          settingsPath: arguments.optionalText('settings_path'),
+          runAnswer: arguments.optionalText('run_answer'),
+        ),
         elevated: arguments.has('elevated') && arguments.flag('elevated'),
       );
 
@@ -66,10 +80,49 @@ final class WriteClusterIssuerManifest extends ReversibleStep<String?> with File
     ArgumentSpec(
       name: 'acme_server_answer',
       kind: ArgumentKind.answerName,
+      required: false,
       describes:
           'the name of the answer holding the certificate authority every certificate on this '
           'cluster is issued by — a staging service for an installation that exists to be proven, '
-          'the production one for an installation that serves',
+          'the production one for an installation that serves. Write "acme_server_key" instead '
+          'where the settings file already carries it, and never both',
+    ),
+    // THE OTHER SOURCE OF THE SAME TWO VALUES, and the reason it is worth a second pair of
+    // arguments: a value handed to a row as an answer is a COPY of what a settings file of the
+    // machine already says, and a copy is what a caller gets wrong. A key names the one place the
+    // value stands, so there is nothing to keep in step.
+    ArgumentSpec(
+      name: 'settings_path',
+      kind: ArgumentKind.text,
+      required: false,
+      describes:
+          'the settings file the keys below are read out of, as a path on the machine. It may '
+          'carry the slot "run_answer" names. Leave it off where every value is answered',
+    ),
+    ArgumentSpec(
+      name: 'run_answer',
+      kind: ArgumentKind.answerName,
+      required: false,
+      describes:
+          'the name of the answer whose value fills the slot spelled with that same name in '
+          '"settings_path" — write "fqdn" here and a "<fqdn>" in the path is filled with the value '
+          'this run holds. Leave it off where the file is named the same on every installation',
+    ),
+    ArgumentSpec(
+      name: 'acme_server_key',
+      kind: ArgumentKind.text,
+      required: false,
+      describes:
+          'the key of the settings file the certificate authority stands under, as a dotted path — '
+          'each dot descends one map. Write it instead of "acme_server_answer", never beside it',
+    ),
+    ArgumentSpec(
+      name: 'email_key',
+      kind: ArgumentKind.text,
+      required: false,
+      describes:
+          'the key of the settings file the mailbox stands under, as a dotted path. Write it '
+          'instead of "email_answer", never beside it',
     ),
     ArgumentSpec(
       name: 'ingress_class',
@@ -83,10 +136,12 @@ final class WriteClusterIssuerManifest extends ReversibleStep<String?> with File
     ArgumentSpec(
       name: 'email_answer',
       kind: ArgumentKind.answerName,
+      required: false,
       describes:
           'the name of the answer holding the mailbox the certificate authority writes to before a '
           'certificate expires — the question belongs to whoever operates the installation, and the '
-          'authority is named separately by acme_server_answer',
+          'authority is named separately by acme_server_answer. Write "email_key" instead where the '
+          'settings file already carries it, and never both',
     ),
     ArgumentSpec(
       name: 'issuer_manifest_path',
@@ -118,8 +173,8 @@ final class WriteClusterIssuerManifest extends ReversibleStep<String?> with File
   /// what keeps the resolver refusing a program that stopped declaring it.
   static const List<String> answers = <String>[];
 
-  /// The name of the answer holding the mailbox, as the row states it.
-  final String emailAnswer;
+  /// Where the mailbox comes from: an answer this run holds, or a key of a settings file.
+  final SettingsValue email;
 
   /// `0644` — a rendered manifest that carries nothing secret.
   static const int manifestMode = 0x1a4;
@@ -138,11 +193,12 @@ final class WriteClusterIssuerManifest extends ReversibleStep<String?> with File
   /// What the issuer is called.
   final String name;
 
-  /// WHICH answer holds the authority certificates are issued by.
+  /// Where the authority certificates are issued by comes from.
   ///
-  /// Empty by design: a default here would be one installation's choice made by a package that must
-  /// not know which installation it is compiled into.
-  final String acmeServerAnswer;
+  /// No default either way: which authority an installation registers with is that installation's
+  /// choice, and a package that must not know which installation it is compiled into cannot make
+  /// it.
+  final SettingsValue acmeServer;
 
   /// The ingress a request is answered over.
   final String ingressClass;
@@ -202,10 +258,26 @@ final class WriteClusterIssuerManifest extends ReversibleStep<String?> with File
   ///
   /// Public because what the cluster is asked to hold and what this writes have to be one text: the
   /// steps that apply the issuer and that prove it settled compare against exactly this.
-  Future<String> manifestFor(StepContext context) => renderedWith(context, <String, String>{
-    'name': name,
-    'acme-server': context.answers.text(acmeServerAnswer),
-    'email': context.answers.text(emailAnswer),
-    'ingress-class': ingressClass,
-  });
+  ///
+  /// **A value that cannot be read is [TemplateRefused] and never an empty slot.** That is the same
+  /// refusal a template this machine does not carry raises, and the mixin above turns it into a
+  /// blocked check and into a plan that says what stands in the way. Rendered with an empty
+  /// authority the manifest would name no issuer and the cluster would accept it, so every
+  /// certificate would be requested from nowhere and the run would report itself green.
+  Future<String> manifestFor(StepContext context) async {
+    final ({String? value, String? refusal}) authority = await acmeServer.valueIn(context);
+    if (authority.refusal case final String refusal) {
+      throw TemplateRefused(refusal);
+    }
+    final ({String? value, String? refusal}) mailbox = await email.valueIn(context);
+    if (mailbox.refusal case final String refusal) {
+      throw TemplateRefused(refusal);
+    }
+    return renderedWith(context, <String, String>{
+      'name': name,
+      'acme-server': authority.value!,
+      'email': mailbox.value!,
+      'ingress-class': ingressClass,
+    });
+  }
 }

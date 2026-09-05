@@ -10,3 +10,4 @@ export 'src/registry.dart';
 export 'src/steps/group_membership.dart';
 export 'src/steps/measure_issuer_url.dart';
 export 'src/steps/report_out_of_box_flow.dart';
+export 'src/steps/settings_value.dart';

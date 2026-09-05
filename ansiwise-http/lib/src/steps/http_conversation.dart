@@ -18,6 +18,7 @@ library;
 import 'dart:convert';
 
 import 'package:ansiwise_core/ansiwise_core.dart';
+import 'package:yaml/yaml.dart';
 
 /// What one read of an address actually said, which is one of THREE things and not two.
 ///
@@ -153,10 +154,14 @@ FieldReading fieldIn(Map<String, Object?> object, String path) {
 
 /// Where one slot of a row's texts takes its value from.
 ///
-/// **Two sources and no third.** An answer this run was started with, and a value that already
-/// stands in the row. The second is not a third grammar: a row writes `{measured: <name>}`, and the
-/// framework writes the carried value in over that body before the step is built — so what a
-/// running step meets under that name is the value itself.
+/// **Three sources.** An answer this run was started with, a value that already stands in the row,
+/// and a key of a settings file on the machine. The second is not a grammar of its own: a row writes
+/// `{measured: <name>}`, and the framework writes the carried value in over that body before the
+/// step is built — so what a running step meets under that name is the value itself.
+///
+/// **The third exists because a value an installation already wrote down should not be copied into
+/// an answer to reach a request.** A copy is what a caller gets wrong, and a request sent to the
+/// wrong address answers perfectly and says nothing.
 sealed class SlotSource {
   const SlotSource();
 }
@@ -179,6 +184,29 @@ final class SlotWritten extends SlotSource {
   final String value;
 }
 
+/// A slot filled from a key of a settings file on the machine.
+///
+/// **The file is read as YAML and [key] is a dotted path**, each segment one map lookup. That is the
+/// same reading a `*_key` argument takes elsewhere in this tree, and it is NOT the reading
+/// `fill_key_value_file` takes of the same two words: that one reads a single `key: value` or
+/// `KEY=value` line and does not descend. The two are recorded as a contested pair in the glossary.
+///
+/// [runAnswer] names the answer that fills the slot spelled with that name in [file], so a file
+/// named per installation can be reached from a program row shipped to every installation.
+final class SlotFile extends SlotSource {
+  /// Reads the slot's value out of [key] of the file at [file].
+  const SlotFile({required this.file, required this.key, this.runAnswer});
+
+  /// Where the settings file stands, as the row wrote it.
+  final String file;
+
+  /// The dotted key of that file holding the value.
+  final String key;
+
+  /// WHICH answer fills the slot in [file], or null where the path carries none.
+  final String? runAnswer;
+}
+
 /// Where each slot of a row's texts takes its value from, read out of the row's `values` mapping.
 ///
 /// **One named slot standing for exactly one value, and nothing that evaluates.** `slot-name:
@@ -191,6 +219,11 @@ final class SlotWritten extends SlotSource {
 /// a step that could not be built while the value is missing would refuse the whole program before
 /// anything measured anything. By the time the row runs, the framework has written that value in
 /// where the body stood, which is why a written-out value is read here and not refused.
+///
+/// **`slot-name: {file: path, key: name}` names a key of a settings file on the machine**, read as
+/// YAML at a dotted path, with an optional `run_answer` filling a slot in the path. It is for a
+/// value the installation already wrote down: copying such a value into an answer to reach a
+/// request is the copy a caller gets wrong.
 Map<String, SlotSource> slotSources(Object? declared) {
   if (declared == null) {
     return const <String, SlotSource>{};
@@ -199,7 +232,7 @@ Map<String, SlotSource> slotSources(Object? declared) {
     throw ArgumentError.value(
       declared,
       'values',
-      'is a mapping of slot-name to {answer: name} or {measured: name}',
+      'is a mapping of slot-name to {answer: name}, {measured: name} or {file: path, key: name}',
     );
   }
   final Map<String, SlotSource> sources = <String, SlotSource>{};
@@ -218,10 +251,27 @@ Map<String, SlotSource> slotSources(Object? declared) {
         continue;
       }
     }
+    if (body is Map<String, Object?>) {
+      if (body['file'] case final String file) {
+        if (body['key'] case final String key) {
+          sources[entry.key] = SlotFile(
+            file: file,
+            key: key,
+            runAnswer: body['run_answer'] as String?,
+          );
+          continue;
+        }
+        throw ArgumentError.value(
+          body,
+          entry.key,
+          'reads a file and names no key, so nothing says which value of it fills the slot',
+        );
+      }
+    }
     throw ArgumentError.value(
       body,
       entry.key,
-      'is bound as {answer: name} or {measured: name} and nothing else',
+      'is bound as {answer: name}, {measured: name} or {file: path, key: name} and nothing else',
     );
   }
   return sources;
@@ -231,10 +281,10 @@ Map<String, SlotSource> slotSources(Object? declared) {
 ///
 /// Refused rather than left empty: a slot whose answer nobody holds would stay in the text as its
 /// own seven literal characters, and whatever reads the request next would take them as content.
-({Map<String, String>? filled, String? refusal}) slotValues(
+Future<({Map<String, String>? filled, String? refusal})> slotValues(
   StepContext context,
   Map<String, SlotSource> sources,
-) {
+) async {
   final Map<String, String> filled = <String, String>{};
   for (final MapEntry<String, SlotSource> each in sources.entries) {
     switch (each.value) {
@@ -251,9 +301,89 @@ Map<String, SlotSource> slotSources(Object? declared) {
           );
         }
         filled[each.key] = context.answers.text(answer);
+      case SlotFile(:final String file, :final String key, :final String? runAnswer):
+        final ({String? value, String? refusal}) read = await _valueInFile(
+          context,
+          file: file,
+          key: key,
+          runAnswer: runAnswer,
+          slot: each.key,
+        );
+        if (read.refusal case final String refusal) {
+          return (filled: null, refusal: refusal);
+        }
+        filled[each.key] = read.value!;
     }
   }
   return (filled: filled, refusal: null);
+}
+
+/// What [key] of the settings file at [file] holds, or the sentence that refuses the row.
+///
+/// Every way this can find nothing is a refusal naming the file and the key, and never an empty
+/// value: a slot filled with nothing composes an address that answers and answers about something
+/// else.
+Future<({String? value, String? refusal})> _valueInFile(
+  StepContext context, {
+  required String file,
+  required String key,
+  required String? runAnswer,
+  required String slot,
+}) async {
+  final String path = filledSlots(file, <String, String>{
+    if (runAnswer case final String name)
+      if (context.answers.optionalText(name) case final String held) name: held,
+  });
+  if (leftoverSlotIn(path) case final String unfilled) {
+    return (
+      value: null,
+      refusal:
+          '"$file" still carries $unfilled after this run filled what it could, so it names no '
+          'file — "run_answer" says which answer fills it',
+    );
+  }
+  if (!await context.files.exists(path)) {
+    return (
+      value: null,
+      refusal: '$path is not on this machine, and its $key is what fills "<$slot>"',
+    );
+  }
+  final YamlNode document;
+  try {
+    document = loadYamlNode(await context.files.read(path));
+  } on YamlException catch (broken) {
+    return (
+      value: null,
+      refusal:
+          '$path is not readable as YAML, and its $key is what fills "<$slot>" — repair the file: '
+          '$broken',
+    );
+  }
+  YamlNode? at = document;
+  for (final String segment in key.split('.')) {
+    if (at case final YamlMap map) {
+      at = map.nodes[segment];
+      continue;
+    }
+    at = null;
+    break;
+  }
+  if (at == null) {
+    return (
+      value: null,
+      refusal: '$path carries nothing under $key, and that is what fills "<$slot>"',
+    );
+  }
+  if (at.value is List || at.value is Map) {
+    return (
+      value: null,
+      refusal: '$path carries a list or a map under $key, and a slot holds one value',
+    );
+  }
+  final String held = at.value == null ? '' : '${at.value}'.trim();
+  return held.isEmpty
+      ? (value: null, refusal: '$path assigns $key nothing at all, and it fills "<$slot>"')
+      : (value: held, refusal: null);
 }
 
 /// Why the declared slots do not fit [texts], or null when every one lands somewhere.

@@ -20,7 +20,13 @@ void main() {
 
   const ReportOutOfBoxFlow step = ReportOutOfBoxFlow(
     subdomain: 'idp',
-    domainAnswer: 'books_cluster',
+    domain: SettingsValue(
+      what: 'the domain the provider is served on',
+      answer: 'books_cluster',
+      key: null,
+      settingsPath: null,
+      runAnswer: null,
+    ),
   );
 
   ({StepContext context, _WhatItSaid said}) contextOn(FakeHttp http, {String? holding = domain}) {
@@ -166,7 +172,13 @@ void main() {
   test('the address it names follows the row and is not fixed in the code', () async {
     const ReportOutOfBoxFlow other = ReportOutOfBoxFlow(
       subdomain: 'entry',
-      domainAnswer: 'elsewhere',
+      domain: SettingsValue(
+        what: 'the domain the provider is served on',
+        answer: 'elsewhere',
+        key: null,
+        settingsPath: null,
+        runAnswer: null,
+      ),
     );
     const String otherBase = 'https://entry.two.example.org';
     final FakeHttp provider = FakeHttp()

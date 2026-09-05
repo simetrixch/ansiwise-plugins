@@ -24,19 +24,23 @@ void main() {
       'namespace',
       'deployments',
     ],
-    // What the issuer is called, which authority it asks, which ingress answers the challenge, and
-    // where the rendered file goes. cert-manager mandates none of the four: each is one product's
-    // choice, and a value here makes this package make that choice for every caller.
+    // What the issuer is called, which ingress answers the challenge, and where the rendered file
+    // goes. cert-manager mandates none of the three: each is one product's choice, and a value here
+    // makes this package make that choice for every caller.
     //
-    // The authority goes one step further: it is the NAME of an answer rather than a value the row
-    // writes out, because it differs between two installations running the same program: one that
-    // exists to be proven registers with a staging service, one that serves registers with the
-    // production one. What this suite holds of it is the same — declared, required, no default.
+    // The authority and the mailbox are not in this list, because each of them has TWO sources and
+    // a row states one of the two: an answer, or a key of a settings file. Neither source can be
+    // required on its own without forbidding the other. What holds them is the group below.
+    'write_cluster_issuer_manifest': <String>['name', 'ingress_class', 'issuer_manifest_path'],
+  };
+
+  /// The values with two sources, and the argument that carries each.
+  const Map<String, List<String>> twoSourced = <String, List<String>>{
     'write_cluster_issuer_manifest': <String>[
-      'name',
       'acme_server_answer',
-      'ingress_class',
-      'issuer_manifest_path',
+      'acme_server_key',
+      'email_answer',
+      'email_key',
     ],
   };
 
@@ -91,6 +95,28 @@ void main() {
             noun: 'argument',
           ),
           <Matcher>[contains('needs the argument "$argument"')],
+        );
+      });
+    }
+  }
+
+  for (final MapEntry<String, List<String>> step in twoSourced.entries) {
+    for (final String argument in step.value) {
+      test('${step.key} declares "$argument" optional and with no default', () {
+        // OPTIONAL BECAUSE THERE ARE TWO OF THEM, never because the value may be left out. A row
+        // that states neither source is refused when the step is asked, by a sentence naming the
+        // value — which the group below drives.
+        final Iterable<ArgumentSpec> found = entryFor(
+          step.key,
+        ).arguments.where((ArgumentSpec spec) => spec.name == argument);
+        expect(found, hasLength(1), reason: '${step.key} declares no argument called $argument');
+        expect(found.first.required, isFalse);
+        expect(
+          found.first.hasDefault,
+          isFalse,
+          reason:
+              'a default here is this package deciding how a cluster was put together, which is '
+              'exactly what it is not allowed to know',
         );
       });
     }
