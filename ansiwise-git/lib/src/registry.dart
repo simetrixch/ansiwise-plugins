@@ -84,7 +84,7 @@ const Map<StepName, RegisteredStep> gitSteps = <StepName, RegisteredStep>{
   ),
   StepName('git_merge_ref'): RegisteredStep(
     name: StepName('git_merge_ref'),
-    source: 'lib/src/steps/git_merge_ref.dart:36',
+    source: 'lib/src/steps/git_merge_ref.dart:28',
     create: GitMergeRef.fromArguments,
     arguments: GitMergeRef.arguments,
   ),

@@ -7,20 +7,14 @@ import 'git_checkout.dart';
 
 /// The step that brings a generated branch up to a stated commit by merging it in.
 ///
-/// The property everything here circles is the declaration rule: a content conflict under a listed
-/// pattern is taken from the incoming commit because a later row writes it again, and EVERY other
-/// conflict — outside the patterns, or a deletion under them — aborts the merge and is named. A
-/// merge that guessed there would guess exactly where guessing destroys somebody's record.
+/// The property everything here circles is that the step never resolves a conflict: every one of
+/// them aborts the merge and is named. A merge that guessed would guess exactly where guessing
+/// destroys somebody's record.
 void main() {
   /// The commit the branch is brought up to, as a row would take it from a measurement.
   const String ref = 'v1.2.3';
 
-  const GitMergeRef step = GitMergeRef(
-    repository: repository,
-    branchAnswer: nameAnswer,
-    ref: ref,
-    towardRef: <String>['rendered/*'],
-  );
+  const GitMergeRef step = GitMergeRef(repository: repository, branchAnswer: nameAnswer, ref: ref);
 
   /// A checkout standing on the branch, mid-history, with the commit resolvable and nothing dirty.
   FakeShell standing({String head = branch, bool carries = false, String status = ''}) {
@@ -166,41 +160,12 @@ void main() {
       expect(shell.ran.where((String c) => c.contains('merge --abort')), isEmpty);
     });
 
-    test('a content conflict under a listed pattern is taken from the incoming commit', () async {
-      final FakeShell shell = standing()
-        ..fails('git -C $repository merge --no-edit $ref', stderr: 'CONFLICT (content)')
-        ..answers('git -C $repository diff --name-only --diff-filter=U', 'rendered/one.yaml\n')
-        ..answers(
-          'git -C $repository ls-files -u -- rendered/one.yaml',
-          '100644 aaa 1\trendered/one.yaml\n'
-              '100644 bbb 2\trendered/one.yaml\n'
-              '100644 ccc 3\trendered/one.yaml\n',
-        );
-
-      await step.apply(contextOn(shell: shell));
-      expect(shell.ran, contains('git -C $repository checkout --theirs -- rendered/one.yaml'));
-      expect(shell.ran, contains('git -C $repository add -- rendered/one.yaml'));
-      expect(shell.ran, contains('git -C $repository commit --no-edit'));
-    });
-
-    test('a conflict outside every pattern aborts the merge and is named', () async {
+    test('a conflict aborts the merge, and the refusal names every path at once', () async {
       final FakeShell shell = standing()
         ..fails('git -C $repository merge --no-edit $ref', stderr: 'CONFLICT (content)')
         ..answers(
           'git -C $repository diff --name-only --diff-filter=U',
           'rendered/one.yaml\nrecords/kept.yaml\n',
-        )
-        ..answers(
-          'git -C $repository ls-files -u -- rendered/one.yaml',
-          '100644 aaa 1\trendered/one.yaml\n'
-              '100644 bbb 2\trendered/one.yaml\n'
-              '100644 ccc 3\trendered/one.yaml\n',
-        )
-        ..answers(
-          'git -C $repository ls-files -u -- records/kept.yaml',
-          '100644 aaa 1\trecords/kept.yaml\n'
-              '100644 bbb 2\trecords/kept.yaml\n'
-              '100644 ccc 3\trecords/kept.yaml\n',
         );
 
       await expectLater(
@@ -209,39 +174,22 @@ void main() {
           isA<StateError>().having(
             (StateError e) => e.message,
             'message',
-            contains('records/kept.yaml'),
+            allOf(contains('rendered/one.yaml'), contains('records/kept.yaml')),
           ),
         ),
       );
       expect(shell.ran, contains('git -C $repository merge --abort'));
+      expect(
+        shell.ran.where((String c) => c.contains('checkout --theirs')),
+        isEmpty,
+        reason: 'no conflict is resolved by this step, whatever the path is',
+      );
       expect(
         shell.ran.where((String c) => c.contains('commit --no-edit')),
         isEmpty,
         reason: 'a merge that was aborted must not be committed',
       );
     });
-
-    test(
-      'a deletion under a listed pattern still aborts — a pattern licenses content only',
-      () async {
-        final FakeShell shell = standing()
-          ..fails('git -C $repository merge --no-edit $ref', stderr: 'CONFLICT (modify/delete)')
-          ..answers('git -C $repository diff --name-only --diff-filter=U', 'rendered/gone.yaml\n')
-          ..answers(
-            'git -C $repository ls-files -u -- rendered/gone.yaml',
-            '100644 aaa 1\trendered/gone.yaml\n'
-                '100644 bbb 2\trendered/gone.yaml\n',
-          );
-
-        await expectLater(step.apply(contextOn(shell: shell)), throwsA(isA<StateError>()));
-        expect(shell.ran, contains('git -C $repository merge --abort'));
-        expect(
-          shell.ran.where((String c) => c.contains('checkout --theirs')),
-          isEmpty,
-          reason: 'there is no incoming content to take for a deletion',
-        );
-      },
-    );
 
     test('a merge that failed with no conflict at all fails with its own words', () async {
       final FakeShell shell = standing()
