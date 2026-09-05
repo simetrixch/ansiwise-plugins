@@ -21,6 +21,15 @@
 # package. Started together those waits overlap instead of adding up, and the
 # tree is judged in a fraction of the time without one package boundary moving.
 #
+# THE RESOLVER RUNS ALONE, BECAUSE THE PUB CACHE IS ONE DIRECTORY. pub keeps a
+# git dependency as one checkout per ref under $PUB_CACHE/git and holds git's
+# index lock while it checks that ref out. Eleven resolvers reaching for the
+# same ref at once meet on that lock, and all but the first die on it. A sibling
+# checkout hides this: pubspec_overrides.yaml answers the pin from a path and
+# nothing is cloned. So every package is resolved first, one after another, and
+# only the judging runs at once. After the first package the resolve is a cache
+# hit and costs nothing worth overlapping.
+#
 # EVERY PACKAGE RUNS BEFORE ANYTHING IS REPORTED, so one red package does not
 # hide the state of the ten behind it. Each run writes to a file of its own and
 # is printed whole, in directory order — eleven runs writing to one screen at
@@ -36,18 +45,21 @@ logs="$(mktemp -d)"
 trap 'rm -rf "$logs"' EXIT
 
 packages=()
-runs=()
 for manifest in */pubspec.yaml; do
   package="${manifest%/pubspec.yaml}"
   [ -d "$package/test" ] || continue
+  (cd "$package" && dart pub get >/dev/null)
+  packages+=("$package")
+done
+
+runs=()
+for package in "${packages[@]}"; do
   (
     cd "$package"
-    dart pub get >/dev/null
     dart analyze --fatal-infos
     dart format --output=none --set-exit-if-changed .
     dart test
   ) >"$logs/$package" 2>&1 &
-  packages+=("$package")
   runs+=("$!")
 done
 
