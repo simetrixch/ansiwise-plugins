@@ -29,7 +29,7 @@ dependencies:
   ansiwise_core:
     git:
       url: https://github.com/simetrixch/ansiwise-core.git
-      ref: 70f3cef613f01a2f60e87058ce7ffdc7c06993b4
+      ref: 2698a8f228a87ce7936efb411faaefd08d172f4e
   # Both tools, because the step is about both. The store package supplies how Vault is read and
   # where an installation's own facts about it stand; the cluster package supplies the composer that
   # spells the kubectl invocation, which is the one place an invocation of it is put together.
@@ -52,5 +52,5 @@ dev_dependencies:
   ansiwise_checks:
     git:
       url: https://github.com/simetrixch/ansiwise-checks.git
-      ref: 9c21108a3237b83e2f13ab64d80056ae7a080b0c
+      ref: f91a44f1ca3dc10ae028ae9317b4251c0b2254eb
       path: registry
