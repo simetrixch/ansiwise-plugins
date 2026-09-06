@@ -13,15 +13,17 @@ void main() {
   const String unit = 'unseal.service';
   const EnableService step = EnableService(unit: unit);
 
-  /// The line the manager is asked, composed from the step's own list rather than written out — a
-  /// property added there is one these tests arrange for, instead of a fake that quietly stops
-  /// matching the command and answers nothing to every question.
-  final String asked = <String>[
+  /// The line the manager is asked about [named], composed from the step's own list rather than
+  /// written out — a property added there is one these tests arrange for, instead of a fake that
+  /// quietly stops matching the command and answers nothing to every question.
+  String askedAbout(String named) => <String>[
     'systemctl',
     'show',
     for (final String property in EnableService.properties) ...<String>['-p', property],
-    unit,
+    named,
   ].join(' ');
+
+  final String asked = askedAbout(unit);
 
   /// What the manager answers, property by property.
   String saying({
@@ -29,7 +31,10 @@ void main() {
     String file = 'enabled',
     String active = 'active',
     String reload = 'no',
-  }) => 'LoadState=$load\nUnitFileState=$file\nActiveState=$active\nNeedDaemonReload=$reload\n';
+    String triggers = '',
+  }) =>
+      'LoadState=$load\nUnitFileState=$file\nActiveState=$active\nNeedDaemonReload=$reload\n'
+      'Triggers=$triggers\n';
 
   /// A machine whose manager answers [state] about the unit.
   HostMachine machineSaying(String state) {
@@ -78,6 +83,107 @@ void main() {
       final CheckResult answer = await step.check(machine.contextFor(under));
       expect(answer, isA<Blocked>());
       expect((answer as Blocked).reason, contains(unit));
+    });
+  });
+
+  group('the unit this one starts', () {
+    // A timer and the service it fires, which is the pair a program installs when the schedule and
+    // the command line are two files. The manager names the second one itself, under Triggers.
+    const String timer = 'unseal.timer';
+    const EnableService timerStep = EnableService(unit: timer);
+
+    /// A machine whose manager says [about] of the timer and [started] of the service it fires.
+    HostMachine machineWithBoth(String about, String started) {
+      final HostMachine machine = HostMachine();
+      machine.shell
+        ..answers(askedAbout(timer), about)
+        ..answers(asked, started);
+      return machine;
+    }
+
+    test('a timer is done only when the unit it fires was read from the disk too', () async {
+      final HostMachine machine = machineWithBoth(
+        saying(triggers: unit),
+        saying(active: 'inactive'),
+      );
+
+      expect(await timerStep.check(machine.contextFor(under)), isA<Satisfied>());
+      expect(machine.changing, isEmpty);
+    });
+
+    test('a timer whose SERVICE was rewritten is NOT done, however healthy the timer is', () async {
+      // The defect. The row before this one rewrites the service file, the timer file is untouched,
+      // and every property the manager answers about the TIMER says it is fine — so a step reading
+      // only the unit it was named finds nothing to do, and the timer keeps firing the command line
+      // the manager loaded before the run.
+      final HostMachine machine = machineWithBoth(
+        saying(triggers: unit),
+        saying(active: 'inactive', reload: 'yes'),
+      );
+
+      expect(await timerStep.check(machine.contextFor(under)), isA<Ready>());
+    });
+
+    test('a manager that will not answer about the unit fired BLOCKS, naming it', () async {
+      // The two answers that look alike and are opposites, one unit on. A service nothing could ask
+      // about is not a service the manager has read.
+      final HostMachine machine = HostMachine();
+      machine.shell
+        ..answers(askedAbout(timer), saying(triggers: unit))
+        ..fails(asked);
+
+      final CheckResult answer = await timerStep.check(machine.contextFor(under));
+      expect(answer, isA<Blocked>());
+      expect((answer as Blocked).reason, contains(unit));
+    });
+
+    test('a manager that says nothing about the reload is not one that said no', () async {
+      // The property stands on every unit the manager knows, including one whose file it cannot
+      // find. Reading its absence as `no` would pass a unit nobody measured.
+      final HostMachine machine = machineWithBoth(
+        saying(triggers: unit),
+        'LoadState=not-found\nUnitFileState=bad\nActiveState=inactive\n',
+      );
+
+      expect(await timerStep.check(machine.contextFor(under)), isA<Ready>());
+    });
+
+    test('the reload runs, and the timer is restarted so the next firing is the new unit', () async {
+      // What apply leaves behind. Telling the manager to read the directory again is what puts the
+      // rewritten service in front of it, and the restart re-arms the timer against it.
+      final HostMachine machine = machineWithBoth(
+        saying(triggers: unit),
+        saying(active: 'inactive', reload: 'yes'),
+      );
+      machine.shell.changes(
+        'systemctl daemon-reload',
+        () => machine.shell.answers(asked, saying(active: 'inactive')),
+      );
+
+      await timerStep.apply(machine.contextFor(under));
+      expect(machine.changing, <String>[
+        'systemctl daemon-reload',
+        'systemctl enable $timer',
+        'systemctl restart $timer',
+      ]);
+    });
+
+    test('a reload that did not take FAILS, naming the unit that is still behind', () async {
+      final HostMachine machine = machineWithBoth(
+        saying(triggers: unit),
+        saying(active: 'inactive', reload: 'yes'),
+      );
+
+      await expectLater(
+        timerStep.apply(machine.contextFor(under)),
+        throwsA(
+          isA<StateError>().having(
+            (StateError failure) => failure.message,
+            'message',
+            allOf(contains(timer), contains(unit)),
+          ),
+        ),
+      );
     });
   });
 

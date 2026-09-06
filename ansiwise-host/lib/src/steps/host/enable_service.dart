@@ -24,6 +24,13 @@ import 'package:ansiwise_core/ansiwise_core.dart';
 /// compares timestamps: a file's modification time and a manager's start time are read off two
 /// different clocks.
 ///
+/// **AND SO IS EVERY UNIT THIS ONE STARTS.** A timer whose own file did not change answers
+/// `NeedDaemonReload=no` while the service it fires was rewritten under it, and a step reading only
+/// the unit it was named finds nothing to do and leaves the manager holding the old service. The
+/// manager names what a unit starts itself, under `Triggers`, so nothing here derives a service name
+/// from a timer's — and the same property answers for a socket and a path unit. One level, because
+/// what a timer starts is a service and a service starts nothing.
+///
 /// **THE UNIT HAS TO BE ONE THAT STAYS ACTIVE** — an ordinary service, or a one-shot carrying
 /// `RemainAfterExit=yes`. What this step reports is what the manager says, and the manager says
 /// `inactive` both for a one-shot that finished successfully and for a unit that has never run at
@@ -62,6 +69,7 @@ final class EnableService extends ReversibleStep<bool> {
     'UnitFileState',
     'ActiveState',
     'NeedDaemonReload',
+    'Triggers',
   ];
 
   @override
@@ -100,7 +108,7 @@ final class EnableService extends ReversibleStep<bool> {
     }
     throw StateError(
       '$unit was enabled and restarted, and the service manager reports ${after.answer}. The '
-      'commands themselves reported no failure, so what is wrong is in the unit and not in the '
+      'commands themselves reported no failure, so what is wrong is in a unit and not in the '
       'enabling. A unit the manager does not find is one whose file is not in the directory it '
       'reads; a unit that ran and finished is reported inactive unless it carries '
       'RemainAfterExit=yes, and this step cannot tell that apart from one that never ran',
@@ -111,8 +119,10 @@ final class EnableService extends ReversibleStep<bool> {
   ///
   /// A machine can arrive with the unit enabled, and taking this run back is not a licence to stop
   /// a service this run did not install. Only a unit this run enabled is disabled again.
+  ///
+  /// What this unit starts is not asked about, because the undo below touches only this one.
   @override
-  Future<bool> capture(StepContext context) async => (await _read(context)).enabled;
+  Future<bool> capture(StepContext context) async => (await _show(context, unit)).enabled;
 
   @override
   Future<void> undo(StepContext context, bool captured) async {
@@ -124,17 +134,39 @@ final class EnableService extends ReversibleStep<bool> {
     );
   }
 
-  /// What the service manager says about this unit.
+  /// What the service manager says about this unit and about every unit this one starts.
+  ///
+  /// A unit it starts is asked ONE question, whether the manager has read the file that stands on
+  /// disk. A service a timer fires is neither wanted at boot nor running between firings, so the
+  /// other answers about it describe a healthy machine and would refuse every one of them.
   Future<_Unit> _read(StepContext context) async {
+    final _Unit state = await _show(context, unit);
+    if (state.refusal != null) {
+      return state;
+    }
+    for (final String started in state.triggers) {
+      final _Unit downstream = await _show(context, started);
+      if (downstream.refusal case final String refusal) {
+        return _Unit.unreadable(refusal);
+      }
+      if (downstream.reloadNeeded) {
+        return _Unit.of(state.said, stale: started);
+      }
+    }
+    return state;
+  }
+
+  /// What the service manager says about [named].
+  Future<_Unit> _show(StepContext context, String named) async {
     final List<String> asked = <String>[
       for (final String property in properties) ...<String>['-p', property],
     ];
     final CommandResult shown = await context.shell.run(
-      Command.observing('systemctl', arguments: <String>['show', ...asked, unit]),
+      Command.observing('systemctl', arguments: <String>['show', ...asked, named]),
     );
     if (!shown.ok) {
       return _Unit.unreadable(
-        'the service manager would not say anything about $unit: ${shown.stderr.trim()}',
+        'the service manager would not say anything about $named: ${shown.stderr.trim()}',
       );
     }
     final Map<String, String> said = <String, String>{};
@@ -165,16 +197,19 @@ final class EnableService extends ReversibleStep<bool> {
 /// What the service manager says about one unit, or why it could not be asked.
 final class _Unit {
   /// Records what the manager answered, keyed by the property it was asked for.
-  const _Unit.of(this.said) : refusal = null;
+  const _Unit.of(this.said, {this.stale}) : refusal = null;
 
   /// Records that nothing could be read, because [refusal].
-  const _Unit.unreadable(String this.refusal) : said = const <String, String>{};
+  const _Unit.unreadable(String this.refusal) : said = const <String, String>{}, stale = null;
 
   /// What the manager answered, property by property.
   final Map<String, String> said;
 
   /// Why nothing could be read, or null when it could.
   final String? refusal;
+
+  /// A unit this one starts whose file the manager has not read, or null where there is none.
+  final String? stale;
 
   /// Everything the manager answered, as one line an operator can act on.
   ///
@@ -184,6 +219,8 @@ final class _Unit {
   String get answer => <String>[
     for (final String property in EnableService.properties)
       '$property=${said[property] ?? 'nothing'}',
+    if (stale case final String started)
+      'and it starts $started, which the manager has not re-read',
   ].join(', ');
 
   /// Whether the manager starts this unit on its way up.
@@ -194,8 +231,16 @@ final class _Unit {
   bool get active => said['ActiveState'] == 'active';
 
   /// Whether the unit file on disk has moved on from what the manager loaded.
-  bool get reloadNeeded => said['NeedDaemonReload'] == 'yes';
+  ///
+  /// A manager that said nothing is not one that said no. The property stands on every unit the
+  /// manager knows, including one whose file it cannot find, so its absence is a reading that did
+  /// not happen and reading it as `no` would pass a unit nobody measured.
+  bool get reloadNeeded => said['NeedDaemonReload'] != 'no';
 
-  /// Whether all three hold at once, which is the state this step produces.
-  bool get settled => enabled && active && !reloadNeeded;
+  /// The units this one starts, which the manager names rather than this step deriving them.
+  Iterable<String> get triggers =>
+      (said['Triggers'] ?? '').split(' ').where((String named) => named.isNotEmpty);
+
+  /// Whether all of it holds at once, which is the state this step produces.
+  bool get settled => enabled && active && !reloadNeeded && stale == null;
 }

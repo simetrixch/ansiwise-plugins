@@ -241,7 +241,7 @@ const Map<StepName, RegisteredStep> hostSteps = <StepName, RegisteredStep>{
   ),
   StepName('enable_service'): RegisteredStep(
     name: StepName('enable_service'),
-    source: 'lib/src/steps/host/enable_service.dart:32',
+    source: 'lib/src/steps/host/enable_service.dart:39',
     create: EnableService.fromArguments,
     arguments: EnableService.arguments,
   ),
