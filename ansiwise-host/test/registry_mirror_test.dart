@@ -32,12 +32,20 @@ void main() {
   const String fallback = 'https://registry.example.com';
   const String credential = 'cHVsbC11c2VyOnNlY3JldA==';
 
+  /// The credential a run carries as an answer, which is a different one from the file's on purpose:
+  /// a test where both sources hold the same value cannot say which of them was read.
+  const String answeredCredential = 'YW5zd2VyLXVzZXI6YW5zd2VyLXNlY3JldA==';
+
   /// The names this row reads the run's answers under, and the axis its credential file is per.
   const String machineNameAnswer = 'machine_name';
   const String mirrorMachineAnswer = 'mirror_machine';
   const String tierAnswer = 'tier';
+  const String credentialAnswerName = 'pull_credential';
 
-  const RegistryMirror layout = RegistryMirror(
+  /// The layout both steps carry, as a row writes it — with or without the answer a credential can
+  /// reach this machine in. Written once, because the pair reading two different layouts is the
+  /// thing this file exists to make impossible.
+  RegistryMirror layoutWith({String? credentialAnswer}) => RegistryMirror(
     repository: repository,
     profilePath: 'clusters/active/<$machineNameAnswer>.yaml',
     mirrorHostKey: 'global.endpoints.registry.host',
@@ -47,13 +55,26 @@ void main() {
     mirroredRegistry: mirroredRegistry,
     thisMachineAnswer: machineNameAnswer,
     mirrorMachineAnswer: mirrorMachineAnswer,
+    credentialAnswer: credentialAnswer,
     runAnswer: tierAnswer,
   );
 
-  const RequireRegistryPullCredential step = RequireRegistryPullCredential(layout: layout);
+  final RegistryMirror layout = layoutWith();
+  final RegistryMirror answeringLayout = layoutWith(credentialAnswer: credentialAnswerName);
 
-  const WriteContainerdRegistryMirror mirror = WriteContainerdRegistryMirror(
+  final RequireRegistryPullCredential step = RequireRegistryPullCredential(layout: layout);
+  final RequireRegistryPullCredential answeringStep = RequireRegistryPullCredential(
+    layout: answeringLayout,
+  );
+
+  final WriteContainerdRegistryMirror mirror = WriteContainerdRegistryMirror(
     layout: layout,
+    certsDirectory: certsDirectory,
+    fallback: fallback,
+    fileMode: 384,
+  );
+  final WriteContainerdRegistryMirror answeringMirror = WriteContainerdRegistryMirror(
+    layout: answeringLayout,
     certsDirectory: certsDirectory,
     fallback: fallback,
     fileMode: 384,
@@ -66,33 +87,35 @@ void main() {
       '    registry:\n'
       '      host: $host\n';
 
-  String secrets({String? value, String newline = '\n'}) {
-    final String written =
-        value ??
-        base64.encode(
-          utf8.encode(
-            jsonEncode(<String, Object>{
-              'auths': <String, Object>{
-                mirrorHost: <String, String>{'auth': credential},
-              },
-            }),
-          ),
-        );
-    return <String>[
-      '# the credentials this machine needs',
-      'REGISTRY_PULL_DOCKERCONFIGJSON=$written',
-      '',
-    ].join(newline);
-  }
+  /// The encoded pull configuration, which is the shape both sources carry the credential in.
+  String document({String blob = credential}) => base64.encode(
+    utf8.encode(
+      jsonEncode(<String, Object>{
+        'auths': <String, Object>{
+          mirrorHost: <String, String>{'auth': blob},
+        },
+      }),
+    ),
+  );
+
+  String secrets({String? value, String newline = '\n'}) => <String>[
+    '# the credentials this machine needs',
+    'REGISTRY_PULL_DOCKERCONFIGJSON=${value ?? document()}',
+    '',
+  ].join(newline);
 
   /// A run on a machine that pulls through another machine's mirror, which is the case these tests
-  /// are written on: the three values the two steps read are answered, not constructed into them.
-  Arguments answeredAs({String machine = thisMachine, String mirrorRunsOn = mirrorMachine}) =>
-      hostAnswering(<String, Object>{
-        tierAnswer: tier,
-        machineNameAnswer: machine,
-        mirrorMachineAnswer: mirrorRunsOn,
-      });
+  /// are written on: the values the two steps read are answered, not constructed into them.
+  Arguments answeredAs({
+    String machine = thisMachine,
+    String mirrorRunsOn = mirrorMachine,
+    String? carrying,
+  }) => hostAnswering(<String, Object>{
+    tierAnswer: tier,
+    machineNameAnswer: machine,
+    mirrorMachineAnswer: mirrorRunsOn,
+    if (carrying case final String value) credentialAnswerName: value,
+  });
 
   HostMachine machineWith({String? secretsFile, bool withCertsDirectory = true}) {
     final HostMachine machine = HostMachine();
@@ -160,21 +183,21 @@ void main() {
       );
     });
 
-    test('no credential file on the machine warns, writes no mirror and stays green', () async {
-      // The unattended base install of a machine runs before any credential reaches it. Failing
-      // here would kill every one of them.
+    test('a machine holding no credential at all is refused by the name it would carry', () async {
+      // It pulls through a mirror that refuses an anonymous pull, and nothing comes back later to
+      // write the mirror. Passing here installs a machine whose every pull goes to the rate-limited
+      // public path, and reports it green.
       final HostMachine machine = machineWith();
-      expect(
-        await step.check(machine.contextFor(under, Arguments.none, answeredAs())),
-        isA<Satisfied>(),
+      final CheckResult answer = await step.check(
+        machine.contextFor(under, Arguments.none, answeredAs()),
       );
-      expect(machine.said.join('\n'), contains(secretsPath));
-      expect(machine.said.join('\n'), contains('run this program again'));
+      expect((answer as Blocked).reason, contains(secretsPath));
+      expect(answer.reason, contains('credential_answer'));
 
       final HostMachine writing = machineWith();
       expect(
         await mirror.check(writing.contextFor(under, Arguments.none, answeredAs())),
-        isA<Satisfied>(),
+        isA<Blocked>(),
       );
       expect(writing.files.written, isEmpty);
     });
@@ -223,6 +246,122 @@ void main() {
         isA<Blocked>(),
       );
       expect(machine.files.written, isEmpty);
+    });
+  });
+
+  group('the credential the run carries instead of a file', () {
+    test('a machine with no credential file passes on the answer alone', () async {
+      // The machine this is for holds no such file at all: the credential reaches it as a value of
+      // the run, and reading a file here would refuse a machine whose credential is in front of it.
+      final Arguments answers = answeredAs(carrying: document(blob: answeredCredential));
+      final HostMachine machine = machineWith();
+      expect(
+        await answeringStep.check(machine.contextFor(under, Arguments.none, answers)),
+        isA<Satisfied>(),
+      );
+
+      final HostMachine writing = machineWith();
+      await answeringMirror.apply(writing.contextFor(under, Arguments.none, answers));
+      expect(
+        writing.files.contents[answeringMirror.path],
+        contains('authorization = "Basic $answeredCredential"'),
+      );
+    });
+
+    test('the answer decides where both are there, and the file is not read', () async {
+      final HostMachine machine = machineWith(secretsFile: secrets());
+      await answeringMirror.apply(
+        machine.contextFor(
+          under,
+          Arguments.none,
+          answeredAs(carrying: document(blob: answeredCredential)),
+        ),
+      );
+      final String written = machine.files.contents[answeringMirror.path] ?? '';
+      expect(written, contains('Basic $answeredCredential'));
+      expect(written, isNot(contains(credential)));
+    });
+
+    test('a row naming an answer this run does not hold reads the file, as before', () async {
+      final HostMachine machine = machineWith(secretsFile: secrets());
+      final StepContext context = machine.contextFor(under, Arguments.none, answeredAs());
+      expect(await answeringStep.check(context), isA<Satisfied>());
+      await answeringMirror.apply(context);
+      expect(machine.files.contents[answeringMirror.path], contains('Basic $credential'));
+    });
+
+    test('neither the answer nor the file carrying one is refused by both names', () async {
+      final HostMachine machine = machineWith();
+      final CheckResult answer = await answeringStep.check(
+        machine.contextFor(under, Arguments.none, answeredAs()),
+      );
+      expect((answer as Blocked).reason, contains(credentialAnswerName));
+      expect(answer.reason, contains(secretsPath));
+
+      final HostMachine writing = machineWith();
+      expect(
+        await answeringMirror.check(writing.contextFor(under, Arguments.none, answeredAs())),
+        isA<Blocked>(),
+      );
+      expect(writing.files.written, isEmpty);
+    });
+
+    test('an answer that is not an encoded pull configuration is refused by name', () async {
+      // The same judgement the file's value gets. A value that is not the shape every client that
+      // logs in to a registry writes would be put into the mirror verbatim and refused on the first
+      // pull, a long way from the row that accepted it.
+      final Arguments answers = answeredAs(carrying: 'not-an-encoded-document');
+      final HostMachine machine = machineWith();
+      final CheckResult answer = await answeringStep.check(
+        machine.contextFor(under, Arguments.none, answers),
+      );
+      expect((answer as Blocked).reason, contains(credentialAnswerName));
+      expect(answer.reason, contains('encoded pull configuration'));
+
+      final HostMachine writing = machineWith();
+      expect(
+        await answeringMirror.check(writing.contextFor(under, Arguments.none, answers)),
+        isA<Blocked>(),
+      );
+      expect(writing.files.written, isEmpty);
+    });
+
+    test('the answer reaches the mirror file and no surface of the record', () async {
+      // What a step of this package puts into a run record is its log lines, its plan, the commands
+      // it runs and what it publishes. Each is asserted here, for the encoded document the run
+      // carries AND for the credential inside it. Beyond the step, an answer a program declares
+      // secret is hidden on every surface by the run's own redactor — that is the engine's, not
+      // this package's, and it hides nothing this step already wrote in the clear.
+      final String carried = document(blob: answeredCredential);
+      final HostMachine machine = machineWith();
+      final StepContext context = machine.contextFor(
+        under,
+        Arguments.none,
+        answeredAs(carrying: carried),
+      );
+      await answeringMirror.apply(context);
+      final StepPlan plan = await answeringMirror.plan(context);
+      final CheckResult gate = await answeringStep.check(context);
+
+      for (final String surface in <String>[
+        machine.said.join('\n'),
+        machine.changing.join('\n'),
+        machine.published.values.join('\n'),
+        plan.summary,
+        (plan as DiffPlan).before,
+        plan.after,
+        (gate as Satisfied).because,
+      ]) {
+        expect(surface, isNot(contains(carried)));
+        expect(surface, isNot(contains(answeredCredential)));
+      }
+      expect(
+        plan.after,
+        contains(WriteContainerdRegistryMirror.redactedCredential),
+        reason: 'what the plan says instead is named, so an empty diff cannot pass for a redaction',
+      );
+      expect(gate.because, contains(credentialAnswerName), reason: 'the name is not the value');
+      expect(machine.files.contents[answeringMirror.path], contains('Basic $answeredCredential'));
     });
   });
 

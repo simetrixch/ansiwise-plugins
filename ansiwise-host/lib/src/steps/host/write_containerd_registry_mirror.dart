@@ -123,26 +123,11 @@ final class WriteContainerdRegistryMirror extends ReversibleStep<String?> {
         'the container runtime reads no per-registry configuration here',
       );
     }
-    final String secrets = layout.secretsIn(context);
-    if (!await context.files.exists(secrets, elevated: elevated)) {
-      context.log.warn(
-        '$secrets is not on this machine, so no mirror is written and every pull goes to the '
-        'rate-limited public path. Fill the file in and run this program again — nothing else comes '
-        'back to write it.',
-      );
-      return const CheckResult.satisfied('there is no credential file on this machine yet');
-    }
-
     // The same guard the gate before the install keeps, asked again here so that running this
     // program on its own keeps it.
-    final PullCredential credential = await layout.readCredential(
-      context,
-      secrets,
-      host,
-      elevated: elevated,
-    );
+    final PullCredential credential = await layout.credentialFor(context, host, elevated: elevated);
     if (credential.refusal case final String refusal) {
-      return CheckResult.blocked('$secrets: $refusal');
+      return CheckResult.blocked(refusal);
     }
     if (credential.blob case final String blob) {
       if (!await context.files.exists(path, elevated: elevated)) {
@@ -187,11 +172,7 @@ final class WriteContainerdRegistryMirror extends ReversibleStep<String?> {
     if (host == null) {
       return;
     }
-    final PullCredential credential = await layout.readCredential(
-      context,
-      layout.secretsIn(context),
-      host,
-    );
+    final PullCredential credential = await layout.credentialFor(context, host, elevated: elevated);
     if (credential.blob case final String blob) {
       context.log.info(
         '${layout.mirroredRegistry} pulls now go through $host, falling back to $fallback',

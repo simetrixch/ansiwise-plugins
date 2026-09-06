@@ -10,21 +10,21 @@ import 'registry_mirror.dart';
 /// The step that writes the mirror asks it again, so the same guard holds when that step is run on
 /// its own.
 ///
-/// **Only two states are refusals, and both are fixed by editing one file and running again.** A
-/// file of credentials written with the line endings of another operating system keeps an invisible
-/// character inside every value, and what that produces is a rejected credential that looks
-/// perfectly correct on screen. A credential that is blank or still the placeholder an example file
-/// ships is not a credential.
+/// **A machine that pulls through the mirror and holds no credential for it is refused.** The
+/// credential is either a value this run carries under the name the row gives, or a key of a file on
+/// the machine; holding neither is refused by both names, as is a credential that is blank, still
+/// the placeholder an example file ships, or not an encoded pull configuration for the mirror's
+/// address. A file of credentials written with the line endings of another operating system keeps an
+/// invisible character inside every value, which produces a rejected credential that looks perfectly
+/// correct on screen, and that is refused too.
 ///
-/// **Everything else passes, and each for its own reason.** The machine the MIRROR runs on cannot
-/// pull through it — at that point in its own install the mirror does not exist. A machine whose
-/// mirror address cannot be read from the profile would have no mirror to write. And a machine with
-/// no credential file at all is the unattended base install of a machine the credentials reach
-/// later.
+/// **Two states pass, and each for its own reason.** The machine the MIRROR runs on cannot pull
+/// through it — at that point in its own install the mirror does not exist. And a machine whose
+/// mirror address cannot be read from the profile has no mirror to pull through at all.
 ///
-/// **These two states are refused rather than warned for one measured reason.** A machine without
-/// the mirror sends every pull to the rate-limited public path with no further sign of it, and
-/// nothing later comes back to write the mirror on its own.
+/// **Everything else is refused rather than warned for one measured reason.** A machine without the
+/// mirror sends every pull to the rate-limited public path with no further sign of it, and nothing
+/// later comes back to write the mirror on its own.
 final class RequireRegistryPullCredential extends ObservingStep {
   /// Decides whether the machine can pull through the mirror [layout] describes.
   const RequireRegistryPullCredential({required this.layout, this.elevated = false});
@@ -65,7 +65,6 @@ final class RequireRegistryPullCredential extends ObservingStep {
       );
     }
 
-    final String secrets = layout.secretsIn(context);
     final String? host = await layout.mirrorHostIn(context, elevated: elevated);
     if (host == null) {
       return CheckResult.satisfied(
@@ -73,24 +72,13 @@ final class RequireRegistryPullCredential extends ObservingStep {
         'pulls stay on the public path',
       );
     }
-    if (!await context.files.exists(secrets, elevated: elevated)) {
-      context.log.warn(
-        '$secrets is not on this machine, so no mirror is written and every pull goes to the '
-        'rate-limited public path. That is the unattended base install of a machine whose '
-        'credentials arrive later; fill the file in and run this program again to write the mirror.',
-      );
-      return const CheckResult.satisfied('there is no credential file on this machine yet');
-    }
 
-    final PullCredential credential = await layout.readCredential(
-      context,
-      secrets,
-      host,
-      elevated: elevated,
-    );
+    final PullCredential credential = await layout.credentialFor(context, host, elevated: elevated);
     if (credential.refusal case final String refusal) {
-      return CheckResult.blocked('$secrets: $refusal');
+      return CheckResult.blocked(refusal);
     }
-    return CheckResult.satisfied('$secrets carries a usable pull credential for $host');
+    return CheckResult.satisfied(
+      '${layout.credentialSourceIn(context)} carries a usable pull credential for $host',
+    );
   }
 }

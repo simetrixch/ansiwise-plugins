@@ -23,6 +23,14 @@ import 'yaml_file.dart';
 /// holds the credential and under which name, what an example file writes in its place, and which
 /// registry is mirrored at all — a vendor with the same container runtime and a completely different
 /// product wants every one of those different, so none of them has a value in this package.
+///
+/// **The credential comes from an ANSWER of the run or from a FILE of the machine, and the run
+/// decides which.** A machine that an earlier program of the same installation gave its credentials
+/// to holds them in the file, and that file is the value somebody may have rotated by hand. A
+/// machine that carries no such file is given the credential as an answer instead, and reading a
+/// file there would refuse a machine whose credential is in the run in front of it. So where the run
+/// holds a value under the name [credentialAnswer], that value IS the credential and the file is not
+/// read; where it does not, the file is.
 final class RegistryMirror {
   /// The layout exactly as a program row describes it.
   const RegistryMirror({
@@ -35,6 +43,7 @@ final class RegistryMirror {
     required this.mirroredRegistry,
     required this.thisMachineAnswer,
     required this.mirrorMachineAnswer,
+    this.credentialAnswer,
     this.runAnswer,
   });
 
@@ -49,6 +58,7 @@ final class RegistryMirror {
     mirroredRegistry: arguments.text('mirrored_registry'),
     thisMachineAnswer: arguments.text('this_machine_answer'),
     mirrorMachineAnswer: arguments.text('mirror_machine_answer'),
+    credentialAnswer: arguments.optionalText('credential_answer'),
     runAnswer: arguments.optionalText('run_answer'),
   );
 
@@ -75,6 +85,19 @@ final class RegistryMirror {
           'the key of the profile the mirror\'s address is written under, written with a dot '
           'between each level. The address is read and never composed: whatever else points at '
           'that registry reads the same key',
+    ),
+    // WHERE THE CREDENTIAL COMES FROM, said twice, and the RUN decides which of them is read. Not
+    // one-or-the-other per row: the same row runs on a machine that was given a credential file and
+    // on one that was given the credential as an answer, and a row that had to choose in the
+    // program file would be two rows of the same step kept in step by hand.
+    ArgumentSpec(
+      name: 'credential_answer',
+      kind: ArgumentKind.answerName,
+      describes:
+          'the name of the answer carrying the encoded pull configuration, for a machine no file of '
+          'this installation writes it to. Where this run holds a value under that name it IS the '
+          'credential and secrets_path is not read; where it holds none, secrets_path is',
+      required: false,
     ),
     ArgumentSpec(
       name: 'secrets_path',
@@ -146,6 +169,9 @@ final class RegistryMirror {
 
   /// The dotted key of the profile the mirror's address is written under.
   final String mirrorHostKey;
+
+  /// The name of the answer carrying the credential, or null where the row names none.
+  final String? credentialAnswer;
 
   /// Where the credential file stands under the checkout, with its slot still in it.
   final String secretsPath;
@@ -237,46 +263,96 @@ final class RegistryMirror {
     return null;
   }
 
-  /// The credential the file at [path] carries for [host], or a refusal saying why not.
+  /// What this row says the credential comes from on THIS run, named the way a refusal names it.
   ///
-  /// The file is read into values here and never into this program's own environment. A file of
+  /// The answer where the run holds one, and the file otherwise. Read by both steps for what they
+  /// say when the credential is usable, so the sentence an operator gets names the thing they would
+  /// have to change.
+  String credentialSourceIn(StepContext context) => _answered(context) == null
+      ? '$credentialKey of ${secretsIn(context)}'
+      : 'the answer "$credentialAnswer"';
+
+  /// The credential this machine reaches the mirror at [host] with, or a refusal saying why none.
+  ///
+  /// The file is read into values and never into this program's own environment. A file of
   /// credentials that is run rather than read puts every value in it into everything the run starts
   /// afterwards.
   ///
+  /// **Nothing carrying a credential is a REFUSAL and not a pass.** A machine that pulls through a
+  /// mirror it cannot present a credential to sends every pull to the rate-limited public path, no
+  /// later run comes back to write the mirror on its own, and a step that passed here would report
+  /// that machine as installed. The two names it could have come from are both in the refusal,
+  /// because either one of them is what somebody fixes.
+  ///
   /// The credential itself is returned and never written anywhere a record can reach.
-  Future<PullCredential> readCredential(
+  Future<PullCredential> credentialFor(
     StepContext context,
-    String path,
     String host, {
     bool elevated = false,
   }) async {
-    final String text = await context.files.read(path, elevated: elevated);
-    if (text.contains('\r\n')) {
-      return const PullCredential.refused(
-        'it is written with the line endings of another operating system, which leaves an invisible '
-        'character inside every value in it — what that produces is a credential that is rejected '
-        'and looks perfectly correct on screen. Rewrite it with plain line endings.',
+    if (_answered(context) case final String written) {
+      return _judged(written, host, context);
+    }
+    final String secrets = secretsIn(context);
+    if (!await context.files.exists(secrets, elevated: elevated)) {
+      return PullCredential.refused(
+        '${_neitherSource(context)}, and this machine pulls its images through the mirror at $host '
+        '— which refuses an anonymous pull, so every pull would go to the rate-limited public path '
+        'and nothing comes back later to write the mirror',
       );
     }
+    final String text = await context.files.read(secrets, elevated: elevated);
+    if (text.contains('\r\n')) {
+      return PullCredential.refused(
+        '$secrets is written with the line endings of another operating system, which leaves an '
+        'invisible character inside every value in it — what that produces is a credential that is '
+        'rejected and looks perfectly correct on screen. Rewrite it with plain line endings.',
+      );
+    }
+    return _judged(_value(text, credentialKey), host, context);
+  }
 
-    final String? written = _value(text, credentialKey);
+  /// The value this run holds under [credentialAnswer], or null where there is no such value.
+  ///
+  /// Null where the row names no answer and where the run holds none. A value that is THERE and
+  /// empty is not null: it is a credential somebody stated as nothing, and it is judged and refused
+  /// by name rather than quietly sending the read to the file instead.
+  String? _answered(StepContext context) {
+    final String? name = credentialAnswer;
+    return name == null ? null : context.answers.optionalText(name);
+  }
+
+  /// Both places this row says a credential could have come from, for the refusal when neither did.
+  String _neitherSource(StepContext context) => credentialAnswer == null
+      ? '${secretsIn(context)} is not on this machine, and this row names no credential_answer for '
+            'a credential to reach it in'
+      : 'this run holds no value under the answer "$credentialAnswer", and '
+            '${secretsIn(context)} is not on this machine either';
+
+  /// Whether [written] is a credential for [host], and a refusal naming its source where it is not.
+  ///
+  /// The same three judgements whichever source the value came from: a credential given as an
+  /// answer that is blank, still the placeholder, or not an encoded pull configuration is exactly as
+  /// unusable as one read out of a file.
+  PullCredential _judged(String? written, String host, StepContext context) {
+    final String named = credentialSourceIn(context);
     if (written == null || written.isEmpty) {
       return PullCredential.refused(
-        '$credentialKey is blank, and without it the mirror would answer every pull with a refusal '
-        'and fall back to the rate-limited public path anyway',
+        '$named is blank, and without it the mirror would answer every pull with a refusal and fall '
+        'back to the rate-limited public path anyway',
       );
     }
     if (written.startsWith(placeholderPrefix)) {
       return PullCredential.refused(
-        '$credentialKey is still the placeholder the example file ships, which is not a credential',
+        '$named is still the placeholder an example credential file ships in place of the real '
+        'value, which is not a credential',
       );
     }
-
     final String? blob = _blobFor(written, host);
     if (blob == null) {
       return PullCredential.refused(
-        '$credentialKey does not carry a credential for $host — it holds the encoded pull '
-        'configuration, and the entry for that address is what the mirror is written with',
+        '$named does not carry a credential for $host — it holds the encoded pull configuration, '
+        'and the entry for that address is what the mirror is written with',
       );
     }
     return PullCredential.usable(blob);
