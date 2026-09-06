@@ -83,6 +83,93 @@ void main() {
     });
   });
 
+  group('what reads the file, restarted with it', () {
+    const List<String> restart = <String>['systemctl', 'restart', 'reader.service'];
+    const List<String> ready = <String>['systemctl', 'is-active', 'reader.service'];
+
+    const WriteFileFromTemplate restarting = WriteFileFromTemplate(
+      templatePath: templatePath,
+      path: path,
+      fileMode: 0x1a4,
+      values: <String, KeyBinding>{
+        'fqdn': KeyBinding(answer: 'fqdn'),
+        'build-plane': KeyBinding(answer: 'build_plane'),
+        'alert-recipients': KeyBinding(answer: 'alert_recipients', join: ', '),
+        'note': KeyBinding(answer: 'note'),
+      },
+      restart: restart,
+      ready: ready,
+    );
+
+    /// How often the restart the row names has run on [machine].
+    int restartsOn(HostMachine machine) =>
+        machine.changing.where((String each) => each == restart.join(' ')).length;
+
+    test('a run that writes the file makes the process read it again', () async {
+      // The defect this closes. A process reads a file of this kind when it starts and never again,
+      // so a file written under a running one reaches it at its next start — which is a restart
+      // nobody is watching, on a machine the run has already reported as done.
+      final HostMachine machine = machineWith(existing: 'fqdn: an-old-name\n');
+      final StepContext context = runWith(machine, answered);
+
+      expect(await restarting.check(context), isA<Ready>());
+      await restarting.apply(context);
+
+      expect(machine.files.contents[path], contains('fqdn: m1.example.com'));
+      expect(restartsOn(machine), 1);
+    });
+
+    test('THE INNOCENT NEIGHBOUR: a run that changes nothing restarts nothing', () async {
+      // The file already holds what this run renders, so the check answers Satisfied and the engine
+      // performs nothing — and the process is left running on the file it has already read.
+      final HostMachine machine = machineWith();
+      await restarting.apply(runWith(machine, answered));
+      final int after = restartsOn(machine);
+
+      expect(await restarting.check(runWith(machine, answered)), isA<Satisfied>());
+      expect(restartsOn(machine), after);
+    });
+
+    test('a row naming no restart command leaves the process as it stands', () async {
+      // Without this, a version that restarted on every write would pass the assertions above and
+      // stop a process for every file this step writes.
+      final HostMachine machine = machineWith(existing: 'fqdn: an-old-name\n');
+
+      await step.apply(runWith(machine, answered));
+
+      expect(machine.changing, isEmpty);
+    });
+
+    test('taking the write back makes the process read the file it is put back to', () async {
+      // A machine running on the text this run wrote, with the file underneath it saying something
+      // else, is the state the restart above exists to prevent.
+      final HostMachine machine = machineWith(existing: 'fqdn: an-old-name\n');
+      final StepContext context = runWith(machine, answered);
+
+      final String? captured = await restarting.capture(context);
+      await restarting.apply(context);
+      await restarting.undo(context, captured);
+
+      expect(restartsOn(machine), 2);
+    });
+
+    test('a row that waits for a restart it never asks for is REFUSED where the row is read', () {
+      // Nothing else here restarts anything, so such a row states a wait that is never performed.
+      expect(
+        () => WriteFileFromTemplate.fromArguments(
+          const Arguments(<String, Object>{
+            'template': templatePath,
+            'path': path,
+            'file_mode': 420,
+            'restart_command': <String>[],
+            'ready_command': ready,
+          }),
+        ),
+        throwsArgumentError,
+      );
+    });
+  });
+
   group('what a rewrite must not take away', () {
     test('a CARRIED slot keeps what the file already said', () async {
       // The value nothing in this run holds: something a later act put there. Without the carried

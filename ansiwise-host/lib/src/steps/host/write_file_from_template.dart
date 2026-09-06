@@ -2,6 +2,7 @@ import 'package:ansiwise_core/ansiwise_core.dart';
 
 import 'fill_key_value_file.dart';
 import 'quoted_slot.dart';
+import 'set_process_flag.dart';
 
 /// Writes a file from a template beside the programs, on every run.
 ///
@@ -19,6 +20,15 @@ import 'quoted_slot.dart';
 /// untouched, and on the first write, where nothing stands there yet, the line is left out. The step
 /// needs to know nothing about which value that is, and a template author says it in the one place
 /// the value appears.
+///
+/// **WHAT READS THE FILE IS RESTARTED WITH IT, where the row names a command.** A file a process
+/// reads when it starts is a change nothing running has taken: the process read the file at its own
+/// start and does not read it again, so the file and the restart are one act. This step is also the
+/// only place that can tell a run which changed the file from one which did not — a file already
+/// holding what this run renders is not written, and then nothing is restarted either. A row that
+/// names no command leaves the process as it stands, and the file reaches it at its next start.
+/// WHICH command makes a process read the file again is the row's to say, never this step's: one
+/// machine restarts a unit by name, another restarts the whole package the service runs inside.
 ///
 /// **Every slot says which answer fills it.** A slot is spelled with hyphens and an answer with
 /// underscores, so matching by name would reach only answers of a single word — and would fail in
@@ -44,20 +54,39 @@ final class WriteFileFromTemplate extends ReversibleStep<String?> with FileStep,
     this.values = const <String, KeyBinding>{},
     this.elevated = false,
     this.escaping,
+    this.restart = const <String>[],
+    this.ready = const <String>[],
   });
 
   /// Builds the step from what the program gave it.
-  factory WriteFileFromTemplate.fromArguments(Arguments arguments) => WriteFileFromTemplate(
-    templatePath: arguments.text('template'),
-    path: arguments.text('path'),
-    fileMode: arguments.integer('file_mode'),
-    runAnswer: arguments.optionalText('run_answer'),
-    values: arguments.has('values')
-        ? KeyBinding.readFrom(arguments.raw('values'))
-        : const <String, KeyBinding>{},
-    elevated: arguments.has('elevated') && arguments.flag('elevated'),
-    escaping: Escaping.named(arguments.optionalText('escaping')),
-  );
+  factory WriteFileFromTemplate.fromArguments(Arguments arguments) {
+    final List<String> restart = arguments.textList('restart_command');
+    final List<String> ready = arguments.textList('ready_command');
+    // REFUSED WHERE THE ROW WAITS FOR A RESTART IT NEVER ASKED FOR. Nothing restarts anything
+    // without restart_command, so a row naming only the second one states a wait that is never
+    // performed and reads, in the file and in the record alike, as though it were.
+    if (restart.isEmpty && ready.isNotEmpty) {
+      throw ArgumentError.value(
+        ready.join(' '),
+        'ready_command',
+        'says when the restarted process answers again, and this row names no restart_command, so '
+            'nothing here restarts anything and nothing would wait for this',
+      );
+    }
+    return WriteFileFromTemplate(
+      templatePath: arguments.text('template'),
+      path: arguments.text('path'),
+      fileMode: arguments.integer('file_mode'),
+      runAnswer: arguments.optionalText('run_answer'),
+      values: arguments.has('values')
+          ? KeyBinding.readFrom(arguments.raw('values'))
+          : const <String, KeyBinding>{},
+      elevated: arguments.has('elevated') && arguments.flag('elevated'),
+      escaping: Escaping.named(arguments.optionalText('escaping')),
+      restart: restart,
+      ready: ready,
+    );
+  }
 
   /// What this step accepts.
   static const List<ArgumentSpec> arguments = <ArgumentSpec>[
@@ -117,6 +146,27 @@ final class WriteFileFromTemplate extends ReversibleStep<String?> with FileStep,
       required: false,
     ),
     ArgumentSpec(
+      name: 'restart_command',
+      kind: ArgumentKind.textList,
+      required: false,
+      defaultValue: <String>[],
+      describes:
+          'the command that makes whatever reads this file read it again, given as the program and '
+          'its arguments. It runs only on a run that really wrote the file, so a run that changed '
+          'nothing restarts nothing. Leave it off where the file is read afresh by whoever needs it',
+    ),
+    ArgumentSpec(
+      name: 'ready_command',
+      kind: ArgumentKind.textList,
+      required: false,
+      defaultValue: <String>[],
+      describes:
+          'a command that succeeds once the restarted process answers again, given as the program '
+          'and its arguments. WITHOUT IT THIS STEP RETURNS WHILE THE PROCESS IS STILL COMING BACK, '
+          'and the next row then asks a process that is down. Only the caller knows what answering '
+          'means. It needs restart_command, because nothing else here restarts anything',
+    ),
+    ArgumentSpec(
       name: 'escaping',
       kind: ArgumentKind.text,
       describes:
@@ -152,6 +202,13 @@ final class WriteFileFromTemplate extends ReversibleStep<String?> with FileStep,
   /// quoting, or null where the row says nothing and such a value is refused.
   final Escaping? escaping;
 
+  /// The command that makes whatever reads this file read it again, or empty where the row names
+  /// none and nothing is restarted.
+  final List<String> restart;
+
+  /// What succeeds once the restarted process answers again, or empty where the row says nothing.
+  final List<String> ready;
+
   @override
   String pathFor(StepContext context) {
     if (runAnswer case final String name) {
@@ -181,6 +238,12 @@ final class WriteFileFromTemplate extends ReversibleStep<String?> with FileStep,
     return FileContent.text(await renderedKeepingQuoting(context, filled, escaping: escaping));
   }
 
+  @override
+  Future<void> apply(StepContext context) async {
+    await super.apply(context);
+    await _readAgain(context);
+  }
+
   /// What the file held before, or null when it was not there.
   @override
   Future<String?> capture(StepContext context) => contentBefore(context);
@@ -191,8 +254,20 @@ final class WriteFileFromTemplate extends ReversibleStep<String?> with FileStep,
       // There was no file, so taking this back means the path is gone again. Returning here would
       // leave this run's values standing while the record says the step was taken back.
       await context.files.delete(pathFor(context), elevated: elevated);
+    } else {
+      await context.files.write(pathFor(context), captured, mode: mode, elevated: elevated);
+    }
+    // THE UNDO PUTS THE PROCESS BACK TOO, both ways round. A machine left running on the text this
+    // run wrote, with the file underneath it saying something else, is the state the apply above
+    // exists to prevent, and the record would say the step was taken back.
+    await _readAgain(context);
+  }
+
+  /// Makes whatever reads this file read it again, where the row named a command for it.
+  Future<void> _readAgain(StepContext context) async {
+    if (restart.isEmpty) {
       return;
     }
-    await context.files.write(pathFor(context), captured, mode: mode, elevated: elevated);
+    await SetProcessFlag.restartWith(context, restart, ready: ready);
   }
 }

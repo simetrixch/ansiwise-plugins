@@ -412,7 +412,7 @@ const Map<StepName, RegisteredStep> hostSteps = <StepName, RegisteredStep>{
   // name of any file a product keeps.
   StepName('write_file_from_template'): RegisteredStep(
     name: StepName('write_file_from_template'),
-    source: 'lib/src/steps/host/write_file_from_template.dart:28',
+    source: 'lib/src/steps/host/write_file_from_template.dart:38',
     create: WriteFileFromTemplate.fromArguments,
     arguments: WriteFileFromTemplate.arguments,
   ),
