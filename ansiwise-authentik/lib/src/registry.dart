@@ -11,7 +11,7 @@ import 'steps/report_out_of_box_flow.dart';
 const Map<StepName, RegisteredStep> authentikSteps = <StepName, RegisteredStep>{
   StepName('authentik_group_membership'): RegisteredStep(
     name: StepName('authentik_group_membership'),
-    source: 'lib/src/steps/group_membership.dart:28',
+    source: 'lib/src/steps/group_membership.dart:37',
     create: GroupMembership.fromArguments,
     arguments: GroupMembership.arguments,
   ),

@@ -37,11 +37,11 @@ void main() {
 
   FakeFiles checkout({String held = token}) => FakeFiles(<String, String>{tokenPath: '$held\n'});
 
-  StepContext contextOn(Http http, {FakeFiles? files}) => StepContext(
+  StepContext contextOn(Http http, {FakeFiles? files, FakeClock? clock}) => StepContext(
     shell: FakeShell(),
     files: files ?? checkout(),
     http: http,
-    clock: FakeClock(),
+    clock: clock ?? FakeClock(),
     entropy: FakeEntropy(),
     log: const _NothingSaid(),
     step: const StepName('authentik_group_membership'),
@@ -160,6 +160,60 @@ void main() {
     expect((answer as Blocked).reason, contains('empty'));
   });
 
+  group('waiting for what the provider applies from its own configuration', () {
+    // THE DEFECT THIS GROUP EXISTS FOR, measured on a master installed on 2026-09-07: the token
+    // file was written at 20:01:44, the first question got 403 at 20:01:44.835, and the same token
+    // got 200 ninety seconds later — the provider's worker was still applying the blueprint that
+    // creates both the token and the group. Refused at once, that costs the operator a second
+    // launcher run on every master whose worker is slower than this row.
+    test(
+      'a credential the provider does not accept yet is waited for, and then the row acts',
+      () async {
+        final FakeClock clock = FakeClock();
+        final _Provider provider = _Provider(members: <String>[], refusesWith: 403, refusals: 2);
+
+        await step.apply(contextOn(provider, clock: clock));
+
+        expect(provider.members, contains(accountId));
+        expect(clock.slept, <Duration>[
+          const Duration(seconds: 5),
+          const Duration(seconds: 5),
+        ], reason: 'it asked again after each refusal, at the gap the row states');
+        expect(await step.check(contextOn(provider)), isA<Satisfied>());
+      },
+    );
+
+    test(
+      'a credential the provider never accepts is refused by the token\'s path after the clock',
+      () async {
+        final FakeClock clock = FakeClock();
+        final _Provider provider = _Provider(members: <String>[], refusesWith: 403);
+
+        final CheckResult answer = await step.check(contextOn(provider, clock: clock));
+
+        expect(answer, isA<Blocked>());
+        expect((answer as Blocked).reason, contains(tokenPath));
+        expect(
+          answer.reason,
+          contains('waited 300s'),
+          reason: 'a refusal after a wait says how long it waited, or it reads like an instant one',
+        );
+        expect(clock.elapsed, const Duration(seconds: 300));
+        expect(provider.posts, isEmpty);
+      },
+    );
+
+    test('a group the provider has not applied yet is waited for, and then the row acts', () async {
+      final FakeClock clock = FakeClock();
+      final _Provider provider = _Provider(members: <String>[], groupAbsentFor: 3);
+
+      await step.apply(contextOn(provider, clock: clock));
+
+      expect(provider.members, contains(accountId));
+      expect(clock.elapsed, const Duration(seconds: 15));
+    });
+  });
+
   group('undoing', () {
     test('what this run added, it takes back out', () async {
       final _Provider provider = _Provider(members: <String>[]);
@@ -191,10 +245,22 @@ final class _Provider implements Http {
     this.hasGroup = true,
     this.hasUser = true,
     this.refusesWith,
+    this.refusals,
+    this.groupAbsentFor = 0,
   }) : members = <String>[...members];
 
-  /// A status the provider answers every question with, where it refuses to answer any.
+  /// A status the provider answers a question with, where it refuses to answer it.
   final int? refusesWith;
+
+  /// How many questions it refuses that way before it starts answering, or null for all of them —
+  /// which is the bootstrap still running, and then over.
+  final int? refusals;
+
+  /// How many questions about the group it answers with an empty page before the group is there.
+  final int groupAbsentFor;
+
+  /// How many questions about the group it has been asked.
+  int groupAsks = 0;
 
   /// Who is in the group right now.
   final List<String> members;
@@ -211,16 +277,19 @@ final class _Provider implements Http {
   Future<HttpAnswer> send(HttpRequest request) async {
     asked.add(request.url);
     if (refusesWith case final int status) {
-      return HttpAnswer(
-        status: status,
-        body: '{"detail":"Authentication credentials were not provided."}',
-        headers: const <String, String>{},
-        elapsed: Duration.zero,
-      );
+      if (refusals == null || asked.length <= refusals!) {
+        return HttpAnswer(
+          status: status,
+          body: '{"detail":"Authentication credentials were not provided."}',
+          headers: const <String, String>{},
+          elapsed: Duration.zero,
+        );
+      }
     }
     if (request.method == 'GET' && request.url.contains('/core/groups/?name=')) {
+      groupAsks += 1;
       return _page(
-        hasGroup
+        hasGroup && groupAsks > groupAbsentFor
             ? <Map<String, Object?>>[
                 <String, Object?>{'pk': groupId, 'name': 'operators', 'users': members},
               ]

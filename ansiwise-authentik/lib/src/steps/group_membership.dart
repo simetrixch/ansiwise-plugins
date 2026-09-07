@@ -25,6 +25,15 @@ import 'settings_value.dart';
 /// **The account and the group are the row's, never this package's.** Which account a provider's
 /// bootstrap creates is a fact about that provider, and which group a platform admits on is a fact
 /// about that platform. Neither is knowable here.
+///
+/// **THE TOKEN AND THE GROUP ARE WAITED FOR.** Both are objects the provider applies from its own
+/// configuration, and it applies them on its own schedule after coming up — so a run that reaches
+/// this row while that is still happening is refused the question by a provider that would have
+/// answered it a minute later. The row carries a clock for exactly those two: a credential the
+/// provider does not accept yet, a server error from a provider still starting, and a group that is
+/// not there are each "not yet", asked again every `interval_seconds` until `timeout_seconds` runs
+/// out, and only then refused by name with how long it was given. Every other answer is refused at
+/// once, because no clock turns a wrong address or a missing account into a right one.
 final class GroupMembership extends ReversibleStep<bool> {
   /// Puts [user] into [group] on the provider served at [subdomain] of the answered domain.
   const GroupMembership({
@@ -33,7 +42,8 @@ final class GroupMembership extends ReversibleStep<bool> {
     required this.user,
     required this.group,
     required this.tokenPath,
-    this.timeout = const Duration(seconds: 30),
+    this.timeoutSeconds = 300,
+    this.intervalSeconds = 5,
   });
 
   /// Builds the step from what the program gave it.
@@ -49,7 +59,8 @@ final class GroupMembership extends ReversibleStep<bool> {
     user: arguments.text('user'),
     group: arguments.text('group'),
     tokenPath: arguments.text('token_path'),
-    timeout: Duration(seconds: arguments.integer('timeout_seconds')),
+    timeoutSeconds: arguments.integer('timeout_seconds'),
+    intervalSeconds: arguments.integer('interval_seconds'),
   );
 
   /// What this step accepts.
@@ -134,8 +145,25 @@ final class GroupMembership extends ReversibleStep<bool> {
             'a bound of zero seconds gives up before it looks, and one longer than a day outlives the run it bounds',
       ),
       required: false,
-      defaultValue: 30,
-      describes: 'how long to wait for the provider to answer one request',
+      defaultValue: 300,
+      describes:
+          'how long the token the provider accepts and the group it carries are given before this '
+          'row reports that they did not come. Both are applied by the provider from its own '
+          'configuration, on its own schedule after it comes up, and this is the window that '
+          'covers it',
+    ),
+    ArgumentSpec(
+      name: 'interval_seconds',
+      kind: ArgumentKind.integer,
+      band: IntegerBand.between(
+        least: 1,
+        most: 3600,
+        because:
+            'a gap of zero seconds asks without pausing, and one longer than an hour is a wait rather than a gap between looks',
+      ),
+      required: false,
+      defaultValue: 5,
+      describes: 'how long to leave between asks',
     ),
   ];
 
@@ -154,8 +182,11 @@ final class GroupMembership extends ReversibleStep<bool> {
   /// The file the API token stands in.
   final String tokenPath;
 
-  /// How long to wait for one request.
-  final Duration timeout;
+  /// How long the token's acceptance and the group are given.
+  final int timeoutSeconds;
+
+  /// How long to leave between asks.
+  final int intervalSeconds;
 
   @override
   Future<CheckResult> check(StepContext context) async {
@@ -181,7 +212,10 @@ final class GroupMembership extends ReversibleStep<bool> {
     return StepPlan.request(
       'POST',
       '${reach.url}/api/v3/core/groups/<$group>/add_user/',
-      body: 'the account $user, added to the members $group already has',
+      body:
+          'the account $user, added to the members $group already has, after up to '
+          '${timeoutSeconds}s waiting for the token and the group the provider applies from its '
+          'own configuration',
     );
   }
 
@@ -249,7 +283,9 @@ final class GroupMembership extends ReversibleStep<bool> {
           'content-type': 'application/json',
         },
         body: jsonEncode(<String, Object?>{'pk': found.userId}),
-        timeout: timeout,
+        // THE ACT IS NOT A POLL, so it is not held to the gap between two asks: it happens once,
+        // and the only bound the row states for it is its own clock.
+        timeout: Duration(seconds: timeoutSeconds),
       ),
     );
     if (!answer.ok) {
@@ -280,14 +316,46 @@ final class GroupMembership extends ReversibleStep<bool> {
     return _Reach(url: 'https://$subdomain.${served.value}', token: token);
   }
 
-  /// Who and which group the provider knows, and whether the one is already in the other.
+  /// Who and which group the provider knows, once the two the provider's bootstrap makes are there.
+  ///
+  /// **THE CLOCK IS HERE AND NOT IN ONE METHOD OF THE FIVE**, because every one of them asks this
+  /// question: the check either side of the apply, the capture the undo rests on, the apply itself
+  /// and the undo. A wait written into the check alone would leave the capture reading a provider
+  /// that has not answered yet and recording "the account was already a member" — an undo that then
+  /// leaves behind exactly what this run put there. [plan] is the one caller that does not come
+  /// through here, so a dry run says what it would do and waits for nothing.
+  ///
+  /// What each ask costs is the gap between two asks and no more: an ask that outlives the interval
+  /// has stopped being a poll, because the next one is already due.
+  Future<_Membership> _membership(StepContext context, _Reach reach) async {
+    final DateTime giveUp = context.clock.now().add(Duration(seconds: timeoutSeconds));
+    while (true) {
+      final _Membership found = await _look(context, reach);
+      if (found.notYet case final String because) {
+        if (context.clock.now().isBefore(giveUp)) {
+          context.log.info('$because — asking again in ${intervalSeconds}s');
+          await context.clock.sleep(Duration(seconds: intervalSeconds));
+          continue;
+        }
+        return _Membership.refused('$because, and this row waited ${timeoutSeconds}s for it');
+      }
+      return found;
+    }
+  }
+
+  /// What one ask found: the two identifiers, why there is nothing yet, or why there never will be.
   ///
   /// **BOTH ARE LOOKED UP BY NAME AND NEITHER IS CREATED.** A group this run invented would admit
   /// nobody anything is bound to, and an account it invented would hold the group and none of the
   /// credentials a person reaches the platform through. Where either is missing this row is refused
   /// and says which one, because both are put there by something else and the answer an operator
   /// needs is which of those two did not run.
-  Future<_Membership> _membership(StepContext context, _Reach reach) async {
+  ///
+  /// **THE GROUP IS "NOT YET" AND THE ACCOUNT IS NOT.** The group is applied by the provider's own
+  /// configuration on its own schedule, so its absence is a moment in time; the account the row
+  /// names is one the row got wrong or one nothing created, and waiting out a clock in front of a
+  /// misspelt name reports a timeout where the answer was already there.
+  Future<_Membership> _look(StepContext context, _Reach reach) async {
     final _Answer groups = await _one(
       context,
       reach,
@@ -296,12 +364,15 @@ final class GroupMembership extends ReversibleStep<bool> {
     if (groups.refusal case final String refusal) {
       return _Membership.refused(refusal);
     }
+    if (groups.notYet case final String because) {
+      return _Membership.notYet(because);
+    }
     final Object? held = groups.found;
     if (held is! Map<String, Object?>) {
-      return _Membership.refused(
-        'the provider at ${reach.url} carries no group called "$group", and this row puts an '
-        'account into it — the group is declared by the provider\'s own configuration, so a run '
-        'reaching here without it has that configuration still to apply',
+      return _Membership.notYet(
+        'the provider at ${reach.url} carries no group called "$group" yet, and this row puts an '
+        'account into it — the group is declared by the provider\'s own configuration, which it '
+        'applies on its own schedule after coming up',
       );
     }
     final _Answer users = await _one(
@@ -311,6 +382,9 @@ final class GroupMembership extends ReversibleStep<bool> {
     );
     if (users.refusal case final String refusal) {
       return _Membership.refused(refusal);
+    }
+    if (users.notYet case final String because) {
+      return _Membership.notYet(because);
     }
     final Object? account = users.found;
     if (account is! Map<String, Object?>) {
@@ -345,6 +419,13 @@ final class GroupMembership extends ReversibleStep<bool> {
   /// one, a run whose credential has not reached the provider yet reports that the provider carries
   /// no group of that name — a true-sounding sentence about something the step was never allowed to
   /// look at, and whoever reads it goes looking for a group that is there all along.
+  ///
+  /// **"NOT ACCEPTED YET" AND "NOT ACCEPTED" ARE THE SAME ANSWER FROM THE PROVIDER**, and the row's
+  /// clock is what tells them apart: the token this row asks with is one the provider applies from
+  /// its own configuration after coming up, so a 401 or a 403 is what the window before that looks
+  /// like. A server error is that same window seen from the other side — the provider is up enough
+  /// to route the request and not up enough to answer it. Every other status is refused at once,
+  /// because no clock turns an address that answers 404 into one that answers the group.
   Future<_Answer> _one(StepContext context, _Reach reach, String query) async {
     final String url = '${reach.url}/api/v3/$query';
     final HttpAnswer answer = await context.http.send(
@@ -352,16 +433,26 @@ final class GroupMembership extends ReversibleStep<bool> {
         'GET',
         url,
         headers: <String, String>{'authorization': 'Bearer ${reach.token}'},
-        timeout: timeout,
+        timeout: Duration(seconds: intervalSeconds),
       ),
     );
+    if (answer.status == 401 || answer.status == 403) {
+      return _Answer.notYet(
+        'the credential in $tokenPath is not one the provider at ${reach.url} accepts yet — it '
+        'refused the question with $url, and the token it does accept is one it applies from its '
+        'own configuration on its own schedule after coming up',
+      );
+    }
+    if (answer.status >= 500) {
+      return _Answer.notYet(
+        'the provider at ${reach.url} answered ${answer.status} to $url, so nothing here has '
+        'looked at what it holds',
+      );
+    }
     if (!answer.ok) {
       return _Answer.refused(
-        answer.status == 401 || answer.status == 403
-            ? 'the provider at ${reach.url} refused the question with $url — the credential in '
-                  '$tokenPath is not one it accepts, so nothing here has looked at what it holds'
-            : 'the provider at ${reach.url} answered ${answer.status} to $url, so nothing here has '
-                  'looked at what it holds',
+        'the provider at ${reach.url} answered ${answer.status} to $url, so nothing here has '
+        'looked at what it holds',
       );
     }
     final Object? decoded = jsonDecode(answer.body);
@@ -378,16 +469,22 @@ final class GroupMembership extends ReversibleStep<bool> {
   }
 }
 
-/// What one name query came back with: the object, nothing, or why there is nothing to read.
+/// What one name query came back with: the object, nothing, why there is nothing to read yet, or
+/// why there is nothing to read at all.
 final class _Answer {
-  const _Answer.of(this.found) : refusal = null;
+  const _Answer.of(this.found) : refusal = null, notYet = null;
 
-  const _Answer.none() : found = null, refusal = null;
+  const _Answer.none() : found = null, refusal = null, notYet = null;
 
-  const _Answer.refused(String this.refusal) : found = null;
+  const _Answer.refused(String this.refusal) : found = null, notYet = null;
+
+  const _Answer.notYet(String this.notYet) : found = null, refusal = null;
 
   final Object? found;
   final String? refusal;
+
+  /// Why the provider has not answered this yet, for a caller holding a clock.
+  final String? notYet;
 }
 
 /// Where the provider is and what this run may ask it with.
@@ -404,12 +501,26 @@ final class _Reach {
 /// What the provider knows about the account and the group named on the row.
 final class _Membership {
   const _Membership({required this.userId, required this.groupId, required this.holds})
-    : refusal = null;
+    : refusal = null,
+      notYet = null;
 
-  const _Membership.refused(String this.refusal) : userId = null, groupId = '', holds = false;
+  const _Membership.refused(String this.refusal)
+    : userId = null,
+      groupId = '',
+      holds = false,
+      notYet = null;
+
+  const _Membership.notYet(String this.notYet)
+    : userId = null,
+      groupId = '',
+      holds = false,
+      refusal = null;
 
   final Object? userId;
   final String groupId;
   final bool holds;
   final String? refusal;
+
+  /// Why the two the provider's bootstrap makes are not both there yet, or null once they are.
+  final String? notYet;
 }
