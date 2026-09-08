@@ -2,17 +2,20 @@ import 'package:ansiwise_core/ansiwise_core.dart';
 
 /// Points the cluster's own volume directory at the data filesystem.
 ///
-/// **A real directory already sitting there is moved aside and never written over.** The cluster may
-/// already have written volumes into it, and replacing it with a link would leave that data with
-/// nothing pointing at it and no note of where it went. It is renamed with the moment it was moved,
-/// so it is still there to be looked at.
+/// **A real directory holding anything is refused unless the operator asks for it.** Every volume
+/// this cluster has already handed out lives in it. Moved aside, every pod holding a mount keeps it
+/// on the moved directory and every pod started afterwards gets an empty one, so the cluster runs on
+/// two directories and its own inventory is among what goes missing. Asking for it by name is what
+/// says the operator knows; the directory is then renamed with the moment it was moved rather than
+/// written over, so it is still there to be looked at. An empty directory holds nothing to strand
+/// and is moved aside the same way without being asked.
 ///
 /// **A link pointing somewhere else is left alone unless the operator asks for it.** It is the only
 /// thing saying where this cluster's volumes are, and repointing it silently would strand every one
-/// of them. Asking for it by name is what says the operator knows.
+/// of them.
 final class LinkStoragePath extends IrreversibleStep {
-  /// Points [linkPath] at the answered storage subdirectory, replacing a wrong link only under
-  /// [force].
+  /// Points [linkPath] at the answered storage subdirectory, replacing a wrong link or moving a
+  /// populated directory aside only under [force].
   const LinkStoragePath({required this.linkPath, required this.force});
 
   /// Builds the step from what the program gave it.
@@ -34,8 +37,9 @@ final class LinkStoragePath extends IrreversibleStep {
       name: 'force',
       kind: ArgumentKind.flag,
       describes:
-          'whether a link already pointing somewhere else may be repointed, which strands '
-          'every volume under the place it pointed at',
+          'whether a link already pointing somewhere else may be repointed and a directory already '
+          'holding volumes moved aside, either of which strands every volume the cluster has '
+          'handed out',
       required: false,
       defaultValue: false,
     ),
@@ -50,7 +54,7 @@ final class LinkStoragePath extends IrreversibleStep {
   /// The path the volume provider writes through.
   final String linkPath;
 
-  /// Whether a link pointing elsewhere may be repointed.
+  /// Whether a link pointing elsewhere may be repointed, and a populated directory moved aside.
   final bool force;
 
   @override
@@ -82,6 +86,25 @@ final class LinkStoragePath extends IrreversibleStep {
       );
       return CheckResult.satisfied('$linkPath points at $target and was left alone');
     }
+    if (target == null && !force && await _isRealDirectory(context)) {
+      final CommandResult held = await context.shell.run(
+        Command.observing('ls', arguments: <String>['-A', '--', linkPath], elevated: true),
+      );
+      if (!held.ok) {
+        return CheckResult.blocked(
+          '$linkPath is a directory that could not be listed, so nothing here says whether volumes '
+          'live in it: ${held.stderr.trim()}',
+        );
+      }
+      if (held.trimmed.isNotEmpty) {
+        return CheckResult.blocked(
+          '$linkPath is a directory holding ${held.trimmed.split('\n').length} entries. Every '
+          'volume this cluster has already handed out lives in it, and moving it aside strands all '
+          'of them: every pod holding a mount keeps it on the moved directory, and every pod '
+          "started afterwards gets an empty one. force is the operator's word that it may be moved.",
+        );
+      }
+    }
     return const CheckResult.ready();
   }
 
@@ -98,10 +121,7 @@ final class LinkStoragePath extends IrreversibleStep {
       await _mustRun(context, <String>['rm', linkPath]);
     } else if (await _isRealDirectory(context)) {
       final String moved = '$linkPath.orig.${_stampOfNow(context)}';
-      context.log.info(
-        '$linkPath is a directory the cluster may already have written into — it is at '
-        '$moved from now on',
-      );
+      context.log.info('$linkPath was a directory, and it is at $moved from now on');
       await _mustRun(context, <String>['mv', linkPath, moved]);
     }
     await _mustRun(context, <String>[

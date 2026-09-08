@@ -284,7 +284,7 @@ const Map<StepName, RegisteredStep> hostSteps = <StepName, RegisteredStep>{
   ),
   StepName('link_storage_path'): RegisteredStep(
     name: StepName('link_storage_path'),
-    source: 'lib/src/steps/host/link_storage_path.dart:13',
+    source: 'lib/src/steps/host/link_storage_path.dart:16',
     create: LinkStoragePath.fromArguments,
     arguments: LinkStoragePath.arguments,
     answers: LinkStoragePath.answers,

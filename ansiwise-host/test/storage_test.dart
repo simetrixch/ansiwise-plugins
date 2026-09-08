@@ -78,18 +78,46 @@ void main() {
   group('the link the volume provider writes through', () {
     LinkStoragePath link({bool force = false}) => LinkStoragePath(linkPath: linkPath, force: force);
 
-    test('a real directory already there is moved aside before the link is made', () async {
-      // The cluster may already have written volumes into it, and replacing it with a link would
-      // leave that data with nothing pointing at it and no note of where it went.
+    test('an empty directory already there is moved aside before the link is made', () async {
+      // It holds nothing to strand, so it goes aside with a stamp rather than being written over.
       final HostMachine machine = HostMachine();
       machine.shell
         ..fails('test -L $linkPath')
         ..answers('test -d $linkPath', '');
 
+      expect(await link().check(withStorage(machine)), isA<Ready>());
       await link().apply(withStorage(machine));
       expect(machine.changing.first, startsWith('mv $linkPath $linkPath.orig.'));
       expect(machine.changing.last, 'ln -s $storageSubdirectory $linkPath');
       expect(machine.said.join('\n'), contains('is at $linkPath.orig.'));
+    });
+
+    test('a directory holding volumes is refused, and nothing is moved', () async {
+      // Every volume the cluster has handed out lives in it: moved aside, every pod holding a mount
+      // keeps it on the moved directory and every pod started afterwards gets an empty one.
+      final HostMachine machine = HostMachine();
+      machine.shell
+        ..fails('test -L $linkPath')
+        ..answers('test -d $linkPath', '')
+        ..answers('ls -A -- $linkPath', 'pvc-one\npvc-two\n');
+
+      final CheckResult answer = await link().check(withStorage(machine));
+      expect((answer as Blocked).reason, contains('$linkPath is a directory holding 2 entries'));
+      expect(answer.reason, contains("force is the operator's word"));
+      expect(machine.changing, isEmpty);
+    });
+
+    test('asked for by name, the directory holding volumes is moved aside with a stamp', () async {
+      final HostMachine machine = HostMachine();
+      machine.shell
+        ..fails('test -L $linkPath')
+        ..answers('test -d $linkPath', '')
+        ..answers('ls -A -- $linkPath', 'pvc-one\npvc-two\n');
+
+      expect(await link(force: true).check(withStorage(machine)), isA<Ready>());
+      await link(force: true).apply(withStorage(machine));
+      expect(machine.changing.first, startsWith('mv $linkPath $linkPath.orig.'));
+      expect(machine.changing.last, 'ln -s $storageSubdirectory $linkPath');
     });
 
     test('a link already pointing at the right place is left alone', () async {
