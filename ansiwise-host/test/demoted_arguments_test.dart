@@ -26,6 +26,10 @@ void main() {
   const Map<String, List<String>> demoted = <String, List<String>>{
     'activate_public_src_routing': <String>['mark', 'table'],
     'apply_netplan': <String>['table'],
+    // The name of the directory on the data disk that the volumes live in is the product's. The
+    // mount it stands under is read off the machine; the name is what the row joins onto it.
+    'create_storage_directory': <String>['subdirectory'],
+    'link_storage_path': <String>['subdirectory'],
     'require_cli_tool_versions': <String>['pin_prefixes'],
     'require_netplan_merged': <String>['installer_key', 'drop_in_key'],
     // Spelling the three commands in this package would name one product's cluster snap; which snap

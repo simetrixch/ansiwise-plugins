@@ -270,24 +270,21 @@ const Map<StepName, RegisteredStep> hostSteps = <StepName, RegisteredStep>{
   // Storage.
   StepName('require_storage_mount'): RegisteredStep(
     name: StepName('require_storage_mount'),
-    source: 'lib/src/steps/host/require_storage_mount.dart:12',
+    source: 'lib/src/steps/host/require_storage_mount.dart:15',
     create: RequireStorageMount.fromArguments,
     arguments: RequireStorageMount.arguments,
-    answers: RequireStorageMount.answers,
   ),
   StepName('create_storage_directory'): RegisteredStep(
     name: StepName('create_storage_directory'),
-    source: 'lib/src/steps/host/create_storage_directory.dart:9',
+    source: 'lib/src/steps/host/create_storage_directory.dart:11',
     create: CreateStorageDirectory.fromArguments,
     arguments: CreateStorageDirectory.arguments,
-    answers: CreateStorageDirectory.answers,
   ),
   StepName('link_storage_path'): RegisteredStep(
     name: StepName('link_storage_path'),
-    source: 'lib/src/steps/host/link_storage_path.dart:16',
+    source: 'lib/src/steps/host/link_storage_path.dart:18',
     create: LinkStoragePath.fromArguments,
     arguments: LinkStoragePath.arguments,
-    answers: LinkStoragePath.answers,
   ),
   // Tools fetched onto the machine.
   StepName('install_tool_prerequisites'): RegisteredStep(

@@ -1,6 +1,8 @@
 import 'package:ansiwise_core/ansiwise_core.dart';
 
-/// Points the cluster's own volume directory at the data filesystem.
+import 'data_disk.dart';
+
+/// Points the cluster's own volume directory at the data disk.
 ///
 /// **A real directory holding anything is refused unless the operator asks for it.** Every volume
 /// this cluster has already handed out lives in it. Moved aside, every pod holding a mount keeps it
@@ -14,13 +16,16 @@ import 'package:ansiwise_core/ansiwise_core.dart';
 /// thing saying where this cluster's volumes are, and repointing it silently would strand every one
 /// of them.
 final class LinkStoragePath extends IrreversibleStep {
-  /// Points [linkPath] at the answered storage subdirectory, replacing a wrong link or moving a
-  /// populated directory aside only under [force].
-  const LinkStoragePath({required this.linkPath, required this.force});
+  /// Points [linkPath] at [subdirectory] under the data disk's mount, replacing a wrong link or
+  /// moving a populated directory aside only under [force].
+  const LinkStoragePath({required this.linkPath, required this.subdirectory, required this.force});
 
   /// Builds the step from what the program gave it.
-  factory LinkStoragePath.fromArguments(Arguments arguments) =>
-      LinkStoragePath(linkPath: arguments.text('link_path'), force: arguments.flag('force'));
+  factory LinkStoragePath.fromArguments(Arguments arguments) => LinkStoragePath(
+    linkPath: arguments.text('link_path'),
+    subdirectory: arguments.text('subdirectory'),
+    force: arguments.flag('force'),
+  );
 
   /// What this step accepts.
   static const List<ArgumentSpec> arguments = <ArgumentSpec>[
@@ -31,8 +36,9 @@ final class LinkStoragePath extends IrreversibleStep {
       kind: ArgumentKind.text,
       describes:
           "the path the cluster's volume provider writes through, which becomes a link to the "
-          'storage subdirectory',
+          'directory on the data disk',
     ),
+    subdirectoryArgument,
     ArgumentSpec(
       name: 'force',
       kind: ArgumentKind.flag,
@@ -45,44 +51,42 @@ final class LinkStoragePath extends IrreversibleStep {
     ),
   ];
 
-  /// The answers this step reads, which is what its registry entry declares.
-  ///
-  /// The same directory the step before it made, under the same name, or the link would point at
-  /// somewhere nothing was created.
-  static const List<String> answers = <String>['storage_subdirectory'];
-
   /// The path the volume provider writes through.
   final String linkPath;
+
+  /// The name of the directory under the data disk's mount, the same one the step before it made.
+  final String subdirectory;
 
   /// Whether a link pointing elsewhere may be repointed, and a populated directory moved aside.
   final bool force;
 
   @override
   String get irreversibleReason =>
-      'everything the cluster writes through the link lands on the data filesystem and stays there. '
+      'everything the cluster writes through the link lands on the data disk and stays there. '
       'Removing the link and moving the directory that was here back leaves that data behind, with '
       'nothing recording which volume any of it belonged to';
 
   @override
   Future<CheckResult> check(StepContext context) async {
-    if (context.answers.text('storage_subdirectory').isEmpty) {
+    final String? mount = await dataDiskMount(context);
+    if (mount == null) {
       return const CheckResult.satisfied(
-        'this machine has no separate data filesystem, so the volume provider keeps its own '
-        'directory',
+        'this machine has no data disk, so the volume provider keeps its own directory',
       );
     }
+    final String directory = '$mount/$subdirectory';
 
     final String? target = await _linkTarget(context);
-    if (target == context.answers.text('storage_subdirectory')) {
+    if (target == directory) {
       return CheckResult.satisfied(
-        '$linkPath points at ${context.answers.text('storage_subdirectory')}',
+        'the data disk is mounted at $mount, and $linkPath points at $directory',
       );
     }
     if (target != null && !force) {
       context.log.warn(
-        '$linkPath points at $target rather than at ${context.answers.text('storage_subdirectory')}. '
-        'It is left where it is: every volume this cluster has already handed out lives under '
-        '$target, and repointing the link strands all of them. Set force to repoint it.',
+        '$linkPath points at $target rather than at $directory. It is left where it is: every '
+        'volume this cluster has already handed out lives under $target, and repointing the link '
+        'strands all of them. Set force to repoint it.',
       );
       return CheckResult.satisfied('$linkPath points at $target and was left alone');
     }
@@ -109,11 +113,17 @@ final class LinkStoragePath extends IrreversibleStep {
   }
 
   @override
-  Future<StepPlan> plan(StepContext context) async =>
-      StepPlan.argv(<String>['ln', '-s', context.answers.text('storage_subdirectory'), linkPath]);
+  Future<StepPlan> plan(StepContext context) async {
+    final String? mount = await dataDiskMount(context);
+    return mount == null
+        ? const StepPlan.nothing('this machine has no data disk, so nothing is linked')
+        : StepPlan.argv(<String>['ln', '-s', '$mount/$subdirectory', linkPath]);
+  }
 
   @override
   Future<void> apply(StepContext context) async {
+    // Only reached once the check has found the data disk, because it answers satisfied otherwise.
+    final String directory = '${(await dataDiskMount(context))!}/$subdirectory';
     final String? target = await _linkTarget(context);
     if (target != null) {
       // Only reached under force, because the check answers satisfied otherwise.
@@ -124,12 +134,7 @@ final class LinkStoragePath extends IrreversibleStep {
       context.log.info('$linkPath was a directory, and it is at $moved from now on');
       await _mustRun(context, <String>['mv', linkPath, moved]);
     }
-    await _mustRun(context, <String>[
-      'ln',
-      '-s',
-      context.answers.text('storage_subdirectory'),
-      linkPath,
-    ]);
+    await _mustRun(context, <String>['ln', '-s', directory, linkPath]);
   }
 
   /// Where the link points, or null when there is no link there.

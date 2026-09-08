@@ -40,9 +40,9 @@ void main() {
   /// A machine whose sshd, whose home directories and whose account database answer as a real one.
   ///
   /// `sshd -T` and `stat` are root's to have — sshd resolves its configuration out of the host keys
-  /// and every file an Include names, and the operator's `.ssh` is `0700`. `getent passwd` and
-  /// `mountpoint` are not: both read something every account on the machine may read, which is
-  /// what makes them the innocent neighbours here.
+  /// and every file an Include names, and the operator's `.ssh` is `0700`. `getent passwd`,
+  /// `findmnt` and `mountpoint` are not: each reads something every account on the machine may
+  /// read, which is what makes them the innocent neighbours here.
   _Session machine() => _Session(
     <String, _RootOnly>{
       askSshd: const _RootOnly(
@@ -74,7 +74,10 @@ void main() {
         refusedExitCode: 1,
       ),
     },
-    answeredToAnybody: <String, String>{readPasswdEntry: '$user:x:1000:1000::$home:/bin/bash\n'},
+    answeredToAnybody: <String, String>{
+      readPasswdEntry: '$user:x:1000:1000::$home:/bin/bash\n',
+      mountTableCommand.argv.join(' '): '/ /dev/sda2\n$dataFilesystem /dev/sdb1\n',
+    },
   );
 
   /// The step as the registry builds it from a row, so the answer travels the path a row travels.
@@ -94,11 +97,7 @@ void main() {
     log: const _SilentLog(),
     step: StepName(step),
     arguments: Arguments.none,
-    answers: const Arguments(<String, Object>{
-      'operator_user': user,
-      'operator_public_key': key,
-      'storage_mount': dataFilesystem,
-    }),
+    answers: const Arguments(<String, Object>{'operator_user': user, 'operator_public_key': key}),
     facts: Facts.none,
     measurements: const _DiscardedMeasurements(),
   );
@@ -153,16 +152,16 @@ void main() {
   });
 
   test('THE INNOCENT NEIGHBOUR: what any account may read is read under either answer', () async {
-    // The sites answered `elevated: false`. `mountpoint` asks the machine's own mount table,
-    // which every account may read, so the session hands the command over whichever account
-    // asks, and neither row's answer changes what comes back. A red result above therefore
+    // The sites answered `elevated: false`. `findmnt` and `mountpoint` ask the machine's own mount
+    // table, which every account may read, so the session hands the commands over whichever
+    // account asks, and neither row's answer changes what comes back. A red result above therefore
     // means an elevation was dropped, not that this session refuses everything.
     for (final bool granted in <bool>[false, true]) {
       final _Session session = machine();
       final Step step = rowFor('require_storage_mount', <String, Object>{'elevated': granted});
 
       final CheckResult answer = await step.check(
-        contextFor('require_storage_mount', session, FakeFiles()..directories.add(dataFilesystem)),
+        contextFor('require_storage_mount', session, FakeFiles()),
       );
 
       expect(answer, isA<Satisfied>(), reason: 'under elevated: $granted, $answer');

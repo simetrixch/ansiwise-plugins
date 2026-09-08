@@ -38,13 +38,6 @@ const Set<String> notCoveredByAFakeMachine = <String>{
   // driven twice directly instead, over a machine where the two paths differ, in
   // write_file_from_template_test.
   'write_file_from_template',
-  // Nothing about the fake machine keeps it from being exercised: the answer does. Every program
-  // that runs it declares `storage_subdirectory` with an empty default, so a run that says nothing
-  // about it takes the early return — the machine has no separate data filesystem and there is no
-  // directory to make — and the step is satisfied before it ever has work. It was reported as
-  // exercised while the probe handed it a placeholder path no installation gives, which measured a
-  // branch the product does not take. Closing it needs a program that answers a path, not a fixture.
-  'create_storage_directory',
   // It leaves its postcondition behind with the row's enable command, and a fake shell records that
   // without carrying it out — so the status it answers after the apply is the status it answered
   // before, and nothing about the second run would be measured.

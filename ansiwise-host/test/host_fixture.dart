@@ -112,11 +112,7 @@ Arguments hostAnswering(Map<String, Object> changed) =>
     Arguments(<String, Object>{...hostAnswerValues, ...changed});
 
 /// The values [hostAnswers] and [hostAnswering] are both built from.
-const Map<String, Object> hostAnswerValues = <String, Object>{
-  'operator_user': operatorUser,
-  'storage_mount': '',
-  'storage_subdirectory': '',
-};
+const Map<String, Object> hostAnswerValues = <String, Object>{'operator_user': operatorUser};
 
 /// Where each template fixture stands, as a program row would name it.
 const String connmarkNftTableTemplate = 'test/templates/connmark-nft-table.tpl';

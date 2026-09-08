@@ -40,6 +40,12 @@ const List<String> _plausiblePackages = <String>[_plausibleText];
 
 /// The fake machine each named step meets, by the name a program file writes.
 final Map<String, Fixture> stepFixtures = <String, Fixture>{
+  // The mount table names a data disk, so the row has a directory to make under it; the files port
+  // carries the making out, which is what the second check reads.
+  'create_storage_directory': (FakeShell shell, FakeFiles files, FakeHttp http) {
+    shell.answers(mountTableCommand.argv.join(' '), '/ /dev/sda2\n/mnt/data /dev/sdb1\n');
+  },
+
   // dpkg answers "not installed" until apt has run, and "installed" afterwards — which is what the
   // step's postcondition reads, and what a fake that only records commands can never show.
   'install_packages': (FakeShell shell, FakeFiles files, FakeHttp http) {
