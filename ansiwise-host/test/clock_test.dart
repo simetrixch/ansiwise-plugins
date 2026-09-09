@@ -75,14 +75,48 @@ void main() {
     });
 
     test(
-      'a machine that reaches no source is REFUSED, because no step can invent a time',
+      'a clock with no reading YET is waited for, never refused - the service is seconds old here',
       () async {
+        // The row that enables the time service stands directly above this one in the program, so
+        // this is what a real machine answers a second later: no reference, every source at reach 0.
+        // Refusing it read "not yet" as "never" and stopped a bare machine's first install
+        // (ansiwise-plugins#184).
         final CheckResult answer = await step.check(
           machineWhere(trackingNoSource, 'no\n').contextFor(under),
         );
-        expect((answer as Blocked).reason, contains('reaches no time source'));
+        expect(answer, isA<Ready>());
       },
     );
+
+    test('a source that never appears ends the row, and says that is what was missing', () async {
+      final HostMachine machine = machineWhere(trackingNoSource, 'no\n');
+      await expectLater(
+        () => step.apply(machine.contextFor(under)),
+        throwsA(
+          isA<WaitedTooLong>().having(
+            (WaitedTooLong e) => '$e',
+            'names what was never reached',
+            allOf(contains('a time source this machine can reach'), contains('reach 0')),
+          ),
+        ),
+      );
+      // It never stepped, because there was nothing to step toward.
+      expect(machine.changing, isNot(contains(makestep)));
+    });
+
+    test('a source that appears LATE is stepped then, not skipped', () async {
+      // The counter-probe of the two above, and the case the old shape got wrong twice over: it
+      // refused before waiting, and had it waited it would have stepped before any reference existed
+      // and then left the machine slewing its whole offset. Here the first `tracking` read answers
+      // with no source and that same read starts answering with one, the way a first poll completing
+      // does.
+      final HostMachine machine = machineWhere(trackingNoSource, 'no\n', thenSynchronised: true);
+      machine.shell.changes(tracking, () {
+        machine.shell.answers(tracking, trackingOut);
+      });
+      await step.apply(machine.contextFor(under));
+      expect(machine.changing, contains(makestep));
+    });
 
     test('out of step with a source reachable, the row is ready to act', () async {
       final CheckResult answer = await step.check(

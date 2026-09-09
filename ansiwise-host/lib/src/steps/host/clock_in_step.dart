@@ -137,12 +137,13 @@ final class ClockInStep extends IrreversibleStep {
     if (await _synchronised(context)) {
       return CheckResult.satisfied(_standing(clockOffsetFrom(await _tracking(context))));
     }
-    if (!hasReference(await _tracking(context))) {
-      return const CheckResult.blocked(
-        'this machine reaches no time source at all, so nothing here can bring its clock into step '
-        '- ask it `chronyc sources`, where a source at reach 0 is one it cannot get to',
-      );
-    }
+    // A MISSING REFERENCE IS NOT A REFUSAL, and reading it as one is what this row got wrong on the
+    // first machine it met. The row that enables the time service stands directly above it in the
+    // program, so the service is SECONDS old when this runs, and one that has not completed a
+    // measurement reports no reference at all - every source at reach 0, which is a bitmask of the
+    // last eight polls and therefore empty however reachable the source is. "Not yet" and "never"
+    // are the same reading here, and only the wait below, at the end of its own deadline, has
+    // stood long enough to tell them apart.
     return const CheckResult.ready();
   }
 
@@ -152,33 +153,56 @@ final class ClockInStep extends IrreversibleStep {
 
   @override
   Future<void> apply(StepContext context) async {
-    final double? offset = clockOffsetFrom(await _tracking(context));
-    if (offset != null && offset.abs() > toleranceSeconds) {
-      context.log.info(
-        '${_away(offset)}, which is past the ${toleranceSeconds}s this row admits - it is stepped '
-        'now rather than waited out',
-      );
-      final CommandResult stepped = await context.shell.run(
-        const Command.detailed('chronyc', arguments: <String>['makestep'], elevated: true),
-      );
-      if (!stepped.ok) {
-        throw CommandFailed(
-          argv: <String>['chronyc', 'makestep'],
-          exitCode: stepped.exitCode,
-          stdout: stepped.stdout,
-          stderr: stepped.stderr,
-        );
-      }
-    }
-
     final Duration interval = Duration(seconds: intervalSeconds);
     Duration waited = Duration.zero;
+    // WHETHER A SOURCE WAS EVER REACHED. It is the whole difference between the two refusals below,
+    // and it can only be answered by having waited: see the note in check().
+    bool reached = false;
+    bool stepped = false;
     while (true) {
       if (await _synchronised(context)) {
         context.log.info(_standing(clockOffsetFrom(await _tracking(context))));
         return;
       }
+      final String reading = await _tracking(context);
+      if (hasReference(reading)) {
+        reached = true;
+        // ONE STEP, AND ONLY ONCE A SOURCE IS KNOWN. `chronyc makestep` has nothing to step toward
+        // before the first measurement, so a row that stepped before waiting would step nothing and
+        // then leave the machine slewing its whole offset for the rest of the deadline - which on a
+        // machine a minute out is a deadline it cannot make.
+        if (!stepped) {
+          stepped = true;
+          final double? offset = clockOffsetFrom(reading);
+          if (offset != null && offset.abs() > toleranceSeconds) {
+            context.log.info(
+              '${_away(offset)}, which is past the ${toleranceSeconds}s this row admits - it is '
+              'stepped now rather than waited out',
+            );
+            final CommandResult ran = await context.shell.run(
+              const Command.detailed('chronyc', arguments: <String>['makestep'], elevated: true),
+            );
+            if (!ran.ok) {
+              throw CommandFailed(
+                argv: <String>['chronyc', 'makestep'],
+                exitCode: ran.exitCode,
+                stdout: ran.stdout,
+                stderr: ran.stderr,
+              );
+            }
+          }
+        }
+      }
       if (waited.inSeconds >= timeoutSeconds) {
+        if (!reached) {
+          throw WaitedTooLong(
+            waitingFor:
+                'a time source this machine can reach - it named none in that whole time, so '
+                'nothing here can bring its clock into step; ask it `chronyc sources`, where a '
+                'source at reach 0 after this long is one it cannot get to',
+            deadline: Duration(seconds: timeoutSeconds),
+          );
+        }
         final double? last = clockOffsetFrom(await _tracking(context));
         throw WaitedTooLong(
           waitingFor: last == null
