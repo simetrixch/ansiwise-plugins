@@ -49,6 +49,7 @@ export 'src/steps/host/require_free_disk.dart';
 export 'src/steps/host/require_key_login_possible.dart';
 export 'src/steps/host/require_machine_size.dart';
 export 'src/steps/host/require_netplan_merged.dart';
+export 'src/steps/host/clock_in_step.dart';
 export 'src/steps/host/require_pinned_ubuntu.dart';
 export 'src/steps/host/require_registry_pull_credential.dart';
 export 'src/steps/host/require_storage_mount.dart';

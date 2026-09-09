@@ -51,6 +51,11 @@ const Set<String> notCoveredByAFakeMachine = <String>{
   'install_pinned_tool',
   'install_snap',
   'install_tailscale_client',
+  // Its apply asks the time daemon to STEP the clock and then waits for the kernel to agree,
+  // and a fake shell records that ask without carrying it out — so the second run reads the
+  // same unsynchronised kernel the first one did. What it decides is driven directly instead,
+  // over scripted readings of a real machine's tracking output, in clock_test.
+  'clock_in_step',
   'link_storage_path',
   'remove_snap',
   // Its apply restarts the service that reads the file it wrote, and a fake shell records a restart

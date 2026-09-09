@@ -37,6 +37,7 @@ import 'steps/host/require_free_disk.dart';
 import 'steps/host/require_key_login_possible.dart';
 import 'steps/host/require_machine_size.dart';
 import 'steps/host/require_netplan_merged.dart';
+import 'steps/host/clock_in_step.dart';
 import 'steps/host/require_pinned_ubuntu.dart';
 import 'steps/host/require_registry_pull_credential.dart';
 import 'steps/host/require_storage_mount.dart';
@@ -67,6 +68,12 @@ import 'steps/host/write_public_src_routing_unit.dart';
 /// and what an operator opens when a step fails.
 const Map<StepName, RegisteredStep> hostSteps = <StepName, RegisteredStep>{
   // Gates that refuse a machine before anything is written to it.
+  StepName('clock_in_step'): RegisteredStep(
+    name: StepName('clock_in_step'),
+    source: 'lib/src/steps/host/clock_in_step.dart:59',
+    create: ClockInStep.fromArguments,
+    arguments: ClockInStep.arguments,
+  ),
   StepName('require_pinned_ubuntu'): RegisteredStep(
     name: StepName('require_pinned_ubuntu'),
     source: 'lib/src/steps/host/require_pinned_ubuntu.dart:11',
