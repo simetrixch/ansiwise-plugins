@@ -12,10 +12,14 @@ import 'package:ansiwise_core/ansiwise_core.dart';
 /// step that reapplies its network manifest (#185), and it is the same fault at every later moment
 /// of the machine's life, so the timers are masked for good and not paused for the run.
 ///
-/// **WAITED OUT, NEVER KILLED.** A run of the upgrade already in progress is left to finish: a
-/// package manager interrupted between unpack and configure leaves a machine no later step can
-/// reason about. The timers are masked only once no upgrade service is active — and a one-shot
-/// service reports `activating` for the whole of its run, so that word counts as running here.
+/// **MASKED FIRST, THEN WAITED OUT, NEVER KILLED.** The timers are masked before anything is
+/// waited for, because a mask closes the timer for good while a wait leaves it open: the first
+/// machine this met fired its timer between the reading that found nothing running and the mask
+/// that followed (#186). A mask stops nothing the timer already started, so a run of the upgrade
+/// in progress — before the mask or into that gap — is then left to finish: a package manager
+/// interrupted between unpack and configure leaves a machine no later step can reason about. A
+/// one-shot service reports `activating` for the whole of its run, so that word counts as running
+/// here, and the manager's word is read only once nothing runs.
 ///
 /// **MASKED, NOT DISABLED.** A disabled timer is started again by the next package that lists it in
 /// its `postinst`, and the upgrade package itself does. A mask is a unit the manager refuses to
@@ -121,6 +125,10 @@ final class MaskAutomaticUpgrades extends ReversibleStep<List<String>> {
 
   @override
   Future<void> apply(StepContext context) async {
+    for (final String timer in timers) {
+      await _mustRun(context, <String>['systemctl', 'mask', '--now', timer]);
+    }
+
     final Duration interval = Duration(seconds: intervalSeconds);
     Duration waited = Duration.zero;
     while (true) {
@@ -142,10 +150,6 @@ final class MaskAutomaticUpgrades extends ReversibleStep<List<String>> {
       context.log.info('${reading.running.join(' and ')} running - waited out, never killed');
       await context.clock.sleep(interval);
       waited += interval;
-    }
-
-    for (final String timer in timers) {
-      await _mustRun(context, <String>['systemctl', 'mask', '--now', timer]);
     }
 
     final _Reading after = await _read(context);

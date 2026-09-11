@@ -255,7 +255,7 @@ const Map<StepName, RegisteredStep> hostSteps = <StepName, RegisteredStep>{
   ),
   StepName('mask_automatic_upgrades'): RegisteredStep(
     name: StepName('mask_automatic_upgrades'),
-    source: 'lib/src/steps/host/mask_automatic_upgrades.dart:27',
+    source: 'lib/src/steps/host/mask_automatic_upgrades.dart:31',
     create: MaskAutomaticUpgrades.fromArguments,
     arguments: MaskAutomaticUpgrades.arguments,
   ),

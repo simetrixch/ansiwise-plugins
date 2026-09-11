@@ -122,7 +122,7 @@ void main() {
   });
 
   group('an upgrade already running', () {
-    test('is waited out, and only then are the timers masked', () async {
+    test('is waited out after the timers are masked, and the mask never waits', () async {
       final HostMachine machine = machineWith(
         timer: saying(),
         service: saying(active: 'activating'),
@@ -151,6 +151,37 @@ void main() {
       expect(machine.clock.slept, hasLength(2));
       expect(machine.changing, masking());
       expect(machine.said.where((String line) => line.contains('waited out')), hasLength(2));
+      // THE MASK COMES FIRST. Both mask commands are on the record before the first look that
+      // finds a service running, so the timer cannot fire into the gap between a reading and
+      // the mask — which is what it did on the first machine (#186).
+      final int firstMask = machine.shell.ran.indexOf(masking().first);
+      final int firstLook = machine.shell.ran.indexOf(askedAbout(services.last));
+      expect(firstMask, lessThan(firstLook));
+    });
+
+    test('that starts into the gap after the mask is waited out too', () async {
+      // Nothing runs when the step looks; the timer fires while the mask is being written. The
+      // mask stops the timer and not the service it already started, and that service is waited
+      // out like one that was running from the start.
+      final HostMachine machine = machineWith(timer: saying(), service: saying());
+      int looked = 0;
+      machine.shell.changes(askedAbout(services.last), () {
+        looked += 1;
+        machine.shell.answers(
+          askedAbout(services.last),
+          saying(active: looked < 3 ? 'activating' : 'inactive'),
+        );
+      });
+      for (final String unit in timers) {
+        machine.shell.changes('systemctl mask --now $unit', () {
+          machine.shell.answers(askedAbout(unit), saying(load: 'masked', file: 'masked'));
+        });
+      }
+
+      await step.apply(machine.contextFor(under));
+
+      expect(machine.clock.slept, hasLength(2));
+      expect(machine.changing, masking());
     });
 
     test('is never stopped or killed by this step', () async {
@@ -165,7 +196,10 @@ void main() {
         machine.changing.where((String line) => line.contains('stop') || line.contains('kill')),
         isEmpty,
       );
-      expect(machine.changing, isEmpty);
+      // The timers are masked all the same: a deadline that runs out leaves the machine with the
+      // timers closed and the upgrade still finishing on its own, which is the safer of the two
+      // states to be found in.
+      expect(machine.changing, masking());
     });
 
     test('that outlasts the deadline names the service still running', () async {
