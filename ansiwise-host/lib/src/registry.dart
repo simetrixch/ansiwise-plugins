@@ -14,6 +14,7 @@ import 'steps/host/create_storage_directory.dart';
 import 'steps/host/password_login.dart';
 import 'steps/host/enable_addons.dart';
 import 'steps/host/enable_service.dart';
+import 'steps/host/mask_automatic_upgrades.dart';
 import 'steps/host/export_kubeconfig.dart';
 import 'steps/host/fill_key_value_file.dart';
 import 'steps/host/hand_directory_to_account.dart';
@@ -251,6 +252,12 @@ const Map<StepName, RegisteredStep> hostSteps = <StepName, RegisteredStep>{
     source: 'lib/src/steps/host/enable_service.dart:39',
     create: EnableService.fromArguments,
     arguments: EnableService.arguments,
+  ),
+  StepName('mask_automatic_upgrades'): RegisteredStep(
+    name: StepName('mask_automatic_upgrades'),
+    source: 'lib/src/steps/host/mask_automatic_upgrades.dart:27',
+    create: MaskAutomaticUpgrades.fromArguments,
+    arguments: MaskAutomaticUpgrades.arguments,
   ),
   StepName('add_shell_alias'): RegisteredStep(
     name: StepName('add_shell_alias'),

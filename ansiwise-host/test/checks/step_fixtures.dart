@@ -150,6 +150,29 @@ final Map<String, Fixture> stepFixtures = <String, Fixture>{
       });
   },
 
+  // The row carries its units as defaults, so the probe hands the real names. Both timers stand
+  // enabled and no upgrade runs; `systemctl mask --now` is what turns a timer masked.
+  'mask_automatic_upgrades': (FakeShell shell, FakeFiles files, FakeHttp http) {
+    String asked(String unit) => <String>[
+      'systemctl',
+      'show',
+      for (final String property in MaskAutomaticUpgrades.properties) ...<String>['-p', property],
+      unit,
+    ].join(' ');
+    String saying(String load, String file, String active) =>
+        'LoadState=$load\nUnitFileState=$file\nActiveState=$active\n';
+    for (final String service in <String>['apt-daily.service', 'apt-daily-upgrade.service']) {
+      shell.answers(asked(service), saying('loaded', 'static', 'inactive'));
+    }
+    for (final String timer in <String>['apt-daily.timer', 'apt-daily-upgrade.timer']) {
+      shell
+        ..answers(asked(timer), saying('loaded', 'enabled', 'active'))
+        ..changes('systemctl mask --now $timer', () {
+          shell.answers(asked(timer), saying('masked', 'masked', 'inactive'));
+        });
+    }
+  },
+
   // The archive holds two files until `apt-get clean` empties it.
   'clean_package_cache': (FakeShell shell, FakeFiles files, FakeHttp http) {
     files.contents['${CleanPackageCache.archives}/one.deb'] = '';
