@@ -9,23 +9,26 @@ import 'cloudflare_api.dart';
 /// `v=DKIM1; h=sha256; k=rsa; p=<key>` — and a program file may not build strings. What is not
 /// DKIM's is the selector, the apex and the key, and all three arrive from outside.
 ///
-/// **The key comes out of the hand-filled input, beside the API token, and it is the PUBLIC half.**
-/// The `p=` value is what the record itself broadcasts to every receiver on earth, so reading it
-/// from the input file is not a secret leaving anywhere. The private half never comes near this
-/// package.
+/// **The key is the PUBLIC half, and it arrives one of two ways.** A run whose caller holds the key
+/// pair answers it (`public_key_answer`); a hand-run reads it out of the hand-filled input, beside
+/// the API token (`public_key_variable`). The `p=` value is what
+/// the record itself broadcasts to every receiver on earth, so neither way is a secret leaving
+/// anywhere. The private half never comes near this package.
 ///
 /// **No key means NO RECORD, said out loud — never a placeholder.** A DKIM record that nothing
 /// signs with is worse than none: receivers that find the record expect signatures and fail mail
 /// that carries none. So an input whose key variable is still empty satisfies this step with a
 /// message saying exactly that, and the record appears on the run after the key does.
 final class CloudflareDkimRecord extends ReversibleStep<CapturedRecord> {
-  /// Publishes the key in the input variable [publicKeyVariable] for the apex in the answer named
-  /// by [apexAnswer], under the selector in the answer named by [selectorAnswer].
+  /// Publishes the key in the answer named by [publicKeyAnswer], or with that unnamed or unanswered
+  /// the key in the input variable [publicKeyVariable], for the apex in the answer named by
+  /// [apexAnswer], under the selector in the answer named by [selectorAnswer].
   const CloudflareDkimRecord({
     required this.access,
     required this.apexAnswer,
     required this.selectorAnswer,
     required this.publicKeyVariable,
+    this.publicKeyAnswer,
   });
 
   /// Builds the step from what the program gave it.
@@ -34,6 +37,7 @@ final class CloudflareDkimRecord extends ReversibleStep<CapturedRecord> {
     apexAnswer: arguments.text('apex_answer'),
     selectorAnswer: arguments.text('selector_answer'),
     publicKeyVariable: arguments.text('public_key_variable'),
+    publicKeyAnswer: arguments.optionalText('public_key_answer'),
   );
 
   /// What this step accepts.
@@ -63,6 +67,15 @@ final class CloudflareDkimRecord extends ReversibleStep<CapturedRecord> {
           'base64 the record\'s p= carries. Left empty, no record is published and the step says '
           'so — a record nothing signs with makes receivers fail mail that is otherwise fine',
     ),
+    ArgumentSpec(
+      name: 'public_key_answer',
+      kind: ArgumentKind.answerName,
+      required: false,
+      describes:
+          'the name of the answer that carries the PUBLIC key, for a run whose caller holds the key '
+          'pair. Answered, it is the key published; left off or answered empty, the key is read '
+          'out of public_key_variable as before',
+    ),
   ];
 
   /// Where the API and the token are found.
@@ -76,6 +89,9 @@ final class CloudflareDkimRecord extends ReversibleStep<CapturedRecord> {
 
   /// The variable of the hand-filled input that holds the public key.
   final String publicKeyVariable;
+
+  /// The name of the answer that carries the public key, or null where the run is not told one.
+  final String? publicKeyAnswer;
 
   /// One decision for check, plan and apply, so the three cannot drift apart.
   Future<RecordDecision> _decide(StepContext context) async {
@@ -94,9 +110,20 @@ final class CloudflareDkimRecord extends ReversibleStep<CapturedRecord> {
       );
     }
     final String path = access.secretsPath(context);
-    final String key = keyValueAssignments(await context.files.read(path))[publicKeyVariable] ?? '';
+    // The answer first, where the run carries one: the caller that answers it holds the pair and
+    // knows the key better than a file typed by hand. The variable is read only when no answer
+    // holds a key, so a hand-run keeps working as it did.
+    final String? answered = publicKeyAnswer == null
+        ? null
+        : answeredText(context, publicKeyAnswer!);
+    final String key =
+        answered ?? keyValueAssignments(await context.files.read(path))[publicKeyVariable] ?? '';
+    final String source = answered == null
+        ? '$publicKeyVariable in $path'
+        : 'the answer "$publicKeyAnswer"';
     if (key.isEmpty || stillUnfilled(key)) {
       return RecordSettled(
+        '${publicKeyAnswer == null ? '' : 'the answer "$publicKeyAnswer" is empty and '}'
         '$publicKeyVariable is empty in $path, so there is no signing key to publish — a DKIM '
         'record nothing signs with makes receivers fail mail that is otherwise fine, so none is '
         'written until the key stands there',
@@ -104,7 +131,7 @@ final class CloudflareDkimRecord extends ReversibleStep<CapturedRecord> {
     }
     if (!_base64Line.hasMatch(key)) {
       return RecordRefused(
-        '$publicKeyVariable in $path is not a single line of base64, and the p= of a DKIM record '
+        '$source is not a single line of base64, and the p= of a DKIM record '
         'is exactly that — published as it stands, every receiver would fail the signature',
       );
     }

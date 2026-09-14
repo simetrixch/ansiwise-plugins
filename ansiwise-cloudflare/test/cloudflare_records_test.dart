@@ -28,30 +28,32 @@ void main() {
     runAnswer: 'stage',
   );
 
-  const Arguments answers = Arguments(<String, Object>{
+  const Map<String, Object> answered = <String, Object>{
     'stage': 'dev',
     'mail_domain': apex,
     'egress_address': address,
     'dkim_selector': 'key1',
     'dmarc_policy': 'none',
     'dmarc_mailbox': 'reports@example.com',
-  });
+  };
+  const Arguments answers = Arguments(answered);
 
   FakeFiles filledInput([String extra = '']) =>
       FakeFiles(<String, String>{secretsFile: 'DNS_API_TOKEN=cf-token-fixture-not-real\n$extra'});
 
-  StepContext contextOf({required FakeFiles files, required Http http}) => StepContext(
-    shell: FakeShell(),
-    files: files,
-    http: http,
-    clock: FakeClock(),
-    entropy: FakeEntropy(),
-    log: const _QuietLog(),
-    step: const StepName('probe'),
-    arguments: Arguments.none,
-    answers: answers,
-    facts: Facts.none,
-  );
+  StepContext contextOf({required FakeFiles files, required Http http, Arguments run = answers}) =>
+      StepContext(
+        shell: FakeShell(),
+        files: files,
+        http: http,
+        clock: FakeClock(),
+        entropy: FakeEntropy(),
+        log: const _QuietLog(),
+        step: const StepName('probe'),
+        arguments: Arguments.none,
+        answers: run,
+        facts: Facts.none,
+      );
 
   const CloudflareSpfRecord spfStep = CloudflareSpfRecord(
     access: access,
@@ -403,6 +405,80 @@ void main() {
       final Map<String, Object?> body = jsonDecode(write.body!) as Map<String, Object?>;
       expect(body['name'], dkimName);
       expect(body['content'], 'v=DKIM1; h=sha256; k=rsa; p=$key');
+    });
+
+    // THE OTHER WAY IN: the caller that minted the pair answers the public half, and the file is
+    // not what decides. A hand-run answers nothing and reads the variable as before.
+    group('answered by the run', () {
+      const CloudflareDkimRecord fromAnswer = CloudflareDkimRecord(
+        access: access,
+        apexAnswer: 'mail_domain',
+        selectorAnswer: 'dkim_selector',
+        publicKeyVariable: 'MAIL_SIGNING_PUBLIC_KEY',
+        publicKeyAnswer: 'dkim_public_key',
+      );
+      _Zone emptyZone() => _Zone(<String, String>{
+        'GET $api/zones?name=$apex&per_page=1': _ok(<Object?>[
+          <String, Object?>{'id': 'zone-1', 'name': apex},
+        ]),
+        'GET $api/zones/zone-1/dns_records?type=TXT&name=$dkimName&per_page=100': _ok(<Object?>[]),
+      });
+      Arguments withKey(String value) =>
+          Arguments(<String, Object>{...answered, 'dkim_public_key': value});
+
+      test('the answered key is the one published, whatever the variable says', () async {
+        final _Zone zone = emptyZone();
+        final StepContext context = contextOf(
+          files: filledInput('MAIL_SIGNING_PUBLIC_KEY=\n'),
+          http: zone,
+          run: withKey(key),
+        );
+
+        expect(await fromAnswer.check(context), isA<Ready>());
+        await fromAnswer.apply(context);
+
+        final HttpRequest write = zone.sent.singleWhere((HttpRequest r) => r.method != 'GET');
+        final Map<String, Object?> body = jsonDecode(write.body!) as Map<String, Object?>;
+        expect(body['content'], 'v=DKIM1; h=sha256; k=rsa; p=$key');
+      });
+
+      test(
+        'an empty answer falls back to the variable, and both empty publishes nothing',
+        () async {
+          final StepContext fromFile = contextOf(
+            files: filledInput('MAIL_SIGNING_PUBLIC_KEY=$key\n'),
+            http: emptyZone(),
+            run: withKey(''),
+          );
+          expect(await fromAnswer.check(fromFile), isA<Ready>());
+
+          final _Zone zone = _Zone(const <String, String>{});
+          final StepContext neither = contextOf(
+            files: filledInput('MAIL_SIGNING_PUBLIC_KEY=\n'),
+            http: zone,
+            run: withKey(''),
+          );
+          final CheckResult result = await fromAnswer.check(neither);
+          expect(result, isA<Satisfied>());
+          expect((result as Satisfied).because, contains('the answer "dkim_public_key" is empty'));
+          expect(result.because, contains('MAIL_SIGNING_PUBLIC_KEY is empty'));
+          expect(zone.sent, isEmpty);
+        },
+      );
+
+      test('an answer that is not one line of base64 is refused, naming the answer', () async {
+        final StepContext context = contextOf(
+          files: filledInput(),
+          http: emptyZone(),
+          run: withKey('-----BEGIN PUBLIC KEY-----'),
+        );
+
+        final CheckResult result = await fromAnswer.check(context);
+
+        expect(result, isA<Blocked>());
+        expect((result as Blocked).reason, contains('the answer "dkim_public_key"'));
+        expect(result.reason, contains('not a single line of base64'));
+      });
     });
 
     test('a stored key the zone chunked reads back as the same record', () async {

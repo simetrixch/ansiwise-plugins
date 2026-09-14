@@ -24,7 +24,7 @@ const Map<StepName, RegisteredStep> cloudflareSteps = <StepName, RegisteredStep>
   ),
   StepName('cloudflare_dkim_record'): RegisteredStep(
     name: StepName('cloudflare_dkim_record'),
-    source: 'lib/src/steps/cloudflare_dkim_record.dart:21',
+    source: 'lib/src/steps/cloudflare_dkim_record.dart:22',
     create: CloudflareDkimRecord.fromArguments,
     arguments: CloudflareDkimRecord.arguments,
   ),
