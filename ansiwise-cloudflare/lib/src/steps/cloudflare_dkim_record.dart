@@ -9,9 +9,10 @@ import 'cloudflare_api.dart';
 /// `v=DKIM1; h=sha256; k=rsa; p=<key>` — and a program file may not build strings. What is not
 /// DKIM's is the selector, the apex and the key, and all three arrive from outside.
 ///
-/// **The key is the PUBLIC half, and it arrives one of two ways.** A run whose caller holds the key
-/// pair answers it (`public_key_answer`); a hand-run reads it out of the hand-filled input, beside
-/// the API token (`public_key_variable`). The `p=` value is what
+/// **The key is the PUBLIC half, and it arrives one of three ways.** A program that keeps the pair
+/// in a store measures it off that store and hands the row the key itself (`public_key`, written as
+/// a measurement); a run whose caller holds the key pair answers it (`public_key_answer`); a
+/// hand-run reads it out of the hand-filled input, beside the API token (`public_key_variable`). The `p=` value is what
 /// the record itself broadcasts to every receiver on earth, so neither way is a secret leaving
 /// anywhere. The private half never comes near this package.
 ///
@@ -20,15 +21,17 @@ import 'cloudflare_api.dart';
 /// that carries none. So an input whose key variable is still empty satisfies this step with a
 /// message saying exactly that, and the record appears on the run after the key does.
 final class CloudflareDkimRecord extends ReversibleStep<CapturedRecord> {
-  /// Publishes the key in the answer named by [publicKeyAnswer], or with that unnamed or unanswered
-  /// the key in the input variable [publicKeyVariable], for the apex in the answer named by
-  /// [apexAnswer], under the selector in the answer named by [selectorAnswer].
+  /// Publishes the measured [publicKey], or without one the key in the answer named by
+  /// [publicKeyAnswer], or with that unnamed or unanswered the key in the input variable
+  /// [publicKeyVariable], for the apex in the answer named by [apexAnswer], under the selector in
+  /// the answer named by [selectorAnswer].
   const CloudflareDkimRecord({
     required this.access,
     required this.apexAnswer,
     required this.selectorAnswer,
     required this.publicKeyVariable,
     this.publicKeyAnswer,
+    this.publicKey,
   });
 
   /// Builds the step from what the program gave it.
@@ -38,6 +41,7 @@ final class CloudflareDkimRecord extends ReversibleStep<CapturedRecord> {
     selectorAnswer: arguments.text('selector_answer'),
     publicKeyVariable: arguments.text('public_key_variable'),
     publicKeyAnswer: arguments.optionalText('public_key_answer'),
+    publicKey: arguments.optionalText('public_key'),
   );
 
   /// What this step accepts.
@@ -76,6 +80,15 @@ final class CloudflareDkimRecord extends ReversibleStep<CapturedRecord> {
           'pair. Answered, it is the key published; left off or answered empty, the key is read '
           'out of public_key_variable as before',
     ),
+    ArgumentSpec(
+      name: 'public_key',
+      kind: ArgumentKind.text,
+      required: false,
+      describes:
+          'the PUBLIC key itself, as one line of base64 — written as {measured: <name>} off the row '
+          "that read it out of the store the signer's key stands in, never as a value in the file. "
+          'Present, it is the key published; absent, the answer and then the variable are read',
+    ),
   ];
 
   /// Where the API and the token are found.
@@ -92,6 +105,9 @@ final class CloudflareDkimRecord extends ReversibleStep<CapturedRecord> {
 
   /// The name of the answer that carries the public key, or null where the run is not told one.
   final String? publicKeyAnswer;
+
+  /// The public key itself, measured by an earlier row, or null where the row carries none.
+  final String? publicKey;
 
   /// One decision for check, plan and apply, so the three cannot drift apart.
   Future<RecordDecision> _decide(StepContext context) async {
@@ -110,15 +126,20 @@ final class CloudflareDkimRecord extends ReversibleStep<CapturedRecord> {
       );
     }
     final String path = access.secretsPath(context);
-    // The answer first, where the run carries one: the caller that answers it holds the pair and
-    // knows the key better than a file typed by hand. The variable is read only when no answer
-    // holds a key, so a hand-run keeps working as it did.
+    // The key itself first, where an earlier row measured it off the store the signer's key stands
+    // in; then the answer, where the run carries one; the variable last, so a hand-run keeps working.
+    final String? measured = publicKey == null || publicKey!.isEmpty ? null : publicKey;
     final String? answered = publicKeyAnswer == null
         ? null
         : answeredText(context, publicKeyAnswer!);
     final String key =
-        answered ?? keyValueAssignments(await context.files.read(path))[publicKeyVariable] ?? '';
-    final String source = answered == null
+        measured ??
+        answered ??
+        keyValueAssignments(await context.files.read(path))[publicKeyVariable] ??
+        '';
+    final String source = measured != null
+        ? 'the measured public_key'
+        : answered == null
         ? '$publicKeyVariable in $path'
         : 'the answer "$publicKeyAnswer"';
     if (key.isEmpty || stillUnfilled(key)) {

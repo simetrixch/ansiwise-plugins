@@ -15,7 +15,9 @@ library;
 
 export 'src/registry.dart';
 export 'src/steps/argument_text.dart';
+export 'src/steps/dkim_key.dart';
 export 'src/steps/file_from_vault.dart';
+export 'src/steps/measure_dkim_public_key.dart';
 export 'src/steps/measure_vault_url.dart';
 export 'src/steps/remove_vault_auth_method.dart';
 export 'src/steps/remove_vault_kv_entry.dart';
@@ -26,6 +28,7 @@ export 'src/steps/vault_api.dart';
 export 'src/steps/vault_auth_method.dart';
 export 'src/steps/vault_auth_role.dart';
 export 'src/steps/vault_init.dart';
+export 'src/steps/vault_kv_dkim_key_pair.dart';
 export 'src/steps/vault_kv_entry.dart';
 export 'src/steps/vault_kv_mount.dart';
 export 'src/steps/vault_kv_ssh_key_pair.dart';

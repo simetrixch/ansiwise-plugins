@@ -1,6 +1,7 @@
 import 'package:ansiwise_core/ansiwise_core.dart';
 
 import 'steps/file_from_vault.dart';
+import 'steps/measure_dkim_public_key.dart';
 import 'steps/measure_vault_url.dart';
 import 'steps/remove_vault_auth_method.dart';
 import 'steps/remove_vault_kv_entry.dart';
@@ -9,6 +10,7 @@ import 'steps/require_vault_login.dart';
 import 'steps/vault_auth_method.dart';
 import 'steps/vault_auth_role.dart';
 import 'steps/vault_init.dart';
+import 'steps/vault_kv_dkim_key_pair.dart';
 import 'steps/vault_kv_entry.dart';
 import 'steps/vault_kv_mount.dart';
 import 'steps/vault_kv_ssh_key_pair.dart';
@@ -86,6 +88,26 @@ const Map<StepName, RegisteredStep> vaultSteps = <StepName, RegisteredStep>{
     arguments: VaultKvSshKeyPair.arguments,
     answers: VaultKvSshKeyPair.answers,
     publishes: VaultKvSshKeyPair.publishes,
+  ),
+  // The other entry a row cannot fill, for the same reason: the mail signing key pair. It publishes
+  // the public half, because the row that puts that half into the DNS must be given exactly what the
+  // signer holds.
+  StepName('vault_kv_dkim_key_pair'): RegisteredStep(
+    name: StepName('vault_kv_dkim_key_pair'),
+    source: 'lib/src/steps/vault_kv_dkim_key_pair.dart:44',
+    create: VaultKvDkimKeyPair.fromArguments,
+    arguments: VaultKvDkimKeyPair.arguments,
+    answers: VaultKvDkimKeyPair.answers,
+    publishes: VaultKvDkimKeyPair.publishes,
+  ),
+  // The read half of the entry above, for the program that publishes the record: what the store
+  // holds under the public field, published under the same name, and a refusal where it holds none.
+  StepName('measure_dkim_public_key'): RegisteredStep(
+    name: StepName('measure_dkim_public_key'),
+    source: 'lib/src/steps/measure_dkim_public_key.dart:30',
+    create: MeasureDkimPublicKey.fromArguments,
+    arguments: MeasureDkimPublicKey.arguments,
+    publishes: MeasureDkimPublicKey.publishes,
   ),
   StepName('file_from_vault'): RegisteredStep(
     name: StepName('file_from_vault'),

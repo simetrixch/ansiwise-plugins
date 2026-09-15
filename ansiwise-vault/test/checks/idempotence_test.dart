@@ -40,6 +40,7 @@ const Set<String> notCoveredByAFakeMachine = <String>{
   'vault_auth_method',
   'vault_auth_role',
   'vault_init',
+  'vault_kv_dkim_key_pair',
   'vault_kv_entry',
   'vault_kv_mount',
   'vault_kv_ssh_key_pair',
