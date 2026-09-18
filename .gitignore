@@ -13,3 +13,6 @@ pubspec_overrides.yaml
 # tracked: they are ours, and this repository is meant to be cloned and used by anybody.
 CLAUDE.md
 AGENTS.md
+
+# graft's local graph cache — regenerable, not committed (run `graft build`).
+/graft/
