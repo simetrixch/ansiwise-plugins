@@ -29,9 +29,9 @@ void main() {
   );
   const Arguments answers = Arguments(<String, Object>{'stage': 'dev', 'fqdn': fqdn});
 
-  StepContext contextOf(Http http) => StepContext(
+  StepContext contextOf(Http http, {String token = 'cf-token-fixture-not-real'}) => StepContext(
     shell: FakeShell(),
-    files: FakeFiles(<String, String>{secretsFile: 'DNS_API_TOKEN=cf-token-fixture-not-real\n'}),
+    files: FakeFiles(<String, String>{secretsFile: 'DNS_API_TOKEN=$token\n'}),
     http: http,
     clock: FakeClock(),
     entropy: FakeEntropy(),
@@ -42,14 +42,27 @@ void main() {
     facts: Facts.none,
   );
 
-  // The zone is walked from the name itself: apps7.example.com is no zone, example.com is.
+  // The zone is walked from the name itself: apps7.example.com is no zone, example.com is. The
+  // slot is judged across the three types a host can hold, so every one of them is answered.
   _Zone zoneWith(List<Map<String, Object?>> records) => _Zone(<String, String>{
     'GET $api/zones?name=$fqdn&per_page=1': _ok(<Object?>[]),
     'GET $api/zones?name=$zoneName&per_page=1': _ok(<Object?>[
       <String, Object?>{'id': 'zone-1', 'name': zoneName},
     ]),
-    'GET $api/zones/zone-1/dns_records?type=CNAME&name=$wildcard&per_page=100': _ok(records),
+    for (final String type in <String>['A', 'AAAA', 'CNAME'])
+      'GET $api/zones/zone-1/dns_records?type=$type&name=$wildcard&per_page=100': _ok(<Object?>[
+        for (final Map<String, Object?> r in records)
+          if (r['type'] == type) r,
+      ]),
   });
+
+  Map<String, Object?> a(String id, String address) => <String, Object?>{
+    'id': id,
+    'type': 'A',
+    'name': wildcard,
+    'content': address,
+    'proxied': false,
+  };
 
   Map<String, Object?> cname(String id, String content, {bool proxied = false}) =>
       <String, Object?>{
@@ -110,34 +123,85 @@ void main() {
     }
   });
 
-  test('two records at the wildcard are refused by name, and nothing is written', () async {
-    final _Zone zone = zoneWith(<Map<String, Object?>>[
-      cname('rec-1', fqdn),
-      cname('rec-2', 'other.example.com'),
-    ]);
+  // The wildcard of every installation made by hand before this step is an ADDRESS record at the
+  // name, and a zone holds either an alias or addresses there, never both — so the address record
+  // is the one this step takes over, replaced whole with the alias body.
+  test('an address record standing at the wildcard is replaced whole by the alias', () async {
+    final _Zone zone = zoneWith(<Map<String, Object?>>[a('rec-a', '203.0.113.7')]);
     final StepContext context = contextOf(zone);
 
-    final CheckResult result = await step.check(context);
-    expect(result, isA<Blocked>());
-    expect((result as Blocked).reason, contains('2 alias records stand at $wildcard'));
-    expect(await step.plan(context), isA<NothingPlan>());
-  });
-
-  test('capture keeps the record about to be overwritten, and undo writes it back', () async {
-    final _Zone zone = zoneWith(<Map<String, Object?>>[cname('rec-w', 'old.example.com')]);
-    final StepContext context = contextOf(zone);
-
-    final CapturedRecord captured = await step.capture(context);
-    expect(captured.wasThere, isTrue);
-    expect(captured.content, 'old.example.com');
-
-    await step.undo(context, captured);
+    expect(await step.check(context), isA<Ready>());
+    await step.apply(context);
 
     final HttpRequest write = zone.sent.singleWhere((HttpRequest r) => r.method != 'GET');
     expect(write.method, 'PUT');
-    expect(write.url, '$api/zones/zone-1/dns_records/rec-w');
-    expect((jsonDecode(write.body!) as Map<String, Object?>)['content'], 'old.example.com');
+    expect(write.url, '$api/zones/zone-1/dns_records/rec-a');
+    expect(jsonDecode(write.body!), <String, Object?>{
+      'type': 'CNAME',
+      'name': wildcard,
+      'content': fqdn,
+      'ttl': 1,
+      'proxied': false,
+    });
   });
+
+  test(
+    'two records at the wildcard, of any types, are refused by name, and nothing is written',
+    () async {
+      final _Zone zone = zoneWith(<Map<String, Object?>>[
+        a('rec-1', '203.0.113.7'),
+        cname('rec-2', 'other.example.com'),
+      ]);
+      final StepContext context = contextOf(zone);
+
+      final CheckResult result = await step.check(context);
+      expect(result, isA<Blocked>());
+      expect(
+        (result as Blocked).reason,
+        contains('2 records stand at $wildcard (A 203.0.113.7, CNAME other.example.com)'),
+      );
+      expect(await step.plan(context), isA<NothingPlan>());
+    },
+  );
+
+  // The DNS token is optional: an installation that answered none keeps its zone by hand, and the
+  // step stands aside and says so — nothing asked of the zone, no run ended over it.
+  test("an empty token is settled, not refused: the zone is the operator's", () async {
+    final _Zone zone = zoneWith(<Map<String, Object?>>[]);
+    final StepContext context = contextOf(zone, token: '');
+
+    final CheckResult result = await step.check(context);
+    expect(result, isA<Satisfied>());
+    expect((result as Satisfied).because, contains('no DNS token is answered'));
+    await step.apply(context);
+    expect(zone.sent, isEmpty);
+  });
+
+  test(
+    'capture keeps the record about to be overwritten, whatever its type, and undo writes it back',
+    () async {
+      for (final Map<String, Object?> held in <Map<String, Object?>>[
+        cname('rec-w', 'old.example.com'),
+        a('rec-w', '203.0.113.7'),
+      ]) {
+        final _Zone zone = zoneWith(<Map<String, Object?>>[held]);
+        final StepContext context = contextOf(zone);
+
+        final CapturedRecord captured = await step.capture(context);
+        expect(captured.wasThere, isTrue);
+        expect(captured.content, held['content']);
+
+        await step.undo(context, captured);
+
+        final HttpRequest write = zone.sent.singleWhere((HttpRequest r) => r.method != 'GET');
+        expect(write.method, 'PUT');
+        expect(write.url, '$api/zones/zone-1/dns_records/rec-w');
+        final Map<String, Object?> body = jsonDecode(write.body!) as Map<String, Object?>;
+        expect(body['type'], held['type']);
+        expect(body['content'], held['content']);
+      }
+    },
+  );
 }
 
 String _ok(Object? result) =>

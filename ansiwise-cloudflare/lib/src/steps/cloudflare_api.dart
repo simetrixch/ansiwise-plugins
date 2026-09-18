@@ -186,7 +186,7 @@ final class CloudflareAccess {
     }
     final String value = keyValueAssignments(content)[tokenVariable] ?? '';
     if (value.isEmpty) {
-      return CloudflareToken.unreadable(
+      return CloudflareToken.absent(
         '$tokenVariable is empty in $path, and it is where the API token stands. Put a token '
         'there with leave to read the zone and edit its records — nothing account-wide, and '
         'nothing on any other zone',
@@ -207,16 +207,24 @@ final RegExp _leftoverSlot = RegExp('<[^<>]*>');
 /// The API token a step was able to read, or why it could not.
 final class CloudflareToken {
   /// Records that the token was read.
-  const CloudflareToken.read(this.value) : refusal = null;
+  const CloudflareToken.read(this.value) : refusal = null, absent = false;
 
   /// Records that it could not be read, because [refusal].
-  const CloudflareToken.unreadable(this.refusal) : value = null;
+  const CloudflareToken.unreadable(this.refusal) : value = null, absent = false;
+
+  /// Records that the file holds no token at all — the slot is EMPTY, which an installation may
+  /// leave on purpose: its zone is then the operator's and no record of it is written by a run.
+  /// [refusal] still says where a token would go, for the step that cannot do without one.
+  const CloudflareToken.absent(this.refusal) : value = null, absent = true;
 
   /// The token, or null when there is none to be had.
   final String? value;
 
   /// Why there is none, or null when there is.
   final String? refusal;
+
+  /// Whether the slot stands empty, as against a file that could not be read.
+  final bool absent;
 }
 
 /// The values of [content] read as a file of `KEY=value` lines.

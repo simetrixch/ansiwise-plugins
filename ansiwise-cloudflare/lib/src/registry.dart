@@ -19,7 +19,7 @@ const Map<StepName, RegisteredStep> cloudflareSteps = <StepName, RegisteredStep>
   ),
   StepName('cloudflare_wildcard_record'): RegisteredStep(
     name: StepName('cloudflare_wildcard_record'),
-    source: 'lib/src/steps/cloudflare_wildcard_record.dart:23',
+    source: 'lib/src/steps/cloudflare_wildcard_record.dart:33',
     create: CloudflareWildcardRecord.fromArguments,
     arguments: CloudflareWildcardRecord.arguments,
   ),
