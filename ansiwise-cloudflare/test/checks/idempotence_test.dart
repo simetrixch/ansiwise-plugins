@@ -34,6 +34,7 @@ const Map<String, Fixture> stepFixtures = <String, Fixture>{};
 /// request that changed something, the way `FakeShell.changes` already does for a command.
 const Set<String> notCoveredByAFakeMachine = <String>{
   'cloudflare_a_record',
+  'cloudflare_wildcard_record',
   'cloudflare_spf_record',
   'cloudflare_dkim_record',
   'cloudflare_dmarc_record',

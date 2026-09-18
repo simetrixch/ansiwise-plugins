@@ -12,3 +12,4 @@ export 'src/steps/cloudflare_api.dart';
 export 'src/steps/cloudflare_dkim_record.dart';
 export 'src/steps/cloudflare_dmarc_record.dart';
 export 'src/steps/cloudflare_spf_record.dart';
+export 'src/steps/cloudflare_wildcard_record.dart';

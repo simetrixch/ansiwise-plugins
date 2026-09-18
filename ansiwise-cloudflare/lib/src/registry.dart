@@ -4,6 +4,7 @@ import 'steps/cloudflare_a_record.dart';
 import 'steps/cloudflare_dkim_record.dart';
 import 'steps/cloudflare_dmarc_record.dart';
 import 'steps/cloudflare_spf_record.dart';
+import 'steps/cloudflare_wildcard_record.dart';
 
 /// Every step this plugin contributes, keyed by the name a program file writes.
 ///
@@ -15,6 +16,12 @@ const Map<StepName, RegisteredStep> cloudflareSteps = <StepName, RegisteredStep>
     source: 'lib/src/steps/cloudflare_a_record.dart:23',
     create: CloudflareARecord.fromArguments,
     arguments: CloudflareARecord.arguments,
+  ),
+  StepName('cloudflare_wildcard_record'): RegisteredStep(
+    name: StepName('cloudflare_wildcard_record'),
+    source: 'lib/src/steps/cloudflare_wildcard_record.dart:23',
+    create: CloudflareWildcardRecord.fromArguments,
+    arguments: CloudflareWildcardRecord.arguments,
   ),
   StepName('cloudflare_spf_record'): RegisteredStep(
     name: StepName('cloudflare_spf_record'),
