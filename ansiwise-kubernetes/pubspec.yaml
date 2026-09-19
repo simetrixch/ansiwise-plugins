@@ -38,5 +38,5 @@ dev_dependencies:
   ansiwise_checks:
     git:
       url: https://github.com/simetrixch/ansiwise-checks.git
-      ref: 4fdaa24ab414ceeb133e65e30e0b4bdc6ce0ba04
+      ref: d2e875450d1ba6c19658924080f5b8f69a34a475
       path: registry
