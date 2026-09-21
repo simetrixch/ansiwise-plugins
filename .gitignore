@@ -22,6 +22,7 @@ AGENTS.md
 /.claude/
 /.mcp.json
 /.agents/
+/.codex/
 /.openhands/microagents/
 /.gemini/
 /.cursorrules
