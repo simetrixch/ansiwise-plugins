@@ -24,7 +24,7 @@ dependencies:
   ansiwise_core:
     git:
       url: https://github.com/simetrixch/ansiwise-core.git
-      ref: 9365f60a0e8073a14cd17de258c562e93b62a7f4
+      ref: eedbed3dd4edc290764e319f60cc7c9b05cd2b00
   yaml: ^3.1.3
 
 dev_dependencies:
@@ -36,5 +36,5 @@ dev_dependencies:
   ansiwise_checks:
     git:
       url: https://github.com/simetrixch/ansiwise-checks.git
-      ref: d2e875450d1ba6c19658924080f5b8f69a34a475
+      ref: e03bb7b9590c7378b71e80b40bda32c3a0c7c558
       path: registry
