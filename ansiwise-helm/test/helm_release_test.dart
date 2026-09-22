@@ -295,6 +295,61 @@ void main() {
     );
   });
 
+  test('the repository index is brought up to date before the chart is resolved', () async {
+    // THE DEFECT, as the first bare-metal master met it: root's helm held the repository from an
+    // earlier life with an index of June, the repository row was satisfied by name and address, and
+    // the upgrade stopped at "chart matching 0.34.0 not found" — a pin of July against an index
+    // nothing in the run ever refreshed. The same day comes to every machine whose pin is raised.
+    final FakeShell shell = FakeShell()
+      ..answers(upgrade, 'NAME: ledger\nSTATUS: deployed\nREVISION: 1\n');
+
+    await release.apply(_contextOn(shell, FakeFiles(<String, String>{path: '{}\n'})));
+
+    expect(shell.ran.take(2).toList(), <String>[
+      'helm repo update example-charts',
+      upgrade,
+    ], reason: "only this chart's repository, and before the upgrade that resolves against it");
+  });
+
+  test('an index that could not be brought up to date stops the row before the upgrade', () async {
+    final FakeShell shell = FakeShell()
+      ..fails(
+        'helm repo update example-charts',
+        stderr: 'Error: no repositories found. You must add one before updating',
+      );
+
+    await expectLater(
+      release.apply(_contextOn(shell, FakeFiles(<String, String>{path: '{}\n'}))),
+      throwsA(
+        isA<CommandFailed>().having(
+          (CommandFailed failure) => failure.message,
+          'message',
+          contains('no repositories found'),
+        ),
+      ),
+    );
+    expect(
+      shell.ran,
+      isNot(contains(upgrade)),
+      reason: 'nothing resolves against an index that is not there',
+    );
+  });
+
+  test('a chart named by a path has no index to bring up to date', () async {
+    const HelmRelease local = HelmRelease(
+      release: 'ledger',
+      chart: './charts/ledger',
+      chartVersion: '0.34.0',
+      namespace: 'ledger',
+      helm: Helm(),
+    );
+    final FakeShell shell = FakeShell();
+
+    await local.apply(_contextOn(shell, FakeFiles(<String, String>{})));
+
+    expect(shell.ran.where((String ran) => ran.startsWith('helm repo update')), isEmpty);
+  });
+
   test('a release already so has nothing to explain', () async {
     // The innocent neighbour: a machine already in the wanted state produces a Satisfied with its
     // own `because`, and no line about acting — a record that said "not installed" over a release

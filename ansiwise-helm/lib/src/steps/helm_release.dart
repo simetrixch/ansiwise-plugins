@@ -188,6 +188,7 @@ final class HelmRelease extends IrreversibleStep {
 
   @override
   Future<void> apply(StepContext context) async {
+    await _bringTheIndexUpToDate(context);
     final CommandResult done = await context.shell.run(
       helm.command(
         _upgradeArguments,
@@ -206,6 +207,55 @@ final class HelmRelease extends IrreversibleStep {
       );
     }
     _sayWhatTheUpgradeAnswered(context, done);
+  }
+
+  /// The repository's index, brought up to date before the chart is resolved against it.
+  ///
+  /// **helm resolves `--version` against the index it holds on disk, and nothing but `repo add` and
+  /// `repo update` ever writes that file.** The repository row above registers a repository and is
+  /// satisfied from then on by its name and address, so the index stays as old as the registration:
+  /// on a machine whose root held the repository from an earlier life, and on any machine the day a
+  /// chart pin is raised above what the index knew, the upgrade below stops with
+  /// `chart matching <version> not found in <repository> index` and sends the reader to run
+  /// `helm repo update` by hand. Measured on the first bare-metal master (2026-09-22): an index of June against a pin of
+  /// July.
+  ///
+  /// **Part of this step and not a row of its own**, for the reason install_packages gives for
+  /// `apt-get update` (ansiwise-host install_packages.dart): a refresh has no target state, so it
+  /// cannot be a row with a verdict — it is how this row reaches its own. Only this chart's
+  /// repository, so a machine's other indexes are not fetched for a release that reads none of them.
+  Future<void> _bringTheIndexUpToDate(StepContext context) async {
+    final String? repository = _repository;
+    if (repository == null) {
+      return;
+    }
+    final List<String> arguments = <String>['repo', 'update', repository];
+    final CommandResult done = await context.shell.run(
+      helm.command(arguments, timeout: const Duration(minutes: 2)),
+    );
+    if (!done.ok) {
+      throw CommandFailed(
+        argv: helm.argv(arguments),
+        exitCode: done.exitCode,
+        stdout: done.stdout,
+        stderr: done.stderr,
+      );
+    }
+  }
+
+  /// The repository the chart is named under, or null where it is named without one.
+  ///
+  /// `<repository>/<chart>` is the form every program row uses. A chart named by a path or by an
+  /// OCI reference carries a `/` as well and has no index to bring up to date, and both spell
+  /// something before their first `/` that no repository name may hold: nothing at all, `.`, or a
+  /// scheme's `:`.
+  String? get _repository {
+    final int slash = chart.indexOf('/');
+    if (slash <= 0) {
+      return null;
+    }
+    final String before = chart.substring(0, slash);
+    return before == '.' || before == '..' || before.contains(':') ? null : before;
   }
 
   /// Puts what the upgrade ANSWERED into the record, at exit zero as much as at any other.
