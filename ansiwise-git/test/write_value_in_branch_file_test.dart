@@ -114,4 +114,57 @@ void main() {
     await step.undo(held(files), captured);
     expect(files.contents['$repository/$map'], before);
   });
+
+  group('the value an earlier row measured, in place of an answer', () {
+    // Built the way the engine builds a row: through the factory, with the measurement written into
+    // `value` as text, which is all a step ever learns of where a value came from.
+    WriteValueInBranchFile built(Map<String, Object> given) => WriteValueInBranchFile.fromArguments(
+      Arguments(<String, Object>{
+        'repository': repository,
+        'path': 'clusters/active/<branch>.yaml',
+        'key': 'release',
+        'file_mode': 420,
+        ...given,
+      }),
+    );
+
+    test('is written as measured, and the second run has nothing to do', () async {
+      final WriteValueInBranchFile measured = built(<String, Object>{'value': tag});
+      final FakeFiles files = carrying(before);
+
+      expect(await measured.check(held(files, value: null)), isA<Ready>());
+      await measured.apply(held(files, value: null));
+
+      expect(files.contents['$repository/$map'], contains('release: $tag'));
+      expect(await measured.check(held(files, value: null)), isA<Satisfied>());
+    });
+
+    test('a row naming both is refused by both names, before the checkout is asked', () async {
+      final FakeShell shell = onBranch();
+      final CheckResult answer =
+          await built(<String, Object>{'value': tag, 'value_answer': 'release_tag'}).check(
+            contextOn(
+              shell: shell,
+              files: carrying(before),
+              also: <String, Object>{'release_tag': tag},
+            ),
+          );
+
+      expect(answer, isA<Blocked>());
+      expect((answer as Blocked).reason, contains('both value and value_answer'));
+      expect(shell.ran, isEmpty);
+    });
+
+    test('a row naming neither still builds, and is refused by both names', () async {
+      // The engine builds every row before the run starts, and a row taking `value` from a
+      // measurement is built without it — the measurement does not exist yet. So the factory
+      // accepts neither, and the step is what refuses.
+      final CheckResult answer = await built(
+        const <String, Object>{},
+      ).check(held(carrying(before)));
+
+      expect(answer, isA<Blocked>());
+      expect((answer as Blocked).reason, contains('neither value nor value_answer'));
+    });
+  });
 }

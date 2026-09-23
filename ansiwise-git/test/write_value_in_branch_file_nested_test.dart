@@ -87,8 +87,71 @@ void main() {
   test('a path whose block is absent refuses rather than inventing one', () async {
     final FakeFiles files = carrying('other:\n  clusterIssuer: something-else\n');
 
+    expect(await step.check(held(files)), isA<Blocked>());
     await expectLater(step.apply(held(files)), throwsA(isA<StateError>()));
-    expect(written(files).split('\n').where((String l) => l.startsWith('clusterIssuer:')), isEmpty);
+    expect(written(files), 'other:\n  clusterIssuer: something-else\n');
+  });
+
+  group('a key its block does not carry yet', () {
+    const WriteValueInBranchFile apiHost = WriteValueInBranchFile(
+      repository: repository,
+      path: file,
+      key: 'global.apiHost',
+      value: '100.64.0.1',
+      fileMode: 420,
+    );
+
+    test(
+      'is inserted directly under the block\'s line, and the second run changes nothing',
+      () async {
+        const String map =
+            'stage: prod\nrole: master\n\nglobal:\n  domain: m1.example.com\n  clusterName: m1\n';
+        const String gained =
+            'stage: prod\nrole: master\n\nglobal:\n  apiHost: 100.64.0.1\n'
+            '  domain: m1.example.com\n  clusterName: m1\n';
+        final FakeFiles files = carrying(map);
+
+        expect(await apiHost.check(held(files)), isA<Ready>());
+        expect(((await apiHost.plan(held(files))) as DiffPlan).after, gained);
+        await apiHost.apply(held(files));
+        expect(written(files), gained);
+
+        expect(await apiHost.check(held(files)), isA<Satisfied>());
+        await apiHost.apply(held(files));
+        expect(written(files), gained);
+      },
+    );
+
+    test('goes two deeper than the block\'s line where the block holds nothing yet', () async {
+      final FakeFiles files = carrying('stage: prod\nglobal:\nrole: master\n');
+
+      await apiHost.apply(held(files));
+
+      expect(written(files), 'stage: prod\nglobal:\n  apiHost: 100.64.0.1\nrole: master\n');
+    });
+
+    test('THE PLANTED CASE: a key of the same name deeper inside the block is not it', () async {
+      // Taken for the key, the deeper line would be overwritten and the block would still lack its
+      // own — while the check reported the value recorded.
+      const String deeper =
+          'global:\n  endpoints:\n    tailnet:\n      apiHost: 100.64.0.9\n  domain: m1.example.com\n';
+      final FakeFiles files = carrying(deeper);
+
+      expect(await apiHost.check(held(files)), isA<Ready>());
+      await apiHost.apply(held(files));
+
+      expect(written(files), deeper.replaceFirst('global:\n', 'global:\n  apiHost: 100.64.0.1\n'));
+    });
+
+    test('is refused where the block\'s line holds a value or a list rather than keys', () async {
+      for (final String shape in <String>['global: {}\n', 'global:\n  - m1\n', 'global:\n- m1\n']) {
+        final FakeFiles files = carrying(shape);
+
+        expect(await apiHost.check(held(files)), isA<Blocked>(), reason: shape);
+        await expectLater(apiHost.apply(held(files)), throwsA(isA<StateError>()));
+        expect(written(files), shape);
+      }
+    });
   });
 
   test('THE INNOCENT NEIGHBOUR: a key with no dot still stands at the head of the file', () async {

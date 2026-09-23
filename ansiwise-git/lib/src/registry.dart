@@ -113,7 +113,7 @@ const Map<StepName, RegisteredStep> gitSteps = <StepName, RegisteredStep>{
   // two different ideas of where it lives.
   StepName('write_value_in_branch_file'): RegisteredStep(
     name: StepName('write_value_in_branch_file'),
-    source: 'lib/src/steps/write_value_in_branch_file.dart:24',
+    source: 'lib/src/steps/write_value_in_branch_file.dart:28',
     create: WriteValueInBranchFile.fromArguments,
     arguments: WriteValueInBranchFile.arguments,
   ),
