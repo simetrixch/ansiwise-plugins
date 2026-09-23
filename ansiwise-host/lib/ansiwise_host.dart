@@ -40,6 +40,7 @@ export 'src/steps/host/measure_host_iptables_backend.dart';
 export 'src/steps/host/measure_host_addresses.dart';
 export 'src/steps/host/measure_host_local_port_range.dart';
 export 'src/steps/host/measure_public_nic.dart';
+export 'src/steps/host/measure_tailnet_address.dart';
 export 'src/steps/host/on_the_path.dart';
 export 'src/steps/host/registry_mirror.dart';
 export 'src/steps/host/remove_snap.dart';

@@ -29,6 +29,7 @@ import 'steps/host/measure_host_iptables_backend.dart';
 import 'steps/host/measure_host_addresses.dart';
 import 'steps/host/measure_host_local_port_range.dart';
 import 'steps/host/measure_public_nic.dart';
+import 'steps/host/measure_tailnet_address.dart';
 import 'steps/host/remove_snap.dart';
 import 'steps/host/remove_unused_packages.dart';
 import 'steps/host/require_answer_matches.dart';
@@ -464,6 +465,21 @@ const Map<StepName, RegisteredStep> hostSteps = <StepName, RegisteredStep>{
     source: 'lib/src/steps/host/stamp_tailnet_address_in_certificate.dart:32',
     create: StampTailnetAddressInCertificate.fromArguments,
     arguments: StampTailnetAddressInCertificate.arguments,
+  ),
+  // The same address, for a row that writes it down wherever something dials the machine by it. It
+  // declares no answer: the coordinator hands the address out at the join, so it is read off the
+  // machine rather than typed.
+  StepName('measure_tailnet_address'): RegisteredStep(
+    name: StepName('measure_tailnet_address'),
+    source: 'lib/src/steps/host/measure_tailnet_address.dart:19',
+    create: MeasureTailnetAddress.fromArguments,
+    arguments: MeasureTailnetAddress.arguments,
+    publishes: <MeasurementSpec>[
+      MeasurementSpec(
+        name: MeasureTailnetAddress.published,
+        describes: "this machine's IPv4 address on the private network it joined",
+      ),
+    ],
   ),
 };
 
