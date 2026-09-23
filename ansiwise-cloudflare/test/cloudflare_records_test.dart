@@ -466,29 +466,37 @@ void main() {
         },
       );
 
-      test('a measured key wins over the answer and the variable alike', () async {
-        const String measured = 'MIIBIjANBgkqT1RIRVI';
-        const CloudflareDkimRecord fromStore = CloudflareDkimRecord(
-          access: access,
-          apexAnswer: 'mail_domain',
-          selectorAnswer: 'dkim_selector',
-          publicKeyVariable: 'MAIL_SIGNING_PUBLIC_KEY',
-          publicKeyAnswer: 'dkim_public_key',
-          publicKey: measured,
-        );
+      const String measured = 'MIIBIjANBgkqT1RIRVI';
+      const CloudflareDkimRecord fromStore = CloudflareDkimRecord(
+        access: access,
+        apexAnswer: 'mail_domain',
+        selectorAnswer: 'dkim_selector',
+        publicKeyVariable: 'MAIL_SIGNING_PUBLIC_KEY',
+        publicKeyAnswer: 'dkim_public_key',
+        publicKey: measured,
+      );
+      Future<String> published(String answer) async {
         final _Zone zone = emptyZone();
         final StepContext context = contextOf(
           files: filledInput('MAIL_SIGNING_PUBLIC_KEY=$key\n'),
           http: zone,
-          run: withKey(key),
+          run: withKey(answer),
         );
-
         expect(await fromStore.check(context), isA<Ready>());
         await fromStore.apply(context);
-
         final HttpRequest write = zone.sent.singleWhere((HttpRequest r) => r.method != 'GET');
-        final Map<String, Object?> body = jsonDecode(write.body!) as Map<String, Object?>;
-        expect(body['content'], 'v=DKIM1; h=sha256; k=rsa; p=$measured');
+        return (jsonDecode(write.body!) as Map<String, Object?>)['content']! as String;
+      }
+
+      test(
+        'the answered key wins over a measured one — the caller names the pair that signs the domain',
+        () async {
+          expect(await published(key), 'v=DKIM1; h=sha256; k=rsa; p=$key');
+        },
+      );
+
+      test('without an answer the measured key is published, before the variable', () async {
+        expect(await published(''), 'v=DKIM1; h=sha256; k=rsa; p=$measured');
       });
 
       test('an answer that is not one line of base64 is refused, naming the answer', () async {
