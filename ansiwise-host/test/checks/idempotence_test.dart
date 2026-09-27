@@ -38,10 +38,6 @@ const Set<String> notCoveredByAFakeMachine = <String>{
   // driven twice directly instead, over a machine where the two paths differ, in
   // write_file_from_template_test.
   'write_file_from_template',
-  // The probe hands the path its one-character value, which is not an absolute path two levels deep,
-  // so the step refuses before it acts, and a refusal is not a run. It is driven twice directly
-  // instead, over a path it may remove, in remove_directory_test.
-  'remove_directory',
   // It leaves its postcondition behind with the row's enable command, and a fake shell records that
   // without carrying it out — so the status it answers after the apply is the status it answered
   // before, and nothing about the second run would be measured.

@@ -11,7 +11,6 @@ import 'steps/host/apply_netplan.dart';
 import 'steps/host/clean_package_cache.dart';
 import 'steps/host/create_group.dart';
 import 'steps/host/create_storage_directory.dart';
-import 'steps/host/remove_directory.dart';
 import 'steps/host/password_login.dart';
 import 'steps/host/enable_addons.dart';
 import 'steps/host/enable_service.dart';
@@ -295,12 +294,6 @@ const Map<StepName, RegisteredStep> hostSteps = <StepName, RegisteredStep>{
     source: 'lib/src/steps/host/create_storage_directory.dart:11',
     create: CreateStorageDirectory.fromArguments,
     arguments: CreateStorageDirectory.arguments,
-  ),
-  StepName('remove_directory'): RegisteredStep(
-    name: StepName('remove_directory'),
-    source: 'lib/src/steps/host/remove_directory.dart:13',
-    create: RemoveDirectory.fromArguments,
-    arguments: RemoveDirectory.arguments,
   ),
   StepName('link_storage_path'): RegisteredStep(
     name: StepName('link_storage_path'),
