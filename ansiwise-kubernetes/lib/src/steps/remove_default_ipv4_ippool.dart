@@ -1,7 +1,9 @@
 import 'package:ansiwise_core/ansiwise_core.dart';
 import 'kubectl.dart';
 
-/// Deletes the address pool the cluster is running on, so Calico builds it again on the new range.
+/// Deletes the default address pool, so the cluster runs on the new range: out of the pool for that
+/// range where one was put in before this runs, and out of the one Calico builds again from the
+/// manifest where none was.
 ///
 /// **This is the primary path and not an edge case.** Even a machine that was installed minutes ago
 /// already has a pool: Calico creates it from the shipped manifest the first time it starts. Treating
@@ -49,7 +51,7 @@ final class RemoveDefaultIpv4Ippool extends IrreversibleStep {
     elevationArgument,
   ];
 
-  /// The pool Calico creates from the shipped manifest, and the only one this program touches.
+  /// The pool Calico creates from the shipped manifest, and the only one this step deletes.
   static const String poolName = 'default-ipv4-ippool';
 
   /// The range the pool the cluster is running on covers, null when there is no pool, or why
@@ -57,7 +59,8 @@ final class RemoveDefaultIpv4Ippool extends IrreversibleStep {
   ///
   /// **This is the live source of truth for the whole conversion, and the manifest is not.** The
   /// manifest's value is consumed once at creation, so a machine can carry a correctly stamped
-  /// manifest and still run on the old pool. Every convergence question in this phase is asked here.
+  /// manifest and still run on the old pool. Every convergence question in this phase is asked here
+  /// or of [livePools].
   ///
   /// A cluster that could not be asked must not come back as the same null a cluster with no pool
   /// does, or the check below answers "there is no $poolName, so there is none to delete" over it —
@@ -80,6 +83,46 @@ final class RemoveDefaultIpv4Ippool extends IrreversibleStep {
     final String? cidr = pool.answer?.trim();
     return (cidr: cidr == null || cidr.isEmpty ? null : cidr, refusal: null);
   }
+
+  /// Every address pool the cluster holds, as its name and the range it covers, or why the cluster
+  /// could not be asked.
+  ///
+  /// A list, so a cluster holding no pool and a cluster that cannot be asked are told apart on the
+  /// exit code alone, the way [Kubectl.readOne] tells them apart: the first answers nothing and
+  /// zero, the second answers non-zero.
+  static Future<({Map<String, String>? pools, String? refusal})> livePools(
+    StepContext context,
+    Kubectl kubectl,
+  ) async {
+    final Command command = kubectl.observing(<String>['get', 'ippool', '-o', poolsOutput]);
+    final CommandResult listed = await context.shell.run(command);
+    if (!listed.ok) {
+      return (
+        pools: null,
+        refusal:
+            'the cluster would not list its address pools: ${command.argv.join(' ')} answered '
+            '${listed.exitCode}'
+            '${listed.stderr.trim().isEmpty ? '' : ' — ${listed.stderr.trim()}'}',
+      );
+    }
+    return (
+      pools: <String, String>{
+        for (final String line in listed.stdout.split('\n'))
+          if (line.indexOf('=') case final int equals when equals > 0)
+            line.substring(0, equals).trim(): line.substring(equals + 1).trim(),
+      },
+      refusal: null,
+    );
+  }
+
+  /// What [livePools] asks the client to write: one line per pool, its name, `=` and its range.
+  ///
+  /// A pool's name cannot carry `=`, so the first one on a line is where the name ends.
+  static const String poolsOutput =
+      r'jsonpath={range .items[*]}{.metadata.name}={.spec.cidr}{"\n"}{end}';
+
+  /// Whether [cidr] is an IPv4 range, which is the only kind this conversion moves.
+  static bool isIpv4(String cidr) => !cidr.contains(':');
 
   /// The range every pod gets an address out of.
   final String podCidr;

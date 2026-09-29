@@ -32,6 +32,11 @@ const Set<String> notCoveredByAFakeMachine = <String>{
   // align_calico_backend_test.dart and align_calico_nat_port_range_test.dart.
   'align_calico_nat_port_range',
   'apply_cluster_issuer',
+  // Its postcondition is a pool the cluster holds, left behind by a `kubectl apply`, and a fake shell
+  // answers a command rather than carrying it out, so the second check finds the pool still missing.
+  // Both runs against a cluster that stores what is applied are driven directly in
+  // create_ipv4_ippool_for_pod_cidr_test.dart.
+  'create_ipv4_ippool_for_pod_cidr',
   'remove_default_ipv4_ippool',
   'remove_existing_cluster_issuer',
   // NOT a machine the fake cannot arrange — a probe that hands one placeholder to a PAIR argument:

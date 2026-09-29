@@ -3,7 +3,8 @@ import 'kubectl.dart';
 import 'remove_default_ipv4_ippool.dart';
 import 'reapply_calico_manifest.dart';
 
-/// Waits for the address pool to come back on the new range, and puts it right once when it does not.
+/// Waits until the cluster's IPv4 pools cover the new range and no other, and puts the default pool
+/// right once where it came back on the old range.
 ///
 /// **The race this answers was measured on a fresh install.** The first look at the pool found
 /// nothing, because Calico had not created it yet, so the delete had nothing to delete and was
@@ -12,11 +13,17 @@ import 'reapply_calico_manifest.dart';
 /// cluster converged on the range the whole conversion exists to leave behind, with every step
 /// reporting success.
 ///
-/// **The heal is one delete and no more.** A pool that is present and carries the wrong range is
-/// deleted a second time and the agent — which now carries the stamped environment — is replaced, so
-/// the pool it creates next is the right one. Doing that in a loop would be a machine deleting a
+/// **Where the pool for the new range was put in before the default one went, that race cannot
+/// happen**: an agent that starts with its old environment finds an IPv4 pool and creates none. There
+/// the first look finds the cluster converged and the heal never runs, which makes this step the
+/// proof of that order rather than its repair.
+///
+/// **The heal is one delete and no more.** A default pool that is present and carries the wrong range
+/// is deleted a second time and the agent — which now carries the stamped environment — is replaced,
+/// so the pool it creates next is the right one. Doing that in a loop would be a machine deleting a
 /// pool over and over against something it cannot fix, so it happens once per run and the polling
-/// then runs out.
+/// then runs out. A pool on another range under any other name is never deleted: this program did
+/// not create it, and the wait runs out naming it.
 final class VerifyIppoolConvergedWithSelfHeal extends IrreversibleStep {
   /// Polls for [podCidr] for up to [timeoutSeconds], healing once on a pool that carries another.
   const VerifyIppoolConvergedWithSelfHeal({
@@ -110,23 +117,23 @@ final class VerifyIppoolConvergedWithSelfHeal extends IrreversibleStep {
 
   @override
   Future<CheckResult> check(StepContext context) async {
-    final ({String? cidr, String? refusal}) reading = await RemoveDefaultIpv4Ippool.liveCidr(
-      context,
-      kubectl,
-    );
+    final ({Map<String, String>? pools, String? refusal}) reading =
+        await RemoveDefaultIpv4Ippool.livePools(context, kubectl);
     if (reading.refusal case final String refusal) {
       return CheckResult.blocked(refusal);
     }
-    if (reading.cidr == podCidr) {
-      return CheckResult.satisfied('${RemoveDefaultIpv4Ippool.poolName} covers $podCidr');
+    final Map<String, String> pools = reading.pools!;
+    if (_converged(pools)) {
+      return CheckResult.satisfied('${_described(pools)}, and no IPv4 pool covers another range');
     }
     return const CheckResult.ready();
   }
 
   @override
   Future<StepPlan> plan(StepContext context) async => StepPlan.nothing(
-    'would watch ${RemoveDefaultIpv4Ippool.poolName} for up to ${timeoutSeconds}s and, on a pool '
-    'that came back covering another range, delete it once more and replace the network agent',
+    'would watch the address pools for up to ${timeoutSeconds}s until one covers $podCidr and no '
+    'IPv4 pool covers another range and, on a ${RemoveDefaultIpv4Ippool.poolName} that came back '
+    'covering another range, delete it once more and replace the network agent',
   );
 
   @override
@@ -135,24 +142,23 @@ final class VerifyIppoolConvergedWithSelfHeal extends IrreversibleStep {
     bool healed = false;
 
     while (true) {
-      final ({String? cidr, String? refusal}) reading = await RemoveDefaultIpv4Ippool.liveCidr(
-        context,
-        kubectl,
-      );
+      final ({Map<String, String>? pools, String? refusal}) reading =
+          await RemoveDefaultIpv4Ippool.livePools(context, kubectl);
       // WAITING OUT A CLUSTER THAT WOULD NOT ANSWER IS NOT WATCHING A POOL. Read as "there is no
       // pool", a cluster that could not be asked left this loop healing nothing and then reporting
       // that the pool never came back covering the range - a deadline blamed on the pool.
       if (reading.refusal case final String refusal) {
         throw StateError(refusal);
       }
-      final String? live = reading.cidr;
-      if (live == podCidr) {
+      final Map<String, String> pools = reading.pools!;
+      if (_converged(pools)) {
         return;
       }
-      if (live != null && !healed) {
+      final String? back = _elsewhere(pools)[RemoveDefaultIpv4Ippool.poolName];
+      if (back != null && !healed) {
         healed = true;
         context.log.warn(
-          '${RemoveDefaultIpv4Ippool.poolName} came back covering $live rather than $podCidr — the '
+          '${RemoveDefaultIpv4Ippool.poolName} came back covering $back rather than $podCidr — the '
           'agent created it before the restart handed it the new range. Deleting it once more and '
           'replacing the agent, which now carries the stamped range.',
         );
@@ -162,14 +168,30 @@ final class VerifyIppoolConvergedWithSelfHeal extends IrreversibleStep {
       if (!context.clock.now().isBefore(giveUp)) {
         throw WaitedTooLong(
           waitingFor:
-              '${RemoveDefaultIpv4Ippool.poolName} to cover $podCidr — it '
-              '${live == null ? 'does not exist' : 'covers $live'}',
+              'a pool to cover $podCidr and none to cover another range — ${_described(pools)}',
           deadline: Duration(seconds: timeoutSeconds),
         );
       }
       await context.clock.sleep(Duration(seconds: intervalSeconds));
     }
   }
+
+  /// Whether an IPv4 pool covers [podCidr] and none covers another range.
+  bool _converged(Map<String, String> pools) =>
+      pools.values.contains(podCidr) && _elsewhere(pools).isEmpty;
+
+  /// The IPv4 pools on a range other than [podCidr], by name.
+  Map<String, String> _elsewhere(Map<String, String> pools) => <String, String>{
+    for (final MapEntry<String, String> pool in pools.entries)
+      if (pool.value != podCidr && RemoveDefaultIpv4Ippool.isIpv4(pool.value)) pool.key: pool.value,
+  };
+
+  /// What the cluster's pools cover, for a verdict and for a deadline that has to name them.
+  static String _described(Map<String, String> pools) => pools.isEmpty
+      ? 'there is no pool'
+      : pools.entries
+            .map((MapEntry<String, String> pool) => '${pool.key} covers ${pool.value}')
+            .join(', ');
 
   Future<void> _rollNetworkAgent(StepContext context) async {
     await context.shell.run(

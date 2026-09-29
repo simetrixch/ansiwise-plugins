@@ -251,6 +251,14 @@ void main() {
 
   group('the verify, and the race it answers', () {
     const String rollAgent = 'kubectl -n kube-system rollout restart daemonset/calico-node';
+    const String pools = 'kubectl get ippool -o ${RemoveDefaultIpv4Ippool.poolsOutput}';
+    const String deleteDefault = 'kubectl delete ippool default-ipv4-ippool';
+    const VerifyIppoolConvergedWithSelfHeal step = VerifyIppoolConvergedWithSelfHeal(
+      podCidr: podCidr,
+      timeoutSeconds: 180,
+      intervalSeconds: 5,
+      rolloutTimeoutSeconds: 120,
+    );
 
     test(
       'a pool that came back on the old range is deleted once more and the agent replaced',
@@ -260,71 +268,103 @@ void main() {
         // handed it the new one.
         final ClusterMachine machine = ClusterMachine();
         machine.shell
-          ..answers(livePool, '10.1.0.0/16')
-          ..changes('kubectl delete ippool default-ipv4-ippool', () {
-            machine.shell.answers(livePool, podCidr);
+          ..answers(pools, 'default-ipv4-ippool=10.1.0.0/16\n')
+          ..changes(deleteDefault, () {
+            machine.shell.answers(pools, 'default-ipv4-ippool=$podCidr\n');
           });
-
-        const VerifyIppoolConvergedWithSelfHeal step = VerifyIppoolConvergedWithSelfHeal(
-          podCidr: podCidr,
-          timeoutSeconds: 180,
-          intervalSeconds: 5,
-          rolloutTimeoutSeconds: 120,
-        );
         final StepContext context = machine.contextFor(under);
 
         expect(await step.check(context), isA<Ready>());
         await step.apply(context);
         expect(await step.check(context), isA<Satisfied>());
-        expect(machine.changing, contains('kubectl delete ippool default-ipv4-ippool'));
+        expect(machine.changing, contains(deleteDefault));
         expect(machine.changing, contains(rollAgent));
         expect(machine.said.join('\n'), contains('came back covering 10.1.0.0/16'));
       },
     );
 
     test('the heal is taken once and no more', () async {
-      final ClusterMachine machine = ClusterMachine()..shell.answers(livePool, '10.1.0.0/16');
+      final ClusterMachine machine = ClusterMachine()
+        ..shell.answers(pools, 'default-ipv4-ippool=10.1.0.0/16\n');
 
-      const VerifyIppoolConvergedWithSelfHeal step = VerifyIppoolConvergedWithSelfHeal(
+      const VerifyIppoolConvergedWithSelfHeal short = VerifyIppoolConvergedWithSelfHeal(
         podCidr: podCidr,
         timeoutSeconds: 30,
         intervalSeconds: 5,
         rolloutTimeoutSeconds: 120,
       );
-      await expectLater(step.apply(machine.contextFor(under)), throwsA(isA<WaitedTooLong>()));
+      await expectLater(short.apply(machine.contextFor(under)), throwsA(isA<WaitedTooLong>()));
       expect(
-        machine.changing.where(
-          (String each) => each == 'kubectl delete ippool default-ipv4-ippool',
-        ),
+        machine.changing.where((String each) => each == deleteDefault),
         hasLength(1),
         reason: 'a machine deleting a pool over and over against something it cannot fix',
       );
     });
 
     test('a pool that is not there yet is waited for and never healed', () async {
-      // An empty read is Calico not having created the pool, and deleting nothing helps nothing.
+      // An empty list is Calico not having created the pool, and deleting nothing helps nothing.
       final ClusterMachine machine = ClusterMachine();
-      machine.shell.fails(livePool);
+      machine.shell.answers(pools, '');
       int looks = 0;
-      machine.shell.changes(livePool, () {
+      machine.shell.changes(pools, () {
         looks++;
         if (looks >= 3) {
-          machine.shell.answers(livePool, podCidr);
+          machine.shell.answers(pools, 'default-ipv4-ippool=$podCidr\n');
         }
       });
 
-      const VerifyIppoolConvergedWithSelfHeal step = VerifyIppoolConvergedWithSelfHeal(
-        podCidr: podCidr,
-        timeoutSeconds: 180,
-        intervalSeconds: 5,
-        rolloutTimeoutSeconds: 120,
-      );
       await step.apply(machine.contextFor(under));
       expect(
         machine.changing.where((String each) => each.contains('delete ippool')),
         isEmpty,
         reason: 'there was no pool to delete',
       );
+    });
+
+    test('the pool for the new range standing and the default gone is converged at once', () async {
+      // The order this step proves: the pool for the new range went in before the default one went,
+      // so no agent start found a cluster without an IPv4 pool, and there is nothing to heal.
+      final ClusterMachine machine = ClusterMachine()
+        ..shell.answers(pools, '${CreateIpv4IppoolForPodCidr.poolName}=$podCidr\n');
+      final StepContext context = machine.contextFor(under);
+
+      expect(await step.check(context), isA<Satisfied>());
+      await step.apply(context);
+      expect(machine.changing, isEmpty);
+      expect(machine.said.join('\n'), isNot(contains('came back covering')));
+    });
+
+    test(
+      'a pool of somebody else\'s on another range is never deleted, and the wait names it',
+      () async {
+        final ClusterMachine machine = ClusterMachine()
+          ..shell.answers(
+            pools,
+            '${CreateIpv4IppoolForPodCidr.poolName}=$podCidr\noffice=192.168.50.0/24\n',
+          );
+
+        await expectLater(
+          step.apply(machine.contextFor(under)),
+          throwsA(
+            isA<WaitedTooLong>().having(
+              (WaitedTooLong failure) => failure.waitingFor,
+              'waitingFor',
+              contains('office covers 192.168.50.0/24'),
+            ),
+          ),
+        );
+        expect(machine.changing.where((String each) => each.contains('delete')), isEmpty);
+      },
+    );
+
+    test('a cluster that cannot list its pools is not waited out', () async {
+      // Read as "there is no pool", a cluster that could not be asked would be watched until the
+      // deadline and the pool blamed for it.
+      final ClusterMachine machine = ClusterMachine()
+        ..cannotBeReached('ippool', stderr: 'connection refused');
+
+      expect(await step.check(machine.contextFor(under)), isA<Blocked>());
+      await expectLater(step.apply(machine.contextFor(under)), throwsA(isA<StateError>()));
     });
   });
 

@@ -10,6 +10,7 @@ export 'src/registry.dart';
 export 'src/steps/align_calico_backend.dart';
 export 'src/steps/align_calico_nat_port_range.dart';
 export 'src/steps/apply_cluster_issuer.dart';
+export 'src/steps/create_ipv4_ippool_for_pod_cidr.dart';
 export 'src/steps/export_cluster_credentials.dart';
 export 'src/steps/kubectl.dart';
 export 'src/steps/kubernetes_configmap_from_directory.dart';

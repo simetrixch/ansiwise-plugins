@@ -2,6 +2,7 @@ import 'package:ansiwise_core/ansiwise_core.dart';
 import 'steps/align_calico_backend.dart';
 import 'steps/align_calico_nat_port_range.dart';
 import 'steps/apply_cluster_issuer.dart';
+import 'steps/create_ipv4_ippool_for_pod_cidr.dart';
 import 'steps/export_cluster_credentials.dart';
 import 'steps/kubernetes_configmap_from_directory.dart';
 import 'steps/kubernetes_namespace.dart';
@@ -53,9 +54,15 @@ const Map<StepName, RegisteredStep> kubernetesSteps = <StepName, RegisteredStep>
     create: RequireUnpopulatedClusterForPodCidrMigration.fromArguments,
     arguments: RequireUnpopulatedClusterForPodCidrMigration.arguments,
   ),
+  StepName('create_ipv4_ippool_for_pod_cidr'): RegisteredStep(
+    name: StepName('create_ipv4_ippool_for_pod_cidr'),
+    source: 'lib/src/steps/create_ipv4_ippool_for_pod_cidr.dart:26',
+    create: CreateIpv4IppoolForPodCidr.fromArguments,
+    arguments: CreateIpv4IppoolForPodCidr.arguments,
+  ),
   StepName('remove_default_ipv4_ippool'): RegisteredStep(
     name: StepName('remove_default_ipv4_ippool'),
-    source: 'lib/src/steps/remove_default_ipv4_ippool.dart:16',
+    source: 'lib/src/steps/remove_default_ipv4_ippool.dart:18',
     create: RemoveDefaultIpv4Ippool.fromArguments,
     arguments: RemoveDefaultIpv4Ippool.arguments,
   ),
@@ -73,7 +80,7 @@ const Map<StepName, RegisteredStep> kubernetesSteps = <StepName, RegisteredStep>
   ),
   StepName('verify_ippool_converged_with_self_heal'): RegisteredStep(
     name: StepName('verify_ippool_converged_with_self_heal'),
-    source: 'lib/src/steps/verify_ippool_converged_with_self_heal.dart:20',
+    source: 'lib/src/steps/verify_ippool_converged_with_self_heal.dart:27',
     create: VerifyIppoolConvergedWithSelfHeal.fromArguments,
     arguments: VerifyIppoolConvergedWithSelfHeal.arguments,
   ),
