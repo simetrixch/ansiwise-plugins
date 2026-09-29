@@ -38,6 +38,11 @@ const Set<String> notCoveredByAFakeMachine = <String>{
   // driven twice directly instead, over a machine where the two paths differ, in
   // write_file_from_template_test.
   'write_file_from_template',
+  // The probe hands every text argument with no default the same one-character value, and one
+  // character is no IPv4 or IPv6 address, so the check refuses before anything is written and
+  // nothing about a second run is measured. It is driven directly instead, over real addresses and
+  // a hosts file that already maps the name, in set_host_address_test.
+  'set_host_address',
   // It leaves its postcondition behind with the row's enable command, and a fake shell records that
   // without carrying it out — so the status it answers after the apply is the status it answered
   // before, and nothing about the second run would be measured.

@@ -6,6 +6,7 @@ import 'conditions/keys_compare.dart';
 import 'conditions/yaml_key_has_value.dart';
 import 'steps/host/activate_public_src_routing.dart';
 import 'steps/host/add_shell_alias.dart';
+import 'steps/host/set_host_address.dart';
 import 'steps/host/add_user_to_group.dart';
 import 'steps/host/apply_netplan.dart';
 import 'steps/host/clean_package_cache.dart';
@@ -266,6 +267,15 @@ const Map<StepName, RegisteredStep> hostSteps = <StepName, RegisteredStep>{
     create: AddShellAlias.fromArguments,
     arguments: AddShellAlias.arguments,
     answers: AddShellAlias.answers,
+  ),
+  // A host name kept on this machine, for a service whose public address the machine itself must not
+  // use, because the service admits requests only from where it is reached privately.
+  StepName('set_host_address'): RegisteredStep(
+    name: StepName('set_host_address'),
+    source: 'lib/src/steps/host/set_host_address.dart:19',
+    create: SetHostAddress.fromArguments,
+    arguments: SetHostAddress.arguments,
+    answers: SetHostAddress.answers,
   ),
   StepName('export_kubeconfig'): RegisteredStep(
     name: StepName('export_kubeconfig'),
