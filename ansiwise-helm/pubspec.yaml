@@ -22,7 +22,7 @@ dependencies:
   ansiwise_core:
     git:
       url: https://github.com/simetrixch/ansiwise-core.git
-      ref: eedbed3dd4edc290764e319f60cc7c9b05cd2b00
+      ref: ff506f295890587fc3821eaf81fb3a773e63ccb8
   # The release step compares the values file a row names with what the release currently holds,
   # and that file is YAML. A plugin that reads its own files declares the parser itself rather than
   # leaning on a transitive dependency it does not control.
@@ -37,5 +37,5 @@ dev_dependencies:
   ansiwise_checks:
     git:
       url: https://github.com/simetrixch/ansiwise-checks.git
-      ref: 8ad9be76048c286f32194535fcf9eb657d28d704
+      ref: ac1dcd519efc83d00ae3cbc07261bf65925ba7e7
       path: registry
