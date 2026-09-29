@@ -21,6 +21,10 @@ import 'vault_profile.dart';
 /// [vaultProfileFrom] itself returned, and nothing is built out of the cluster's name or the host
 /// it is served on.
 ///
+/// **Its host goes with it.** A row that keeps the Vault's name pointed at an address of this
+/// machine needs the name by itself, taken from this same address and never composed a second
+/// time.
+///
 /// **It only reads.** Nothing on the machine changes, so a dry run performs it and the value is
 /// there for the rows that follow.
 final class MeasureVaultUrl extends ObservingStep {
@@ -55,6 +59,10 @@ final class MeasureVaultUrl extends ObservingStep {
       name: MeasurementName('vault_url'),
       describes: "the address this installation's Vault answers at, as its profile records it",
     ),
+    MeasurementSpec(
+      name: MeasurementName('vault_host'),
+      describes: 'the host name in that address',
+    ),
   ];
 
   /// The checkout this installation runs from.
@@ -78,7 +86,14 @@ final class MeasureVaultUrl extends ObservingStep {
     // that the steps of this family write where they go on to FILL a slot would publish an empty
     // text here, which the sink refuses and which a later row could not tell from an address.
     final String url = vault.url!;
+    final String host = Uri.tryParse(url)?.host ?? '';
+    if (host.isEmpty) {
+      return CheckResult.blocked(
+        '${vault.path} carries "$url" under ${layout.urlKey}, which is no address with a host name',
+      );
+    }
     context.measurements.publish(const MeasurementName('vault_url'), url);
+    context.measurements.publish(const MeasurementName('vault_host'), host);
     return CheckResult.satisfied("this installation's Vault answers at $url");
   }
 }

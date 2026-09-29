@@ -54,6 +54,16 @@ void main() {
 
     expect(await step.check(it.context), isA<Satisfied>());
     expect(it.published[const MeasurementName('vault_url')], 'https://one.example');
+    expect(it.published[const MeasurementName('vault_host')], 'one.example');
+  });
+
+  test('an address with no host name refuses and publishes nothing', () async {
+    final ({StepContext context, Map<MeasurementName, String> published}) it = runOver(
+      'global:\n  vaultUrl: one.example\n',
+    );
+
+    expect(await step.check(it.context), isA<Blocked>());
+    expect(it.published, isEmpty);
   });
 
   test('a profile with no address refuses and publishes nothing', () async {

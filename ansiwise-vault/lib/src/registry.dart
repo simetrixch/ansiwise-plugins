@@ -121,15 +121,10 @@ const Map<StepName, RegisteredStep> vaultSteps = <StepName, RegisteredStep>{
   // the reason the entries above give.
   StepName('measure_vault_url'): RegisteredStep(
     name: StepName('measure_vault_url'),
-    source: 'lib/src/steps/measure_vault_url.dart:26',
+    source: 'lib/src/steps/measure_vault_url.dart:30',
     create: MeasureVaultUrl.fromArguments,
     arguments: MeasureVaultUrl.arguments,
-    publishes: <MeasurementSpec>[
-      MeasurementSpec(
-        name: MeasurementName('vault_url'),
-        describes: "the address this installation's Vault answers at, as its profile records it",
-      ),
-    ],
+    publishes: MeasureVaultUrl.publishes,
   ),
   // The gate that proves a mount's connection to its cluster with a real login attempt. Which
   // answer holds the credential it presents is the row's to say, so no answer is declared here.
