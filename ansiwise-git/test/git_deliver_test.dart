@@ -21,9 +21,10 @@ void main() {
 
   const String tip = 'a1b2c3d4';
 
-  FakeShell dirty({String status = ' M clusters/one.yaml\n'}) =>
-      checkout(head: branch)
-        ..answers('git -C $repository status --porcelain -- clusters configs', status);
+  FakeShell dirty({String status = ' M clusters/one.yaml\n'}) => checkout(head: branch)
+    ..answers('git -C $repository ls-files -- clusters', 'clusters/one.yaml\n')
+    ..answers('git -C $repository ls-files -- configs', 'configs/one.yaml\n')
+    ..answers('git -C $repository status --porcelain -- clusters configs', status);
 
   group('recording what was written', () {
     test('a tree with changes among the named paths has work to do', () async {
@@ -66,16 +67,22 @@ void main() {
           paths: <String>['clusters', 'cluster'],
           message: 'what this run wrote',
         );
+        // Only `clusters` is arranged: `cluster` is answered with nothing by the index and by the
+        // work tree, which is how git answers a path it holds nothing at.
         final FakeShell shell = checkout(head: branch)
+          ..answers('git -C $repository ls-files -- clusters', 'clusters/one.yaml\n')
           ..answers(
             'git -C $repository status --porcelain -- clusters cluster',
             ' M clusters/one.yaml\n',
-          )
-          ..fails('git -C $repository ls-files --error-unmatch -- cluster');
+          );
 
         expect(
           await naming.check(contextOn(shell: shell)),
-          isA<Blocked>().having((Blocked blocked) => blocked.reason, 'reason', contains('cluster')),
+          isA<Blocked>().having(
+            (Blocked blocked) => blocked.reason,
+            'reason',
+            contains('holds nothing at cluster —'),
+          ),
         );
       },
     );
@@ -85,13 +92,48 @@ void main() {
       // heard of the file, and add takes it anyway. Asking the index alone would refuse the whole
       // row at the one moment it matters most.
       final FakeShell shell = dirty()
-        ..fails('git -C $repository ls-files --error-unmatch -- clusters')
+        ..answers('git -C $repository ls-files -- clusters', '')
         ..answers(
           'git -C $repository ls-files --others --exclude-standard -- clusters',
           'clusters/active/one.yaml\n',
         );
 
       expect(await commit.check(contextOn(shell: shell)), isA<Ready>());
+    });
+
+    test('a path git does not track yet leaves no failed command in the record', () async {
+      // Every first installation meets this: the run writes `installation` before git has heard of
+      // it. The first answer arranged below is how git answers the question this step asked
+      // before, with --error-unmatch. A failed command's output is kept in the record, so that
+      // question put an error line into the record of a green run.
+      const GitCommit first = GitCommit(
+        repository: repository,
+        paths: <String>['installation'],
+        message: 'what this run wrote',
+      );
+      final FakeShell shell = checkout(head: branch)
+        ..fails(
+          'git -C $repository ls-files --error-unmatch -- installation',
+          stderr: "error: pathspec 'installation' did not match any file(s) known to git",
+        )
+        ..answers(
+          'git -C $repository ls-files --others --exclude-standard -- installation',
+          'installation/profile.yaml\n',
+        )
+        ..answers('git -C $repository status --porcelain -- installation', '?? installation/\n');
+      final MemoryRecorder recorder = MemoryRecorder(FakeClock());
+
+      expect(await first.check(contextOn(shell: recording(shell, recorder))), isA<Ready>());
+      expect(recorder.output.where((String line) => line.contains('error: pathspec')), isEmpty);
+      expect(
+        recorder.only<CommandFinished>().where((CommandFinished c) => c.exitCode != 0),
+        isEmpty,
+      );
+      expect(
+        recorder.only<CommandStarted>().map((CommandStarted c) => c.argv.join(' ')),
+        contains('git -C $repository ls-files -- installation'),
+        reason: 'the question went through the record, so a clean record means it did not fail',
+      );
     });
 
     test(

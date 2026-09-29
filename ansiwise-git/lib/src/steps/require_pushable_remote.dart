@@ -109,7 +109,12 @@ final class RequirePushableRemote extends ObservingStep {
       );
     }
 
-    final CommandResult offered = await _git(context, <String>['push', '--dry-run', remote, named]);
+    final CommandResult offered = await _git(context, <String>[
+      'push',
+      '--dry-run',
+      remote,
+      await _refspec(context, named),
+    ]);
     if (!offered.ok) {
       return CheckResult.blocked(
         '${address.trimmed} would refuse a push of $named — either this credential may not write '
@@ -118,6 +123,29 @@ final class RequirePushableRemote extends ObservingStep {
     }
 
     return CheckResult.satisfied('${address.trimmed} answers and would accept a push');
+  }
+
+  /// What the push of [named] is offered as: the branch itself where this checkout holds it, and
+  /// HEAD under the branch's name where it does not.
+  ///
+  /// **The second is a run whose rows have not cut the branch yet**, a test or a dry run of the
+  /// program that cuts it. git answers a push of a branch the checkout does not hold with `src
+  /// refspec ... does not match any`, and a failed command's output is kept in the record. HEAD
+  /// under the branch's name puts the same question to the remote: whether this credential may
+  /// write that branch.
+  ///
+  /// Asked with for-each-ref, whose "no" is an empty answer. `rev-parse --verify` answers it with
+  /// exit 1, which the record keeps as a failed command.
+  Future<String> _refspec(StepContext context, String named) async {
+    final String ref = 'refs/heads/$named';
+    final CommandResult held = await context.shell.run(
+      Command.observing(
+        'git',
+        arguments: <String>['-C', repository, 'for-each-ref', '--format=%(refname)', ref],
+      ),
+    );
+    final bool holds = held.ok && held.stdout.split('\n').any((String line) => line.trim() == ref);
+    return holds ? named : 'HEAD:$ref';
   }
 
   /// The branch this row is about, from whichever of the two statements the row made.

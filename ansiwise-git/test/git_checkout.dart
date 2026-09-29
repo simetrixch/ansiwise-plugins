@@ -39,7 +39,7 @@ const String branch = 'm1.example.com';
 /// [log] is for the cases where what a step SAYS is the thing being measured. It defaults to the
 /// one that keeps nothing, so a case that is about the machine is not made to arrange a log.
 StepContext contextOn({
-  FakeShell? shell,
+  Shell? shell,
   FakeFiles? files,
   String? name = branch,
   String answerName = nameAnswer,
@@ -74,16 +74,36 @@ FakeShell checkout({
     ..answers('git -C $repository remote get-url $remote', 'git@example.com:example/tree.git\n')
     ..answers('git -C $repository ls-remote --heads $remote', 'abc\trefs/heads/$base\n')
     ..answers('git -C $repository push --dry-run $remote $base', '')
+    ..answers(
+      'git -C $repository for-each-ref --format=%(refname) refs/heads/$base',
+      'refs/heads/$base\n',
+    )
     ..answers('git check-ref-format --branch $name', '$name\n')
     ..answers('git -C $repository rev-parse --abbrev-ref HEAD', '$head\n')
     ..answers('git -C $repository status --porcelain', status);
   if (branchExists) {
-    shell.answers('git -C $repository rev-parse --verify --quiet refs/heads/$name', 'abc\n');
+    shell
+      ..answers('git -C $repository rev-parse --verify --quiet refs/heads/$name', 'abc\n')
+      ..answers(
+        'git -C $repository for-each-ref --format=%(refname) refs/heads/$name',
+        'refs/heads/$name\n',
+      );
   } else {
     shell.fails('git -C $repository rev-parse --verify --quiet refs/heads/$name');
   }
   return shell;
 }
+
+/// [shell] wired the way a run wires a step's shell, so whatever it runs reaches [recorder].
+///
+/// A run keeps the output of a command that failed and only the exit code of one that did not, so
+/// what reaches [recorder] is what an operator reads in the record of the step.
+Shell recording(FakeShell shell, MemoryRecorder recorder) => RecordingShell(
+  shell,
+  recorder: recorder,
+  redactor: Redactor.none,
+  step: const StepName('under_test'),
+);
 
 /// A log that keeps nothing, so a step's own notes do not land in the middle of a test run.
 final class SilentLog implements Logger {

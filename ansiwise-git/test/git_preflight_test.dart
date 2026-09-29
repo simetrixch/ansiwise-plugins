@@ -80,6 +80,10 @@ void main() {
       final FakeShell shell = FakeShell()
         ..answers('git -C $repository remote get-url upstream', 'git@example.com:example/t.git\n')
         ..answers('git -C $repository ls-remote --heads upstream', 'abc\trefs/heads/$base\n')
+        ..answers(
+          'git -C $repository for-each-ref --format=%(refname) refs/heads/$base',
+          'refs/heads/$base\n',
+        )
         ..answers('git -C $repository push --dry-run upstream $base', '');
 
       expect(await named.check(contextOn(shell: shell)), isA<Satisfied>());
@@ -92,7 +96,7 @@ void main() {
         remote: remote,
         branchAnswer: nameAnswer,
       );
-      final FakeShell shell = checkout()
+      final FakeShell shell = checkout(branchExists: true)
         ..answers('git -C $repository push --dry-run $remote $branch', '');
 
       expect(await perInstallation.check(contextOn(shell: shell)), isA<Satisfied>());
@@ -153,6 +157,87 @@ void main() {
         expect(command.environment['GIT_SSH_COMMAND'], contains('BatchMode=yes'));
         expect(command.timeout, isNotNull, reason: 'a remote that never answers is not waited for');
       }
+    });
+  });
+
+  group('a branch this run has not cut yet', () {
+    // A test or dry run of the program that cuts the branch: the rows that cut it did not run, so
+    // the checkout does not hold it when this gate is asked.
+    const RequirePushableRemote perInstallation = RequirePushableRemote(
+      repository: repository,
+      remote: remote,
+      branchAnswer: nameAnswer,
+    );
+
+    /// A checkout without the branch, which answers the push this step offered before the way git
+    /// answers it.
+    FakeShell uncut() => checkout()
+      ..fails(
+        'git -C $repository push --dry-run $remote $branch',
+        stderr:
+            'error: src refspec $branch does not match any\n'
+            "error: failed to push some refs to 'git@example.com:example/tree.git'",
+      );
+
+    test('is proven with HEAD under its name, and the record carries no failed push', () async {
+      final FakeShell shell = uncut();
+      final MemoryRecorder recorder = MemoryRecorder(FakeClock());
+
+      expect(
+        await perInstallation.check(contextOn(shell: recording(shell, recorder))),
+        isA<Satisfied>(),
+      );
+      expect(
+        shell.ran,
+        contains('git -C $repository push --dry-run $remote HEAD:refs/heads/$branch'),
+      );
+      expect(recorder.output.where((String line) => line.contains('src refspec')), isEmpty);
+      expect(
+        recorder.only<CommandFinished>().where((CommandFinished c) => c.exitCode != 0),
+        isEmpty,
+      );
+    });
+
+    test(
+      'THE INNOCENT NEIGHBOUR: a branch the checkout holds is offered by its own name',
+      () async {
+        // Without this, a step that always offered HEAD would pass the case above, and a real run
+        // would prove a push of whatever HEAD is instead of the branch the run produced.
+        final FakeShell shell = checkout(branchExists: true);
+
+        expect(await perInstallation.check(contextOn(shell: shell)), isA<Satisfied>());
+        expect(shell.ran, contains('git -C $repository push --dry-run $remote $branch'));
+        expect(shell.ran.where((String c) => c.contains('HEAD:')), isEmpty);
+      },
+    );
+
+    test('a credential that may not write is still refused, and the record keeps why', () async {
+      final FakeShell shell = uncut()
+        ..fails(
+          'git -C $repository push --dry-run $remote HEAD:refs/heads/$branch',
+          stderr: 'remote: Permission denied',
+        );
+      final MemoryRecorder recorder = MemoryRecorder(FakeClock());
+
+      final CheckResult answer = await perInstallation.check(
+        contextOn(shell: recording(shell, recorder)),
+      );
+      expect((answer as Blocked).reason, contains('Permission denied'));
+      // The other half of the first case: a refusal is a failed command and its output IS kept, so
+      // the clean record there means nothing failed rather than nothing was kept.
+      expect(recorder.output, contains('remote: Permission denied'));
+    });
+
+    test('a remote that moved ahead of the branch the checkout holds is still refused', () async {
+      final FakeShell shell = checkout(branchExists: true)
+        ..fails(
+          'git -C $repository push --dry-run $remote $branch',
+          stderr: ' ! [rejected]        $branch -> $branch (fetch first)',
+        );
+
+      final CheckResult answer = await perInstallation.check(contextOn(shell: shell));
+      expect((answer as Blocked).reason, contains('fetch first'));
+      expect(answer.reason, contains('moved ahead'));
     });
   });
 }

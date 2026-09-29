@@ -188,14 +188,16 @@ final class GitCommit extends IrreversibleStep {
   }
 
   /// Whether the index holds anything under [path].
+  ///
+  /// **Its "no" is an empty answer, and never `--error-unmatch`.** That flag turns "nothing under
+  /// this path" into `error: pathspec ... did not match any file(s)` and exit 1, and a failed
+  /// command's output is kept in the record — so every first installation, where the path is not
+  /// tracked yet, would carry an error line for a question that had an ordinary answer.
   Future<bool> _inTheIndex(StepContext context, String path) async {
     final CommandResult answer = await context.shell.run(
-      Command.observing(
-        'git',
-        arguments: <String>['-C', repository, 'ls-files', '--error-unmatch', '--', path],
-      ),
+      Command.observing('git', arguments: <String>['-C', repository, 'ls-files', '--', path]),
     );
-    return answer.ok;
+    return answer.ok && answer.trimmed.isNotEmpty;
   }
 
   /// Whether the work tree carries anything under [path] that git would take.
