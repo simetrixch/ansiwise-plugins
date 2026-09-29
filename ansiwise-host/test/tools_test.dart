@@ -638,11 +638,15 @@ void main() {
         }),
       );
       final HostMachine machine = withTools(
-        answers: <String, String>{'jq --version': 'jq-1.7.1\n'},
+        answers: <String, String>{
+          'jq --version': 'jq-1.7.1\n',
+          'tailscale version': '1.102.4\n  tailscale commit: abcdef1\n',
+        },
       );
 
       final CheckResult answer = await everyPinned.check(machine.contextFor(under));
       expect((answer as Blocked).reason, contains('jq is at 1.7.1'));
+      expect(answer.reason, contains('tailscale is at 1.102.4'));
       expect(
         RequireCliToolVersions.arguments
             .singleWhere((ArgumentSpec spec) => spec.name == 'unpinnable')
