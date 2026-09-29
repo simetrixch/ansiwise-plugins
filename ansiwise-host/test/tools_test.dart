@@ -627,6 +627,30 @@ void main() {
       expect((answer as Blocked).reason, contains('yq is at 4.40.0'));
     });
 
+    test('a row that names no tool unpinnable holds every tool to its pin', () async {
+      // Where every tool is installed at its pin, the row leaves the list off, and a difference on
+      // the tool that was reported before now fails like the others.
+      final RequireCliToolVersions everyPinned = RequireCliToolVersions.fromArguments(
+        const Arguments(<String, Object>{
+          'tools': <String>['jq=jq-1.8.2', 'tailscale=v1.98.10'],
+          'version_commands': <String>['jq=--version', 'tailscale=version'],
+          'pin_prefixes': pinPrefixes,
+        }),
+      );
+      final HostMachine machine = withTools(
+        answers: <String, String>{'jq --version': 'jq-1.7.1\n'},
+      );
+
+      final CheckResult answer = await everyPinned.check(machine.contextFor(under));
+      expect((answer as Blocked).reason, contains('jq is at 1.7.1'));
+      expect(
+        RequireCliToolVersions.arguments
+            .singleWhere((ArgumentSpec spec) => spec.name == 'unpinnable')
+            .required,
+        isFalse,
+      );
+    });
+
     test('a tool named here with nothing able to ask it its version is caught', () async {
       // The assertion is the only thing binding the list to the steps that install them: a tool
       // added to one and not the other would otherwise never be installed and nothing would say so.

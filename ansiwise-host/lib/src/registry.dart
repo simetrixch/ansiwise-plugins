@@ -316,13 +316,13 @@ const Map<StepName, RegisteredStep> hostSteps = <StepName, RegisteredStep>{
   ),
   StepName('install_tailscale_client'): RegisteredStep(
     name: StepName('install_tailscale_client'),
-    source: 'lib/src/steps/host/install_tailscale_client.dart:18',
+    source: 'lib/src/steps/host/install_tailscale_client.dart:22',
     create: InstallTailscaleClient.fromArguments,
     arguments: InstallTailscaleClient.arguments,
   ),
   StepName('require_cli_tool_versions'): RegisteredStep(
     name: StepName('require_cli_tool_versions'),
-    source: 'lib/src/steps/host/require_cli_tool_versions.dart:28',
+    source: 'lib/src/steps/host/require_cli_tool_versions.dart:21',
     create: RequireCliToolVersions.fromArguments,
     arguments: RequireCliToolVersions.arguments,
   ),

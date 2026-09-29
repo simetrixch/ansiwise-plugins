@@ -4,24 +4,17 @@ import 'install_tool_prerequisites.dart';
 /// Holds every tool on the machine against the version the program pins for it.
 ///
 /// **This is the only thing binding the list of tools to the steps that install them.** Each tool
-/// arrives its own way — most of them as a release fetched at a pin, one out of the package manager,
-/// one out of an installer somebody else wrote — and each of those is a row of its own in the
-/// program file, so there is no loop over this list that installs them. Without this a tool added to
-/// the list would simply never be installed, and nothing would say so.
+/// arrives its own way — as a release fetched at a pin, out of the package manager, out of an
+/// installer somebody else wrote — and each of those is a row of its own in the program file, so
+/// there is no loop over this list that installs them. Without this a tool added to the list would
+/// simply never be installed, and nothing would say so.
 ///
-/// **Two of them can only be reported and never enforced, and that distinction is deliberate.** The
-/// tool from the package manager and the one from its makers' own installer take no version at all.
-/// The package manager carries exactly ONE of the tool it ships, and the installer fetches whatever
-/// its makers publish on the day, so no re-run of this program can reach a different version for
-/// either of them — and failing on the version they do carry would make an install that can never
-/// end green on a machine whose package manager disagrees with the pin. What is left is worth
-/// having: the difference is reported, so an operator who cares can act on it. Being MISSING is
-/// still a failure, for every tool without exception.
-///
-/// **Their presence is what decides whether to install them, and their version is only reported.**
-/// That is the other half of the same fact, and it is why the two steps that put those two on the
-/// machine take no version argument at all: there is no version they could be given that would
-/// change what they fetch.
+/// **A tool the row names unpinnable is only reported, never enforced.** Its install path takes no
+/// version — the package manager carries exactly ONE of the tool it ships, an installer that takes
+/// no version fetches whatever its makers publish on the day — so no re-run of the program can reach
+/// a different version, and failing on the version it does carry would make an install that can
+/// never end green. The difference is reported, so an operator who cares can act on it. Being
+/// MISSING is still a failure, for every tool without exception.
 ///
 /// **Everything wrong is reported at once.** An operator told about one tool, who fixes it, runs
 /// again and is then told about the next has paid for four runs to learn what one could have said.
@@ -30,15 +23,15 @@ final class RequireCliToolVersions extends ObservingStep {
   /// machine, asking each one its version the way [versionCommands] states.
   const RequireCliToolVersions({
     required this.tools,
-    required this.unpinnable,
     required this.versionCommands,
     required this.pinPrefixes,
+    this.unpinnable = const <String>[],
   });
 
   /// Builds the step from what the program gave it.
   factory RequireCliToolVersions.fromArguments(Arguments arguments) => RequireCliToolVersions(
     tools: arguments.textList('tools'),
-    unpinnable: arguments.textList('unpinnable'),
+    unpinnable: arguments.has('unpinnable') ? arguments.textList('unpinnable') : const <String>[],
     versionCommands: arguments.textList('version_commands'),
     pinPrefixes: arguments.textList('pin_prefixes'),
   );
@@ -52,14 +45,16 @@ final class RequireCliToolVersions extends ObservingStep {
           'every tool the program pins, each written as its name, an equals sign and its '
           'pinned version',
     ),
-    // No default: which tools arrive without a version is decided by which install path the
-    // program chose for each, so the program row states it.
+    // Which tools arrive without a version is decided by which install path the program chose for
+    // each, so the program row states it. A row naming none holds every tool to its pin.
     ArgumentSpec(
       name: 'unpinnable',
       kind: ArgumentKind.textList,
+      required: false,
       describes:
           'the tools whose install path takes no version, so a difference is reported and '
-          'never failed on — being missing still fails',
+          'never failed on — being missing still fails. Leave it off where every tool is '
+          'installed at its pin',
     ),
     // No default, and no table of tools in this file. Each of these tools answers differently, and
     // which tools a run holds is decided by the program that pins them — so a map written here

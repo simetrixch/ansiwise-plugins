@@ -1,13 +1,17 @@
 import 'package:ansiwise_core/ansiwise_core.dart';
 import 'install_tool_prerequisites.dart';
+import 'require_cli_tool_versions.dart';
 
 /// Puts the private-network client on the machine, using the installer its makers publish.
 ///
-/// **Its presence is what decides whether to install it, because the installer takes no version.**
-/// Whatever is current at the moment it runs is what lands, so a machine set up today and one set up
-/// next month carry different versions and nothing in a run can reach the pinned one. That is
-/// reported by the step that holds every tool against its pin, and never failed on — an install that
-/// failed on it could never end green anywhere.
+/// **With a version, the version decides whether to install it.** The installer is handed the pin
+/// in `TAILSCALE_VERSION` and passes it to the package manager, so a machine set up today and one
+/// set up next month carry the same client, and a re-run brings a machine that drifted back to the
+/// pin. A pin older than the client that stands there is refused by the package manager, which
+/// steps a package down only when told to.
+///
+/// **Without one, its presence decides**, and whatever the installer fetches on the day is what
+/// lands.
 ///
 /// **Being installed says nothing about being on a network.** The service runs from the moment it is
 /// installed and belongs to nothing until a credential has been used to join, which is a separate
@@ -15,14 +19,21 @@ import 'install_tool_prerequisites.dart';
 ///
 /// The installer is fetched to a file first rather than fed straight into a shell, so what ran is
 /// still on the machine to be looked at when something about it goes wrong.
-final class InstallTailscaleClient extends ReversibleStep<bool> {
-  /// Puts the client on the machine from [installerUrl].
-  const InstallTailscaleClient({required this.installerUrl, required this.installerPath});
+final class InstallTailscaleClient extends IrreversibleStep {
+  /// Puts the client on the machine from [installerUrl], at [version] where the row names one.
+  const InstallTailscaleClient({
+    required this.installerUrl,
+    required this.installerPath,
+    required this.pinPrefixes,
+    this.version,
+  });
 
   /// Builds the step from what the program gave it.
   factory InstallTailscaleClient.fromArguments(Arguments arguments) => InstallTailscaleClient(
     installerUrl: arguments.text('installer_url'),
     installerPath: arguments.text('installer_path'),
+    pinPrefixes: arguments.textList('pin_prefixes'),
+    version: arguments.optionalText('version'),
   );
 
   /// What this step accepts.
@@ -41,6 +52,23 @@ final class InstallTailscaleClient extends ReversibleStep<bool> {
       required: false,
       defaultValue: '/tmp/tailscale-install.sh',
     ),
+    ArgumentSpec(
+      name: 'version',
+      kind: ArgumentKind.text,
+      required: false,
+      describes:
+          'the version the program pins for the client, handed to the installer. Without one, '
+          'a client that is there is left alone and a new one is whatever the installer fetches',
+    ),
+    // No default, for the reason the step that fetches pinned releases gives: which tag shapes are
+    // in play is decided by the tools the program pins, so the list stands once in the program.
+    ArgumentSpec(
+      name: 'pin_prefixes',
+      kind: ArgumentKind.textList,
+      describes:
+          'the shapes a release tag is written with, taken off the pin before it is handed to the '
+          'installer and held against what the client answers — such as v for v1.102.4',
+    ),
   ];
 
   /// What the tool is called.
@@ -49,20 +77,64 @@ final class InstallTailscaleClient extends ReversibleStep<bool> {
   /// The service that runs from the moment the client is installed.
   static const String service = 'tailscaled';
 
+  /// The variable the installer reads the version to install from.
+  static const String versionVariable = 'TAILSCALE_VERSION';
+
+  /// What the client is asked its version with. Its first line is the bare version.
+  static const List<String> versionCommand = <String>['version'];
+
   /// The installer its makers publish.
   final String installerUrl;
 
   /// Where the installer is put.
   final String installerPath;
 
-  @override
-  Future<CheckResult> check(StepContext context) async =>
-      await InstallToolPrerequisites.onPath(context, tool)
-      ? const CheckResult.satisfied('$tool is on the path')
-      : const CheckResult.ready();
+  /// The version the program pins, or null where the row names none.
+  final String? version;
+
+  /// The shapes a release tag is written with, taken off the pin.
+  final List<String> pinPrefixes;
+
+  /// The pin without the shape its release tag carries, which is how the installer and the client
+  /// both write a version, or null where the row names no version.
+  String? get _pinned =>
+      version == null ? null : RequireCliToolVersions.bare(version!, pinPrefixes);
 
   @override
-  Future<StepPlan> plan(StepContext context) async => StepPlan.argv(<String>['sh', installerPath]);
+  String get irreversibleReason =>
+      'the package manager puts the client over whatever version of it stood there, and keeps no '
+      'copy of the one it replaced';
+
+  @override
+  Future<CheckResult> check(StepContext context) async {
+    final String? pinned = _pinned;
+    if (pinned == null) {
+      return await InstallToolPrerequisites.onPath(context, tool)
+          ? const CheckResult.satisfied('$tool is on the path')
+          : const CheckResult.ready();
+    }
+    if (pinned.isEmpty) {
+      return const CheckResult.blocked(
+        'the row gives $tool an empty version, and the installer would read that as no version and '
+        'fetch whatever is current',
+      );
+    }
+    final String? installed = (await RequireCliToolVersions.installedVersion(
+      context,
+      tool,
+      versionCommand,
+    )).version;
+    return installed == pinned
+        ? CheckResult.satisfied('$tool is at $installed')
+        : const CheckResult.ready();
+  }
+
+  @override
+  Future<StepPlan> plan(StepContext context) async => StepPlan.argv(<String>[
+    if (_pinned case final String pinned) ...<String>['env', '$versionVariable=$pinned'],
+    'sh',
+    installerPath,
+  ]);
 
   @override
   Future<void> apply(StepContext context) async {
@@ -76,7 +148,11 @@ final class InstallTailscaleClient extends ReversibleStep<bool> {
       installerPath,
       installerUrl,
     ]);
-    await _mustRun(context, <String>['sh', installerPath]);
+    await _mustRun(
+      context,
+      <String>['sh', installerPath],
+      environment: <String, String>{if (_pinned case final String pinned) versionVariable: pinned},
+    );
     await _mustRun(context, <String>['systemctl', 'enable', '--now', service]);
     context.log.info(
       '$tool is installed and $service is running. It belongs to no network until a join credential '
@@ -84,39 +160,18 @@ final class InstallTailscaleClient extends ReversibleStep<bool> {
     );
   }
 
-  /// Whether the client is on the path already.
-  ///
-  /// The undo stops the service and removes the package. A machine that was already on a private
-  /// network when this ran would be taken off it — the credential it joined with is not on the
-  /// machine to join again.
-  @override
-  Future<bool> capture(StepContext context) => InstallToolPrerequisites.onPath(context, tool);
-
-  @override
-  Future<void> undo(StepContext context, bool captured) async {
-    if (captured) {
-      return;
-    }
-    await context.shell.run(
-      const Command.detailed(
-        'systemctl',
-        arguments: <String>['disable', '--now', service],
-        elevated: true,
-      ),
-    );
-    await context.shell.run(
-      const Command.detailed(
-        'apt-get',
-        arguments: <String>['remove', '--yes', tool],
-        environment: InstallToolPrerequisites.quiet,
-        elevated: true,
-      ),
-    );
-  }
-
-  Future<void> _mustRun(StepContext context, List<String> argv) async {
+  Future<void> _mustRun(
+    StepContext context,
+    List<String> argv, {
+    Map<String, String> environment = const <String, String>{},
+  }) async {
     final CommandResult answer = await context.shell.run(
-      Command.detailed(argv.first, arguments: argv.sublist(1), elevated: true),
+      Command.detailed(
+        argv.first,
+        arguments: argv.sublist(1),
+        environment: environment,
+        elevated: true,
+      ),
     );
     if (!answer.ok) {
       throw CommandFailed(
