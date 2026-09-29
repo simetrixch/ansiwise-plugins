@@ -167,8 +167,7 @@ void main() {
     });
 
     test('a tool from the package manager skips on being there, taking no version', () async {
-      // The other half of the pair, and the reason the pins call this one unpinnable: nothing here
-      // names a version, because the package manager carries exactly one and no run could reach
+      // The other half of the pair: nothing here names a version, because the package manager carries exactly one and no run could reach
       // another.
       final HostMachine machine = HostMachine()
         ..shell.answers(r'dpkg-query -W -f=${Status} jq', 'install ok installed');
@@ -373,7 +372,6 @@ void main() {
         'tailscale=v1.98.10',
         'stamped-cli=0.1.0-alpha-20260822223803',
       ],
-      unpinnable: <String>['jq', 'tailscale'],
       versionCommands: <String>[
         'packed-cli=version',
         'yq=--version',
@@ -595,18 +593,6 @@ void main() {
       );
     });
 
-    test(
-      'a version difference on a tool whose path takes no version is reported, not failed',
-      () async {
-        final HostMachine machine = withTools(
-          answers: <String, String>{'jq --version': 'jq-1.7.1\n'},
-        );
-        expect(await step.check(machine.contextFor(under)), isA<Satisfied>());
-        expect(machine.said.join('\n'), contains('jq is at 1.7.1'));
-        expect(machine.said.join('\n'), contains('no run can reach the pin'));
-      },
-    );
-
     test('a release-tagged tool that drifted is named at the whole tag it is at', () async {
       // Three numbers equal and the stamp not — a rebuild of the same version. What the operator is
       // told has to be the tag the binary answered, because the numbers alone name two releases.
@@ -627,9 +613,9 @@ void main() {
       expect((answer as Blocked).reason, contains('yq is at 4.40.0'));
     });
 
-    test('a row that names no tool unpinnable holds every tool to its pin', () async {
-      // Where every tool is installed at its pin, the row leaves the list off, and a difference on
-      // the tool that was reported before now fails like the others.
+    test('jq and tailscale off their pins fail like every other tool', () async {
+      // Both came through install paths that took no version, and their difference was only
+      // reported. Every install path now takes the pin, so a difference fails.
       final RequireCliToolVersions everyPinned = RequireCliToolVersions.fromArguments(
         const Arguments(<String, Object>{
           'tools': <String>['jq=jq-1.8.2', 'tailscale=v1.98.10'],
@@ -647,12 +633,6 @@ void main() {
       final CheckResult answer = await everyPinned.check(machine.contextFor(under));
       expect((answer as Blocked).reason, contains('jq is at 1.7.1'));
       expect(answer.reason, contains('tailscale is at 1.102.4'));
-      expect(
-        RequireCliToolVersions.arguments
-            .singleWhere((ArgumentSpec spec) => spec.name == 'unpinnable')
-            .required,
-        isFalse,
-      );
     });
 
     test('a tool named here with nothing able to ask it its version is caught', () async {
@@ -660,7 +640,6 @@ void main() {
       // added to one and not the other would otherwise never be installed and nothing would say so.
       const RequireCliToolVersions unknown = RequireCliToolVersions(
         tools: <String>['silent-cli=v4.2.3'],
-        unpinnable: <String>[],
         versionCommands: <String>[],
         pinPrefixes: pinPrefixes,
       );
@@ -673,7 +652,6 @@ void main() {
       // and the machine would be asked its version by running the tool with no arguments at all.
       const RequireCliToolVersions malformed = RequireCliToolVersions(
         tools: <String>['yq=v4.53.3'],
-        unpinnable: <String>[],
         versionCommands: <String>['yq=', '=--version', 'yq'],
         pinPrefixes: pinPrefixes,
       );

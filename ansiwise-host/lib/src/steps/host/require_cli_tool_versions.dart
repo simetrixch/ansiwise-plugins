@@ -4,17 +4,13 @@ import 'install_tool_prerequisites.dart';
 /// Holds every tool on the machine against the version the program pins for it.
 ///
 /// **This is the only thing binding the list of tools to the steps that install them.** Each tool
-/// arrives its own way — as a release fetched at a pin, out of the package manager, out of an
-/// installer somebody else wrote — and each of those is a row of its own in the program file, so
-/// there is no loop over this list that installs them. Without this a tool added to the list would
-/// simply never be installed, and nothing would say so.
+/// arrives its own way — as a release fetched at a pin, out of an installer handed the pin — and
+/// each of those is a row of its own in the program file, so there is no loop over this list that
+/// installs them. Without this a tool added to the list would simply never be installed, and nothing
+/// would say so.
 ///
-/// **A tool the row names unpinnable is only reported, never enforced.** Its install path takes no
-/// version — the package manager carries exactly ONE of the tool it ships, an installer that takes
-/// no version fetches whatever its makers publish on the day — so no re-run of the program can reach
-/// a different version, and failing on the version it does carry would make an install that can
-/// never end green. The difference is reported, so an operator who cares can act on it. Being
-/// MISSING is still a failure, for every tool without exception.
+/// **A tool off its pin fails, the same as a missing one.** Every install path a program chooses
+/// takes the pin, so an ordinary re-run brings a machine that drifted back to it.
 ///
 /// **Everything wrong is reported at once.** An operator told about one tool, who fixes it, runs
 /// again and is then told about the next has paid for four runs to learn what one could have said.
@@ -25,13 +21,11 @@ final class RequireCliToolVersions extends ObservingStep {
     required this.tools,
     required this.versionCommands,
     required this.pinPrefixes,
-    this.unpinnable = const <String>[],
   });
 
   /// Builds the step from what the program gave it.
   factory RequireCliToolVersions.fromArguments(Arguments arguments) => RequireCliToolVersions(
     tools: arguments.textList('tools'),
-    unpinnable: arguments.has('unpinnable') ? arguments.textList('unpinnable') : const <String>[],
     versionCommands: arguments.textList('version_commands'),
     pinPrefixes: arguments.textList('pin_prefixes'),
   );
@@ -44,17 +38,6 @@ final class RequireCliToolVersions extends ObservingStep {
       describes:
           'every tool the program pins, each written as its name, an equals sign and its '
           'pinned version',
-    ),
-    // Which tools arrive without a version is decided by which install path the program chose for
-    // each, so the program row states it. A row naming none holds every tool to its pin.
-    ArgumentSpec(
-      name: 'unpinnable',
-      kind: ArgumentKind.textList,
-      required: false,
-      describes:
-          'the tools whose install path takes no version, so a difference is reported and '
-          'never failed on — being missing still fails. Leave it off where every tool is '
-          'installed at its pin',
     ),
     // No default, and no table of tools in this file. Each of these tools answers differently, and
     // which tools a run holds is decided by the program that pins them — so a map written here
@@ -83,9 +66,6 @@ final class RequireCliToolVersions extends ObservingStep {
 
   /// Every tool and its pin.
   final List<String> tools;
-
-  /// The tools whose version is reported rather than enforced.
-  final List<String> unpinnable;
 
   /// How each tool is asked what version it is, each written as its name, an equals sign and the
   /// arguments it is run with.
@@ -227,7 +207,6 @@ final class RequireCliToolVersions extends ObservingStep {
   @override
   Future<CheckResult> check(StepContext context) async {
     final List<String> problems = <String>[];
-    final List<String> reported = <String>[];
     final List<String> right = <String>[];
     final Map<String, List<String>> readers = this.readers;
 
@@ -267,22 +246,12 @@ final class RequireCliToolVersions extends ObservingStep {
         right.add('$tool $installed');
         continue;
       }
-      if (unpinnable.contains(tool)) {
-        reported.add('$tool is at $installed and the program pins $pin');
-        continue;
-      }
       problems.add(
         '$tool is at $installed and the program pins $pin — an ordinary re-run of this program '
         'fetches the pinned one',
       );
     }
 
-    for (final String difference in reported) {
-      context.log.warn(
-        '$difference. Its install path takes no version, so no run can reach the pin and this is '
-        'reported rather than failed on.',
-      );
-    }
     if (problems.isNotEmpty) {
       return CheckResult.blocked(problems.join('; '));
     }

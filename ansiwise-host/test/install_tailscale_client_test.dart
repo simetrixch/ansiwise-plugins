@@ -21,11 +21,6 @@ void main() {
     pinPrefixes: pinPrefixes,
     version: 'v1.102.4',
   );
-  const InstallTailscaleClient unpinned = InstallTailscaleClient(
-    installerUrl: 'https://tailscale.com/install.sh',
-    installerPath: installerPath,
-    pinPrefixes: pinPrefixes,
-  );
 
   /// A machine whose client answers [version] — or one without the client, where it is null.
   HostMachine carrying(String? version) {
@@ -88,32 +83,13 @@ void main() {
     });
   });
 
-  group('without a version', () {
-    test(
-      'THE INNOCENT NEIGHBOUR: a client that is there is left alone, whatever its version',
-      () async {
-        // Without this, a step that always compared versions would pass the cases above and replace
-        // the client on every machine whose row names no pin.
-        expect(await unpinned.check(carrying('1.98.10').contextFor(under)), isA<Satisfied>());
-      },
-    );
-
-    test('the installer is handed no version', () async {
-      final HostMachine machine = carrying(null);
-      await unpinned.apply(machine.contextFor(under));
-
-      expect(
-        installerRun(machine).environment.containsKey(InstallTailscaleClient.versionVariable),
-        isFalse,
-      );
-    });
-  });
-
-  test('a row may leave the version off', () {
+  test('a row has to name the version', () {
+    // Without one the installer fetches whatever its makers published on the day, which is the
+    // drift the pin exists to stop.
     final ArgumentSpec version = InstallTailscaleClient.arguments.singleWhere(
       (ArgumentSpec spec) => spec.name == 'version',
     );
-    expect(version.required, isFalse);
+    expect(version.required, isTrue);
   });
 
   test('it cannot be taken back, because the version it replaced is kept nowhere', () {

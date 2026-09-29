@@ -1,17 +1,14 @@
 import 'package:ansiwise_core/ansiwise_core.dart';
-import 'install_tool_prerequisites.dart';
 import 'require_cli_tool_versions.dart';
 
-/// Puts the private-network client on the machine, using the installer its makers publish.
+/// Puts the private-network client on the machine at the version the program pins, using the
+/// installer its makers publish.
 ///
-/// **With a version, the version decides whether to install it.** The installer is handed the pin
-/// in `TAILSCALE_VERSION` and passes it to the package manager, so a machine set up today and one
+/// **The version decides whether to install it, never the presence.** The installer is handed the
+/// pin in `TAILSCALE_VERSION` and passes it to the package manager, so a machine set up today and one
 /// set up next month carry the same client, and a re-run brings a machine that drifted back to the
 /// pin. A pin older than the client that stands there is refused by the package manager, which
 /// steps a package down only when told to.
-///
-/// **Without one, its presence decides**, and whatever the installer fetches on the day is what
-/// lands.
 ///
 /// **Being installed says nothing about being on a network.** The service runs from the moment it is
 /// installed and belongs to nothing until a credential has been used to join, which is a separate
@@ -20,12 +17,12 @@ import 'require_cli_tool_versions.dart';
 /// The installer is fetched to a file first rather than fed straight into a shell, so what ran is
 /// still on the machine to be looked at when something about it goes wrong.
 final class InstallTailscaleClient extends IrreversibleStep {
-  /// Puts the client on the machine from [installerUrl], at [version] where the row names one.
+  /// Puts the client on the machine from [installerUrl], at [version].
   const InstallTailscaleClient({
     required this.installerUrl,
     required this.installerPath,
+    required this.version,
     required this.pinPrefixes,
-    this.version,
   });
 
   /// Builds the step from what the program gave it.
@@ -33,7 +30,7 @@ final class InstallTailscaleClient extends IrreversibleStep {
     installerUrl: arguments.text('installer_url'),
     installerPath: arguments.text('installer_path'),
     pinPrefixes: arguments.textList('pin_prefixes'),
-    version: arguments.optionalText('version'),
+    version: arguments.text('version'),
   );
 
   /// What this step accepts.
@@ -55,10 +52,7 @@ final class InstallTailscaleClient extends IrreversibleStep {
     ArgumentSpec(
       name: 'version',
       kind: ArgumentKind.text,
-      required: false,
-      describes:
-          'the version the program pins for the client, handed to the installer. Without one, '
-          'a client that is there is left alone and a new one is whatever the installer fetches',
+      describes: 'the version the program pins for the client, handed to the installer',
     ),
     // No default, for the reason the step that fetches pinned releases gives: which tag shapes are
     // in play is decided by the tools the program pins, so the list stands once in the program.
@@ -89,16 +83,15 @@ final class InstallTailscaleClient extends IrreversibleStep {
   /// Where the installer is put.
   final String installerPath;
 
-  /// The version the program pins, or null where the row names none.
-  final String? version;
+  /// The version the program pins.
+  final String version;
 
   /// The shapes a release tag is written with, taken off the pin.
   final List<String> pinPrefixes;
 
   /// The pin without the shape its release tag carries, which is how the installer and the client
-  /// both write a version, or null where the row names no version.
-  String? get _pinned =>
-      version == null ? null : RequireCliToolVersions.bare(version!, pinPrefixes);
+  /// both write a version.
+  String get _pinned => RequireCliToolVersions.bare(version, pinPrefixes);
 
   @override
   String get irreversibleReason =>
@@ -107,12 +100,7 @@ final class InstallTailscaleClient extends IrreversibleStep {
 
   @override
   Future<CheckResult> check(StepContext context) async {
-    final String? pinned = _pinned;
-    if (pinned == null) {
-      return await InstallToolPrerequisites.onPath(context, tool)
-          ? const CheckResult.satisfied('$tool is on the path')
-          : const CheckResult.ready();
-    }
+    final String pinned = _pinned;
     if (pinned.isEmpty) {
       return const CheckResult.blocked(
         'the row gives $tool an empty version, and the installer would read that as no version and '
@@ -130,11 +118,8 @@ final class InstallTailscaleClient extends IrreversibleStep {
   }
 
   @override
-  Future<StepPlan> plan(StepContext context) async => StepPlan.argv(<String>[
-    if (_pinned case final String pinned) ...<String>['env', '$versionVariable=$pinned'],
-    'sh',
-    installerPath,
-  ]);
+  Future<StepPlan> plan(StepContext context) async =>
+      StepPlan.argv(<String>['env', '$versionVariable=$_pinned', 'sh', installerPath]);
 
   @override
   Future<void> apply(StepContext context) async {
@@ -151,7 +136,7 @@ final class InstallTailscaleClient extends IrreversibleStep {
     await _mustRun(
       context,
       <String>['sh', installerPath],
-      environment: <String, String>{if (_pinned case final String pinned) versionVariable: pinned},
+      environment: <String, String>{versionVariable: _pinned},
     );
     await _mustRun(context, <String>['systemctl', 'enable', '--now', service]);
     context.log.info(
