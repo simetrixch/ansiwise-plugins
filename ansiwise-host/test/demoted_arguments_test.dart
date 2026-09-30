@@ -36,7 +36,9 @@ void main() {
     // runs a cluster is the product's substrate choice, so each command is the row's.
     'enable_addons': <String>['status_command', 'enable_command', 'disable_command'],
     'export_kubeconfig': <String>['credentials_command'],
-    'install_pinned_tool': <String>['pin_prefixes'],
+    // The digest is a fact of one file of one release, and a row that leaves it out would be a fetch
+    // whose bytes nothing holds against anything.
+    'install_pinned_tool': <String>['pin_prefixes', 'sha256'],
     // The whole layout of the image mirror. Where the profile and the credential file stand, which
     // key each value is written under, what an example file writes in place of a credential, which
     // registry is mirrored at all — and the two names the run's own answers are read under, because

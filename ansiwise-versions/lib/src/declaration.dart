@@ -20,6 +20,8 @@
 /// <group>:                     # any name; it heads a section of the report
 ///   <component>:               # any name, unique within its group
 ///     version: "1.2.3"         # the pin — always quoted, so YAML cannot re-read it as a number
+///     sha256: "<64 hex digits>"  # optional; the digest of the file the pin fetches, where a site
+///                                # holds a fetched file against one — quoted like the version
 ///     note: one line the report appends to this component's upstream cell   # optional
 ///     upstream:                # optional; without it the report answers "?" for this component
 ///       kind: github_release | docker_hub | oci_tags | chart_repository | helm_index
@@ -29,6 +31,8 @@
 ///       - kind: yaml_value | chart_dependency | list_pin | dockerfile_from | dockerfile_arg
 ///         tree: <name>         # which checkout, by the label a program row maps to a path
 ///         file: <path>         # inside that tree
+///         writes: sha256       # yaml_value only, optional: the site carries the sha256 and not
+///                              # the version
 ///         ...                  # the fields of that kind, and nothing else
 /// ```
 ///
@@ -92,6 +96,7 @@ final class PinnedComponent {
     required this.group,
     required this.name,
     required this.version,
+    this.sha256,
     this.note,
     this.upstream,
     this.stamps = const <PinStamp>[],
@@ -105,6 +110,13 @@ final class PinnedComponent {
 
   /// The pinned version, exactly as the stamps write it.
   final String version;
+
+  /// The SHA-256 of the file this pin fetches, in lowercase hexadecimal, or null where no site
+  /// holds a fetched file against one.
+  ///
+  /// Beside the version because the two move together: a bump that moves the pin and not the
+  /// digest reaches the machine as a fetched file the site refuses.
+  final String? sha256;
 
   /// One line the report appends beside this component's upstream answer, or null.
   ///
@@ -275,11 +287,18 @@ final class YamlValueStamp extends PinStamp {
     required super.file,
     required this.key,
     this.anchor,
+    this.writesSha256 = false,
     super.segments,
   });
 
   /// The key whose value is the pin.
   final String key;
+
+  /// Whether this site carries the component's [PinnedComponent.sha256] instead of its version.
+  ///
+  /// A scalar under an anchor either way, so the digest reaches its site through the same surgical
+  /// edit as the pin beside it, found under the same anchor.
+  final bool writesSha256;
 
   /// The exact trimmed line that opens the block the key stands in, or null for a top-level key.
   ///
@@ -421,9 +440,11 @@ PinnedComponent? _component(String group, String name, YamlMap body, List<String
   final String label = group == name ? name : '$group/$name';
   bool whole = true;
   for (final Object? key in body.keys) {
-    if (key is! String || !const <String>{'version', 'note', 'upstream', 'stamps'}.contains(key)) {
+    if (key is! String ||
+        !const <String>{'version', 'sha256', 'note', 'upstream', 'stamps'}.contains(key)) {
       problems.add(
-        '"$label" carries "$key", and a component holds version, note, upstream and stamps',
+        '"$label" carries "$key", and a component holds version, sha256, note, upstream and '
+        'stamps',
       );
       whole = false;
     }
@@ -434,6 +455,14 @@ PinnedComponent? _component(String group, String name, YamlMap body, List<String
     // unquoted 26.04 as a number that has lost its trailing zero — and a pin that changed by
     // being read is a pin nothing can stamp faithfully.
     problems.add('"$label" has a version that is not text — write it quoted');
+    whole = false;
+  }
+  final Object? sha256 = body['sha256'];
+  if (sha256 != null && sha256 is! String) {
+    problems.add('"$label" has a sha256 that is not text — write it quoted');
+    whole = false;
+  } else if (sha256 is String && !RegExp(r'^[0-9a-f]{64}$').hasMatch(sha256)) {
+    problems.add('"$label" has a sha256 that is not 64 lowercase hexadecimal digits');
     whole = false;
   }
   final Object? note = body['note'];
@@ -465,6 +494,11 @@ PinnedComponent? _component(String group, String name, YamlMap body, List<String
       }
     }
   }
+  if (sha256 == null &&
+      stamps.any((PinStamp stamp) => stamp is YamlValueStamp && stamp.writesSha256)) {
+    problems.add('"$label" has a stamp that writes its sha256, and it declares none');
+    whole = false;
+  }
   if (!whole) {
     return null;
   }
@@ -472,6 +506,7 @@ PinnedComponent? _component(String group, String name, YamlMap body, List<String
     group: group,
     name: name,
     version: version! as String,
+    sha256: sha256 as String?,
     note: note as String?,
     upstream: upstream,
     stamps: stamps,
@@ -554,14 +589,33 @@ PinStamp? _stamp(String label, YamlNode node, List<String> problems) {
   final PinStamp? stamp = switch (kind) {
     'yaml_value' => () {
       final String? key = fields.text('key');
-      return key == null
+      final String? anchor = fields.optionalText('anchor');
+      final int? segments = fields.optionalCount('segments');
+      final bool? writesSha256 = switch (fields.optionalText('writes')) {
+        null || 'version' => false,
+        'sha256' => true,
+        final String other => () {
+          problems.add(
+            '"$label": the stamp writes "$other", and a yaml_value stamp writes version or sha256',
+          );
+          return null;
+        }(),
+      };
+      if (writesSha256 == true && segments != null) {
+        problems.add(
+          '"$label": a stamp that writes the sha256 writes it whole, and this one names segments',
+        );
+        return null;
+      }
+      return key == null || writesSha256 == null
           ? null
           : YamlValueStamp(
               tree: tree,
               file: file,
               key: key,
-              anchor: fields.optionalText('anchor'),
-              segments: fields.optionalCount('segments'),
+              anchor: anchor,
+              writesSha256: writesSha256,
+              segments: segments,
             );
     }(),
     'chart_dependency' => () {

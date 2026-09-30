@@ -320,7 +320,7 @@ const Map<StepName, RegisteredStep> hostSteps = <StepName, RegisteredStep>{
   ),
   StepName('install_pinned_tool'): RegisteredStep(
     name: StepName('install_pinned_tool'),
-    source: 'lib/src/steps/host/install_pinned_tool.dart:39',
+    source: 'lib/src/steps/host/install_pinned_tool.dart:47',
     create: InstallPinnedTool.fromArguments,
     arguments: InstallPinnedTool.arguments,
   ),

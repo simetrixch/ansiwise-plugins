@@ -9,6 +9,14 @@ import 'host_fixture.dart';
 /// leading letter, another writes its own name in front of the number.
 const List<String> pinPrefixes = <String>['v', 'jq-'];
 
+/// A digest no fixture's row pins, planted where a test needs a fetched file that is not the one the
+/// row names.
+const String plantedDigest = '0000000000000000000000000000000000000000000000000000000000000bad';
+
+/// Makes [machine] answer `sha256sum` on [fetched] with [digest], in the shape the command prints.
+void answerDigest(HostMachine machine, String fetched, String digest) =>
+    machine.shell.answers('sha256sum $fetched', '$digest  $fetched\n');
+
 /// The two shapes a pinned release arrives in, each written the way a program row writes it.
 ///
 /// One step covers both, so what separates them is only their arguments — which is the claim these
@@ -27,6 +35,7 @@ const InstallPinnedTool packedCli = InstallPinnedTool(
   url:
       'https://releases.example.invalid/packed-cli/${InstallPinnedTool.bareVersionPlaceholder}/'
       'packed-cli_${InstallPinnedTool.bareVersionPlaceholder}_linux_amd64.zip',
+  sha256: '9d3c1b7e5a0f24c68e1d0b3a57f9e2c4d6a8b0c1e3f5a7b9d2c4e6f8a0b1c3d5',
   directory: InstallPinnedTool.defaultDirectory,
   archive: '/tmp/packed-cli.zip',
   versionCommand: <String>['version'],
@@ -45,11 +54,15 @@ const InstallPinnedTool stampedCli = InstallPinnedTool(
   url:
       'https://releases.example.invalid/stamped-cli/'
       '${InstallPinnedTool.versionPlaceholder}/stamped-cli',
+  sha256: '4f6a8c0e2b4d6f8a1c3e5b7d9f0a2c4e6b8d1f3a5c7e9b0d2f4a6c8e1b3d5f7a',
   directory: InstallPinnedTool.defaultDirectory,
   archive: null,
   versionCommand: <String>['--version'],
   pinPrefixes: pinPrefixes,
 );
+
+/// The digest the yq fixture's row pins, and the one the rows built beside it borrow.
+const String yqDigest = 'c2e4a6b8d0f1e3c5a7b9d1f3e5c7a9b0d2f4e6c8a0b1d3f5e7c9a1b2d4f6e8c0';
 
 const InstallPinnedTool yqCli = InstallPinnedTool(
   tool: 'yq',
@@ -57,6 +70,7 @@ const InstallPinnedTool yqCli = InstallPinnedTool(
   url:
       'https://github.com/mikefarah/yq/releases/download/'
       '${InstallPinnedTool.versionPlaceholder}/yq_linux_amd64',
+  sha256: yqDigest,
   directory: InstallPinnedTool.defaultDirectory,
   archive: null,
   versionCommand: <String>['--version'],
@@ -181,6 +195,7 @@ void main() {
         tool: yqCli.tool,
         version: '',
         url: yqCli.url,
+        sha256: yqDigest,
         directory: yqCli.directory,
         archive: null,
         versionCommand: yqCli.versionCommand,
@@ -197,6 +212,7 @@ void main() {
         tool: 'yq',
         version: 'v4.53.3',
         url: 'https://github.com/mikefarah/yq/releases/download/v4.40.0/yq_linux_amd64',
+        sha256: yqDigest,
         directory: InstallPinnedTool.defaultDirectory,
         archive: null,
         versionCommand: <String>['--version'],
@@ -216,6 +232,7 @@ void main() {
           url:
               'https://github.com/mikefarah/yq/releases/download/'
               '${InstallPinnedTool.versionPlaceholder}/yq_<architekture>',
+          sha256: yqDigest,
           directory: InstallPinnedTool.defaultDirectory,
           archive: null,
           versionCommand: <String>['--version'],
@@ -236,6 +253,7 @@ void main() {
           url:
               'https://releases.example.invalid/silent-cli/'
               '${InstallPinnedTool.versionPlaceholder}/silent-cli',
+          sha256: yqDigest,
           directory: InstallPinnedTool.defaultDirectory,
           archive: null,
           versionCommand: <String>[],
@@ -299,8 +317,13 @@ void main() {
       machine.shell
         ..fails(onThePathKey('packed-cli'))
         ..fails('unzip -o -d ${packedCli.directory} ${packedCli.archive}');
+      answerDigest(machine, packedCli.archive!, packedCli.sha256);
 
       await expectLater(packedCli.apply(machine.contextFor(under)), throwsA(isA<CommandFailed>()));
+      expect(
+        machine.shell.ran,
+        contains('unzip -o -d ${packedCli.directory} ${packedCli.archive}'),
+      );
       expect(machine.files.deleted, contains(packedCli.archive));
     });
 
@@ -317,6 +340,7 @@ void main() {
       () async {
         final HostMachine machine = HostMachine();
         machine.shell.fails(onThePathKey('yq'));
+        answerDigest(machine, yqCli.incoming, yqCli.sha256);
 
         await yqCli.apply(machine.contextFor(under));
 
@@ -358,6 +382,115 @@ void main() {
       await expectLater(yqCli.apply(machine.contextFor(under)), throwsA(isA<CommandFailed>()));
       expect(machine.files.deleted, contains('${yqCli.directory}/yq.incoming'));
     });
+  });
+
+  group('the fetched file held against the digest its row pins', () {
+    // The pin decides which address is fetched and never which bytes arrive. Each test below runs
+    // twice, once with a planted digest and once with the pinned one, so the refusal is shown to
+    // come from the digest and from nothing else about the row.
+    for (final bool planted in <bool>[true, false]) {
+      final String which = planted ? 'a planted digest' : 'the pinned digest';
+
+      test('a release that is the binary itself, fetched with $which', () async {
+        final HostMachine machine = HostMachine();
+        machine.shell.fails(onThePathKey('yq'));
+        answerDigest(machine, yqCli.incoming, planted ? plantedDigest : yqCli.sha256);
+
+        final Future<void> applied = yqCli.apply(machine.contextFor(under));
+
+        final String target = '${yqCli.directory}/yq';
+        if (planted) {
+          await expectLater(
+            applied,
+            throwsA(
+              isA<FetchedReleaseRefused>().having(
+                (FetchedReleaseRefused refused) => refused.message,
+                'message',
+                allOf(contains(plantedDigest), contains(yqCli.sha256), contains(yqCli.fetchedFrom)),
+              ),
+            ),
+          );
+          expect(
+            machine.shell.ran.where((String each) => each.startsWith('chmod ')),
+            isEmpty,
+            reason: 'a refused file is never made runnable',
+          );
+          expect(
+            machine.shell.ran.where((String each) => each.startsWith('mv ')),
+            isEmpty,
+            reason: 'a refused file never reaches the tool',
+          );
+        } else {
+          await applied;
+          expect(machine.shell.ran, contains('mv -f $target.incoming $target'));
+        }
+        expect(
+          machine.shell.ran,
+          containsAllInOrder(<String>[
+            'curl --silent --show-error --fail --location --output $target.incoming '
+                '${yqCli.fetchedFrom}',
+            'sha256sum $target.incoming',
+          ]),
+        );
+        expect(machine.files.deleted, contains(yqCli.incoming));
+      });
+
+      test('a release that arrives packed, fetched with $which', () async {
+        final HostMachine machine = HostMachine();
+        machine.shell.fails(onThePathKey('packed-cli'));
+        answerDigest(machine, packedCli.archive!, planted ? plantedDigest : packedCli.sha256);
+
+        final Future<void> applied = packedCli.apply(machine.contextFor(under));
+
+        final String unpacking = 'unzip -o -d ${packedCli.directory} ${packedCli.archive}';
+        if (planted) {
+          await expectLater(applied, throwsA(isA<FetchedReleaseRefused>()));
+          expect(
+            machine.shell.ran,
+            isNot(contains(unpacking)),
+            reason: 'a refused archive is never unpacked',
+          );
+        } else {
+          await applied;
+          expect(
+            machine.shell.ran,
+            containsAllInOrder(<String>['sha256sum ${packedCli.archive}', unpacking]),
+          );
+        }
+        expect(machine.files.deleted, contains(packedCli.archive));
+      });
+    }
+
+    test(
+      'a digest that is not 64 lowercase hexadecimal digits is refused before any fetch',
+      () async {
+        for (final String written in <String>[
+          '',
+          yqCli.sha256.toUpperCase(),
+          yqCli.sha256.substring(1),
+          'sha256:${yqCli.sha256}',
+        ]) {
+          final HostMachine machine = HostMachine();
+          final CheckResult answer = await InstallPinnedTool(
+            tool: yqCli.tool,
+            version: yqCli.version,
+            url: yqCli.url,
+            sha256: written,
+            directory: yqCli.directory,
+            archive: null,
+            versionCommand: yqCli.versionCommand,
+            pinPrefixes: pinPrefixes,
+          ).check(machine.contextFor(under));
+          expect(
+            (answer as Blocked).reason,
+            contains('64 lowercase hexadecimal digits'),
+            reason: written,
+          );
+        }
+        final CheckResult pinned = await yqCli.check(HostMachine().contextFor(under));
+        expect(pinned, isNot(isA<Blocked>()));
+      },
+    );
   });
 
   group('the pins held against the machine', () {

@@ -147,6 +147,60 @@ RUN echo built
     expect((refused as Blocked).reason, contains('"alpha_checkout"'));
   });
 
+  test('a digest lands beside its pin in the one row the anchor names', () async {
+    // Two rows of the same step, so the anchor is what separates them: the digest of one tool
+    // written into the other's row would be a fetch refused on every machine.
+    const String old = 'a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1';
+    const String bumped = 'b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2';
+    const String other = 'c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3';
+    const String pinned =
+        '''
+tools:
+  widget-cli:
+    version: "v1.3.0"
+    sha256: "$bumped"
+    stamps:
+      - kind: yaml_value
+        tree: alpha
+        file: programs/setup.yaml
+        key: version
+        anchor: 'tool: widget-cli'
+      - kind: yaml_value
+        tree: alpha
+        file: programs/setup.yaml
+        key: sha256
+        anchor: 'tool: widget-cli'
+        writes: sha256
+''';
+    const String program =
+        '''
+steps:
+  - step: fetch_tool
+    tool: widget-cli
+    version: v1.2.0
+    sha256: $old
+  - step: fetch_tool
+    tool: gadget-cli
+    version: v9.9.9
+    sha256: $other
+''';
+    final FakeFiles files = FakeFiles(<String, String>{
+      '/srv/alpha/pins.yaml': pinned,
+      '/srv/alpha/programs/setup.yaml': program,
+    });
+    final StepContext context = contextOn(files);
+
+    await step.apply(context);
+
+    expect(
+      files.contents['/srv/alpha/programs/setup.yaml'],
+      program
+          .replaceFirst('version: v1.2.0', 'version: v1.3.0')
+          .replaceFirst('sha256: $old', 'sha256: $bumped'),
+    );
+    expect(await step.check(context), isA<Satisfied>());
+  });
+
   test('a missing target file is a refusal naming file and component', () async {
     final FakeFiles files = filesOn();
     files.contents.remove('/srv/beta/build/tools.containerfile');

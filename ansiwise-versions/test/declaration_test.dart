@@ -170,6 +170,92 @@ tools:
     );
   });
 
+  group('the digest beside a pin', () {
+    const String digest = '3a7bd3e2360a3d29eea436fcfb7e44c735d117c42d1c1835420b6b9942dd4f1b';
+
+    test('is carried, and only the stamp that says so writes it', () {
+      const String pinned =
+          '''
+tools:
+  widget-cli:
+    version: "v1.2.3"
+    sha256: "$digest"
+    stamps:
+      - kind: yaml_value
+        tree: alpha
+        file: programs/setup.yaml
+        key: version
+        anchor: 'tool: widget-cli'
+      - kind: yaml_value
+        tree: alpha
+        file: programs/setup.yaml
+        key: sha256
+        anchor: 'tool: widget-cli'
+        writes: sha256
+''';
+      final PinnedComponent widget = parseDeclaration(pinned, where: 'pins.yaml').components.single;
+      expect(widget.sha256, digest);
+      final List<YamlValueStamp> sites = widget.stamps.cast<YamlValueStamp>();
+      expect(sites.map((YamlValueStamp site) => site.writesSha256), <bool>[false, true]);
+    });
+
+    test('every way of writing it wrong is refused by name, all at once', () {
+      // The planted defects: a digest cut short, one in capitals, a stamp writing a digest its
+      // component never declared, a stamp naming a value nothing writes, and a digest site told to
+      // cut the digest into segments. Each would stamp a value no fetched file can match.
+      const String wrong =
+          '''
+tools:
+  short-cli:
+    version: "v1.0.0"
+    sha256: "3a7bd3e2360a3d29eea436fcfb7e44c735d117c42d1c1835420b6b9942dd4f1"
+  loud-cli:
+    version: "v1.0.0"
+    sha256: "3A7BD3E2360A3D29EEA436FCFB7E44C735D117C42D1C1835420B6B9942DD4F1B"
+  bare-cli:
+    version: "v1.0.0"
+    stamps:
+      - kind: yaml_value
+        tree: alpha
+        file: programs/setup.yaml
+        key: sha256
+        writes: sha256
+  odd-cli:
+    version: "v1.0.0"
+    sha256: "$digest"
+    stamps:
+      - kind: yaml_value
+        tree: alpha
+        file: programs/setup.yaml
+        key: checksum
+        writes: checksum
+  cut-cli:
+    version: "v1.0.0"
+    sha256: "$digest"
+    stamps:
+      - kind: yaml_value
+        tree: alpha
+        file: programs/setup.yaml
+        key: sha256
+        writes: sha256
+        segments: 1
+''';
+      try {
+        parseDeclaration(wrong, where: 'pins.yaml');
+        fail('a declaration with five wrong digests parsed');
+      } on DeclarationInvalid catch (refused) {
+        expect(refused.problems, hasLength(5));
+        expect(
+          refused.problems.where((String each) => each.contains('64 lowercase hexadecimal')),
+          hasLength(2),
+        );
+        expect(refused.toString(), contains('"tools/bare-cli" has a stamp that writes its sha256'));
+        expect(refused.toString(), contains('writes "checksum"'));
+        expect(refused.toString(), contains('names segments'));
+      }
+    });
+  });
+
   test('every problem is reported at once, not one per run', () {
     const String twiceWrong = '''
 appliances:

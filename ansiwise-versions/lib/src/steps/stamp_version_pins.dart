@@ -232,7 +232,10 @@ final class StampVersionPins extends ReversibleStep<Map<String, String>> {
           final String original = await context.files.read(path);
           edit = _FileEdit(original);
         }
-        switch (stampInto(edit.content, stamp, stamp.valueOf(component.version))) {
+        final String value = stamp is YamlValueStamp && stamp.writesSha256
+            ? component.sha256!
+            : stamp.valueOf(component.version);
+        switch (stampInto(edit.content, stamp, value)) {
           case StampStands(:final String at):
             already.add('$path: $at');
             if (edit.was.isNotEmpty) {

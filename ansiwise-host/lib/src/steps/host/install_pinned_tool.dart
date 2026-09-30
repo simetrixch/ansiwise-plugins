@@ -14,6 +14,14 @@ import 'require_cli_tool_versions.dart';
 /// cannot come apart. Two machines set up a month apart would otherwise get different tools, and
 /// neither could be built again.
 ///
+/// **The pin decides which address is fetched, and [sha256] decides which bytes are kept.** A
+/// release replaced upstream, or an answer from anything between the machine and the host, would
+/// otherwise go onto the machine as the tool, and every account and root would run it. The fetched
+/// file is hashed where it landed, and a file whose digest differs is removed before it is made
+/// runnable, moved or unpacked. The digest is the row's and is never read off the host at fetch
+/// time: a list served by the host the release comes from proves nothing that HTTPS does not
+/// already prove.
+///
 /// **A release that arrives packed is unpacked into place; one that IS the binary is fetched
 /// straight to where it goes.** [archive] says which of the two this is, and it is also where the
 /// packed copy is put while it is being unpacked. That copy is removed afterwards whether the
@@ -38,11 +46,13 @@ import 'require_cli_tool_versions.dart';
 /// is the failure that matters.
 final class InstallPinnedTool extends IrreversibleStep {
   /// Fetches [tool] at [version] from [url] into [directory], out of [archive] where there is one,
-  /// and reads what is on the machine by running the tool with [versionCommand].
+  /// keeps it only where its digest is [sha256], and reads what is on the machine by running the
+  /// tool with [versionCommand].
   const InstallPinnedTool({
     required this.tool,
     required this.version,
     required this.url,
+    required this.sha256,
     required this.directory,
     required this.archive,
     required this.versionCommand,
@@ -55,6 +65,7 @@ final class InstallPinnedTool extends IrreversibleStep {
     tool: arguments.text('tool'),
     version: arguments.text('version'),
     url: arguments.text('url'),
+    sha256: arguments.text('sha256'),
     directory: arguments.text('directory'),
     archive: arguments.optionalText('archive'),
     versionCommand: arguments.textList('version_command'),
@@ -82,6 +93,17 @@ final class InstallPinnedTool extends IrreversibleStep {
       describes:
           'where the release is fetched from, written with $versionPlaceholder where the pin '
           'belongs and $bareVersionPlaceholder where it belongs without the shape its tag carries',
+    ),
+    // No default: a digest is a fact of one file of one release, so it stands in the row beside the
+    // pin that names the release.
+    ArgumentSpec(
+      name: 'sha256',
+      kind: ArgumentKind.text,
+      describes:
+          'the SHA-256 of the file the url serves, as 64 lowercase hexadecimal digits — of the '
+          'archive where the release arrives packed, which is the file each project lists beside '
+          'its release. A fetched file whose digest differs is removed and never reaches the '
+          'directory',
     ),
     ArgumentSpec(
       name: 'directory',
@@ -146,6 +168,9 @@ final class InstallPinnedTool extends IrreversibleStep {
 
   /// Where the release is fetched from, with the pin still in its marked slots.
   final String url;
+
+  /// The SHA-256 of the file [url] serves at the pin, in lowercase hexadecimal.
+  final String sha256;
 
   /// Where the tool goes.
   final String directory;
@@ -212,6 +237,12 @@ final class InstallPinnedTool extends IrreversibleStep {
         'text as it stands',
       );
     }
+    if (!RegExp(r'^[0-9a-f]{64}$').hasMatch(sha256)) {
+      return CheckResult.blocked(
+        'the sha256 for $tool is not 64 lowercase hexadecimal digits, and the fetched file is held '
+        'against it before it is kept',
+      );
+    }
     if (versionCommand.isEmpty) {
       return CheckResult.blocked(
         'nothing was given to ask $tool what version it is, and this step decides its skip on the '
@@ -251,6 +282,7 @@ final class InstallPinnedTool extends IrreversibleStep {
       // issue this comment's neighbour names.
       try {
         await _mustRun(context, _fetch);
+        await _holdAgainstDigest(context, incoming);
         // A file curl wrote carries no execute bit, and one unzip wrote carries the mode the
         // archive recorded — so this is on the unpacked path only. 755: a tool every account on
         // the machine runs. It is set BEFORE the move, so the target is never briefly unreadable.
@@ -265,6 +297,7 @@ final class InstallPinnedTool extends IrreversibleStep {
     }
     try {
       await _mustRun(context, _fetch);
+      await _holdAgainstDigest(context, packed);
       await _mustRun(context, <String>['unzip', '-o', '-d', directory, packed]);
     } finally {
       // On both paths. A half-finished download left here is what a later run would unpack, and the
@@ -290,9 +323,31 @@ final class InstallPinnedTool extends IrreversibleStep {
     fetchedFrom,
   ];
 
-  Future<void> _mustRun(StepContext context, List<String> argv) async {
+  /// Refuses [fetched] unless its SHA-256 is [sha256].
+  ///
+  /// Called before the file is made runnable, moved or unpacked, so a refused file reaches none of
+  /// them: the caller's `finally` removes it, and [path] keeps what it held.
+  Future<void> _holdAgainstDigest(StepContext context, String fetched) async {
+    final CommandResult answer = await _mustRun(context, <String>[
+      'sha256sum',
+      fetched,
+    ], observes: true);
+    final String digest = answer.stdout.trim().split(' ').first;
+    if (digest != sha256) {
+      throw FetchedReleaseRefused(
+        'the file fetched from $fetchedFrom has the SHA-256 $digest, and the row pins $sha256 — '
+        'it was removed, and $path was left as it stood',
+      );
+    }
+  }
+
+  Future<CommandResult> _mustRun(
+    StepContext context,
+    List<String> argv, {
+    bool observes = false,
+  }) async {
     final CommandResult answer = await context.shell.run(
-      Command.detailed(argv.first, arguments: argv.sublist(1), elevated: true),
+      Command.detailed(argv.first, arguments: argv.sublist(1), observes: observes, elevated: true),
     );
     if (!answer.ok) {
       throw CommandFailed(
@@ -302,5 +357,21 @@ final class InstallPinnedTool extends IrreversibleStep {
         stderr: answer.stderr,
       );
     }
+    return answer;
   }
+}
+
+/// A fetched release whose SHA-256 is not the one its row pins.
+///
+/// The apply throws it before the file is kept, and its own clean-up removes the file on the way
+/// out, so the engine records the row as failed with this message and nothing of the file stays.
+final class FetchedReleaseRefused implements Exception {
+  /// Records that a fetched release was refused, because [message].
+  const FetchedReleaseRefused(this.message);
+
+  /// Where the file came from, the digest it has, the one the row pins, and what was left standing.
+  final String message;
+
+  @override
+  String toString() => message;
 }
