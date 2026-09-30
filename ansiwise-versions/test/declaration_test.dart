@@ -173,6 +173,21 @@ tools:
   group('the digest beside a pin', () {
     const String digest = '3a7bd3e2360a3d29eea436fcfb7e44c735d117c42d1c1835420b6b9942dd4f1b';
 
+    /// A component named [name] whose digest is written as [written], with a stamp that writes it.
+    String writtenAs(String name, String written) =>
+        '''
+  $name:
+    version: "v1.0.0"
+    sha256: $written
+    stamps:
+      - kind: yaml_value
+        tree: alpha
+        file: programs/setup.yaml
+        key: sha256
+        anchor: 'tool: $name'
+        writes: sha256
+''';
+
     test('is carried, and only the stamp that says so writes it', () {
       const String pinned =
           '''
@@ -192,26 +207,41 @@ tools:
         key: sha256
         anchor: 'tool: widget-cli'
         writes: sha256
+      - kind: yaml_value
+        tree: alpha
+        file: programs/manifest.yaml
+        key: tag
+        writes: version
 ''';
       final PinnedComponent widget = parseDeclaration(pinned, where: 'pins.yaml').components.single;
       expect(widget.sha256, digest);
       final List<YamlValueStamp> sites = widget.stamps.cast<YamlValueStamp>();
-      expect(sites.map((YamlValueStamp site) => site.writesSha256), <bool>[false, true]);
+      expect(sites.map((YamlValueStamp site) => site.writesSha256), <bool>[false, true, false]);
     });
 
-    test('every way of writing it wrong is refused by name, all at once', () {
-      // The planted defects: a digest cut short, one in capitals, a stamp writing a digest its
-      // component never declared, a stamp naming a value nothing writes, and a digest site told to
-      // cut the digest into segments. Each would stamp a value no fetched file can match.
-      const String wrong =
+    test('every way of writing it wrong is refused by name, each once, all at once', () {
+      // The planted defects, one per component so each refusal is about one thing: a digest cut
+      // short, one a digit too long, one in capitals, one carrying the name of its algorithm, an
+      // empty one, a digest no stamp writes, a stamp writing a digest its component never
+      // declared, a stamp naming a value nothing writes, and a digest site told to cut the digest
+      // into segments. Each would put a value into a row that no fetched file can match.
+      final String wrong =
+          'tools:\n'
+          '${writtenAs('short-cli', '"${digest.substring(1)}"')}'
+          '${writtenAs('long-cli', '"${digest}0"')}'
+          '${writtenAs('loud-cli', '"${digest.toUpperCase()}"')}'
+          '${writtenAs('named-cli', '"sha256:$digest"')}'
+          '${writtenAs('empty-cli', '')}'
           '''
-tools:
-  short-cli:
+  unwritten-cli:
     version: "v1.0.0"
-    sha256: "3a7bd3e2360a3d29eea436fcfb7e44c735d117c42d1c1835420b6b9942dd4f1"
-  loud-cli:
-    version: "v1.0.0"
-    sha256: "3A7BD3E2360A3D29EEA436FCFB7E44C735D117C42D1C1835420B6B9942DD4F1B"
+    sha256: "$digest"
+    stamps:
+      - kind: yaml_value
+        tree: alpha
+        file: programs/setup.yaml
+        key: version
+        anchor: 'tool: unwritten-cli'
   bare-cli:
     version: "v1.0.0"
     stamps:
@@ -242,12 +272,23 @@ tools:
 ''';
       try {
         parseDeclaration(wrong, where: 'pins.yaml');
-        fail('a declaration with five wrong digests parsed');
+        fail('a declaration with nine wrong digests parsed');
       } on DeclarationInvalid catch (refused) {
-        expect(refused.problems, hasLength(5));
+        expect(refused.problems, hasLength(9), reason: refused.toString());
+        for (final String name in <String>['short-cli', 'long-cli', 'loud-cli', 'named-cli']) {
+          expect(
+            refused.problems.where(
+              (String each) =>
+                  each.contains('"tools/$name"') && each.contains('64 lowercase hexadecimal'),
+            ),
+            hasLength(1),
+            reason: name,
+          );
+        }
+        expect(refused.toString(), contains('"tools/empty-cli" has a sha256 that is not text'));
         expect(
-          refused.problems.where((String each) => each.contains('64 lowercase hexadecimal')),
-          hasLength(2),
+          refused.toString(),
+          contains('"tools/unwritten-cli" declares a sha256, and no stamp writes it'),
         );
         expect(refused.toString(), contains('"tools/bare-cli" has a stamp that writes its sha256'));
         expect(refused.toString(), contains('writes "checksum"'));

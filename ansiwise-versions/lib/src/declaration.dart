@@ -20,8 +20,9 @@
 /// <group>:                     # any name; it heads a section of the report
 ///   <component>:               # any name, unique within its group
 ///     version: "1.2.3"         # the pin — always quoted, so YAML cannot re-read it as a number
-///     sha256: "<64 hex digits>"  # optional; the digest of the file the pin fetches, where a site
-///                                # holds a fetched file against one — quoted like the version
+///     sha256: "<64 hex digits>"  # optional; the digest of the file the pin fetches, in lowercase,
+///                                # where a site holds a fetched file against one — quoted like the
+///                                # version, and written by a stamp that says writes: sha256
 ///     note: one line the report appends to this component's upstream cell   # optional
 ///     upstream:                # optional; without it the report answers "?" for this component
 ///       kind: github_release | docker_hub | oci_tags | chart_repository | helm_index
@@ -31,8 +32,8 @@
 ///       - kind: yaml_value | chart_dependency | list_pin | dockerfile_from | dockerfile_arg
 ///         tree: <name>         # which checkout, by the label a program row maps to a path
 ///         file: <path>         # inside that tree
-///         writes: sha256       # yaml_value only, optional: the site carries the sha256 and not
-///                              # the version
+///         writes: version | sha256  # yaml_value only, optional, version when absent: which of
+///                                   # the two values this site carries
 ///         ...                  # the fields of that kind, and nothing else
 /// ```
 ///
@@ -458,7 +459,7 @@ PinnedComponent? _component(String group, String name, YamlMap body, List<String
     whole = false;
   }
   final Object? sha256 = body['sha256'];
-  if (sha256 != null && sha256 is! String) {
+  if (body.containsKey('sha256') && sha256 is! String) {
     problems.add('"$label" has a sha256 that is not text — write it quoted');
     whole = false;
   } else if (sha256 is String && !RegExp(r'^[0-9a-f]{64}$').hasMatch(sha256)) {
@@ -478,25 +479,36 @@ PinnedComponent? _component(String group, String name, YamlMap body, List<String
     whole = false;
   }
   final List<PinStamp> stamps = <PinStamp>[];
+  bool everyStampRead = true;
   final YamlNode? stampsNode = body.nodes['stamps'];
   if (stampsNode != null) {
     if (stampsNode is! YamlList) {
       problems.add('"$label" has stamps that are not a list');
       whole = false;
+      everyStampRead = false;
     } else {
       for (final YamlNode element in stampsNode.nodes) {
         final PinStamp? stamp = _stamp(label, element, problems);
         if (stamp == null) {
           whole = false;
+          everyStampRead = false;
         } else {
           stamps.add(stamp);
         }
       }
     }
   }
-  if (sha256 == null &&
-      stamps.any((PinStamp stamp) => stamp is YamlValueStamp && stamp.writesSha256)) {
+  final bool digestIsWritten = stamps.any(
+    (PinStamp stamp) => stamp is YamlValueStamp && stamp.writesSha256,
+  );
+  if (!body.containsKey('sha256') && digestIsWritten) {
     problems.add('"$label" has a stamp that writes its sha256, and it declares none');
+    whole = false;
+  } else if (body.containsKey('sha256') && !digestIsWritten && everyStampRead) {
+    // A digest nothing writes is the pin nothing writes, one field over: a bump would stamp the
+    // version and leave the row holding the old digest. Asked only once every stamp was read,
+    // because a refused stamp may be the one that writes it, and its own refusal says what is wrong.
+    problems.add('"$label" declares a sha256, and no stamp writes it');
     whole = false;
   }
   if (!whole) {

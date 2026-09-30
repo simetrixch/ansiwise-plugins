@@ -147,9 +147,7 @@ RUN echo built
     expect((refused as Blocked).reason, contains('"alpha_checkout"'));
   });
 
-  test('a digest lands beside its pin in the one row the anchor names', () async {
-    // Two rows of the same step, so the anchor is what separates them: the digest of one tool
-    // written into the other's row would be a fetch refused on every machine.
+  group('a digest beside its pin', () {
     const String old = 'a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1';
     const String bumped = 'b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2';
     const String other = 'c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3';
@@ -184,21 +182,41 @@ steps:
     version: v9.9.9
     sha256: $other
 ''';
-    final FakeFiles files = FakeFiles(<String, String>{
+
+    FakeFiles filesHolding(String rows) => FakeFiles(<String, String>{
       '/srv/alpha/pins.yaml': pinned,
-      '/srv/alpha/programs/setup.yaml': program,
+      '/srv/alpha/programs/setup.yaml': rows,
     });
-    final StepContext context = contextOn(files);
 
-    await step.apply(context);
+    test('lands in the one row the anchor names', () async {
+      // Two rows of the same step, so the anchor is what separates them: the digest of one tool
+      // written into the other's row would be a fetch refused on every machine.
+      final FakeFiles files = filesHolding(program);
+      final StepContext context = contextOn(files);
 
-    expect(
-      files.contents['/srv/alpha/programs/setup.yaml'],
-      program
-          .replaceFirst('version: v1.2.0', 'version: v1.3.0')
-          .replaceFirst('sha256: $old', 'sha256: $bumped'),
-    );
-    expect(await step.check(context), isA<Satisfied>());
+      await step.apply(context);
+
+      expect(
+        files.contents['/srv/alpha/programs/setup.yaml'],
+        program
+            .replaceFirst('version: v1.2.0', 'version: v1.3.0')
+            .replaceFirst('sha256: $old', 'sha256: $bumped'),
+      );
+      expect(await step.check(context), isA<Satisfied>());
+    });
+
+    test('a row with no digest line is refused, and nothing is written', () async {
+      // The row as it stood before digests: the stamp edits a value and never adds a key, so the
+      // row gains its sha256 line by hand once, and a stamp that finds none says so rather than
+      // stamping the version alone.
+      final FakeFiles files = filesHolding(program.replaceFirst('    sha256: $old\n', ''));
+
+      final CheckResult refused = await step.check(contextOn(files));
+
+      expect(refused, isA<Blocked>());
+      expect((refused as Blocked).reason, allOf(contains('widget-cli'), contains('sha256')));
+      expect(files.written, isEmpty);
+    });
   });
 
   test('a missing target file is a refusal naming file and component', () async {
