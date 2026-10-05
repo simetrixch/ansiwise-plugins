@@ -4,13 +4,13 @@ import 'package:ansiwise_host/ansiwise_host.dart';
 import 'package:test/test.dart';
 
 void main() {
-  StepContext contextOn({FakeShell? shell}) => StepContext(
+  StepContext contextOn({FakeShell? shell, Logger? log}) => StepContext(
     shell: shell ?? FakeShell(),
     files: FakeFiles(),
     http: FakeHttp(),
     clock: FakeClock(),
     entropy: FakeEntropy(),
-    log: const _SilentLog(),
+    log: log ?? const _SilentLog(),
     step: const StepName('under_test'),
     arguments: Arguments.none,
     facts: Facts.none,
@@ -52,12 +52,16 @@ void main() {
   });
 
   group('a machine below the floor', () {
-    test('is ready to prune where the runtime is installed', () async {
-      final CheckResult answer = await step.check(
-        contextOn(shell: machine(availableKibibytes: 29783032)),
-      );
-      expect(answer, isA<Ready>());
-    });
+    test(
+      'is ready to prune where the runtime is installed, asked with the run\'s own elevation',
+      () async {
+        final FakeShell shell = machine(availableKibibytes: 29783032);
+        final CheckResult answer = await step.check(contextOn(shell: shell));
+        expect(answer, isA<Ready>());
+        final Command asked = shell.commands.singleWhere((Command c) => c.executable == 'sh');
+        expect(asked.elevated, isTrue);
+      },
+    );
 
     test(
       'is satisfied where the prune command is not on the path, because nothing was pulled yet',
@@ -68,6 +72,12 @@ void main() {
         expect((answer as Satisfied).because, contains('runtime'));
       },
     );
+
+    test('its plan says what pruning costs: images of idle workloads are pulled again', () async {
+      final _RecordingLog log = _RecordingLog();
+      await step.plan(contextOn(shell: machine(availableKibibytes: 29783032), log: log));
+      expect(log.lines.join('\n'), contains('pulls its image again on its next start'));
+    });
 
     test('plans the prune command the row names, elevated', () async {
       final StepPlan plan = await step.plan(
@@ -137,4 +147,20 @@ final class _SilentLog implements Logger {
 
   @override
   void error(String message) {}
+}
+
+final class _RecordingLog implements Logger {
+  final List<String> lines = <String>[];
+
+  @override
+  void debug(String message) => lines.add(message);
+
+  @override
+  void info(String message) => lines.add(message);
+
+  @override
+  void warn(String message) => lines.add(message);
+
+  @override
+  void error(String message) => lines.add(message);
 }

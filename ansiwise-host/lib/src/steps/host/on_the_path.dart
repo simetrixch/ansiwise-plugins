@@ -19,8 +19,12 @@ import 'package:ansiwise_core/ansiwise_core.dart';
 /// **The name is passed as an ARGUMENT and never written into the script.** `sh -c '…' sh <name>`
 /// puts it in `$1`, so a name carrying a space, a quote or a semicolon is one word to the shell.
 /// Composed into the script text it would be shell input, and the name comes off a program row.
-Command onThePath(String name) => Command.observing(
+///
+/// [elevated] asks with the path the elevated run will use: a command found only on the account's
+/// own path would be called missing by a run that starts it elevated, and the other way round.
+Command onThePath(String name, {bool elevated = false}) => Command.observing(
   'sh',
+  elevated: elevated,
   arguments: <String>[
     '-c',
     // $1 and not the name: see above. `sh` fills argv[0], which -c wants and never runs.

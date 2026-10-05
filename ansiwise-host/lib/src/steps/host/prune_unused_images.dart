@@ -98,7 +98,9 @@ final class PruneUnusedImages extends IrreversibleStep {
         '$path has $available KiB free, at or above $freeKibibytes KiB, so no image is pruned',
       );
     }
-    if (!foundOnThePath(await context.shell.run(onThePath(pruneCommand.first)))) {
+    if (!foundOnThePath(
+      await context.shell.run(onThePath(pruneCommand.first, elevated: elevated)),
+    )) {
       return CheckResult.satisfied(
         '${pruneCommand.first} is not on the path, so no image was pulled here yet',
       );
@@ -107,7 +109,14 @@ final class PruneUnusedImages extends IrreversibleStep {
   }
 
   @override
-  Future<StepPlan> plan(StepContext context) async => StepPlan.argv(pruneCommand);
+  Future<StepPlan> plan(StepContext context) async {
+    context.log.info(
+      'every image no container uses is removed, so a workload without a running container (a job '
+      'between its runs, a deployment scaled to zero) pulls its image again on its next start, '
+      'and fails to start while its registry cannot be reached',
+    );
+    return StepPlan.argv(pruneCommand);
+  }
 
   @override
   Future<void> apply(StepContext context) async {
