@@ -22,6 +22,9 @@ Future<void> main() => auditIdempotence(
 /// for it. A name arrives here only by somebody adding it, which is the point: a step written
 /// tomorrow either brings its fixture or is written down as unproven.
 const Set<String> notCoveredByAFakeMachine = <String>{
+  // Its floor and its prune command are the row's, and the fake knows neither; its own test shows a
+  // second run satisfied once the disk is at the floor (test/prune_unused_images_test.dart).
+  'prune_unused_images',
   'activate_public_src_routing',
   'add_shell_alias',
   'add_user_to_group',

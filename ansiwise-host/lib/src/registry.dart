@@ -10,6 +10,7 @@ import 'steps/host/set_host_address.dart';
 import 'steps/host/add_user_to_group.dart';
 import 'steps/host/apply_netplan.dart';
 import 'steps/host/clean_package_cache.dart';
+import 'steps/host/prune_unused_images.dart';
 import 'steps/host/create_group.dart';
 import 'steps/host/create_storage_directory.dart';
 import 'steps/host/password_login.dart';
@@ -119,6 +120,12 @@ const Map<StepName, RegisteredStep> hostSteps = <StepName, RegisteredStep>{
     source: 'lib/src/steps/host/remove_unused_packages.dart:8',
     create: RemoveUnusedPackages.fromArguments,
     arguments: RemoveUnusedPackages.arguments,
+  ),
+  StepName('prune_unused_images'): RegisteredStep(
+    name: StepName('prune_unused_images'),
+    source: 'lib/src/steps/host/prune_unused_images.dart:23',
+    create: PruneUnusedImages.fromArguments,
+    arguments: PruneUnusedImages.arguments,
   ),
   StepName('clean_package_cache'): RegisteredStep(
     name: StepName('clean_package_cache'),

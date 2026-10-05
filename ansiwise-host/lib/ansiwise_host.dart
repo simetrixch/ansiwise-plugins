@@ -48,6 +48,7 @@ export 'src/steps/host/remove_snap.dart';
 export 'src/steps/host/remove_unused_packages.dart';
 export 'src/steps/host/require_cli_tool_versions.dart';
 export 'src/steps/host/require_commands.dart';
+export 'src/steps/host/prune_unused_images.dart';
 export 'src/steps/host/require_free_disk.dart';
 export 'src/steps/host/require_key_login_possible.dart';
 export 'src/steps/host/require_machine_size.dart';

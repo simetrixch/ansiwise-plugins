@@ -59,7 +59,7 @@ final class RequireFreeDisk extends ObservingStep {
       return CheckResult.blocked('df could not measure $path: ${measured.stderr.trim()}');
     }
 
-    final int? available = _availableKibibytes(measured.stdout);
+    final int? available = availableKibibytesIn(measured.stdout);
     if (available == null) {
       return CheckResult.blocked('df answered something $path cannot be read out of');
     }
@@ -72,8 +72,9 @@ final class RequireFreeDisk extends ObservingStep {
     return CheckResult.satisfied('$available KiB free on $path');
   }
 
-  /// The fourth column of the second line: available blocks, which `-k` makes 1024 bytes each.
-  static int? _availableKibibytes(String output) {
+  /// The fourth column of the second line of `df -Pk`: available blocks, which `-k` makes 1024
+  /// bytes each. Shared with prune_unused_images, so both read the disk the same way.
+  static int? availableKibibytesIn(String output) {
     final List<String> lines = output
         .split('\n')
         .where((String line) => line.trim().isNotEmpty)
