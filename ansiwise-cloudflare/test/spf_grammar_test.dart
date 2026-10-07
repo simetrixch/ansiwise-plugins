@@ -35,6 +35,18 @@ void main() {
       expect(isDnsHostName('-x.example.org'), isFalse);
       expect(isDnsHostName('x-.example.org'), isFalse);
     });
+
+    test('refuses a label longer than 63 characters', () {
+      expect(isDnsHostName('${'a' * 64}.example.org'), isFalse);
+    });
+
+    test('accepts a label of 63 characters', () {
+      expect(isDnsHostName('${'a' * 63}.example.org'), isTrue);
+    });
+
+    test('refuses a name longer than 253 characters', () {
+      expect(isDnsHostName('${'a' * 50}.${'b' * 63}.${'c' * 63}.${'d' * 63}.example.com'), isFalse);
+    });
   });
 
   group('the SPF mechanism for a host', () {
@@ -54,6 +66,10 @@ void main() {
       expect(spfListsMechanism('v=spf1 a:mail.example.org -all', 'a'), isFalse);
       expect(spfListsMechanism('v=spf1 a:mail.example.org -all', 'a:mail'), isFalse);
       expect(spfListsMechanism('v=spf1 a:mail -all', 'a:mail.example.org'), isFalse);
+    });
+
+    test('matches case-insensitively', () {
+      expect(spfListsMechanism('v=spf1 A:MAIL.EXAMPLE.ORG -all', 'a:mail.example.org'), isTrue);
     });
   });
 
@@ -126,6 +142,50 @@ void main() {
         'v=spf1 a:$host ~all',
       );
     });
+
+    test('inserts before the trailing all-mechanism when all is uppercase', () {
+      expect(
+        spfMerged('v=spf1 include:x.example.net -ALL', 'a:mail.example.org'),
+        'v=spf1 include:x.example.net a:mail.example.org -ALL',
+      );
+    });
+
+    test('answers null when the mechanism is already authorised in uppercase', () {
+      expect(spfMerged('v=spf1 A:MAIL.EXAMPLE.ORG -all', 'a:mail.example.org'), isNull);
+    });
+
+    test('replaces an address token when ip4 is uppercase', () {
+      expect(
+        spfMerged(
+          'v=spf1 include:spf.example.net IP4:192.0.2.10 ~all',
+          mechanism,
+          replacesAddress: '192.0.2.10',
+        ),
+        'v=spf1 include:spf.example.net a:$host ~all',
+      );
+    });
+
+    test('replaces an address token specified with a /32 prefix', () {
+      expect(
+        spfMerged(
+          'v=spf1 ip4:192.0.2.10/32 -all',
+          'a:mail.example.org',
+          replacesAddress: '192.0.2.10',
+        ),
+        'v=spf1 a:mail.example.org -all',
+      );
+    });
+
+    test('keeps an address token with a prefix length other than /32', () {
+      expect(
+        spfMerged(
+          'v=spf1 ip4:192.0.2.0/24 -all',
+          'a:mail.example.org',
+          replacesAddress: '192.0.2.0',
+        ),
+        'v=spf1 ip4:192.0.2.0/24 a:mail.example.org -all',
+      );
+    });
   });
 
   group('a fresh record', () {
@@ -155,6 +215,24 @@ void main() {
       expect(
         spfForeignMechanisms(
           'v=spf1 include:spf.example.net ip4:192.0.2.10 -all',
+          mechanism,
+          replacesAddress: '192.0.2.10',
+        ),
+        'include:spf.example.net',
+      );
+    });
+
+    test('ignores our mechanism and closing all case-insensitively', () {
+      expect(
+        spfForeignMechanisms('v=spf1 include:spf.example.net A:$host -ALL', mechanism),
+        'include:spf.example.net',
+      );
+    });
+
+    test('ignores the address being replaced when specified with /32 or uppercase', () {
+      expect(
+        spfForeignMechanisms(
+          'v=spf1 include:spf.example.net IP4:192.0.2.10/32 -all',
           mechanism,
           replacesAddress: '192.0.2.10',
         ),

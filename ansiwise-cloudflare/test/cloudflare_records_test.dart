@@ -222,8 +222,53 @@ void main() {
       expect(body['content'], 'v=spf1 a:$egressHost ~all');
     });
 
+    test('a record that already authorises the host in uppercase is left untouched', () async {
+      final _Zone zone = zoneWithApexTxt(<Map<String, Object?>>[
+        _txt('rec-1', apex, 'v=spf1 include:spf.example.net A:$egressHost ~all'),
+      ]);
+      final StepContext context = contextOf(files: filledInput(), http: zone);
+
+      final CheckResult result = await spfStep.check(context);
+
+      expect(result, isA<Satisfied>());
+      expect((result as Satisfied).because, contains('include:spf.example.net'));
+      expect(zone.sent.where((HttpRequest r) => r.method != 'GET'), isEmpty);
+    });
+
+    test('replaces an address token specified with /32', () async {
+      const CloudflareSpfRecord step = CloudflareSpfRecord(
+        access: access,
+        apexAnswer: 'mail_domain',
+        hostAnswer: 'egress_host',
+        replacesAddressAnswer: 'old_address',
+        allMechanism: '-all',
+      );
+      final _Zone zone = zoneWithApexTxt(<Map<String, Object?>>[
+        _txt('rec-1', apex, 'v=spf1 include:spf.example.net ip4:192.0.2.10/32 ~all'),
+      ]);
+      final StepContext context = contextOf(
+        files: filledInput(),
+        http: zone,
+        run: const Arguments(<String, Object>{...answered, 'old_address': '192.0.2.10'}),
+      );
+
+      expect(await step.check(context), isA<Ready>());
+      await step.apply(context);
+
+      final HttpRequest write = zone.sent.singleWhere((HttpRequest r) => r.method != 'GET');
+      expect(write.method, 'PUT');
+      final Map<String, Object?> body = jsonDecode(write.body!) as Map<String, Object?>;
+      expect(body['content'], 'v=spf1 include:spf.example.net a:$egressHost ~all');
+    });
+
     test('refuses an answer that is not a valid DNS host name', () async {
-      for (final String bad in <String>['192.0.2.10', 'Mail.Example.org', '-x.example.org']) {
+      for (final String bad in <String>[
+        '192.0.2.10',
+        'Mail.Example.org',
+        '-x.example.org',
+        '${'a' * 64}.example.org',
+        '${'a' * 50}.${'b' * 63}.${'c' * 63}.${'d' * 63}.example.com',
+      ]) {
         final _Zone zone = zoneWithApexTxt(<Map<String, Object?>>[]);
         final StepContext context = contextOf(files: filledInput(), http: zone, run: withHost(bad));
 

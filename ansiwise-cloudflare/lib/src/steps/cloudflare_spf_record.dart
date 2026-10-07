@@ -264,8 +264,12 @@ final class CloudflareSpfRecord extends ReversibleStep<CapturedRecord> {
 ///
 /// Must consist of at least two labels separated by dots, each containing only lowercase
 /// alphanumeric characters and hyphens (`a-z0-9-`), with no leading or trailing hyphen.
+/// No label may exceed 63 characters and the whole name may not exceed 253 characters.
 /// An IPv4 address is not a host name.
 bool isDnsHostName(String host) {
+  if (host.length > 253) {
+    return false;
+  }
   if (isCidr('$host/32')) {
     return false;
   }
@@ -274,7 +278,7 @@ bool isDnsHostName(String host) {
     return false;
   }
   for (final String label in labels) {
-    if (!_dnsLabel.hasMatch(label)) {
+    if (label.length > 63 || !_dnsLabel.hasMatch(label)) {
       return false;
     }
   }
@@ -302,7 +306,8 @@ String spfMechanism(String apex, String host) => host == apex ? 'a' : 'a:$host';
 ///
 /// Padded with spaces on both sides so `a` never matches inside `a:mail.example.org`, and
 /// `a:host` never matches as a prefix of `a:host-2.example.org`.
-bool spfListsMechanism(String content, String mechanism) => ' $content '.contains(' $mechanism ');
+bool spfListsMechanism(String content, String mechanism) =>
+    ' ${content.toLowerCase()} '.contains(' ${mechanism.toLowerCase()} ');
 
 /// [content] with [mechanism] merged in, optionally replacing [replacesAddress], or null where
 /// nothing changes.
@@ -317,16 +322,18 @@ bool spfListsMechanism(String content, String mechanism) => ' $content '.contain
 /// gets [mechanism] appended. Pure text surgery: every other mechanism already in the record
 /// survives byte for byte.
 String? spfMerged(String content, String mechanism, {String? replacesAddress}) {
-  if (replacesAddress != null && ' $content '.contains(' ip4:$replacesAddress ')) {
+  if (replacesAddress != null) {
     final List<String> tokens = content.split(_spaces);
-    if (spfListsMechanism(content, mechanism)) {
-      tokens.removeWhere((String t) => t == 'ip4:$replacesAddress');
+    final int index = tokens.indexWhere((String t) => _isReplacedAddress(t, replacesAddress));
+    if (index != -1) {
+      if (spfListsMechanism(content, mechanism)) {
+        tokens.removeWhere((String t) => _isReplacedAddress(t, replacesAddress));
+        return tokens.join(' ');
+      }
+      tokens[index] = mechanism;
+      tokens.removeWhere((String t) => _isReplacedAddress(t, replacesAddress));
       return tokens.join(' ');
     }
-    final int index = tokens.indexOf('ip4:$replacesAddress');
-    tokens[index] = mechanism;
-    tokens.removeWhere((String t) => t == 'ip4:$replacesAddress');
-    return tokens.join(' ');
   }
   if (spfListsMechanism(content, mechanism)) {
     return null;
@@ -349,11 +356,12 @@ String spfFresh(String allMechanism, String mechanism) => 'v=spf1 $mechanism $al
 /// which is what a merge exists to preserve and what the operator is told is being kept.
 String spfForeignMechanisms(String content, String mechanism, {String? replacesAddress}) {
   final List<String> foreign = <String>[];
+  final String lowerMechanism = mechanism.toLowerCase();
   for (final String token in content.split(_spaces)) {
     if (token.isEmpty ||
         token == 'v=spf1' ||
-        token == mechanism ||
-        (replacesAddress != null && token == 'ip4:$replacesAddress')) {
+        token.toLowerCase() == lowerMechanism ||
+        (replacesAddress != null && _isReplacedAddress(token, replacesAddress))) {
       continue;
     }
     if (_allMechanism.hasMatch(token)) {
@@ -364,6 +372,17 @@ String spfForeignMechanisms(String content, String mechanism, {String? replacesA
   return foreign.join(' ');
 }
 
+/// Whether [token] is an IPv4 mechanism matching [replacesAddress], case-insensitively and
+/// treating `/32` as the same address.
+bool _isReplacedAddress(String token, String replacesAddress) {
+  final String lowerToken = token.toLowerCase();
+  final String lowerAddress = replacesAddress.toLowerCase();
+  final String baseAddress = lowerAddress.endsWith('/32')
+      ? lowerAddress.substring(0, lowerAddress.length - 3)
+      : lowerAddress;
+  return lowerToken == 'ip4:$baseAddress' || lowerToken == 'ip4:$baseAddress/32';
+}
+
 final RegExp _spaces = RegExp(r'\s+');
-final RegExp _allMechanism = RegExp(r'^[-~?+]?all$');
-final RegExp _trailingAll = RegExp(r'^(.*\s)([-~?+]?all)\s*$');
+final RegExp _allMechanism = RegExp(r'^[-~?+]?all$', caseSensitive: false);
+final RegExp _trailingAll = RegExp(r'^(.*\s)([-~?+]?all)\s*$', caseSensitive: false);
