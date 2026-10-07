@@ -2,7 +2,7 @@ import 'package:ansiwise_core/ansiwise_core.dart';
 
 import 'cloudflare_api.dart';
 
-/// Authorises one IPv4 address to send mail for an apex, by MERGING it into the apex's one SPF
+/// Authorises one host to send mail for an apex, by MERGING it into the apex's one SPF
 /// record — never by adding a second one.
 ///
 /// **Why merging is the whole design and not a nicety.** SPF's own standard allows a domain exactly
@@ -11,7 +11,7 @@ import 'cloudflare_api.dart';
 /// that were working included. The apex of a live domain routinely belongs to somebody else's mail
 /// service already, so the existing record is somebody's production mail. This step therefore:
 ///
-/// - inserts `ip4:<address>` into the ONE existing record, directly before its trailing
+/// - inserts `a:<host>` into the ONE existing record, directly before its trailing
 ///   all-mechanism, keeping the qualifier and every mechanism already there — another service's
 ///   `include:` lines are exactly what must survive;
 /// - creates a fresh record only where none exists at all;
@@ -23,12 +23,13 @@ import 'cloudflare_api.dart';
 /// `-all`, `~all`, whatever the domain's owner chose — is theirs, and a merge keeps it letter for
 /// letter.
 final class CloudflareSpfRecord extends ReversibleStep<CapturedRecord> {
-  /// Merges the address in the answer named by [addressAnswer] into the SPF record of the apex in
-  /// the answer named by [apexAnswer].
+  /// Merges the host in the answer named by [hostAnswer] into the SPF record of the apex in
+  /// the answer named by [apexAnswer], optionally replacing an address in [replacesAddressAnswer].
   const CloudflareSpfRecord({
     required this.access,
     required this.apexAnswer,
-    required this.addressAnswer,
+    required this.hostAnswer,
+    this.replacesAddressAnswer,
     required this.allMechanism,
   });
 
@@ -36,7 +37,8 @@ final class CloudflareSpfRecord extends ReversibleStep<CapturedRecord> {
   factory CloudflareSpfRecord.fromArguments(Arguments arguments) => CloudflareSpfRecord(
     access: CloudflareAccess.fromArguments(arguments),
     apexAnswer: arguments.text('apex_answer'),
-    addressAnswer: arguments.text('address_answer'),
+    hostAnswer: arguments.text('host_answer'),
+    replacesAddressAnswer: arguments.optionalText('replaces_address_answer'),
     allMechanism: arguments.text('all_mechanism'),
   );
 
@@ -52,11 +54,21 @@ final class CloudflareSpfRecord extends ReversibleStep<CapturedRecord> {
           'installation this is',
     ),
     ArgumentSpec(
-      name: 'address_answer',
+      name: 'host_answer',
       kind: ArgumentKind.answerName,
       describes:
-          'the name of the answer holding the IPv4 address the mail actually leaves from — what '
-          'the merged record newly authorises',
+          'the name of the answer holding the host name the mail leaves by — what the merged '
+          'record newly authorises, as `a:<host>`, or as the bare `a` when the host is the apex '
+          'itself. Named by host, so a change of the host\'s address never touches the record',
+    ),
+    ArgumentSpec(
+      name: 'replaces_address_answer',
+      kind: ArgumentKind.answerName,
+      required: false,
+      describes:
+          'the name of the answer holding an IPv4 address the record may still authorise as '
+          '`ip4:<address>`; that one mechanism is replaced by the host\'s, and every other '
+          'mechanism stays',
     ),
     ArgumentSpec(
       name: 'all_mechanism',
@@ -77,8 +89,11 @@ final class CloudflareSpfRecord extends ReversibleStep<CapturedRecord> {
   /// The name of the answer holding the apex.
   final String apexAnswer;
 
-  /// The name of the answer holding the IPv4 address.
-  final String addressAnswer;
+  /// The name of the answer holding the host.
+  final String hostAnswer;
+
+  /// The name of the answer holding an IPv4 address to replace, if any.
+  final String? replacesAddressAnswer;
 
   /// How a fresh record closes; an existing record keeps its own.
   final String allMechanism;
@@ -93,15 +108,32 @@ final class CloudflareSpfRecord extends ReversibleStep<CapturedRecord> {
     if (apex == null) {
       return RecordRefused(missingAnswerRefusal(apexAnswer, 'the domain mail is sent as'));
     }
-    final String? address = answeredText(context, addressAnswer);
-    if (address == null) {
-      return RecordRefused(missingAnswerRefusal(addressAnswer, 'the address the mail leaves from'));
+    final String? host = answeredText(context, hostAnswer);
+    if (host == null) {
+      return RecordRefused(missingAnswerRefusal(hostAnswer, 'the host the mail leaves by'));
     }
-    if (!isCidr('$address/32')) {
+    if (!isDnsHostName(host)) {
       return RecordRefused(
-        '"$addressAnswer" holds "$address", which is not an IPv4 address — merged into an SPF '
+        '"$hostAnswer" holds "$host", which is not a host name — merged into an SPF '
         'record it would authorise nothing and still change a live mail policy',
       );
+    }
+    final String? replacesAddress;
+    if (replacesAddressAnswer case final String answerName) {
+      replacesAddress = answeredText(context, answerName);
+      if (replacesAddress == null) {
+        return RecordRefused(
+          missingAnswerRefusal(answerName, 'the IPv4 address the record replaces'),
+        );
+      }
+      if (!isCidr('$replacesAddress/32')) {
+        return RecordRefused(
+          '"$answerName" holds "$replacesAddress", which is not an IPv4 address — merged into an SPF '
+          'record it would replace nothing and still change a live mail policy',
+        );
+      }
+    } else {
+      replacesAddress = null;
     }
     final ZoneLookup zone = await zoneFor(
       context,
@@ -137,19 +169,24 @@ final class CloudflareSpfRecord extends ReversibleStep<CapturedRecord> {
         'until a hand removes one',
       );
     }
+    final String mechanism = spfMechanism(apex, host);
     if (spf.isEmpty) {
       return RecordWrite(
         zoneId: zoneId,
-        body: recordBody(type: 'TXT', name: apex, content: spfFresh(allMechanism, address)),
+        body: recordBody(type: 'TXT', name: apex, content: spfFresh(allMechanism, mechanism)),
       );
     }
     final DnsRecord held = spf.single;
     final String current = dechunkedTxt(held.content);
-    final String? merged = spfMerged(current, address);
-    final String foreign = spfForeignMechanisms(current, address);
+    final String? merged = spfMerged(current, mechanism, replacesAddress: replacesAddress);
+    final String foreign = spfForeignMechanisms(
+      current,
+      mechanism,
+      replacesAddress: replacesAddress,
+    );
     if (merged == null) {
       return RecordSettled(
-        '$apex already authorises ip4:$address'
+        '$apex already authorises $mechanism'
         '${foreign.isEmpty ? '' : ', beside $foreign which stays as it is'}',
       );
     }
@@ -223,6 +260,33 @@ final class CloudflareSpfRecord extends ReversibleStep<CapturedRecord> {
   );
 }
 
+/// Whether [host] is a valid lowercase DNS host name.
+///
+/// Must consist of at least two labels separated by dots, each containing only lowercase
+/// alphanumeric characters and hyphens (`a-z0-9-`), with no leading or trailing hyphen.
+/// An IPv4 address is not a host name.
+bool isDnsHostName(String host) {
+  if (isCidr('$host/32')) {
+    return false;
+  }
+  final List<String> labels = host.split('.');
+  if (labels.length < 2) {
+    return false;
+  }
+  for (final String label in labels) {
+    if (!_dnsLabel.hasMatch(label)) {
+      return false;
+    }
+  }
+  if (_allDigits.hasMatch(labels.last)) {
+    return false;
+  }
+  return true;
+}
+
+final RegExp _dnsLabel = RegExp(r'^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$');
+final RegExp _allDigits = RegExp(r'^[0-9]+$');
+
 /// Whether a de-chunked TXT value is an SPF record.
 ///
 /// The version term is the exact word `v=spf1`, alone or followed by mechanisms — a value merely
@@ -230,42 +294,66 @@ final class CloudflareSpfRecord extends ReversibleStep<CapturedRecord> {
 /// refuse a domain over something receivers never read as SPF.
 bool isSpfContent(String content) => content == 'v=spf1' || content.startsWith('v=spf1 ');
 
-/// Whether [content] already authorises [address], token-aware.
-///
-/// Padded with spaces on both sides so `ip4:10.0.0.1` never matches inside `ip4:10.0.0.10` — the
-/// off-by-one that quietly re-authorises the wrong machine.
-bool spfListsIp4(String content, String address) => ' $content '.contains(' ip4:$address ');
+/// The SPF mechanism authorising [host] for [apex] — bare `a` when [host] is the apex itself,
+/// else `a:[host]`.
+String spfMechanism(String apex, String host) => host == apex ? 'a' : 'a:$host';
 
-/// [content] with `ip4:[address]` merged in, or null where it is already authorised.
+/// Whether [content] already lists [mechanism], token-aware.
 ///
-/// The mechanism is inserted directly BEFORE the trailing all-mechanism, so the record's own
-/// closing policy — qualifier included — stays the last word, exactly as SPF evaluates it. A record
-/// with no all-mechanism gets the address appended. Pure text surgery: every mechanism already in
-/// the record survives byte for byte.
-String? spfMerged(String content, String address) {
-  if (spfListsIp4(content, address)) {
+/// Padded with spaces on both sides so `a` never matches inside `a:mail.example.org`, and
+/// `a:host` never matches as a prefix of `a:host-2.example.org`.
+bool spfListsMechanism(String content, String mechanism) => ' $content '.contains(' $mechanism ');
+
+/// [content] with [mechanism] merged in, optionally replacing [replacesAddress], or null where
+/// nothing changes.
+///
+/// When [replacesAddress] is given and [content] lists `ip4:[replacesAddress]` (token-aware), that
+/// token is replaced by [mechanism], or dropped when [mechanism] is already listed.
+///
+/// Otherwise, when [mechanism] is already listed, null is returned so nothing is rewritten.
+///
+/// Otherwise, [mechanism] is inserted directly BEFORE the trailing all-mechanism, so the record's
+/// own closing policy — qualifier included — stays the last word. A record with no all-mechanism
+/// gets [mechanism] appended. Pure text surgery: every other mechanism already in the record
+/// survives byte for byte.
+String? spfMerged(String content, String mechanism, {String? replacesAddress}) {
+  if (replacesAddress != null && ' $content '.contains(' ip4:$replacesAddress ')) {
+    final List<String> tokens = content.split(_spaces);
+    if (spfListsMechanism(content, mechanism)) {
+      tokens.removeWhere((String t) => t == 'ip4:$replacesAddress');
+      return tokens.join(' ');
+    }
+    final int index = tokens.indexOf('ip4:$replacesAddress');
+    tokens[index] = mechanism;
+    tokens.removeWhere((String t) => t == 'ip4:$replacesAddress');
+    return tokens.join(' ');
+  }
+  if (spfListsMechanism(content, mechanism)) {
     return null;
   }
   final RegExpMatch? trailing = _trailingAll.firstMatch(content);
   if (trailing == null) {
-    return '$content ip4:$address';
+    return '$content $mechanism';
   }
-  return '${trailing.group(1)}ip4:$address ${trailing.group(2)}';
+  return '${trailing.group(1)}$mechanism ${trailing.group(2)}';
 }
 
-/// A fresh SPF record authorising only [address], closed by [allMechanism].
-String spfFresh(String allMechanism, String address) => 'v=spf1 ip4:$address $allMechanism';
+/// A fresh SPF record authorising only [mechanism], closed by [allMechanism].
+String spfFresh(String allMechanism, String mechanism) => 'v=spf1 $mechanism $allMechanism';
 
 /// The mechanisms of [content] that belong to OTHER senders, as one space-joined text.
 ///
-/// Everything that is not the version term, not `ip4:[address]` and not the trailing
-/// all-mechanism — on a live domain typically another mail service's `include:` lines. Non-empty
-/// means the record also authorises senders this run does not manage, which is what a merge exists
-/// to preserve and what the operator is told is being kept.
-String spfForeignMechanisms(String content, String address) {
+/// Everything that is not the version term, not [mechanism], not `ip4:[replacesAddress]` (when
+/// given) and not the trailing all-mechanism — on a live domain typically another mail service's
+/// `include:` lines. Non-empty means the record also authorises senders this run does not manage,
+/// which is what a merge exists to preserve and what the operator is told is being kept.
+String spfForeignMechanisms(String content, String mechanism, {String? replacesAddress}) {
   final List<String> foreign = <String>[];
   for (final String token in content.split(_spaces)) {
-    if (token.isEmpty || token == 'v=spf1' || token == 'ip4:$address') {
+    if (token.isEmpty ||
+        token == 'v=spf1' ||
+        token == mechanism ||
+        (replacesAddress != null && token == 'ip4:$replacesAddress')) {
       continue;
     }
     if (_allMechanism.hasMatch(token)) {

@@ -19,6 +19,7 @@ void main() {
   const String secretsFile = '$repository/secrets/values.dev';
   const String apex = 'example.com';
   const String address = '203.0.113.25';
+  const String egressHost = 'mail.example.org';
 
   const CloudflareAccess access = CloudflareAccess(
     apiUrl: api,
@@ -31,6 +32,7 @@ void main() {
   const Map<String, Object> answered = <String, Object>{
     'stage': 'dev',
     'mail_domain': apex,
+    'egress_host': egressHost,
     'egress_address': address,
     'dkim_selector': 'key1',
     'dmarc_policy': 'none',
@@ -58,7 +60,7 @@ void main() {
   const CloudflareSpfRecord spfStep = CloudflareSpfRecord(
     access: access,
     apexAnswer: 'mail_domain',
-    addressAnswer: 'egress_address',
+    hostAnswer: 'egress_host',
     allMechanism: '-all',
   );
 
@@ -71,9 +73,12 @@ void main() {
   });
 
   group('the SPF trap', () {
+    Arguments withHost(String host) =>
+        Arguments(<String, Object>{...answered, 'egress_host': host});
+
     test('TWO v=spf1 records refuse the domain wholesale, naming both', () async {
       final _Zone zone = zoneWithApexTxt(<Map<String, Object?>>[
-        _txt('rec-1', apex, 'v=spf1 include:spf.partner.example -all'),
+        _txt('rec-1', apex, 'v=spf1 include:spf.example.net -all'),
         _txt('rec-2', apex, 'v=spf1 ip4:198.51.100.7 ~all'),
         _txt('rec-3', apex, 'some-site-verification=abc123'),
       ]);
@@ -84,7 +89,7 @@ void main() {
       expect(result, isA<Blocked>());
       final String reason = (result as Blocked).reason;
       expect(reason, contains('2 v=spf1 records'));
-      expect(reason, contains('v=spf1 include:spf.partner.example -all'));
+      expect(reason, contains('v=spf1 include:spf.example.net -all'));
       expect(reason, contains('v=spf1 ip4:198.51.100.7 ~all'));
 
       await expectLater(spfStep.apply(context), throwsStateError);
@@ -101,7 +106,7 @@ void main() {
       'ONE existing record is merged, keeping the foreign mechanisms and the qualifier',
       () async {
         final _Zone zone = zoneWithApexTxt(<Map<String, Object?>>[
-          _txt('rec-1', apex, 'v=spf1 include:spf.partner.example ~all'),
+          _txt('rec-1', apex, 'v=spf1 include:spf.example.net ~all'),
         ]);
         final StepContext context = contextOf(files: filledInput(), http: zone);
 
@@ -114,7 +119,7 @@ void main() {
         final Map<String, Object?> body = jsonDecode(write.body!) as Map<String, Object?>;
         expect(
           body['content'],
-          'v=spf1 include:spf.partner.example ip4:$address ~all',
+          'v=spf1 include:spf.example.net a:$egressHost ~all',
           reason:
               'the other service\'s include is somebody\'s production mail and the ~all is the '
               'domain owner\'s policy — the merge may add one mechanism and change nothing else',
@@ -122,16 +127,16 @@ void main() {
       },
     );
 
-    test('a record that already authorises the address is left untouched', () async {
+    test('a record that already authorises the host is left untouched', () async {
       final _Zone zone = zoneWithApexTxt(<Map<String, Object?>>[
-        _txt('rec-1', apex, 'v=spf1 include:spf.partner.example ip4:$address ~all'),
+        _txt('rec-1', apex, 'v=spf1 include:spf.example.net a:$egressHost ~all'),
       ]);
       final StepContext context = contextOf(files: filledInput(), http: zone);
 
       final CheckResult result = await spfStep.check(context);
 
       expect(result, isA<Satisfied>());
-      expect((result as Satisfied).because, contains('include:spf.partner.example'));
+      expect((result as Satisfied).because, contains('include:spf.example.net'));
       expect(zone.sent.where((HttpRequest r) => r.method != 'GET'), isEmpty);
     });
 
@@ -148,9 +153,151 @@ void main() {
       expect(write.method, 'POST');
       expect(write.url, '$api/zones/zone-1/dns_records');
       final Map<String, Object?> body = jsonDecode(write.body!) as Map<String, Object?>;
-      expect(body['content'], 'v=spf1 ip4:$address -all');
+      expect(body['content'], 'v=spf1 a:$egressHost -all');
       expect(body['name'], apex);
       expect(body['type'], 'TXT');
+    });
+
+    test('authorises bare a when the host equals the apex itself', () async {
+      final _Zone zone = zoneWithApexTxt(<Map<String, Object?>>[]);
+      final StepContext context = contextOf(files: filledInput(), http: zone, run: withHost(apex));
+
+      expect(await spfStep.check(context), isA<Ready>());
+      await spfStep.apply(context);
+
+      final HttpRequest write = zone.sent.singleWhere((HttpRequest r) => r.method != 'GET');
+      final Map<String, Object?> body = jsonDecode(write.body!) as Map<String, Object?>;
+      expect(body['content'], 'v=spf1 a -all');
+    });
+
+    test('replaces an address token when replaces_address_answer is given', () async {
+      const CloudflareSpfRecord step = CloudflareSpfRecord(
+        access: access,
+        apexAnswer: 'mail_domain',
+        hostAnswer: 'egress_host',
+        replacesAddressAnswer: 'old_address',
+        allMechanism: '-all',
+      );
+      final _Zone zone = zoneWithApexTxt(<Map<String, Object?>>[
+        _txt('rec-1', apex, 'v=spf1 include:spf.example.net ip4:192.0.2.10 ~all'),
+      ]);
+      final StepContext context = contextOf(
+        files: filledInput(),
+        http: zone,
+        run: const Arguments(<String, Object>{...answered, 'old_address': '192.0.2.10'}),
+      );
+
+      expect(await step.check(context), isA<Ready>());
+      await step.apply(context);
+
+      final HttpRequest write = zone.sent.singleWhere((HttpRequest r) => r.method != 'GET');
+      expect(write.method, 'PUT');
+      final Map<String, Object?> body = jsonDecode(write.body!) as Map<String, Object?>;
+      expect(body['content'], 'v=spf1 include:spf.example.net a:$egressHost ~all');
+    });
+
+    test('drops the replaced address when the host mechanism is already listed', () async {
+      const CloudflareSpfRecord step = CloudflareSpfRecord(
+        access: access,
+        apexAnswer: 'mail_domain',
+        hostAnswer: 'egress_host',
+        replacesAddressAnswer: 'old_address',
+        allMechanism: '-all',
+      );
+      final _Zone zone = zoneWithApexTxt(<Map<String, Object?>>[
+        _txt('rec-1', apex, 'v=spf1 a:$egressHost ip4:192.0.2.10 ~all'),
+      ]);
+      final StepContext context = contextOf(
+        files: filledInput(),
+        http: zone,
+        run: const Arguments(<String, Object>{...answered, 'old_address': '192.0.2.10'}),
+      );
+
+      expect(await step.check(context), isA<Ready>());
+      await step.apply(context);
+
+      final HttpRequest write = zone.sent.singleWhere((HttpRequest r) => r.method != 'GET');
+      expect(write.method, 'PUT');
+      final Map<String, Object?> body = jsonDecode(write.body!) as Map<String, Object?>;
+      expect(body['content'], 'v=spf1 a:$egressHost ~all');
+    });
+
+    test('refuses an answer that is not a valid DNS host name', () async {
+      for (final String bad in <String>['192.0.2.10', 'Mail.Example.org', '-x.example.org']) {
+        final _Zone zone = zoneWithApexTxt(<Map<String, Object?>>[]);
+        final StepContext context = contextOf(files: filledInput(), http: zone, run: withHost(bad));
+
+        final CheckResult result = await spfStep.check(context);
+        expect(result, isA<Blocked>());
+        expect((result as Blocked).reason, contains('not a host name'));
+        expect(zone.sent, isEmpty);
+      }
+    });
+
+    test('refuses when the host answer is missing', () async {
+      final _Zone zone = zoneWithApexTxt(<Map<String, Object?>>[]);
+      final StepContext context = contextOf(
+        files: filledInput(),
+        http: zone,
+        run: const Arguments(<String, Object>{'stage': 'dev', 'mail_domain': apex}),
+      );
+
+      final CheckResult result = await spfStep.check(context);
+      expect(result, isA<Blocked>());
+      expect((result as Blocked).reason, contains('egress_host'));
+      expect(zone.sent, isEmpty);
+    });
+
+    test('refuses when replaces_address_answer is not an IPv4 address', () async {
+      const CloudflareSpfRecord step = CloudflareSpfRecord(
+        access: access,
+        apexAnswer: 'mail_domain',
+        hostAnswer: 'egress_host',
+        replacesAddressAnswer: 'old_address',
+        allMechanism: '-all',
+      );
+      final _Zone zone = zoneWithApexTxt(<Map<String, Object?>>[]);
+      final StepContext context = contextOf(
+        files: filledInput(),
+        http: zone,
+        run: const Arguments(<String, Object>{...answered, 'old_address': 'not-an-ip'}),
+      );
+
+      final CheckResult result = await step.check(context);
+      expect(result, isA<Blocked>());
+      expect((result as Blocked).reason, contains('not an IPv4 address'));
+      expect(zone.sent, isEmpty);
+    });
+
+    test('refuses when replaces_address_answer is named but missing from answers', () async {
+      const CloudflareSpfRecord step = CloudflareSpfRecord(
+        access: access,
+        apexAnswer: 'mail_domain',
+        hostAnswer: 'egress_host',
+        replacesAddressAnswer: 'missing_address',
+        allMechanism: '-all',
+      );
+      final _Zone zone = zoneWithApexTxt(<Map<String, Object?>>[]);
+      final StepContext context = contextOf(files: filledInput(), http: zone, run: answers);
+
+      final CheckResult result = await step.check(context);
+      expect(result, isA<Blocked>());
+      expect((result as Blocked).reason, contains('missing_address'));
+      expect(zone.sent, isEmpty);
+    });
+
+    test('leaves non-SPF records at apex untouched on apply', () async {
+      final _Zone zone = zoneWithApexTxt(<Map<String, Object?>>[
+        _txt('rec-3', apex, 'some-site-verification=abc123'),
+      ]);
+      final StepContext context = contextOf(files: filledInput(), http: zone);
+
+      expect(await spfStep.check(context), isA<Ready>());
+      await spfStep.apply(context);
+
+      final HttpRequest write = zone.sent.singleWhere((HttpRequest r) => r.method != 'GET');
+      expect(write.method, 'POST');
+      expect(zone.sent.where((HttpRequest r) => r.url.contains('rec-3')), isEmpty);
     });
 
     test('a listing that cannot be read blocks rather than passing for an empty zone', () async {
@@ -593,13 +740,13 @@ void main() {
   group('taking the work back', () {
     test('capture keeps the record about to be overwritten, and undo writes it back', () async {
       final _Zone zone = zoneWithApexTxt(<Map<String, Object?>>[
-        _txt('rec-1', apex, 'v=spf1 include:spf.partner.example ~all'),
+        _txt('rec-1', apex, 'v=spf1 include:spf.example.net ~all'),
       ]);
       final StepContext context = contextOf(files: filledInput(), http: zone);
 
       final CapturedRecord captured = await spfStep.capture(context);
       expect(captured.wasThere, isTrue);
-      expect(captured.content, 'v=spf1 include:spf.partner.example ~all');
+      expect(captured.content, 'v=spf1 include:spf.example.net ~all');
 
       await spfStep.undo(context, captured);
 
@@ -607,14 +754,14 @@ void main() {
       expect(write.method, 'PUT');
       expect(write.url, '$api/zones/zone-1/dns_records/rec-1');
       final Map<String, Object?> body = jsonDecode(write.body!) as Map<String, Object?>;
-      expect(body['content'], 'v=spf1 include:spf.partner.example ~all');
+      expect(body['content'], 'v=spf1 include:spf.example.net ~all');
     });
 
     test('a slot captured empty has the step\'s own record removed on undo', () async {
       // The zone as the undo finds it: the apply created one SPF record; the capture from before
       // says nothing stood there.
       final _Zone zone = zoneWithApexTxt(<Map<String, Object?>>[
-        _txt('rec-9', apex, 'v=spf1 ip4:$address -all'),
+        _txt('rec-9', apex, 'v=spf1 a:$egressHost -all'),
         _txt('rec-3', apex, 'some-site-verification=abc123'),
       ]);
       final StepContext context = contextOf(files: filledInput(), http: zone);
