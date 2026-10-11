@@ -1,4 +1,5 @@
 import 'package:ansiwise_core/ansiwise_core.dart';
+import 'conditions/kubernetes_object_absent.dart';
 import 'steps/align_calico_backend.dart';
 import 'steps/align_calico_nat_port_range.dart';
 import 'steps/apply_cluster_issuer.dart';
@@ -200,11 +201,24 @@ const Map<StepName, RegisteredStep> kubernetesSteps = <StepName, RegisteredStep>
   ),
 };
 
-/// This plugin's registry: its steps, and no predicate.
+/// Every condition this plugin contributes, keyed by the name a program row writes behind `when:`.
 ///
-/// A predicate is a named condition about one installation — which part is switched on, where a
-/// build plane runs. Those are the product's to declare; a tool plugin has none.
+/// What is registered is a reading of the TOOL: whether the cluster holds one object. Which object
+/// is one installation's, stated under `conditions:` on its own configuration and bound onto this
+/// entry under the name it chose there.
+const Map<PredicateName, RegisteredPredicate> kubernetesConditions =
+    <PredicateName, RegisteredPredicate>{
+      PredicateName('kubernetes_object_absent'): RegisteredPredicate.taking(
+        name: PredicateName('kubernetes_object_absent'),
+        source: 'lib/src/conditions/kubernetes_object_absent.dart:22',
+        create: KubernetesObjectAbsent.fromArguments,
+        describes: 'whether the cluster holds no object of a kind and name',
+        arguments: KubernetesObjectAbsent.arguments,
+      ),
+    };
+
+/// This plugin's registry: its steps and its one condition.
 const Registry kubernetesRegistry = Registry(
   steps: kubernetesSteps,
-  predicates: <PredicateName, RegisteredPredicate>{},
+  predicates: kubernetesConditions,
 );

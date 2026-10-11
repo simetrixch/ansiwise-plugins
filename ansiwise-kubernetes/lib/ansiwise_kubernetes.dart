@@ -5,6 +5,7 @@
 /// argument is required and the value stands in that installation's program row.
 library;
 
+export 'src/conditions/kubernetes_object_absent.dart';
 export 'src/plugin.dart';
 export 'src/registry.dart';
 export 'src/steps/align_calico_backend.dart';
