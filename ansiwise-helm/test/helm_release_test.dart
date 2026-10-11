@@ -339,7 +339,6 @@ void main() {
     const HelmRelease local = HelmRelease(
       release: 'ledger',
       chart: './charts/ledger',
-      chartVersion: '0.34.0',
       namespace: 'ledger',
       helm: Helm(),
     );
@@ -348,6 +347,119 @@ void main() {
     await local.apply(_contextOn(shell, FakeFiles(<String, String>{})));
 
     expect(shell.ran.where((String ran) => ran.startsWith('helm repo update')), isEmpty);
+  });
+
+  group('a chart directory', () {
+    const String directory = '/srv/charts/ledger';
+    const String definition = '$directory/Chart.yaml';
+    const String declaring =
+        'apiVersion: v2\nname: ledger\nversion: 1.0.0\ndependencies:\n'
+        '  - name: upstream\n    version: 0.34.0\n    repository: oci://example.org/charts\n';
+    const HelmRelease fromDirectory = HelmRelease(
+      release: 'ledger',
+      chart: directory,
+      namespace: 'ledger',
+      helm: Helm(),
+    );
+    Arguments row(Map<String, Object> also) => Arguments(<String, Object>{
+      'release': 'ledger',
+      'namespace': 'ledger',
+      'helm_command': <String>['helm'],
+      ...also,
+    });
+
+    test(
+      'that declares a dependency is built before the install, which names no version',
+      () async {
+        final FakeShell shell = FakeShell();
+
+        await fromDirectory.apply(
+          _contextOn(shell, FakeFiles(<String, String>{definition: declaring})),
+        );
+
+        expect(shell.ran, <String>[
+          'helm dependency build $directory',
+          'helm upgrade --install ledger $directory --namespace ledger',
+        ]);
+      },
+    );
+
+    test('that declares none is installed without a build', () async {
+      final FakeShell shell = FakeShell();
+
+      await fromDirectory.apply(
+        _contextOn(
+          shell,
+          FakeFiles(<String, String>{definition: 'apiVersion: v2\nname: ledger\nversion: 1.0.0\n'}),
+        ),
+      );
+
+      expect(shell.ran, <String>['helm upgrade --install ledger $directory --namespace ledger']);
+    });
+
+    test('a build that fails stops the row before the install', () async {
+      final FakeShell shell = FakeShell()
+        ..fails('helm dependency build $directory', stderr: 'failed to fetch upstream');
+
+      await expectLater(
+        fromDirectory.apply(_contextOn(shell, FakeFiles(<String, String>{definition: declaring}))),
+        throwsA(isA<CommandFailed>()),
+      );
+      expect(shell.ran.where((String ran) => ran.contains('upgrade')), isEmpty);
+    });
+
+    test('is compared with the name and version of its own Chart.yaml', () async {
+      StepContext holding(String chart) => _contextOn(
+        FakeShell()..answers(
+          'helm list --namespace ledger -o json',
+          '[{"name":"ledger","status":"deployed","chart":"$chart"}]',
+        ),
+        FakeFiles(<String, String>{definition: declaring}),
+      );
+
+      expect(await fromDirectory.check(holding('ledger-1.0.0')), isA<Satisfied>());
+      expect(await fromDirectory.check(holding('upstream-0.34.0')), isA<Ready>());
+    });
+
+    test('whose Chart.yaml is not on the machine stops the row', () async {
+      final CheckResult answer = await fromDirectory.check(
+        _contextOn(
+          FakeShell()..answers(
+            'helm list --namespace ledger -o json',
+            '[{"name":"ledger","status":"deployed","chart":"ledger-1.0.0"}]',
+          ),
+          FakeFiles(<String, String>{}),
+        ),
+      );
+
+      expect(answer, isA<Blocked>());
+    });
+
+    test('named with a chart_version is refused by that name', () {
+      expect(
+        () => HelmRelease.fromArguments(
+          row(<String, Object>{'chart': directory, 'chart_version': '1.0.0'}),
+        ),
+        throwsA(isA<ArgumentError>().having((ArgumentError e) => e.name, 'name', 'chart_version')),
+      );
+      expect(
+        HelmRelease.fromArguments(row(<String, Object>{'chart': directory})).chartVersion,
+        isNull,
+      );
+    });
+
+    test('a repository chart still has to name its version', () {
+      expect(
+        () => HelmRelease.fromArguments(row(<String, Object>{'chart': 'example-charts/ledger'})),
+        throwsA(isA<ArgumentError>().having((ArgumentError e) => e.name, 'name', 'chart_version')),
+      );
+      expect(
+        HelmRelease.fromArguments(
+          row(<String, Object>{'chart': 'example-charts/ledger', 'chart_version': '0.34.0'}),
+        ).chartVersion,
+        '0.34.0',
+      );
+    });
   });
 
   test('a release already so has nothing to explain', () async {

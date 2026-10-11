@@ -9,6 +9,12 @@ import 'helm.dart';
 
 /// Installs or converges one helm release, pinned to a chart version.
 ///
+/// **A chart directory pins itself.** A row may name the path of a chart directory instead of
+/// `<repository>/<chart>`. Its own `Chart.yaml` holds the name and version the installed release
+/// is compared with, and the pins of whatever it depends on; the dependencies are built into it
+/// before the install, because a checkout holds no pulled chart. Such a row names no
+/// `chart_version`, and one that does is refused: two pins for one release would disagree some day.
+///
 /// **The version is pinned and there is no path that resolves the newest.** An unpinned upgrade asks
 /// the repository what the latest is on every run, and that answer can cross a major version by
 /// itself — on a component nothing but a re-run of this program repairs.
@@ -19,11 +25,12 @@ import 'helm.dart';
 /// release is currently holding are read back and compared with the file, and a difference in either
 /// is work to do.
 final class HelmRelease extends IrreversibleStep {
-  /// Installs [chart] at [chartVersion] as [release] in [namespace].
+  /// Installs [chart] at [chartVersion] as [release] in [namespace]; [chartVersion] is null for a
+  /// chart directory.
   const HelmRelease({
     required this.release,
     required this.chart,
-    required this.chartVersion,
+    this.chartVersion,
     required this.namespace,
     this.values,
     this.helm = const Helm(),
@@ -31,15 +38,43 @@ final class HelmRelease extends IrreversibleStep {
   });
 
   /// Builds the step from what the program gave it.
-  factory HelmRelease.fromArguments(Arguments arguments) => HelmRelease(
-    release: arguments.text('release'),
-    chart: arguments.text('chart'),
-    chartVersion: arguments.text('chart_version'),
-    namespace: arguments.text('namespace'),
-    values: arguments.optionalText('values'),
-    helm: Helm.fromArguments(arguments),
-    elevated: arguments.has('elevated') && arguments.flag('elevated'),
-  );
+  ///
+  /// The pin is refused here, before anything runs, where the row gets it wrong either way: every
+  /// step is constructed before the first one runs, so the refusal reaches the operator as a broken
+  /// program rather than as a release installed at a version nobody chose.
+  factory HelmRelease.fromArguments(Arguments arguments) {
+    final String chart = arguments.text('chart');
+    final String? chartVersion = arguments.optionalText('chart_version');
+    if (_namesDirectory(chart) && chartVersion != null) {
+      throw ArgumentError.value(
+        chartVersion,
+        'chart_version',
+        'is named for the chart directory $chart, whose own Chart.yaml pins what it installs — '
+            'leave it out',
+      );
+    }
+    if (!_namesDirectory(chart) && chartVersion == null) {
+      throw ArgumentError.value(
+        chartVersion,
+        'chart_version',
+        'is left out for $chart, and an unpinned upgrade can cross a major version on a component '
+            'nothing else repairs',
+      );
+    }
+    return HelmRelease(
+      release: arguments.text('release'),
+      chart: chart,
+      chartVersion: chartVersion,
+      namespace: arguments.text('namespace'),
+      values: arguments.optionalText('values'),
+      helm: Helm.fromArguments(arguments),
+      elevated: arguments.has('elevated') && arguments.flag('elevated'),
+    );
+  }
+
+  /// Whether [chart] is the path of a chart directory rather than `<repository>/<chart>`.
+  static bool _namesDirectory(String chart) =>
+      chart.startsWith('/') || chart.startsWith('./') || chart.startsWith('../');
 
   /// What this step accepts.
   static const List<ArgumentSpec> arguments = <ArgumentSpec>[
@@ -53,14 +88,18 @@ final class HelmRelease extends IrreversibleStep {
     ArgumentSpec(
       name: 'chart',
       kind: ArgumentKind.text,
-      describes: 'the chart, as the repository name and the chart name',
+      describes:
+          'the chart, as the repository name and the chart name, or the path of a chart '
+          'directory',
     ),
     ArgumentSpec(
       name: 'chart_version',
       kind: ArgumentKind.text,
+      required: false,
       describes:
-          'the exact chart version, which is never left out — an unpinned upgrade can cross a '
-          'major version on a component nothing else repairs',
+          'the exact chart version, which a repository chart never leaves out — an unpinned '
+          'upgrade can cross a major version on a component nothing else repairs. A chart '
+          'directory names none: its Chart.yaml is the pin',
     ),
     ArgumentSpec(
       name: 'namespace',
@@ -79,11 +118,11 @@ final class HelmRelease extends IrreversibleStep {
   /// The release name.
   final String release;
 
-  /// The chart, as `<repository>/<chart>`.
+  /// The chart, as `<repository>/<chart>` or the path of a chart directory.
   final String chart;
 
-  /// The pinned chart version.
-  final String chartVersion;
+  /// The pinned chart version, or null for a chart directory.
+  final String? chartVersion;
 
   /// The namespace it goes into.
   final String namespace;
@@ -100,9 +139,10 @@ final class HelmRelease extends IrreversibleStep {
   /// can be compared.
   String get chartName => chart.contains('/') ? chart.split('/').last : chart;
 
-  /// Whether the VALUES FILE this row points at belongs to root, so every read of it is elevated.
+  /// Whether the VALUES FILE this row points at belongs to root, so every read of it is elevated,
+  /// and with it the `Chart.yaml` of a chart directory, which stands in the same tree.
   ///
-  /// Only the file. Whether helm itself has to be started as root is a property of how helm is
+  /// Only the files. Whether helm itself has to be started as root is a property of how helm is
   /// reached and is answered on [helm], because a machine where the values file is the operator's
   /// and helm is admitted only to root is one row and two different answers.
   final bool elevated;
@@ -136,8 +176,19 @@ final class HelmRelease extends IrreversibleStep {
       return const CheckResult.ready();
     }
 
+    final String wanted;
+    if (_namesDirectory(chart)) {
+      final Map<Object?, Object?>? definition = await _definition(context);
+      if (definition == null) {
+        return CheckResult.blocked(
+          '$chart/Chart.yaml is not on this machine, and $release is installed from that directory',
+        );
+      }
+      wanted = '${definition['name']}-${definition['version']}';
+    } else {
+      wanted = '$chartName-$chartVersion';
+    }
     final Object? held = installed['chart'];
-    final String wanted = '$chartName-$chartVersion';
     if (held != wanted) {
       context.log.info('the installed chart is $held and this run pins $wanted');
       return const CheckResult.ready();
@@ -189,6 +240,7 @@ final class HelmRelease extends IrreversibleStep {
   @override
   Future<void> apply(StepContext context) async {
     await _bringTheIndexUpToDate(context);
+    await _buildTheDependencies(context);
     final CommandResult done = await context.shell.run(
       helm.command(
         _upgradeArguments,
@@ -241,6 +293,42 @@ final class HelmRelease extends IrreversibleStep {
         stderr: done.stderr,
       );
     }
+  }
+
+  /// The charts a chart directory depends on, pulled into it before it is installed.
+  ///
+  /// A checkout tracks no pulled chart, so a directory declaring dependencies installs nothing until
+  /// they are built. With no lock file the build resolves the declared versions as an update does.
+  Future<void> _buildTheDependencies(StepContext context) async {
+    if (!_namesDirectory(chart)) {
+      return;
+    }
+    final Object? dependencies = (await _definition(context))?['dependencies'];
+    if (dependencies is! List || dependencies.isEmpty) {
+      return;
+    }
+    final List<String> arguments = <String>['dependency', 'build', chart];
+    final CommandResult done = await context.shell.run(
+      helm.command(arguments, timeout: const Duration(minutes: 5)),
+    );
+    if (!done.ok) {
+      throw CommandFailed(
+        argv: helm.argv(arguments),
+        exitCode: done.exitCode,
+        stdout: done.stdout,
+        stderr: done.stderr,
+      );
+    }
+  }
+
+  /// The `Chart.yaml` of a chart directory, or null where the machine holds none.
+  Future<Map<Object?, Object?>?> _definition(StepContext context) async {
+    final String path = '$chart/Chart.yaml';
+    if (!await context.files.exists(path, elevated: elevated)) {
+      return null;
+    }
+    final Object? read = loadYaml(await context.files.read(path, elevated: elevated));
+    return read is Map<Object?, Object?> ? read : null;
   }
 
   /// The repository the chart is named under, or null where it is named without one.
@@ -336,8 +424,7 @@ final class HelmRelease extends IrreversibleStep {
     chart,
     '--namespace',
     namespace,
-    '--version',
-    chartVersion,
+    if (chartVersion case final String version) ...<String>['--version', version],
     if (values case final String path) ...<String>['--values', path],
   ];
 
