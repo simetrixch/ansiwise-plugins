@@ -8,10 +8,9 @@ import 'support/machine.dart';
 ///
 /// **The shape.** `kubectl get <kind> <name>` exits one for an object that is not there and exits
 /// one for a cluster that never answered — no route to the API server, no credential, a client
-/// refused. Six steps of this package read the second as the first, and each of them decided
-/// something on it: "there is no pool, so there is none to delete", "there is no issuer to take
-/// away" on a row an operator reaches by ASKING for a rebuild, "there is nothing to patch", and
-/// three captures reading "this run created it" that send an undo to delete an object the cluster
+/// refused. Four steps of this package read the second as the first, and each of them decided
+/// something on it: "there is no pool, so there is none to delete", "there is nothing to patch",
+/// and two captures reading "this run created it" that send an undo to delete an object the cluster
 /// was already running on.
 ///
 /// **When it happens is not a corner.** The rows this matters most for are the ones that run
@@ -65,67 +64,6 @@ void main() {
       final CheckResult answer = await step.check(machine.contextFor(under));
 
       expect(answer, isA<Satisfied>(), reason: answer is Blocked ? answer.reason : '$answer');
-    });
-  });
-
-  group('the certificate issuer an operator asked to rebuild', () {
-    const RemoveExistingClusterIssuer removing = RemoveExistingClusterIssuer(
-      name: 'my-issuer',
-      force: true,
-    );
-
-    test(
-      'THE PLANTED DEFECT: a rebuild is not reported done over a cluster nobody asked',
-      () async {
-        final ClusterMachine machine = unreachable('clusterissuer');
-
-        final CheckResult answer = await removing.check(machine.contextFor(under));
-
-        expect(answer, isA<Blocked>(), reason: '$answer');
-        expect(machine.changing, isEmpty);
-      },
-    );
-
-    test('THE INNOCENT CASE: a cluster that answers and holds no issuer is satisfied', () async {
-      final ClusterMachine machine = holdingNone('clusterissuer');
-
-      final CheckResult answer = await removing.check(machine.contextFor(under));
-
-      expect(answer, isA<Satisfied>(), reason: answer is Blocked ? answer.reason : '$answer');
-    });
-
-    test('THE PLANTED DEFECT: an undo leaves an issuer it could not read alone', () async {
-      // capture answered null for a cluster it could not ask, and null is what tells the undo this
-      // run created the issuer - so the clean-up after some OTHER step failed deleted the issuer
-      // every certificate on the cluster is issued by.
-      const ApplyClusterIssuer applying = ApplyClusterIssuer(
-        name: 'my-issuer',
-        manifestPath: '/etc/certificates/issuer.yaml',
-      );
-      final ClusterMachine machine = unreachable('clusterissuer');
-      final StepContext context = machine.contextFor(under);
-
-      final ClusterIssuerBefore captured = await applying.capture(context);
-      await applying.undo(context, captured);
-
-      expect(captured.unmeasured, isTrue, reason: 'a reading nobody took is not an absent issuer');
-      expect(machine.changing, isEmpty, reason: 'the undo deleted an issuer it never measured');
-      expect(machine.said.join('\n'), contains('could not be read'));
-    });
-
-    test('THE INNOCENT CASE: an issuer this run really created is deleted again', () async {
-      const ApplyClusterIssuer applying = ApplyClusterIssuer(
-        name: 'my-issuer',
-        manifestPath: '/etc/certificates/issuer.yaml',
-      );
-      final ClusterMachine machine = holdingNone('clusterissuer');
-      final StepContext context = machine.contextFor(under);
-
-      final ClusterIssuerBefore captured = await applying.capture(context);
-      await applying.undo(context, captured);
-
-      expect(captured.unmeasured, isFalse);
-      expect(machine.changing.single, contains('delete clusterissuer my-issuer'));
     });
   });
 

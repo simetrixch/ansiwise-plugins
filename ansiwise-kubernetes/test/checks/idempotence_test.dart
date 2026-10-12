@@ -31,14 +31,12 @@ const Set<String> notCoveredByAFakeMachine = <String>{
   // each of them does on a second run against real values is driven directly in
   // align_calico_backend_test.dart and align_calico_nat_port_range_test.dart.
   'align_calico_nat_port_range',
-  'apply_cluster_issuer',
   // Its postcondition is a pool the cluster holds, left behind by a `kubectl apply`, and a fake shell
   // answers a command rather than carrying it out, so the second check finds the pool still missing.
   // Both runs against a cluster that stores what is applied are driven directly in
   // create_ipv4_ippool_for_pod_cidr_test.dart.
   'create_ipv4_ippool_for_pod_cidr',
   'remove_default_ipv4_ippool',
-  'remove_existing_cluster_issuer',
   // NOT a machine the fake cannot arrange — a probe that hands one placeholder to a PAIR argument:
   // its `tokens` list takes <field>=<secret name> pairs and the probe plants the bare placeholder,
   // so the check is blocked on the malformed pair before any machine is asked. A fixture cannot
@@ -68,7 +66,6 @@ const Set<String> notCoveredByAFakeMachine = <String>{
   // second run could measure anything. Its repeatability against real answers is driven directly in
   // replace_calico_agent_for_pod_cidr_test.dart.
   'replace_calico_agent_for_pod_cidr',
-  'restart_cert_manager_and_reapply_cluster_issuer',
   'set_default_storage_class',
   // The authority it puts on the machine is written into a Secret by the certificate service, and a
   // blank fake shell answers that read with no data at all — so the apply names the unwritten
@@ -77,12 +74,4 @@ const Set<String> notCoveredByAFakeMachine = <String>{
   // trust_cluster_authority_test.dart, where the bundle a rebuild leaves is modelled and read back.
   'trust_cluster_authority',
   'verify_ippool_converged_with_self_heal',
-  // NOT a machine the fake cannot arrange — a probe that cannot tell two paths apart. The audit
-  // hands every text argument the same placeholder, so the template this step renders FROM and the
-  // file it renders INTO are one path: the apply would write the finished manifest over its own
-  // template, and the second check would then be rendering from a file carrying no slot at all. A
-  // fixture cannot close that, because a fixture arranges the machine and not the arguments.
-  // Closing it needs the probe to hand distinguishable values to two text arguments of one step.
-  // The second run itself IS driven, against real paths, in write_cluster_issuer_manifest_test.dart.
-  'write_cluster_issuer_manifest',
 };
