@@ -2,7 +2,6 @@ import 'package:ansiwise_core/ansiwise_core.dart';
 import 'conditions/kubernetes_object_absent.dart';
 import 'steps/align_calico_backend.dart';
 import 'steps/align_calico_nat_port_range.dart';
-import 'steps/apply_cluster_issuer.dart';
 import 'steps/create_ipv4_ippool_for_pod_cidr.dart';
 import 'steps/export_cluster_credentials.dart';
 import 'steps/kubernetes_configmap_from_directory.dart';
@@ -15,17 +14,14 @@ import 'steps/reapply_calico_manifest.dart';
 import 'steps/recycle_kube_system_pod_ips.dart';
 import 'steps/remove_calico_rules_from_other_backend.dart';
 import 'steps/remove_default_ipv4_ippool.dart';
-import 'steps/remove_existing_cluster_issuer.dart';
 import 'steps/remove_kubernetes_object.dart';
 import 'steps/replace_calico_agent_for_pod_cidr.dart';
 import 'steps/require_pod_cidr_free_of_reserved_ranges.dart';
 import 'steps/require_unpopulated_cluster_for_pod_cidr_migration.dart';
-import 'steps/restart_cert_manager_and_reapply_cluster_issuer.dart';
 import 'steps/trust_cluster_authority.dart';
 import 'steps/set_default_storage_class.dart';
 import 'steps/verify_ippool_converged_with_self_heal.dart';
 import 'steps/wait_for_command_output.dart';
-import 'steps/write_cluster_issuer_manifest.dart';
 
 /// The map from the names a program file writes to the classes that implement them.
 ///
@@ -121,37 +117,11 @@ const Map<StepName, RegisteredStep> kubernetesSteps = <StepName, RegisteredStep>
     create: SetDefaultStorageClass.fromArguments,
     arguments: SetDefaultStorageClass.arguments,
   ),
-  StepName('remove_existing_cluster_issuer'): RegisteredStep(
-    name: StepName('remove_existing_cluster_issuer'),
-    source: 'lib/src/steps/remove_existing_cluster_issuer.dart:10',
-    create: RemoveExistingClusterIssuer.fromArguments,
-    arguments: RemoveExistingClusterIssuer.arguments,
-  ),
-  // Rendered before it is applied, and both are given the same file under the same name.
-  StepName('write_cluster_issuer_manifest'): RegisteredStep(
-    name: StepName('write_cluster_issuer_manifest'),
-    source: 'lib/src/steps/write_cluster_issuer_manifest.dart:23',
-    create: WriteClusterIssuerManifest.fromArguments,
-    arguments: WriteClusterIssuerManifest.arguments,
-    answers: WriteClusterIssuerManifest.answers,
-  ),
-  StepName('apply_cluster_issuer'): RegisteredStep(
-    name: StepName('apply_cluster_issuer'),
-    source: 'lib/src/steps/apply_cluster_issuer.dart:26',
-    create: ApplyClusterIssuer.fromArguments,
-    arguments: ApplyClusterIssuer.arguments,
-  ),
   StepName('trust_cluster_authority'): RegisteredStep(
     name: StepName('trust_cluster_authority'),
     source: 'lib/src/steps/trust_cluster_authority.dart:36',
     create: TrustClusterAuthority.fromArguments,
     arguments: TrustClusterAuthority.arguments,
-  ),
-  StepName('restart_cert_manager_and_reapply_cluster_issuer'): RegisteredStep(
-    name: StepName('restart_cert_manager_and_reapply_cluster_issuer'),
-    source: 'lib/src/steps/restart_cert_manager_and_reapply_cluster_issuer.dart:16',
-    create: RestartCertManagerAndReapplyClusterIssuer.fromArguments,
-    arguments: RestartCertManagerAndReapplyClusterIssuer.arguments,
   ),
   StepName('kubernetes_namespace'): RegisteredStep(
     name: StepName('kubernetes_namespace'),
