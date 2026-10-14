@@ -15,11 +15,17 @@
 # judged against its own. A single run at the root would resolve one dependency
 # graph for all of them and report about a thing that does not exist.
 #
-# THEY RUN AT ONCE, BECAUSE EACH ONE IS A PROCESS OF ITS OWN. What a package
-# costs is mostly start-up that nothing here can shorten: a resolver, an
-# analyzer, a formatter and a test runner, each started again for the next
-# package. Started together those waits overlap instead of adding up, and the
-# tree is judged in a fraction of the time without one package boundary moving.
+# THEY OVERLAP, BECAUSE EACH ONE IS A PROCESS OF ITS OWN. What a package costs is
+# mostly start-up that nothing here can shorten: a resolver, an analyzer, a
+# formatter and a test runner, each started again for the next package. Started
+# together those waits overlap instead of adding up, and the tree is judged in a
+# fraction of the time without one package boundary moving.
+#
+# BUT ONLY A FEW AT A TIME, BECAUSE EACH ONE HOLDS MEMORY. The ci of the master
+# gives the check 3 GiB. With all eleven started at once the kernel killed some
+# of them, and the run said a package was red that was only out of memory. So at
+# most $jobs packages are judged at once; scripts/build.test.sh holds the number
+# to the budget of the ci.
 #
 # THE RESOLVER RUNS ALONE, BECAUSE THE PUB CACHE IS ONE DIRECTORY. pub keeps a
 # git dependency as one checkout per ref under $PUB_CACHE/git and holds git's
@@ -27,8 +33,8 @@
 # same ref at once meet on that lock, and all but the first die on it. A sibling
 # checkout hides this: pubspec_overrides.yaml answers the pin from a path and
 # nothing is cloned. So every package is resolved first, one after another, and
-# only the judging runs at once. After the first package the resolve is a cache
-# hit and costs nothing worth overlapping.
+# only the judging overlaps. After the first package the resolve is a cache hit
+# and costs nothing worth overlapping.
 #
 # EVERY PACKAGE RUNS BEFORE ANYTHING IS REPORTED, so one red package does not
 # hide the state of the ten behind it. Each run writes to a file of its own and
@@ -37,6 +43,8 @@
 set -euo pipefail
 
 cd "$(git rev-parse --show-toplevel)"
+
+jobs=3
 
 logs="$(mktemp -d)"
 trap 'rm -rf "$logs"' EXIT
@@ -49,24 +57,21 @@ for manifest in */pubspec.yaml; do
   packages+=("$package")
 done
 
-runs=()
-for package in "${packages[@]}"; do
+judge() {
   (
-    cd "$package"
-    dart analyze --fatal-infos
-    dart format --output=none --set-exit-if-changed .
-    dart test
-  ) >"$logs/$package" 2>&1 &
-  runs+=("$!")
-done
+    cd "$1"
+    dart analyze --fatal-infos && dart format --output=none --set-exit-if-changed . && dart test
+  ) >"$logs/$1" 2>&1 || touch "$logs/$1.red"
+}
+export -f judge
+export logs
+printf '%s\n' "${packages[@]}" | xargs -n 1 -P "$jobs" bash -c 'judge "$1"' _
 
 failed=0
-index=0
-while [ "$index" -lt "${#packages[@]}" ]; do
-  echo "build: ${packages[$index]}"
-  wait "${runs[$index]}" || failed=1
-  cat "$logs/${packages[$index]}"
-  index=$((index + 1))
+for package in "${packages[@]}"; do
+  echo "build: $package"
+  cat "$logs/$package"
+  if [ -e "$logs/$package.red" ]; then failed=1; fi
 done
 
 test "$failed" -eq 0 || { echo "build: FAIL — a package above is red" >&2; exit 1; }

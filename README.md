@@ -29,8 +29,8 @@ There is no register to add it to, in this repository or in the workflow.
 ./build.sh          analyse, format and test every package — the whole repository
 ```
 
-The packages run at once, each in a process of its own, and each one's output is printed whole and
-in directory order. Every package is run before anything is reported, so one red package does not
+Up to three packages run at once, each in a process of its own, because the ci of the master holds
+the check to 3 GiB; each one's output is printed whole and in directory order. Every package is run before anything is reported, so one red package does not
 hide the state of the ten behind it. the ci of the master runs this same file on a push,
 and the release of ansiwise-cli runs it once more before it builds anything — a red package stops a
 release before a binary exists.
