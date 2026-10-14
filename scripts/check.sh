@@ -3,9 +3,10 @@
 #
 #   ./scripts/check.sh
 #
-# One step, and a red one stops the run: build.sh in the root analyses, formats and tests every
-# package of this tree, which is what .github/workflows/checks.yml runs on a push and what the
-# release of ansiwise-cli runs once more before it builds a binary.
+# Two steps, and a red one stops the run: scripts/build.test.sh holds build.sh to the memory of
+# the ci, then build.sh in the root analyses, formats and tests every package of this tree,
+# which is what .github/workflows/checks.yml runs on a push and what the release of ansiwise-cli
+# runs once more before it builds a binary.
 set -uo pipefail
 
 root="$(git rev-parse --show-toplevel)" || exit 1
@@ -21,6 +22,8 @@ echo "check: every package analysed, formatted and tested."
 # like a check that ran.
 command -v dart >/dev/null 2>&1 \
   || fail "bash build.sh — dart is not on this machine, so no package was analysed, formatted or tested. The version this organisation pins stands in ../ansiwise-checks/gate/lib/src/pins.dart."
+
+bash scripts/build.test.sh || fail "bash scripts/build.test.sh — build.sh no longer judges every package within the memory of the ci."
 
 bash build.sh || fail "bash build.sh — a package above is red."
 
