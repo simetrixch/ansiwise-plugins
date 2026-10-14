@@ -5,8 +5,8 @@
 #
 # Two steps, and a red one stops the run: scripts/build.test.sh holds build.sh to the memory of
 # the ci, then build.sh in the root analyses, formats and tests every package of this tree,
-# which is what .github/workflows/checks.yml runs on a push and what the release of ansiwise-cli
-# runs once more before it builds a binary.
+# which is what the ci of the master runs on a push and what the release of ansiwise-cli runs
+# once more before it builds a binary.
 set -uo pipefail
 
 root="$(git rev-parse --show-toplevel)" || exit 1
