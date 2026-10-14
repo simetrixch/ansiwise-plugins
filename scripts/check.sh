@@ -6,9 +6,6 @@
 # One step, and a red one stops the run: build.sh in the root analyses, formats and tests every
 # package of this tree, which is what .github/workflows/checks.yml runs on a push and what the
 # release of ansiwise-cli runs once more before it builds a binary.
-#
-# Windows entry point: check.ps1 beside this file. It is a shim that starts THIS file, so there
-# is no second spelling of these checks that could answer differently.
 set -uo pipefail
 
 root="$(git rev-parse --show-toplevel)" || exit 1

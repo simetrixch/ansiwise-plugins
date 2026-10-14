@@ -64,7 +64,7 @@ import 'stamp_selection.dart';
 ///
 /// **A script is recognised by what it is, not by what it is called.** A suffix list alone lets an
 /// extensionless script through, and the stamp reached into a script again. The first line answers
-/// for every one of those; the two suffixes stay for PowerShell, which carries no such line.
+/// for every one of those; the suffix list stays for the scripts that carry no first line.
 ///
 /// **The content search runs first and the first line second.** Only a file that carries the literal
 /// can be in the answer, and that is a few dozen of several hundred. Testing the first line of every

@@ -34,9 +34,6 @@
 # hide the state of the ten behind it. Each run writes to a file of its own and
 # is printed whole, in directory order — eleven runs writing to one screen at
 # once interleave into a log nobody can read a failure out of.
-#
-# Windows entry point: build.ps1 in this folder. It is a shim that starts
-# THIS file, so there is no second spelling of this build to keep true.
 set -euo pipefail
 
 cd "$(git rev-parse --show-toplevel)"
