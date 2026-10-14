@@ -27,7 +27,6 @@ There is no register to add it to, in this repository or in the workflow.
 
 ```
 ./build.sh          analyse, format and test every package — the whole repository
-./build.ps1         the Windows entry point; it starts build.sh and nothing else
 ```
 
 The packages run at once, each in a process of its own, and each one's output is printed whole and

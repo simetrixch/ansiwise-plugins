@@ -62,7 +62,7 @@ void main() {
           'keys': <String>['revision', 'targetRevision'],
           'excluded_segments': <String>['docs', 'templates'],
           'excluded_names': <String>[],
-          'script_suffixes': <String>['.sh', '.ps1'],
+          'script_suffixes': <String>['.sh'],
         }),
       );
 

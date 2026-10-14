@@ -30,7 +30,7 @@ void main() {
   const StampSelection rule = StampSelection(
     excludedSegments: <String>['docs', 'templates'],
     excludedNames: <String>['branch-classes.yaml'],
-    scriptSuffixes: <String>['.sh', '.ps1'],
+    scriptSuffixes: <String>['.sh'],
   );
 
   /// The marker the tree being generated writes, as the program's defaults block states it.
@@ -371,13 +371,13 @@ void main() {
       );
     });
 
-    test('a PowerShell script is excluded by its suffix, having no first line', () async {
-      const String content = 'param([string]\$Domain = "example.invalid")\n';
-      final FakeFiles files = tree(<String, String>{'tools/ops/publish.ps1': content});
-      final FakeShell shell = searching(carrying: <String>['tools/ops/publish.ps1']);
+    test('a script is excluded by its suffix wherever it stands, having no first line', () async {
+      const String content = ': "\${DOMAIN:=example.invalid}"\n';
+      final FakeFiles files = tree(<String, String>{'tools/ops/publish.sh': content});
+      final FakeShell shell = searching(carrying: <String>['tools/ops/publish.sh']);
 
       await stamp.apply(contextOn(shell: shell, files: files));
-      expect(read(files, 'tools/ops/publish.ps1'), content);
+      expect(read(files, 'tools/ops/publish.sh'), content);
     });
 
     test('the file that declares this stamp is excluded by name', () async {
