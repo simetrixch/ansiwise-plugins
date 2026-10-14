@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # =============================================================================
 # build.sh — prove every package of this repository locally. It is the one
-# runner: the ci of the master calls this file rather than spelling a
+# runner: .github/workflows/checks.yml calls this file rather than spelling a
 # loop of its own.
 # =============================================================================
 #
