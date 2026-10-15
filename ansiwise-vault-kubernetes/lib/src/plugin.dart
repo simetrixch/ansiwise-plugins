@@ -2,7 +2,7 @@ import 'package:ansiwise_core/ansiwise_core.dart';
 
 import 'registry.dart';
 
-/// What this plugin teaches the framework: how to get one value out of Vault onto a cluster.
+/// The Vault/Kubernetes credential exchanges registered with this plugin.
 ///
 /// It knows BOTH tools — how Vault answers over its HTTP API and how kubectl is invoked — and that
 /// is the whole reason it is a package of its own. A step that reads from one tool and writes to the

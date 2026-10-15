@@ -1,7 +1,6 @@
-# The vault-kubernetes plugin: the one step that reads a held value out of Vault and writes it onto
-# a cluster.
+# The vault-kubernetes plugin: complete credential exchanges between the store and the cluster.
 #
-# The subject of this package is the PAIR, and the name says so. The step cannot be two rows — a
+# The subject of this package is the PAIR, and the name says so. An exchange cannot be two rows — a
 # step that measured something has no way to tell a later step what it found — so it knows two
 # tools, and neither tool package is the place for it: inside the store package every vendor without
 # a cluster would resolve a cluster client, and inside the cluster package every vendor without a
@@ -11,7 +10,7 @@
 # which namespace and which keys are a program row's to say, and this package carries no default
 # that belongs to any one product.
 name: ansiwise_vault_kubernetes
-description: The step that materializes one Vault entry into a Secret on a Kubernetes cluster.
+description: Complete credential exchanges between Vault and Kubernetes.
 publish_to: none
 
 # WHERE THE BINARY THIS PACKAGE ENDS UP IN IS COMPOSED. Nothing here produces one: a plugin declares
