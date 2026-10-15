@@ -148,13 +148,16 @@ void main() {
       final Fixture f = Fixture()..producer.failure = true;
       f.context.log.info('credential exchange is ready');
       f.assertPrivate();
-      await f.context.shell.run(
+      final CommandResult answer = await f.context.shell.run(
         Command.detailed(
           'bash',
           stdin: jsonEncode(<String, Object?>{'entry': null, 'inputs': <String, String>{}}),
-          secretOutput: false,
         ),
       );
+      // A command given stdin keeps its output out of the record whatever it declares.
+      f.assertPrivate();
+      // PLANTED: a step that logged what the producer answered carries it into the record.
+      f.context.log.info(answer.stdout);
       expect(f.assertPrivate, throwsA(isA<TestFailure>()));
     },
   );
