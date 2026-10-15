@@ -43,6 +43,20 @@ void main() {
   });
 
   test(
+    'an entry whose latest version was deleted is written against the version Vault kept',
+    () async {
+      // PLANTED: Vault retains version 7 after a soft delete and refuses a write checked against 0.
+      final Fixture f = Fixture()..store.deleted = 7;
+      expect(await exchange.check(f.context), isA<Ready>());
+      await exchange.apply(f.context);
+      expect(f.store.writes.single['options'], <String, Object>{'cas': 7});
+      expect(f.store.entry, values);
+      expect(await exchange.check(f.context), isA<Satisfied>());
+      f.assertPrivate();
+    },
+  );
+
+  test(
     'one complete exchange is validated, CAS written once and verified without recording values',
     () async {
       final Fixture f = Fixture();
@@ -234,14 +248,32 @@ final class Producer implements Shell {
   }
 }
 
+// Strict about check-and-set, as Vault is: a write names the entry's current version, which a
+// deleted latest version keeps (KV v2 createupdate-secret), or 0 where nothing was ever written.
 final class Store implements Http {
   Store(this.entry);
   Map<String, String>? entry;
   int status = 200, version = 1;
+  int? deleted;
   bool refuseWrite = false, ignoreWrite = false;
   final List<Map<String, Object?>> writes = <Map<String, Object?>>[];
+  int get _current => entry != null ? version : deleted ?? 0;
+  HttpAnswer _answer(int status, Object? body) => HttpAnswer(
+    status: status,
+    body: jsonEncode(body),
+    headers: const <String, String>{},
+    elapsed: Duration.zero,
+  );
   @override
   Future<HttpAnswer> send(HttpRequest request) async {
+    if (status != 200) return _answer(status, null);
+    if (request.url.contains('/metadata/')) {
+      return entry == null && deleted == null
+          ? _answer(404, <String, Object>{'errors': <Object>[]})
+          : _answer(200, <String, Object?>{
+              'data': <String, Object?>{'current_version': _current},
+            });
+    }
     if (request.method == 'POST') {
       final Map<String, Object?> body = jsonDecode(request.body!) as Map<String, Object?>;
       writes.add(body);
@@ -253,23 +285,19 @@ final class Store implements Http {
           elapsed: Duration.zero,
         );
       }
+      if ((body['options']! as Map<String, Object?>)['cas'] != _current) {
+        return _answer(400, <String, Object>{
+          'errors': <String>['check-and-set parameter did not match the current version'],
+        });
+      }
+      version = _current + 1;
       if (!ignoreWrite) entry = Map<String, String>.from(body['data']! as Map);
-      version++;
     }
-    return HttpAnswer(
-      status: status != 200
-          ? status
-          : entry == null
-          ? 404
-          : 200,
-      body: jsonEncode(<String, Object?>{
-        'data': <String, Object?>{
-          'data': entry,
-          'metadata': <String, Object>{'version': version},
-        },
-      }),
-      headers: const <String, String>{},
-      elapsed: Duration.zero,
-    );
+    return _answer(entry == null ? 404 : 200, <String, Object?>{
+      'data': <String, Object?>{
+        'data': entry,
+        'metadata': <String, Object>{'version': entry == null ? _current : version},
+      },
+    });
   }
 }

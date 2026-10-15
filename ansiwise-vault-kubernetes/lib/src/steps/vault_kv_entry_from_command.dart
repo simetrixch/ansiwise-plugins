@@ -269,6 +269,22 @@ final class VaultKvEntryFromCommand extends IrreversibleStep {
       }
       values = data;
       version = metadata['version']! as int;
+    } else {
+      // A deleted latest version reads as absent, yet Vault keeps its number and refuses a write
+      // checked against 0 for as long as the entry's metadata stands. Only no metadata is no entry.
+      final String metadataPath = '$mount/metadata/${target.value}';
+      final VaultReading kept = readingOf(
+        await context.http.send(vaultRead(profile.url!, metadataPath, token: token.value)),
+        path: metadataPath,
+      );
+      if (kept case final VaultUnreadable refused) throw _ExchangeRefused(refused.because);
+      if (kept is VaultHeld) {
+        final Object? current = kept.data['current_version'];
+        if (current is! int || current < 1) {
+          throw _ExchangeRefused('$metadataPath returned no readable current version');
+        }
+        version = current;
+      }
     }
     return _Entry(profile.url!, dataPath, token.value!, values, version);
   }
