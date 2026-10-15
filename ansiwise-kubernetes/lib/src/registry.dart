@@ -1,5 +1,6 @@
 import 'package:ansiwise_core/ansiwise_core.dart';
 import 'conditions/kubernetes_object_absent.dart';
+import 'conditions/kubernetes_object_present.dart';
 import 'steps/align_calico_backend.dart';
 import 'steps/align_calico_nat_port_range.dart';
 import 'steps/create_ipv4_ippool_for_pod_cidr.dart';
@@ -173,7 +174,7 @@ const Map<StepName, RegisteredStep> kubernetesSteps = <StepName, RegisteredStep>
 
 /// Every condition this plugin contributes, keyed by the name a program row writes behind `when:`.
 ///
-/// What is registered is a reading of the TOOL: whether the cluster holds one object. Which object
+/// What is registered is a reading of the TOOL: whether the cluster holds one object, either way. Which object
 /// is one installation's, stated under `conditions:` on its own configuration and bound onto this
 /// entry under the name it chose there.
 const Map<PredicateName, RegisteredPredicate> kubernetesConditions =
@@ -185,9 +186,16 @@ const Map<PredicateName, RegisteredPredicate> kubernetesConditions =
         describes: 'whether the cluster holds no object of a kind and name',
         arguments: KubernetesObjectAbsent.arguments,
       ),
+      PredicateName('kubernetes_object_present'): RegisteredPredicate.taking(
+        name: PredicateName('kubernetes_object_present'),
+        source: 'lib/src/conditions/kubernetes_object_present.dart:10',
+        create: KubernetesObjectPresent.fromArguments,
+        describes: 'whether the cluster holds an object of a kind and name',
+        arguments: KubernetesObjectPresent.arguments,
+      ),
     };
 
-/// This plugin's registry: its steps and its one condition.
+/// This plugin's registry: its steps and its two conditions.
 const Registry kubernetesRegistry = Registry(
   steps: kubernetesSteps,
   predicates: kubernetesConditions,

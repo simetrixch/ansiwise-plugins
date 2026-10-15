@@ -6,6 +6,7 @@
 library;
 
 export 'src/conditions/kubernetes_object_absent.dart';
+export 'src/conditions/kubernetes_object_present.dart';
 export 'src/plugin.dart';
 export 'src/registry.dart';
 export 'src/steps/align_calico_backend.dart';
