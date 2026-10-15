@@ -1,4 +1,5 @@
 import 'package:ansiwise_checks/ansiwise_checks.dart';
+import 'package:ansiwise_core/testing.dart';
 import 'package:ansiwise_checks/audits.dart';
 import 'package:ansiwise_vault_kubernetes/ansiwise_vault_kubernetes.dart';
 
@@ -11,12 +12,22 @@ Future<void> main() => auditIdempotence(
 
 /// The fake machine each named step meets, by the name a program file writes.
 ///
-/// Empty, and that is a statement rather than an omission. What stops the one step here is not the
-/// fake but the VALUES the audit hands it, which a fixture does not get to choose: its `fields`
-/// argument arrives as the audit's generic text, that text is not a `key=field` pair, and the step
-/// refuses before it writes anything. So no fixture here could take the step out of the ledger
-/// below.
-const Map<String, Fixture> stepFixtures = <String, Fixture>{};
+/// The producer repairs external authorization while retaining an unchanged entry. The focused
+/// exchange suite also covers creation and rotation against a stateful Vault port.
+final Map<String, Fixture> stepFixtures = <String, Fixture>{
+  'vault_kv_entry_from_command': (FakeShell shell, FakeFiles files, FakeHttp http) {
+    files.contents['x/x'] = 'x: https://vault.example.invalid\nRoot Token: fixture-root-secret\n';
+    http.answers(
+      'GET https://vault.example.invalid/v1/x/data/x',
+      body: '{"data":{"data":{"x":"fixture-held"},"metadata":{"version":1}}}',
+    );
+    shell.answers('bash x --check -- kubectl', '{"satisfied":false}');
+    shell.answers('bash x --apply -- kubectl', '{"x":"fixture-held"}');
+    shell.changes('bash x --apply -- kubectl', () {
+      shell.answers('bash x --check -- kubectl', '{"satisfied":true}');
+    });
+  },
+};
 
 /// The steps a fake machine cannot exercise, each named because an audit that quietly covers nothing
 /// reads like a pass.

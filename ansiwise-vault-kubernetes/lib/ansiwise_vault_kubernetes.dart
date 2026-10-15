@@ -16,3 +16,4 @@ library;
 export 'src/plugin.dart';
 export 'src/registry.dart';
 export 'src/steps/kubernetes_secret_from_vault.dart';
+export 'src/steps/vault_kv_entry_from_command.dart';

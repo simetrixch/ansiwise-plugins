@@ -1,6 +1,7 @@
 import 'package:ansiwise_core/ansiwise_core.dart';
 
 import 'steps/kubernetes_secret_from_vault.dart';
+import 'steps/vault_kv_entry_from_command.dart';
 
 /// Every step this plugin carries, from the names a program file writes to the classes that
 /// implement them.
@@ -16,6 +17,12 @@ import 'steps/kubernetes_secret_from_vault.dart';
 /// class is compiled out of, and a program file names a step rather than a package — so a rename
 /// here would break every row for a change no row can see.
 const Map<StepName, RegisteredStep> vaultKubernetesSteps = <StepName, RegisteredStep>{
+  StepName('vault_kv_entry_from_command'): RegisteredStep(
+    name: StepName('vault_kv_entry_from_command'),
+    source: 'lib/src/steps/vault_kv_entry_from_command.dart:9',
+    create: VaultKvEntryFromCommand.fromArguments,
+    arguments: VaultKvEntryFromCommand.arguments,
+  ),
   // It reads no answer by a name of its own. The one axis a product may run the same layout along
   // more than once is named by the row under `run_answer`, exactly as it is for every step of the
   // vault family, so this entry declares none and the slot in the entry path is filled from that
