@@ -109,6 +109,28 @@ ground:
     );
   });
 
+  test('the kind of the host\'s release feed is gone and the refusal names its replacement', () {
+    const String retired = '''
+tools:
+  liner:
+    version: "v9.0.0"
+    upstream:
+      kind: github_release
+      project: example/liner
+      matching: '^v[0-9]+\\.[0-9]+\\.[0-9]+\$'
+''';
+    expect(
+      () => parseDeclaration(retired, where: 'pins.yaml'),
+      throwsA(
+        isA<DeclarationInvalid>().having(
+          (DeclarationInvalid refused) => refused.toString(),
+          'the refusal',
+          allOf(contains('github_release'), contains('git_tags')),
+        ),
+      ),
+    );
+  });
+
   test('an upstream kind nobody wrote is refused with the kinds that exist', () {
     const String unknown = '''
 appliances:
@@ -129,24 +151,25 @@ appliances:
     );
   });
 
-  test('a release-feed upstream that says which shapes it will see is carried whole', () {
+  test('a tag-list upstream that says which shapes it will see is carried whole', () {
     const String channelled = '''
 tools:
   liner:
     version: "v9.0.0"
     upstream:
-      kind: github_release
+      kind: git_tags
       project: example/liner
       matching: '^v[0-9]+\\.[0-9]+\\.[0-9]+\$'
 ''';
     final VersionsDeclaration declaration = parseDeclaration(channelled, where: 'pins.yaml');
     final Upstream? upstream = declaration.components.single.upstream;
-    expect(upstream, isA<GithubRelease>());
-    expect((upstream! as GithubRelease).matching, r'^v[0-9]+\.[0-9]+\.[0-9]+$');
+    expect(upstream, isA<GitTags>());
+    expect((upstream! as GitTags).project, 'example/liner');
+    expect((upstream as GitTags).matching, r'^v[0-9]+\.[0-9]+\.[0-9]+$');
   });
 
-  test('a release-feed upstream naming no shape it will see is refused', () {
-    // A release list carries every channel a project ever cut, so a pin that says nothing about
+  test('a tag-list upstream naming no shape it will see is refused', () {
+    // A tag list carries every channel a project ever cut, so a pin that says nothing about
     // which of them it follows would be answered with whichever one happens to sort highest — a
     // release candidate read as a version to move to. The pin has to say, and there is no default
     // to fall back on: which channel a component follows is the product's decision.
@@ -155,7 +178,7 @@ tools:
   liner:
     version: "v9.0.0"
     upstream:
-      kind: github_release
+      kind: git_tags
       project: example/liner
 ''';
     expect(

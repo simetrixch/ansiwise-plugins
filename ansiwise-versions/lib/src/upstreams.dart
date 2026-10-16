@@ -6,7 +6,7 @@
 /// the reason — because a version appearing on the internet, or a feed being down, must never turn
 /// a tree red, or red stops meaning "the tree is sound".
 ///
-/// Four lessons are load-bearing here and named where they bite, each measured against a real
+/// Three lessons are load-bearing here and named where they bite, each measured against a real
 /// upstream:
 ///
 /// - **An image is published by a REGISTRY**, and a project can tag a release with no image
@@ -17,11 +17,6 @@
 ///   newer tags fall outside the page it read.
 /// - **The pattern decides what is comparable.** A tag list carries every shape a project ever
 ///   published, so each candidate must match the declared pattern whole before it competes.
-/// - **A feed's own word "latest" is not the newest.** `releases/latest` on github.com answers
-///   only the newest release a project did NOT mark a pre-release, and 404 where it marked every
-///   one of them. Measured against a project cutting every release on a pre-release
-///   channel: that endpoint answered 404 while the whole list served five entries. So the whole
-///   list is asked, and the declared pattern is what says which entries a pin competes against.
 library;
 
 import 'dart:convert';
@@ -61,87 +56,70 @@ final class UpstreamReading {
 /// answered from what happened to be read.
 const int pageLimit = 200;
 
-/// The newest release tag of [project] on github.com matching [matching].
+/// The caveat every Git tag reading carries: a tag is source, and publishing is a separate act.
+const String _sourceTagCaveat = 'a Git source tag: no artifact is known to be served for it';
+
+/// The ref lines of a smart-HTTP advertisement: an object name, a space, the ref.
 ///
-/// The WHOLE list is asked and never `releases/latest`, which answers one release chosen by the
-/// project's own pre-release marking and 404 where every release carries it. Which entries a pin
-/// is willing to see is the declaration's to say, in the same [matching] the tag lists take: a pin
-/// written in a stable shape never competes against a candidate cut on another channel, and a pin
-/// written in a pre-release shape can be read at all.
+/// The body arrives through the port as text, so the 4-digit pkt-line lengths in front of each line
+/// are not counted but left unread, and a line is found by its own shape. The first line of a list
+/// carries the server's capabilities after a NUL, which `[^\s\x00]` stops at.
+final RegExp _refLine = RegExp(r'[0-9a-f]{40} ([^\s\x00]+)');
+
+/// The newest tag of [project] on github.com matching [matching], read off its Git refs.
 ///
-/// The answer names the project's own pre-release marking of the entry it chose, in the caveat.
-/// The marking is carried beside the tag in the feed and a tag name need not repeat it, so a
-/// reader holding a stable pin against this answer would otherwise have no way to see it.
+/// The address is the one a `git ls-remote` asks, through the framework's port and never through a
+/// `git` of the machine: the tag list of a repository is Git content, and no Releases API, Pages or
+/// registry is asked. The answer holds every ref, so there is one request and no page to follow.
 ///
-/// The list is served newest-published first, and a page cut short is answered the way the tag
-/// lists answer one: the maximum over what WAS served, saying so.
-Future<UpstreamReading> githubNewestRelease(
+/// A tag competes only where it matches [matching] whole. Where the expression holds a group, the
+/// first group is the version the tag stands for — `kube-prometheus-stack-87.21.0` reads as
+/// `87.21.0` — and the versions are what is ordered. An annotated tag is listed twice, once as
+/// itself and once peeled (`^{}`); the peeled line is the same tag and is dropped.
+///
+/// Every reading says that a tag is source: nothing here knows an artifact is served for it.
+Future<UpstreamReading> gitNewestTag(
   Http http,
   String project,
   String matching, {
   required Duration timeout,
 }) async {
-  final Map<String, bool> released = <String, bool>{};
-  String? url = 'https://api.github.com/repos/$project/releases?per_page=100';
-  for (int page = 0; url != null; page++) {
-    if (page >= pageLimit) {
-      return UpstreamReading.unresolved(
-        'the release list of $project did not end within $pageLimit pages',
-      );
-    }
-    final _Json fetched = await _json(
-      http,
-      url,
-      timeout: timeout,
-      headers: const <String, String>{'Accept': 'application/vnd.github+json'},
-    );
-    final Object? body = fetched.body;
-    if (body == null) {
-      if (released.isEmpty) {
-        return UpstreamReading.unresolved(fetched.whyNot!);
-      }
-      final UpstreamReading partial = _newest(released.keys, matching, of: project);
-      return partial.newest == null
-          ? UpstreamReading.unresolved(fetched.whyNot!)
-          : UpstreamReading.of(
-              partial.newest!,
-              caveat: _caveat(prerelease: released[partial.newest!]!, truncatedAfter: page),
-            );
-    }
-    if (body is! List<Object?>) {
-      return UpstreamReading.unresolved(
-        'the release list of $project answered an unexpected shape',
-      );
-    }
-    for (final Object? entry in body) {
-      if (entry is Map<String, Object?> && entry['tag_name'] is String) {
-        released[entry['tag_name']! as String] = entry['prerelease'] == true;
-      }
-    }
-    final HttpAnswer? served = fetched.answer;
-    url = served == null ? null : _nextLinked(served, 'api.github.com');
+  final String url = 'https://github.com/$project.git/info/refs?service=git-upload-pack';
+  final HttpAnswer answer;
+  try {
+    answer = await http.send(HttpRequest('GET', url, timeout: timeout));
+  } on Object catch (failure) {
+    return UpstreamReading.unresolved('$url could not be asked — $failure');
   }
-  final UpstreamReading whole = _newest(released.keys, matching, of: project);
-  return whole.newest == null
-      ? whole
-      : UpstreamReading.of(
-          whole.newest!,
-          caveat: _caveat(prerelease: released[whole.newest!]!, truncatedAfter: null),
-        );
-}
-
-/// What weakens a release-feed answer without voiding it, or null when nothing does.
-///
-/// Both can hold at once — a truncated walk whose maximum is a pre-release — so they are joined
-/// rather than chosen between.
-String? _caveat({required bool prerelease, required int? truncatedAfter}) {
-  final List<String> weakened = <String>[
-    if (prerelease) 'the project marks this release a pre-release',
-    if (truncatedAfter != null)
-      'the feed refused the rest of the list after $truncatedAfter page(s), newest-published '
-          'first; this is the maximum over what it served',
-  ];
-  return weakened.isEmpty ? null : weakened.join('; ');
+  if (!answer.ok) {
+    return UpstreamReading.unresolved('$url answered ${answer.status}');
+  }
+  final List<RegExpMatch> refs = _refLine.allMatches(answer.body).toList();
+  if (refs.isEmpty) {
+    return UpstreamReading.unresolved('$url answered something that is not a Git ref list');
+  }
+  const String tagRefs = 'refs/tags/';
+  final RegExp shape = RegExp(matching);
+  final List<String> versions = <String>[];
+  for (final RegExpMatch ref in refs) {
+    final String name = ref[1]!;
+    if (!name.startsWith(tagRefs) || name.endsWith('^{}')) {
+      continue;
+    }
+    final String tag = name.substring(tagRefs.length);
+    final RegExpMatch? whole = shape.firstMatch(tag);
+    if (whole == null || whole[0] != tag) {
+      continue;
+    }
+    final String? version = whole.groupCount == 0 ? tag : whole[1];
+    if (version != null) {
+      versions.add(version);
+    }
+  }
+  final UpstreamReading newest = _highest(versions, matching, of: project);
+  return newest.newest == null
+      ? newest
+      : UpstreamReading.of(newest.newest!, caveat: _sourceTagCaveat);
 }
 
 /// The newest tag of [image] on hub.docker.com matching [matching].
@@ -388,10 +366,18 @@ Future<UpstreamReading> hashicorpLatestVersion(
 /// both the other way around. Ties fall back to the text itself, so the answer is deterministic.
 UpstreamReading _newest(Iterable<String> candidates, String matching, {required String of}) {
   final RegExp shape = RegExp(matching);
-  final List<String> matched = <String>[
-    for (final String candidate in candidates)
-      if (shape.stringMatch(candidate) == candidate) candidate,
-  ];
+  return _highest(
+    <String>[
+      for (final String candidate in candidates)
+        if (shape.stringMatch(candidate) == candidate) candidate,
+    ],
+    matching,
+    of: of,
+  );
+}
+
+/// The highest of [matched], which already passed [matching], compared by their numbers.
+UpstreamReading _highest(List<String> matched, String matching, {required String of}) {
   if (matched.isEmpty) {
     return UpstreamReading.unresolved('$of serves no version matching $matching');
   }
@@ -485,14 +471,10 @@ String? _header(HttpAnswer answer, String name) {
 }
 
 final class _Json {
-  const _Json(this.body, this.whyNot, {this.answer});
+  const _Json(this.body, this.whyNot);
 
   final Object? body;
   final String? whyNot;
-
-  /// The answer the transport gave, where one arrived at all — for a reader whose next page is
-  /// named in a header rather than in the document.
-  final HttpAnswer? answer;
 }
 
 Future<_Json> _json(
@@ -508,13 +490,13 @@ Future<_Json> _json(
     return _Json(null, '$url could not be asked — $failure');
   }
   if (!answer.ok) {
-    return _Json(null, '$url answered ${answer.status}', answer: answer);
+    return _Json(null, '$url answered ${answer.status}');
   }
   final Object? body = _decoded(answer.body);
   if (body == null) {
-    return _Json(null, '$url answered something that is not a document', answer: answer);
+    return _Json(null, '$url answered something that is not a document');
   }
-  return _Json(body, null, answer: answer);
+  return _Json(body, null);
 }
 
 Object? _decoded(String text) {

@@ -25,7 +25,7 @@
 ///                                # version, and written by a stamp that says writes: sha256
 ///     note: one line the report appends to this component's upstream cell   # optional
 ///     upstream:                # optional; without it the report answers "?" for this component
-///       kind: github_release | docker_hub | oci_tags | chart_repository | helm_index
+///       kind: git_tags | docker_hub | oci_tags | chart_repository | helm_index
 ///             | snap_channel | hashicorp_release
 ///       ...                    # the fields of that kind, and nothing else
 ///     stamps:                  # optional; without it nothing writes this pin anywhere
@@ -141,24 +141,29 @@ sealed class Upstream {
   const Upstream();
 }
 
-/// The newest release of a project on github.com whose tag matches a pattern.
+/// The newest tag of a project's Git repository on github.com whose tag matches a pattern.
 ///
-/// For a CLI TOOL this is the right question: the release is what the install fetches. For an
-/// IMAGE it is the wrong one — a project can tag a release with no image behind it, and a cluster
-/// runs the image — which is why the image kinds below ask the registry instead.
-final class GithubRelease extends Upstream {
-  /// Asks the release list of [project] for the releases matching [matching].
-  const GithubRelease({required this.project, required this.matching});
+/// The tag list of a repository is Git content, so it is read where the source is and not through
+/// the host's release feed. A tag names SOURCE: the project cut it, and nothing says an artifact
+/// was ever published for it — which is why every answer of this kind says so beside the value. For
+/// an IMAGE the question is the wrong one, because a cluster runs the image and a project can tag
+/// a version with no image behind it — which is why the image kinds below ask the registry instead.
+final class GitTags extends Upstream {
+  /// Asks the tag list of [project] for the tags matching [matching].
+  const GitTags({required this.project, required this.matching});
 
   /// The `owner/name` of the project.
   final String project;
 
-  /// The anchored expression a release tag must match whole to be a candidate.
+  /// The anchored expression a tag must match whole to be a candidate.
   ///
-  /// A release list carries every shape a project ever published, and the channel a release was
-  /// cut on is usually part of that shape — so this is where a pin says whether it is willing to
-  /// be told about a pre-release at all. Without it a release candidate competes with the stable
-  /// versions beside it and reads as a version to bump to.
+  /// A tag list carries every shape a project ever published, and the channel a tag was cut on is
+  /// usually part of that shape — so this is where a pin says whether it is willing to be told
+  /// about a pre-release at all. Without it a release candidate competes with the stable versions
+  /// beside it and reads as a version to bump to.
+  ///
+  /// Where it holds a group, the version a tag stands for is the first group: a project that
+  /// writes its own name in front of the number is read as the number the pin spells.
   ///
   /// It has no default, because which channel a pin follows is the product's decision and a
   /// package that guessed it would answer confidently for a question nobody was asked.
@@ -236,7 +241,7 @@ final class SnapChannel extends Upstream {
 
 /// The latest release of a product on the hashicorp releases feed.
 ///
-/// Its own kind rather than a github release because the feed is what the install fetches from,
+/// Its own kind rather than a Git tag list because the feed is what the install fetches from,
 /// and the honest question is asked of the source actually served.
 final class HashicorpRelease extends Upstream {
   /// Asks the releases feed about [product].
@@ -536,12 +541,12 @@ Upstream? _upstream(String label, YamlNode node, List<String> problems) {
     return null;
   }
   final Upstream? upstream = switch (kind) {
-    'github_release' => () {
+    'git_tags' => () {
       final String? project = fields.text('project');
       final String? matching = fields.text('matching');
       return project == null || matching == null
           ? null
-          : GithubRelease(project: project, matching: matching);
+          : GitTags(project: project, matching: matching);
     }(),
     'docker_hub' => () {
       final String? image = fields.text('image');
@@ -576,7 +581,7 @@ Upstream? _upstream(String label, YamlNode node, List<String> problems) {
     }(),
     _ => () {
       problems.add(
-        '"$label" has an upstream of kind "$kind", and the kinds are github_release, docker_hub, '
+        '"$label" has an upstream of kind "$kind", and the kinds are git_tags, docker_hub, '
         'oci_tags, chart_repository, helm_index, snap_channel and hashicorp_release',
       );
       return null;
