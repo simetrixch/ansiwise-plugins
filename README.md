@@ -18,10 +18,11 @@ Make a directory named `ansiwise-<tool>` with a `pubspec.yaml` in it. That is th
 
 - `build.sh` walks every directory holding a `pubspec.yaml` and a `test/`, so a new package is
   analysed, formatted and tested without being added to a list;
-- the ci of the master runs that same file on a push, so there is one walk and not two;
+- the ci of the master, the pipeline `ansiwise-plugins-ci`, runs that same file on a push, so there is
+  one walk and not two;
 - the product picks up the packages it wants by path, at the commit its manifest names.
 
-There is no register to add it to, in this repository or in the workflow.
+There is no register to add it to, in this repository or in the ci of the master.
 
 ## Judging it
 
@@ -30,10 +31,17 @@ There is no register to add it to, in this repository or in the workflow.
 ```
 
 Up to three packages run at once, each in a process of its own, because the ci of the master holds
-the check to 3 GiB; each one's output is printed whole and in directory order. Every package is run before anything is reported, so one red package does not
-hide the state of the ten behind it. the ci of the master runs this same file on a push,
-and the release of ansiwise-cli runs it once more before it builds anything — a red package stops a
-release before a binary exists.
+the check to 3 GiB; each one's output is printed whole and in directory order. Every package is run
+before anything is reported, so one red package does not hide the state of the ten behind it.
+
+The ci of the master is the Tekton pipeline `ansiwise-plugins-ci` (hostyour-cloud
+`clusters/inventories/consumer-build/templates/pipeline-ci.yaml`). It installs the Dart that
+`ci-tools.json` names and runs this same file on a push of the default branch or of a branch whose
+name starts with `ci/` (the Trigger `github-ci-push`, hostyour-cloud
+`clusters/inventories/image-builder/templates/triggers/github-ci-push.yaml`). Its runs are the
+PipelineRuns `ansiwise-plugins-ci-*` in the namespace `ansiwise-plugins-build`, and it sets the commit
+status `tekton/ci`. The release of ansiwise-cli runs the file once more before it builds anything — a
+red package stops a release before a binary exists.
 
 ## Taking one
 
