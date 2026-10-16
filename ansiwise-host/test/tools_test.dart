@@ -77,6 +77,24 @@ const InstallPinnedTool yqCli = InstallPinnedTool(
   pinPrefixes: pinPrefixes,
 );
 
+/// The digest the store fixture's row pins, and the one its address names.
+const String blobDigest = 'e1c3a5b7d9f0b2d4f6a8c0e2d4f6b8a0c2e4f6a8b0d2c4e6f8a1b3d5c7e9f0a2';
+
+/// A tool kept by a store that serves a file under its own digest, so the address of its release
+/// names the digest the row pins beside the version it pins.
+const InstallPinnedTool blobCli = InstallPinnedTool(
+  tool: 'blob-cli',
+  version: 'v1.4.0',
+  url:
+      'https://store.example.invalid/v2/tools/blob-cli/${InstallPinnedTool.versionPlaceholder}/'
+      'blobs/sha256:${InstallPinnedTool.sha256Placeholder}',
+  sha256: blobDigest,
+  directory: InstallPinnedTool.defaultDirectory,
+  archive: null,
+  versionCommand: <String>['--version'],
+  pinPrefixes: pinPrefixes,
+);
+
 /// The tools an operator uses on the machine, and the pins that make two machines the same.
 void main() {
   const StepName under = StepName('under_test');
@@ -241,6 +259,66 @@ void main() {
         expect((answer as Blocked).reason, contains('<architekture>'));
       },
     );
+
+    test('a url naming the digest slot is fetched with the digest of its row', () async {
+      // The address of a store that keeps a file under its own digest names the very bytes the
+      // row pins, so the row's digest fills it before the fetch and the fetched file is still held
+      // against that digest afterwards.
+      const String filled =
+          'https://store.example.invalid/v2/tools/blob-cli/v1.4.0/blobs/sha256:$blobDigest';
+      expect(blobCli.fetchedFrom, filled);
+
+      final HostMachine machine = HostMachine();
+      machine.shell.fails(onThePathKey('blob-cli'));
+      expect(await blobCli.check(machine.contextFor(under)), isA<Ready>());
+
+      answerDigest(machine, blobCli.incoming, blobDigest);
+      await blobCli.apply(machine.contextFor(under));
+      expect(
+        machine.shell.ran,
+        contains(
+          'curl --silent --show-error --fail --location --output '
+          '${blobCli.directory}/blob-cli.incoming $filled',
+        ),
+      );
+    });
+
+    test('the digest slot does not stand in for the pin, and fills nothing else', () async {
+      // The pin is still what the address must name, and a slot the row cannot fill is still
+      // refused beside the one it can.
+      final CheckResult unpinned = await const InstallPinnedTool(
+        tool: 'blob-cli',
+        version: 'v1.4.0',
+        url: 'https://store.example.invalid/v2/tools/blob-cli/blobs/sha256:<sha256>',
+        sha256: blobDigest,
+        directory: InstallPinnedTool.defaultDirectory,
+        archive: null,
+        versionCommand: <String>['--version'],
+        pinPrefixes: pinPrefixes,
+      ).check(HostMachine().contextFor(under));
+      expect((unpinned as Blocked).reason, contains(InstallPinnedTool.versionPlaceholder));
+
+      final CheckResult unknown = await const InstallPinnedTool(
+        tool: 'blob-cli',
+        version: 'v1.4.0',
+        url:
+            'https://store.example.invalid/v2/tools/blob-cli/<version>/blobs/sha256:<sha256>/'
+            '<architekture>',
+        sha256: blobDigest,
+        directory: InstallPinnedTool.defaultDirectory,
+        archive: null,
+        versionCommand: <String>['--version'],
+        pinPrefixes: pinPrefixes,
+      ).check(HostMachine().contextFor(under));
+      expect((unknown as Blocked).reason, contains('<architekture>'));
+    });
+
+    test('the argument that holds the url names the digest slot', () {
+      final ArgumentSpec url = InstallPinnedTool.arguments.firstWhere(
+        (ArgumentSpec spec) => spec.name == 'url',
+      );
+      expect(url.describes, contains(InstallPinnedTool.sha256Placeholder));
+    });
 
     test(
       'a row that says nothing about asking the version is refused, not fetched every run',

@@ -92,7 +92,9 @@ final class InstallPinnedTool extends IrreversibleStep {
       kind: ArgumentKind.text,
       describes:
           'where the release is fetched from, written with $versionPlaceholder where the pin '
-          'belongs and $bareVersionPlaceholder where it belongs without the shape its tag carries',
+          'belongs and $bareVersionPlaceholder where it belongs without the shape its tag carries, '
+          'and with $sha256Placeholder where the sha256 of the row belongs — for a store that '
+          'serves a file under its own digest',
     ),
     // No default: a digest is a fact of one file of one release, so it stands in the row beside the
     // pin that names the release.
@@ -103,7 +105,7 @@ final class InstallPinnedTool extends IrreversibleStep {
           'the SHA-256 of the file the url serves, as 64 lowercase hexadecimal digits — of the '
           'archive where the release arrives packed, which is the file each project lists beside '
           'its release. A fetched file whose digest differs is removed and never reaches the '
-          'directory',
+          'directory. It is also what a $sha256Placeholder in the url is filled with',
     ),
     ArgumentSpec(
       name: 'directory',
@@ -160,6 +162,13 @@ final class InstallPinnedTool extends IrreversibleStep {
   /// written once, in the shape the pins are kept in, and the url says which shape it needs.
   static const String bareVersionPlaceholder = '<bare-version>';
 
+  /// The text a program file writes in the url where the row's [sha256] belongs.
+  ///
+  /// For a store that serves a file under its own digest, so the address names the very bytes the
+  /// row pins. The url still has to name the pin, and the fetched file is still held against the
+  /// digest, so a store that answered other bytes is refused the way any host is.
+  static const String sha256Placeholder = '<sha256>';
+
   /// What the tool is called.
   final String tool;
 
@@ -196,6 +205,7 @@ final class InstallPinnedTool extends IrreversibleStep {
   String get fetchedFrom => filledSlots(url, <String, String>{
     'version': version,
     'bare-version': RequireCliToolVersions.bare(version, pinPrefixes),
+    'sha256': sha256,
   });
 
   /// Why this cannot be taken back, written for the machine where it costs something.
@@ -232,9 +242,9 @@ final class InstallPinnedTool extends IrreversibleStep {
     }
     if (leftoverSlotIn(fetchedFrom) case final String left) {
       return CheckResult.blocked(
-        'the url for $tool still carries $left once the pin filled $versionPlaceholder and '
-        '$bareVersionPlaceholder — nothing else fills a slot here, and the fetch would send the '
-        'text as it stands',
+        'the url for $tool still carries $left once the row filled $versionPlaceholder, '
+        '$bareVersionPlaceholder and $sha256Placeholder — nothing else fills a slot here, and the '
+        'fetch would send the text as it stands',
       );
     }
     if (!RegExp(r'^[0-9a-f]{64}$').hasMatch(sha256)) {

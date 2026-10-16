@@ -12,8 +12,8 @@ import 'support.dart';
 /// one page fails here; the chart repository asked is the one the stamped Chart.yaml names, so
 /// the coupling the shared declaration exists for is measured and not assumed; a feed that
 /// answers 500 makes a "?" row while the step still ends satisfied, because a report that can
-/// go red stops meaning what a report means; and a project that published nothing but
-/// pre-releases resolves to a version, with the row saying what kind of release it names.
+/// go red stops meaning what a report means; and a pin written in a pre-release shape resolves to
+/// a version, with the row saying the answer is a Git source tag.
 void main() {
   const String declaration = '''
 appliances:
@@ -43,13 +43,13 @@ tools:
   liner:
     version: "v9.0.0"
     upstream:
-      kind: github_release
+      kind: git_tags
       project: example/liner
       matching: '^v[0-9]+\\.[0-9]+\\.[0-9]+\$'
   planer:
     version: "0.3.0-alpha-20260825130748"
     upstream:
-      kind: github_release
+      kind: git_tags
       project: example/planer
       matching: '^[0-9]+\\.[0-9]+\\.[0-9]+-alpha-[0-9]{14}\$'
     stamps:
@@ -104,19 +104,18 @@ entries:
     - version: 4.5.9
 ''',
     );
-    // The release feed answers a server error today; the row reads "?" and the report stands.
+    // The ref list answers a server error today; the row reads "?" and the report stands.
+    http.answers(refsOf('example/liner'), status: 500);
+    // A project that cuts every tag on a pre-release channel: the pin is written in that shape, so
+    // the tag competes, and the row has to say that a tag is source and nothing more.
     http.answers(
-      'GET https://api.github.com/repos/example/liner/releases?per_page=100',
-      status: 500,
-    );
-    // A project that publishes nothing but pre-releases — every release cut on a channel it marks
-    // as one. `releases/latest` answers 404 for exactly this project, so the row it produced was a
-    // question mark; the whole list answers, and the row has to say what kind of release it names.
-    http.answers(
-      'GET https://api.github.com/repos/example/planer/releases?per_page=100',
-      body:
-          '[{"tag_name": "0.5.1-alpha-20260826000332", "prerelease": true}, '
-          '{"tag_name": "0.5.0-alpha-20260825232305", "prerelease": true}]',
+      refsOf('example/planer'),
+      body: refList(<String>[
+        'HEAD',
+        'refs/heads/main',
+        'refs/tags/0.5.0-alpha-20260825232305',
+        'refs/tags/0.5.1-alpha-20260826000332',
+      ]),
     );
     return http;
   }
@@ -161,15 +160,14 @@ entries:
     // nothing stamps anywhere is named as such.
     expect(rowOf('liner'), allOf(contains('v9.0.0'), contains('?'), contains('answered 500')));
     expect(rowOf('liner'), contains('stamped nowhere'));
-    // The pin whose project publishes nothing but pre-releases: it RESOLVES, and the row names
-    // what kind of release the answer is, so a reader is never handed a pre-release as a plain
-    // "newer" version.
+    // The pin written in a pre-release shape RESOLVES, and the row names what the answer is, so a
+    // reader is never handed a tag as proof that an artifact was published.
     expect(
       rowOf('planer'),
       allOf(
         contains('0.3.0-alpha-20260825130748'),
         contains('0.5.1-alpha-20260826000332'),
-        contains('pre-release'),
+        contains('a Git source tag'),
       ),
     );
     // Both pages were really fetched.
@@ -180,12 +178,13 @@ entries:
             '?page_size=100&ordering=last_updated',
         'GET https://hub.docker.com/v2/repositories/library/widget/tags?page=2',
         'GET https://charts.example.com/stable/index.yaml',
+        refsOf('example/liner'),
+        refsOf('example/planer'),
       ]),
     );
-    // The endpoint that answers one release chosen by the project's own pre-release marking is
-    // asked by nothing here. It is what made a project publishing only pre-releases unreadable,
-    // and a reader that quietly went back to it would pass every assertion above.
-    expect(http.sent.where((String asked) => asked.contains('/releases/latest')), isEmpty);
+    // A tag list is Git content. The host's API is asked by nothing here, and a reader that quietly
+    // went back to it would pass every assertion above.
+    expect(http.sent.where((String asked) => asked.contains('api.github.com')), isEmpty);
   });
 
   test('a list the registry cuts short is answered from what it served, saying so', () async {
@@ -216,171 +215,179 @@ entries:
     expect(reading.caveat, contains('refused the rest of the list after 1 page(s)'));
   });
 
-  test('a pin whose shape is stable is never told about a release candidate', () async {
-    // Measured on a real project: its release list interleaves series, and a release
-    // candidate stands above every stable version published before it. So two readings that look
-    // right are wrong here — the FIRST matching entry is a back-patch of an older series, and the
-    // maximum over EVERY entry is the candidate. Only the maximum over what the pattern admits is
-    // the version this pin could move to.
-    final FakeHttp http = FakeHttp();
-    http.answers(
-      'GET https://api.github.com/repos/example/liner/releases?per_page=100',
-      body:
-          '[{"tag_name": "v3.6.0-rc1", "prerelease": true}, '
-          '{"tag_name": "v3.4.7", "prerelease": false}, '
-          '{"tag_name": "v3.5.1", "prerelease": false}]',
-    );
-    final UpstreamReading reading = await githubNewestRelease(
-      http,
-      'example/liner',
-      r'^v[0-9]+\.[0-9]+\.[0-9]+$',
-      timeout: const Duration(seconds: 5),
-    );
-    expect(reading.newest, 'v3.5.1');
-    // Nothing weakens this answer: the entry it names is one the project published plainly, and
-    // the whole list was served.
-    expect(reading.caveat, isNull);
-  });
+  group('the tags of a Git repository', () {
+    const String stable = r'^v[0-9]+\.[0-9]+\.[0-9]+$';
+    const Duration timeout = Duration(seconds: 5);
+    const String caveat = 'a Git source tag: no artifact is known to be served for it';
 
-  test('a project publishing nothing but pre-releases is read, and the answer names them '
-      'as such', () async {
-    final FakeHttp http = FakeHttp();
-    http.answers(
-      'GET https://api.github.com/repos/example/planer/releases?per_page=100',
-      body:
-          '[{"tag_name": "0.5.1-alpha-20260826000332", "prerelease": true}, '
-          '{"tag_name": "0.5.0-alpha-20260825232305", "prerelease": true}]',
-    );
-    final UpstreamReading reading = await githubNewestRelease(
-      http,
-      'example/planer',
-      r'^[0-9]+\.[0-9]+\.[0-9]+-alpha-[0-9]{14}$',
-      timeout: const Duration(seconds: 5),
-    );
-    expect(reading.newest, '0.5.1-alpha-20260826000332');
-    expect(reading.caveat, contains('pre-release'));
-  });
-
-  test('the newest release stands on the second page the feed links to', () async {
-    // The release list pages through a Link header, and the newest entry is not obliged to stand
-    // on the first page — a project that publishes often puts a hundred releases in a month.
-    final FakeHttp http = FakeHttp(<String, HttpAnswer>{
-      'GET https://api.github.com/repos/example/liner/releases?per_page=100': const HttpAnswer(
-        status: 200,
-        body: '[{"tag_name": "v1.9.9", "prerelease": false}]',
-        headers: <String, String>{
-          'link':
-              '<https://api.github.com/repos/example/liner/releases?per_page=100&page=2>; '
-              'rel="next"',
-        },
-        elapsed: Duration.zero,
-      ),
-      'GET https://api.github.com/repos/example/liner/releases?per_page=100&page=2':
-          const HttpAnswer(
-            status: 200,
-            body:
-                '[{"tag_name": "v2.0.0", "prerelease": false}, '
-                '{"tag_name": "v1.0.1", "prerelease": false}]',
-            headers: <String, String>{},
-            elapsed: Duration.zero,
-          ),
+    test('a matching stable tag is the answer, saying a tag is source', () async {
+      final FakeHttp http = FakeHttp()
+        ..answers(
+          refsOf('example/liner'),
+          body: refList(<String>['HEAD', 'refs/heads/main', 'refs/tags/v1.2.3']),
+        );
+      final UpstreamReading reading = await gitNewestTag(
+        http,
+        'example/liner',
+        stable,
+        timeout: timeout,
+      );
+      expect(reading.newest, 'v1.2.3');
+      expect(reading.caveat, caveat);
+      // One request, to the address a `git ls-remote` asks: the whole list comes in one answer.
+      expect(http.sent, <String>[refsOf('example/liner')]);
     });
-    final UpstreamReading reading = await githubNewestRelease(
-      http,
-      'example/liner',
-      r'^v[0-9]+\.[0-9]+\.[0-9]+$',
-      timeout: const Duration(seconds: 5),
-    );
-    expect(reading.newest, 'v2.0.0');
-    expect(http.sent, hasLength(2));
-  });
 
-  test('a page whose Link header opens with rel="prev" is not walked backwards', () async {
-    // The header below is the real shape, measured on page two of a release list:
-    // prev, then next, then last, then first. A reader taking the FIRST address in the header
-    // goes back to page one, forward to page two, back again — and stops only when the host
-    // refuses. Anonymously that budget is sixty requests an hour for the whole report, so one pin
-    // read this way leaves every later pin unresolvable.
-    const String middle =
-        '<https://api.github.com/repos/example/liner/releases?per_page=100>; rel="prev", '
-        '<https://api.github.com/repos/example/liner/releases?per_page=100&page=3>; rel="next", '
-        '<https://api.github.com/repos/example/liner/releases?per_page=100&page=3>; rel="last", '
-        '<https://api.github.com/repos/example/liner/releases?per_page=100>; rel="first"';
-    final FakeHttp http = FakeHttp(<String, HttpAnswer>{
-      'GET https://api.github.com/repos/example/liner/releases?per_page=100': const HttpAnswer(
-        status: 200,
-        body: '[{"tag_name": "v1.0.0", "prerelease": false}]',
-        headers: <String, String>{
-          'link':
-              '<https://api.github.com/repos/example/liner/releases?per_page=100&page=2>; '
-              'rel="next"',
-        },
-        elapsed: Duration.zero,
-      ),
-      'GET https://api.github.com/repos/example/liner/releases?per_page=100&page=2':
-          const HttpAnswer(
-            status: 200,
-            body: '[{"tag_name": "v1.5.0", "prerelease": false}]',
-            headers: <String, String>{'link': middle},
-            elapsed: Duration.zero,
-          ),
-      'GET https://api.github.com/repos/example/liner/releases?per_page=100&page=3':
-          const HttpAnswer(
-            status: 200,
-            body: '[{"tag_name": "v2.0.0", "prerelease": false}]',
-            headers: <String, String>{
-              'link':
-                  '<https://api.github.com/repos/example/liner/releases?per_page=100&page=2>; '
-                  'rel="prev"',
-            },
-            elapsed: Duration.zero,
-          ),
-    });
-    final UpstreamReading reading = await githubNewestRelease(
-      http,
-      'example/liner',
-      r'^v[0-9]+\.[0-9]+\.[0-9]+$',
-      timeout: const Duration(seconds: 5),
+    test(
+      'a stable pin is told of neither a candidate, a stray tag, a branch nor a peeled line',
+      () async {
+        // Git lists refs in byte order, so the newest version is neither the first nor the last
+        // line: v3.10.0 stands before v3.4.7 as text, a candidate stands above both, and a branch
+        // named like a version is not a tag at all.
+        final FakeHttp http = FakeHttp()
+          ..answers(
+            refsOf('example/liner'),
+            body: refList(<String>[
+              'HEAD',
+              'refs/heads/main',
+              'refs/heads/v9.9.9',
+              'refs/tags/nightly',
+              'refs/tags/v3.10.0',
+              'refs/tags/v3.4.7',
+              'refs/tags/v3.4.7^{}',
+              'refs/tags/v3.9.0',
+              'refs/tags/v4.0.0-rc1',
+            ]),
+          );
+        final UpstreamReading reading = await gitNewestTag(
+          http,
+          'example/liner',
+          stable,
+          timeout: timeout,
+        );
+        expect(reading.newest, 'v3.10.0');
+        expect(reading.caveat, caveat);
+      },
     );
-    expect(reading.newest, 'v2.0.0');
-    // Three pages exist and three requests were sent: the walk went forward once and stopped
-    // where the header named no next.
-    expect(http.sent, hasLength(3));
-  });
 
-  test('a release list the feed cuts short is answered from what it served, saying so', () async {
-    // The same shape the tag lists answer, and for the same reason: this feed rations anonymous
-    // requests by the hour, so a walk can be refused part-way through with the living releases
-    // already in hand. Answering "?" from there would throw away what was served.
-    final FakeHttp http = FakeHttp(<String, HttpAnswer>{
-      'GET https://api.github.com/repos/example/liner/releases?per_page=100': const HttpAnswer(
-        status: 200,
-        body:
-            '[{"tag_name": "v1.3.0", "prerelease": false}, '
-            '{"tag_name": "v1.2.9", "prerelease": false}]',
-        headers: <String, String>{
-          'link':
-              '<https://api.github.com/repos/example/liner/releases?per_page=100&page=2>; '
-              'rel="next"',
-        },
-        elapsed: Duration.zero,
-      ),
-      'GET https://api.github.com/repos/example/liner/releases?per_page=100&page=2':
-          const HttpAnswer(
-            status: 403,
-            body: '',
-            headers: <String, String>{},
-            elapsed: Duration.zero,
-          ),
+    test('a peeled line is the tag it peels and never a candidate of its own', () async {
+      // A pattern loose enough to admit the peeled spelling would otherwise read it as a version
+      // tying with the tag and winning the tie on its text.
+      final FakeHttp http = FakeHttp()
+        ..answers(
+          refsOf('example/liner'),
+          body: refList(<String>[
+            'HEAD',
+            'refs/tags/v0.9.0',
+            'refs/tags/v1.0.0',
+            'refs/tags/v1.0.0^{}',
+          ]),
+        );
+      final UpstreamReading reading = await gitNewestTag(
+        http,
+        'example/liner',
+        r'^v.+$',
+        timeout: timeout,
+      );
+      expect(reading.newest, 'v1.0.0');
     });
-    final UpstreamReading reading = await githubNewestRelease(
-      http,
-      'example/liner',
-      r'^v[0-9]+\.[0-9]+\.[0-9]+$',
-      timeout: const Duration(seconds: 5),
-    );
-    expect(reading.newest, 'v1.3.0');
-    expect(reading.caveat, contains('refused the rest of the list after 1 page(s)'));
+
+    test('the first group of the pattern is the version a tag stands for', () async {
+      // One repository carries the tags of several charts, each with its own name in front of the
+      // number, so the pin spells the number alone and the tags of the other charts do not compete.
+      final FakeHttp http = FakeHttp()
+        ..answers(
+          refsOf('example/charts'),
+          body: refList(<String>[
+            'HEAD',
+            'refs/tags/other-chart-99.0.0',
+            'refs/tags/stack-87.2.0',
+            'refs/tags/stack-87.21.0',
+            'refs/tags/stack-88.0.0-rc1',
+          ]),
+        );
+      final UpstreamReading reading = await gitNewestTag(
+        http,
+        'example/charts',
+        r'^stack-([0-9]+\.[0-9]+\.[0-9]+)$',
+        timeout: timeout,
+      );
+      expect(reading.newest, '87.21.0');
+      expect(reading.caveat, caveat);
+    });
+
+    test('the capabilities after the NUL of the first line are no part of a tag', () async {
+      // A repository with no HEAD advertises its capabilities on whichever ref comes first.
+      final FakeHttp http = FakeHttp()
+        ..answers(refsOf('example/liner'), body: refList(<String>['refs/tags/v1.0.0']));
+      final UpstreamReading reading = await gitNewestTag(
+        http,
+        'example/liner',
+        stable,
+        timeout: timeout,
+      );
+      expect(reading.newest, 'v1.0.0');
+    });
+
+    test('a list holding no tag of the declared shape is unresolved, with the pattern', () async {
+      final FakeHttp http = FakeHttp()
+        ..answers(
+          refsOf('example/liner'),
+          body: refList(<String>['HEAD', 'refs/heads/main', 'refs/tags/v1.0.0-rc1']),
+        );
+      final UpstreamReading reading = await gitNewestTag(
+        http,
+        'example/liner',
+        stable,
+        timeout: timeout,
+      );
+      expect(reading.newest, isNull);
+      expect(reading.unresolved, allOf(contains('example/liner'), contains(stable)));
+    });
+
+    test('a project with no repository is unresolved, with the status', () async {
+      final FakeHttp http = FakeHttp()..answers(refsOf('example/missing'), status: 404);
+      final UpstreamReading reading = await gitNewestTag(
+        http,
+        'example/missing',
+        stable,
+        timeout: timeout,
+      );
+      expect(reading.newest, isNull);
+      expect(reading.unresolved, contains('answered 404'));
+    });
+
+    test('an empty answer and a page that is no ref list are unresolved', () async {
+      for (final String body in <String>[
+        '',
+        '001e# service=git-upload-pack\n00000000',
+        '<html><body>Not a repository</body></html>',
+      ]) {
+        final FakeHttp http = FakeHttp()..answers(refsOf('example/liner'), body: body);
+        final UpstreamReading reading = await gitNewestTag(
+          http,
+          'example/liner',
+          stable,
+          timeout: timeout,
+        );
+        expect(reading.newest, isNull, reason: 'body: $body');
+        expect(reading.unresolved, contains('not a Git ref list'), reason: 'body: $body');
+      }
+    });
+
+    test('a host that cannot be asked is unresolved, with the failure', () async {
+      final UpstreamReading reading = await gitNewestTag(
+        _Unreachable(),
+        'example/liner',
+        stable,
+        timeout: timeout,
+      );
+      expect(reading.newest, isNull);
+      expect(
+        reading.unresolved,
+        allOf(contains(refsOf('example/liner').substring(4)), contains('no route')),
+      );
+    });
   });
 
   test('a registry speaking the distribution protocol is asked with its own token flow', () async {
@@ -460,4 +467,29 @@ final class _AnonymousThenTokened implements Http {
     headers: const <String, String>{},
     elapsed: Duration.zero,
   );
+}
+
+/// The request that asks the Git refs of [project], as the fake network keys it.
+String refsOf(String project) =>
+    'GET https://github.com/$project.git/info/refs?service=git-upload-pack';
+
+/// What github.com answers for the refs of a repository: the service line, a flush, one pkt-line per
+/// ref, and a flush — the first ref carrying the server's capabilities after a NUL.
+String refList(List<String> refs) {
+  final StringBuffer body = StringBuffer('001e# service=git-upload-pack\n0000');
+  for (int index = 0; index < refs.length; index++) {
+    final String ref = index == 0
+        ? '${refs[index]}\u0000multi_ack thin-pack side-band agent=git/test'
+        : refs[index];
+    final String line = '${index.toRadixString(16).padLeft(40, '0')} $ref\n';
+    body.write('${(line.length + 4).toRadixString(16).padLeft(4, '0')}$line');
+  }
+  body.write('0000');
+  return body.toString();
+}
+
+/// A network with no route to anywhere.
+final class _Unreachable implements Http {
+  @override
+  Future<HttpAnswer> send(HttpRequest request) => Future<HttpAnswer>.error('no route to host');
 }
