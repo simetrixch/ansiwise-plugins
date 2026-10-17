@@ -11,6 +11,7 @@ import 'steps/kubernetes_object_irreversible.dart';
 import 'steps/kubernetes_object_reversible.dart';
 import 'steps/oidc_admins_binding.dart';
 import 'steps/patch_container_arguments_and_ports.dart';
+import 'steps/patch_container_resources.dart';
 import 'steps/reapply_calico_manifest.dart';
 import 'steps/recycle_kube_system_pod_ips.dart';
 import 'steps/remove_calico_rules_from_other_backend.dart';
@@ -108,9 +109,15 @@ const Map<StepName, RegisteredStep> kubernetesSteps = <StepName, RegisteredStep>
   ),
   StepName('patch_container_arguments_and_ports'): RegisteredStep(
     name: StepName('patch_container_arguments_and_ports'),
-    source: 'lib/src/steps/patch_container_arguments_and_ports.dart:46',
+    source: 'lib/src/steps/patch_container_arguments_and_ports.dart:47',
     create: PatchContainerArgumentsAndPorts.fromArguments,
     arguments: PatchContainerArgumentsAndPorts.arguments,
+  ),
+  StepName('patch_container_resources'): RegisteredStep(
+    name: StepName('patch_container_resources'),
+    source: 'lib/src/steps/patch_container_resources.dart:34',
+    create: PatchContainerResources.fromArguments,
+    arguments: PatchContainerResources.arguments,
   ),
   StepName('set_default_storage_class'): RegisteredStep(
     name: StepName('set_default_storage_class'),

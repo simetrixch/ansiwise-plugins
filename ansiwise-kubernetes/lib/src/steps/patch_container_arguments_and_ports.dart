@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:ansiwise_core/ansiwise_core.dart';
 
+import 'container_workload.dart';
 import 'kubectl.dart';
 
 /// Makes one container of one workload carry the arguments and publish the ports a program names,
@@ -120,12 +121,6 @@ final class PatchContainerArgumentsAndPorts extends ReversibleStep<ContainerAddi
     Kubectl.elevationArgument,
   ];
 
-  /// The phase of a pod that is stuck waiting for something it cannot have.
-  static const String pending = 'Pending';
-
-  /// The phase of a pod that is serving.
-  static const String running = 'Running';
-
   /// The namespace the workload runs in.
   final String namespace;
 
@@ -150,8 +145,15 @@ final class PatchContainerArgumentsAndPorts extends ReversibleStep<ContainerAddi
   /// How the cluster is reached.
   final Kubectl kubectl;
 
-  /// The workload as the cluster client addresses it in a rollout.
-  String get workload => '$kind/$name';
+  /// The container this step patches, reached the way every step that patches one reaches it.
+  ContainerWorkload get _target => ContainerWorkload(
+    namespace: namespace,
+    kind: kind,
+    name: name,
+    container: container,
+    rolloutTimeoutSeconds: rolloutTimeoutSeconds,
+    kubectl: kubectl,
+  );
 
   @override
   Future<CheckResult> check(StepContext context) async {
@@ -175,11 +177,11 @@ final class PatchContainerArgumentsAndPorts extends ReversibleStep<ContainerAddi
       return const CheckResult.satisfied('nothing is asked of this container');
     }
 
-    final ({_Workload? workload, String? refusal}) reading = await _read(context);
+    final ({Workload? workload, String? refusal}) reading = await _target.read(context);
     if (reading.refusal case final String refusal) {
       return CheckResult.blocked(refusal);
     }
-    final _Workload? workloadNow = reading.workload;
+    final Workload? workloadNow = reading.workload;
     if (workloadNow == null) {
       return CheckResult.satisfied(
         'there is no $kind $name in $namespace, so what installs it is not up and there is nothing '
@@ -193,22 +195,22 @@ final class PatchContainerArgumentsAndPorts extends ReversibleStep<ContainerAddi
         '${workloadNow.containerNames.join(', ')}',
       );
     }
-    final _Container declared = workloadNow.containers[at];
+    final WorkloadContainer declared = workloadNow.containers[at];
     if (_missingArguments(declared.arguments).isNotEmpty ||
         _missingPorts(declared.ports, wantedPorts).isNotEmpty) {
       return const CheckResult.ready();
     }
 
-    final List<_Pod>? pods = await _pods(context, workloadNow.selector);
+    final List<WorkloadPod>? pods = await _target.pods(context, workloadNow.selector);
     if (pods == null) {
       return CheckResult.blocked(
         'the pods of $kind $name in $namespace could not be read, so what is actually serving '
         'cannot be compared with what the cluster declares',
       );
     }
-    final List<_Pod> serving = <_Pod>[
-      for (final _Pod pod in pods)
-        if (pod.phase == running) pod,
+    final List<WorkloadPod> serving = <WorkloadPod>[
+      for (final WorkloadPod pod in pods)
+        if (pod.phase == ContainerWorkload.running) pod,
     ];
     if (serving.isEmpty) {
       return CheckResult.satisfied(
@@ -225,67 +227,70 @@ final class PatchContainerArgumentsAndPorts extends ReversibleStep<ContainerAddi
 
   @override
   Future<StepPlan> plan(StepContext context) async {
-    final ({_Workload? workload, String? refusal}) reading = await _read(context);
+    final ({Workload? workload, String? refusal}) reading = await _target.read(context);
     if (reading.refusal case final String refusal) {
       return StepPlan.nothing(refusal);
     }
-    final _Workload? workloadNow = reading.workload;
+    final Workload? workloadNow = reading.workload;
     final int at = workloadNow?.positionOf(container) ?? -1;
     if (workloadNow == null || at < 0) {
       return const StepPlan.nothing('there is no such container to patch');
     }
     final List<_PublishedPort> wantedPorts = _wantedPorts();
     final String? patch = _addPatch(workloadNow.containers[at], at, wantedPorts);
-    final List<_Pod> pods = await _pods(context, workloadNow.selector) ?? const <_Pod>[];
+    final List<WorkloadPod> pods =
+        await _target.pods(context, workloadNow.selector) ?? const <WorkloadPod>[];
     // The pods the apply would delete: the stuck ones unconditionally, and the serving ones that
     // lag what this program asks for — which is every serving pod the patch would leave behind.
     final List<String> podsToDelete = <String>[
-      for (final _Pod pod in pods)
-        if (pod.phase == pending) pod.name,
-      for (final _Pod pod in _lagging(pods, wantedPorts))
-        if (pod.phase == running) pod.name,
+      for (final WorkloadPod pod in pods)
+        if (pod.phase == ContainerWorkload.pending) pod.name,
+      for (final WorkloadPod pod in _lagging(pods, wantedPorts))
+        if (pod.phase == ContainerWorkload.running) pod.name,
     ];
     if (podsToDelete.isEmpty) {
       return patch == null
           ? StepPlan.nothing(
               'the declaration and every running pod of $name carry what this program asks for',
             )
-          : StepPlan.argv(kubectl.argv(_patchCommand(patch)));
+          : StepPlan.argv(kubectl.argv(_target.patchCommand('json', patch)));
     }
     // A plan carries one command. Of the two the apply would run, the deletion is the one whose
     // consequence cannot be taken back, so the plan names it and the log beside it says the rest.
     if (patch != null) {
       context.log.info(
         'before the deletion the declaration is patched: '
-        '${kubectl.argv(_patchCommand(patch)).join(' ')}',
+        '${kubectl.argv(_target.patchCommand('json', patch)).join(' ')}',
       );
     }
     context.log.warn(
       'every pod this plan names is deleted, and nothing answers on the ports it holds until its '
       'replacement is up — the requests refused in between are not made again',
     );
-    return StepPlan.argv(kubectl.argv(<String>[..._delete, ...podsToDelete, '--grace-period=10']));
+    return StepPlan.argv(
+      kubectl.argv(<String>[..._target.deleteCommand, ...podsToDelete, '--grace-period=10']),
+    );
   }
 
   @override
   Future<void> apply(StepContext context) async {
-    final ({_Workload? workload, String? refusal}) reading = await _read(context);
+    final ({Workload? workload, String? refusal}) reading = await _target.read(context);
     if (reading.refusal case final String refusal) {
       throw StateError(refusal);
     }
-    final _Workload? workloadNow = reading.workload;
+    final Workload? workloadNow = reading.workload;
     final int at = workloadNow?.positionOf(container) ?? -1;
     if (workloadNow == null || at < 0) {
       return;
     }
     final List<_PublishedPort> wantedPorts = _wantedPorts();
     if (_addPatch(workloadNow.containers[at], at, wantedPorts) case final String patch) {
-      await _mustRun(context, _patchCommand(patch));
+      await _target.mustRun(context, _target.patchCommand('json', patch));
     }
-    await _replacePods(
+    await _target.replacePods(
       context,
       workloadNow.selector,
-      (List<_Pod> serving) => _lagging(serving, wantedPorts),
+      (List<WorkloadPod> serving) => _lagging(serving, wantedPorts),
     );
   }
 
@@ -296,7 +301,7 @@ final class PatchContainerArgumentsAndPorts extends ReversibleStep<ContainerAddi
   /// running and simply stops doing one of the things it did.
   @override
   Future<ContainerAdditions> capture(StepContext context) async {
-    final ({_Workload? workload, String? refusal}) reading = await _read(context);
+    final ({Workload? workload, String? refusal}) reading = await _target.read(context);
     if (reading.refusal case final String refusal) {
       // What the undo takes out is exactly what this names, so an empty list leaves the container
       // as it stands - which is what a reading nobody could take has to produce. Said out loud,
@@ -308,12 +313,12 @@ final class PatchContainerArgumentsAndPorts extends ReversibleStep<ContainerAddi
       );
       return const ContainerAdditions(arguments: <String>[], ports: <int>[]);
     }
-    final _Workload? workloadNow = reading.workload;
+    final Workload? workloadNow = reading.workload;
     final int at = workloadNow?.positionOf(container) ?? -1;
     if (workloadNow == null || at < 0) {
       return const ContainerAdditions(arguments: <String>[], ports: <int>[]);
     }
-    final _Container declared = workloadNow.containers[at];
+    final WorkloadContainer declared = workloadNow.containers[at];
     return ContainerAdditions(
       arguments: _missingArguments(declared.arguments),
       ports: <int>[
@@ -324,11 +329,11 @@ final class PatchContainerArgumentsAndPorts extends ReversibleStep<ContainerAddi
 
   @override
   Future<void> undo(StepContext context, ContainerAdditions captured) async {
-    final ({_Workload? workload, String? refusal}) reading = await _read(context);
+    final ({Workload? workload, String? refusal}) reading = await _target.read(context);
     if (reading.refusal != null) {
       return;
     }
-    final _Workload? workloadNow = reading.workload;
+    final Workload? workloadNow = reading.workload;
     final int at = workloadNow?.positionOf(container) ?? -1;
     if (workloadNow == null || at < 0) {
       return;
@@ -339,26 +344,26 @@ final class PatchContainerArgumentsAndPorts extends ReversibleStep<ContainerAddi
     // WHOLE ports list — entries publishing nothing count too, and the patch path resolves against
     // that list. Highest position first within each list, so removing one does not move the next
     // one out from under its own position.
-    final _Container declared = workloadNow.containers[at];
+    final WorkloadContainer declared = workloadNow.containers[at];
     final List<Map<String, Object>> removals = <Map<String, Object>>[
       for (final int position in _positionsOf(captured.arguments, declared.arguments))
-        <String, Object>{'op': 'remove', 'path': '${_containerPath(at)}/args/$position'},
+        <String, Object>{'op': 'remove', 'path': '${containerPath(at)}/args/$position'},
       for (final int position in declared.positionsOfPorts(captured.ports))
-        <String, Object>{'op': 'remove', 'path': '${_containerPath(at)}/ports/$position'},
+        <String, Object>{'op': 'remove', 'path': '${containerPath(at)}/ports/$position'},
     ];
     if (removals.isEmpty) {
       return;
     }
     // A rejected removal must throw, so it is recorded as not taken back — reported as taken back,
     // the pods that come back still carry what the record says was removed.
-    await _mustRun(context, _patchCommand(jsonEncode(removals)));
+    await _target.mustRun(context, _target.patchCommand('json', jsonEncode(removals)));
     // The declaration no longer carries them and a pod started before this does, which is the same
     // gap the apply closes — read from the other side.
-    await _replacePods(
+    await _target.replacePods(
       context,
       workloadNow.selector,
-      (List<_Pod> serving) => <_Pod>[
-        for (final _Pod pod in serving)
+      (List<WorkloadPod> serving) => <WorkloadPod>[
+        for (final WorkloadPod pod in serving)
           if (captured.arguments.any(pod.container.arguments.contains) ||
               captured.ports.any(pod.container.ports.contains))
             pod,
@@ -393,22 +398,23 @@ final class PatchContainerArgumentsAndPorts extends ReversibleStep<ContainerAddi
       ];
 
   /// The pods of [serving] that are missing any of it.
-  List<_Pod> _lagging(List<_Pod> serving, List<_PublishedPort> wantedPorts) => <_Pod>[
-    for (final _Pod pod in serving)
-      if (_missingArguments(pod.container.arguments).isNotEmpty ||
-          _missingPorts(pod.container.ports, wantedPorts).isNotEmpty)
-        pod,
-  ];
+  List<WorkloadPod> _lagging(List<WorkloadPod> serving, List<_PublishedPort> wantedPorts) =>
+      <WorkloadPod>[
+        for (final WorkloadPod pod in serving)
+          if (_missingArguments(pod.container.arguments).isNotEmpty ||
+              _missingPorts(pod.container.ports, wantedPorts).isNotEmpty)
+            pod,
+      ];
 
   /// One patch appending what [declared] at [at] is short of, or null when it is short of nothing.
-  String? _addPatch(_Container declared, int at, List<_PublishedPort> wantedPorts) {
+  String? _addPatch(WorkloadContainer declared, int at, List<_PublishedPort> wantedPorts) {
     final List<Map<String, Object>> additions = <Map<String, Object>>[
       for (final String argument in _missingArguments(declared.arguments))
-        <String, Object>{'op': 'add', 'path': '${_containerPath(at)}/args/-', 'value': argument},
+        <String, Object>{'op': 'add', 'path': '${containerPath(at)}/args/-', 'value': argument},
       for (final _PublishedPort port in _missingPorts(declared.ports, wantedPorts))
         <String, Object>{
           'op': 'add',
-          'path': '${_containerPath(at)}/ports/-',
+          'path': '${containerPath(at)}/ports/-',
           'value': <String, Object>{
             'name': port.name,
             'containerPort': port.port,
@@ -418,130 +424,6 @@ final class PatchContainerArgumentsAndPorts extends ReversibleStep<ContainerAddi
         },
     ];
     return additions.isEmpty ? null : jsonEncode(additions);
-  }
-
-  /// What applies [patch] to this workload, after the words the client is invoked with.
-  List<String> _patchCommand(String patch) => <String>[
-    '-n',
-    namespace,
-    'patch',
-    kind,
-    name,
-    '--type=json',
-    '-p',
-    patch,
-  ];
-
-  /// Replaces the pods [choose] picks out of the ones that are serving, and waits for the workload.
-  ///
-  /// The stuck ones go first and unconditionally: they hold nothing, and while one of them exists
-  /// the replacement cannot have the machine's ports.
-  Future<void> _replacePods(
-    StepContext context,
-    String selector,
-    List<_Pod> Function(List<_Pod> serving) choose,
-  ) async {
-    final List<_Pod> pods = await _pods(context, selector) ?? const <_Pod>[];
-    for (final _Pod pod in pods) {
-      if (pod.phase != pending) {
-        continue;
-      }
-      context.log.debug(
-        '${pod.name} is stuck waiting for the ports a running pod holds — removing',
-      );
-      await _mustRun(context, <String>[..._delete, pod.name, '--grace-period=0', '--force']);
-    }
-    final List<_Pod> serving = <_Pod>[
-      for (final _Pod pod in pods)
-        if (pod.phase == running) pod,
-    ];
-    for (final _Pod pod in choose(serving)) {
-      context.log.debug(
-        '${pod.name} is serving with what it was started with — replacing it, and nothing answers '
-        'on the ports it holds until its replacement is up',
-      );
-      await _mustRun(context, <String>[..._delete, pod.name, '--grace-period=10']);
-    }
-    await _mustRun(context, <String>[
-      '-n',
-      namespace,
-      'rollout',
-      'status',
-      workload,
-      '--timeout=${rolloutTimeoutSeconds}s',
-    ]);
-  }
-
-  /// The workload as the cluster holds it, null when the cluster holds no such workload, or why
-  /// neither could be read.
-  ///
-  /// A cluster that could not be asked must not come back as the same null a cluster without the
-  /// workload does, or the check answers "there is no $kind $name in $namespace, so what installs
-  /// it is not up and there is nothing to patch" over it. See [Kubectl.readOne].
-  Future<({_Workload? workload, String? refusal})> _read(StepContext context) async {
-    final ({String? answer, String? refusal}) read = await kubectl.readOne(
-      context,
-      kind: kind,
-      name: name,
-      output: 'json',
-      namespace: namespace,
-    );
-    if (read.refusal case final String refusal) {
-      return (workload: null, refusal: refusal);
-    }
-    if (read.answer case final String json) {
-      return (workload: _Workload.read(_decoded(json)), refusal: null);
-    }
-    return (workload: null, refusal: null);
-  }
-
-  /// The pods of this workload, or null when they cannot be read.
-  ///
-  /// Found through the selector the workload itself declares, so the pods this compares against are
-  /// the ones the cluster considers to be its. A selector written into the program beside the
-  /// workload's name would be a second description of the same thing, and the two would disagree the
-  /// first time one of them was edited.
-  Future<List<_Pod>?> _pods(StepContext context, String selector) async {
-    final CommandResult read = await context.shell.run(
-      kubectl.observing(<String>['-n', namespace, 'get', 'pods', '-l', selector, '-o', 'json']),
-    );
-    if (!read.ok) {
-      return null;
-    }
-    final Object? decoded = _decoded(read.stdout);
-    if (decoded is! Map<String, Object?> || decoded['items'] is! List<Object?>) {
-      return null;
-    }
-    return <_Pod>[
-      for (final Object? item in decoded['items']! as List<Object?>)
-        if (_Pod.read(item, container) case final _Pod pod) pod,
-    ];
-  }
-
-  List<String> get _delete => <String>['-n', namespace, 'delete', 'pod'];
-
-  Future<void> _mustRun(StepContext context, List<String> arguments) async {
-    final Command command = kubectl.command(arguments);
-    final CommandResult answer = await context.shell.run(command);
-    if (!answer.ok) {
-      throw CommandFailed(
-        argv: command.argv,
-        exitCode: answer.exitCode,
-        stdout: '',
-        stderr: answer.stderr,
-      );
-    }
-  }
-
-  static Object? _decoded(String text) {
-    if (text.trim().isEmpty) {
-      return null;
-    }
-    try {
-      return jsonDecode(text);
-    } on FormatException {
-      return null;
-    }
   }
 }
 
@@ -555,133 +437,6 @@ final class ContainerAdditions {
 
   /// The ports it published, by the port number on the machine.
   final List<int> ports;
-}
-
-/// One workload as the cluster holds it: its containers and how its pods are found.
-final class _Workload {
-  const _Workload(this.containers, this.selector);
-
-  /// The workload [decoded] describes, or null when it describes none this step can patch.
-  static _Workload? read(Object? decoded) {
-    final Object? spec = _at(decoded, 'spec');
-    final Object? labels = _at(_at(spec, 'selector'), 'matchLabels');
-    if (labels is! Map<String, Object?>) {
-      return null;
-    }
-    return _Workload(
-      <_Container>[
-        for (final Object? each in _list(_at(_at(spec, 'template'), 'spec'), 'containers'))
-          if (_Container.read(each) case final _Container container) container,
-      ],
-      <String>[
-        for (final MapEntry<String, Object?> label in labels.entries) '${label.key}=${label.value}',
-      ].join(','),
-    );
-  }
-
-  final List<_Container> containers;
-
-  /// How the cluster itself finds this workload's pods.
-  final String selector;
-
-  /// The names it declares, for a message that says what was there instead.
-  List<String> get containerNames => <String>[
-    for (final _Container container in containers) container.name,
-  ];
-
-  /// Where the container called [name] sits, or -1 when the workload declares none.
-  ///
-  /// A position and not the container itself, because a patch addresses a container by where it
-  /// stands in the list and there is no other way to write that path.
-  int positionOf(String name) {
-    for (int at = 0; at < containers.length; at += 1) {
-      if (containers[at].name == name) {
-        return at;
-      }
-    }
-    return -1;
-  }
-}
-
-/// One container: what it is started with and what it publishes on the machine.
-final class _Container {
-  const _Container(this.name, this.arguments, this.ports, this.portPositions);
-
-  /// The container [decoded] describes, or null when it describes none.
-  static _Container? read(Object? decoded) {
-    final List<Object?> declaredPorts = _list(decoded, 'ports');
-    final List<int> published = <int>[];
-    final List<int> positions = <int>[];
-    for (int at = 0; at < declaredPorts.length; at += 1) {
-      if (_at(declaredPorts[at], 'hostPort') case final int number) {
-        published.add(number);
-        positions.add(at);
-      }
-    }
-    if (_at(decoded, 'name') case final String name) {
-      return _Container(
-        name,
-        <String>[
-          for (final Object? argument in _list(decoded, 'args'))
-            if (argument is String) argument,
-        ],
-        published,
-        positions,
-      );
-    }
-    return null;
-  }
-
-  final String name;
-  final List<String> arguments;
-
-  /// The ports it publishes on the machine.
-  final List<int> ports;
-
-  /// Where each of [ports] stands in the container's WHOLE ports list, position for position.
-  ///
-  /// The whole list and not only the published entries: entries that publish nothing sit in it
-  /// too, and a patch path resolves against it — so a position counted among the published ports
-  /// alone hits the wrong element as soon as such an entry sits ahead of one.
-  final List<int> portPositions;
-
-  /// Where each of [wanted] is published, as [portPositions] counts it, highest first and leaving
-  /// out what is not published.
-  List<int> positionsOfPorts(List<int> wanted) => <int>[
-    for (final int port in wanted)
-      if (ports.contains(port)) portPositions[ports.indexOf(port)],
-  ]..sort((int a, int b) => b.compareTo(a));
-}
-
-/// One pod, with the container inside it that this step is about.
-final class _Pod {
-  const _Pod(this.name, this.phase, this.container);
-
-  /// The pod [decoded] describes with its container [named], or null when it has no such container.
-  ///
-  /// A pod of this workload running something else under the same labels is not one this step has
-  /// anything to say about.
-  static _Pod? read(Object? decoded, String named) {
-    final Object? name = _at(_at(decoded, 'metadata'), 'name');
-    final Object? phase = _at(_at(decoded, 'status'), 'phase');
-    if (name is! String || phase is! String) {
-      return null;
-    }
-    for (final Object? each in _list(_at(decoded, 'spec'), 'containers')) {
-      if (_Container.read(each) case final _Container inside when inside.name == named) {
-        return _Pod(name, phase, inside);
-      }
-    }
-    return null;
-  }
-
-  final String name;
-
-  /// Which phase it is in, which decides whether it holds a port or is waiting for one.
-  final String phase;
-
-  /// What it is actually running with.
-  final _Container container;
 }
 
 /// One port published on the machine: a name and the port it answers on.
@@ -705,19 +460,3 @@ final class _PublishedPort {
   final String name;
   final int port;
 }
-
-/// What [of] holds under [key], or null where it is not an object or holds nothing there.
-///
-/// Everything below this line reads a document the API server composed, so every step of the way
-/// down is a place the shape could be other than expected. Asking through this rather than casting
-/// makes a surprising document produce a step with nothing to do instead of a crash.
-Object? _at(Object? of, String key) => of is Map<String, Object?> ? of[key] : null;
-
-/// The list [of] holds under [key], or an empty one where it holds no list there.
-List<Object?> _list(Object? of, String key) {
-  final Object? found = _at(of, key);
-  return found is List<Object?> ? found : const <Object?>[];
-}
-
-/// Where the container at [at] sits, for a patch that addresses it by position.
-String _containerPath(int at) => '/spec/template/spec/containers/$at';
