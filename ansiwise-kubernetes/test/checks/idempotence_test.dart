@@ -52,6 +52,9 @@ const Set<String> notCoveredByAFakeMachine = <String>{
   // out of the cluster, and a fake shell answers a command rather than carrying it out. Named here
   // rather than counted as passing.
   'patch_container_arguments_and_ports',
+  // The same reason as its sibling: the pods are read back out of the cluster, and a fake shell
+  // answers a command rather than carrying it out. Its second run is driven in its own test.
+  'patch_container_resources',
   'reapply_calico_manifest',
   // The same placeholder problem as the two calico rows above, and one more on top of it. Its
   // `backend` argument takes a MEASUREMENT, so the probe's placeholder blocks it before any machine

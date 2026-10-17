@@ -7,6 +7,7 @@ final class PodState {
     required this.phase,
     this.arguments = const <String>[],
     this.ports = const <String, int>{},
+    this.cpuRequest,
   });
 
   /// Which phase the pod is in.
@@ -17,9 +18,13 @@ final class PodState {
 
   /// What it publishes on the machine.
   final Map<String, int> ports;
+
+  /// The CPU its container requests, as the cluster writes it, or null where it requests none.
+  final String? cpuRequest;
 }
 
-/// A workload holding one container called [container], started with [arguments].
+/// A workload holding one container called [container], started with [arguments] and requesting
+/// [cpuRequest] of CPU.
 ///
 /// [ports] are the ports it publishes on the machine, each written as its name and the port it
 /// answers on — the shape a container declares them in, so a step reads this the way it reads a real
@@ -28,13 +33,14 @@ String workloadJson({
   required String container,
   required List<String> arguments,
   Map<String, int> ports = const <String, int>{},
+  String? cpuRequest,
   Map<String, String> selector = const <String, String>{'app.kubernetes.io/name': 'traefik'},
 }) => jsonEncode(<String, Object>{
   'spec': <String, Object>{
     'selector': <String, Object>{'matchLabels': selector},
     'template': <String, Object>{
       'spec': <String, Object>{
-        'containers': <Object>[containerJson(container, arguments, ports)],
+        'containers': <Object>[containerJson(container, arguments, ports, cpuRequest)],
       },
     },
   },
@@ -50,21 +56,28 @@ String podsJson(Map<String, PodState> pods, {String container = 'traefik'}) => j
           'metadata': <String, Object>{'name': pod.key},
           'status': <String, Object>{'phase': pod.value.phase},
           'spec': <String, Object>{
-            'containers': <Object>[containerJson(container, pod.value.arguments, pod.value.ports)],
+            'containers': <Object>[
+              containerJson(container, pod.value.arguments, pod.value.ports, pod.value.cpuRequest),
+            ],
           },
         },
     ],
   },
 );
 
-/// One container as the cluster declares it, publishing every port of [ports] on the machine.
+/// One container as the cluster declares it, publishing every port of [ports] on the machine and
+/// requesting [cpuRequest] of CPU, or declaring `resources: {}` where that is null.
 Map<String, Object> containerJson(
   String container,
   List<String> arguments,
-  Map<String, int> ports,
-) => <String, Object>{
+  Map<String, int> ports, [
+  String? cpuRequest,
+]) => <String, Object>{
   'name': container,
   'args': arguments,
+  'resources': <String, Object>{
+    if (cpuRequest != null) 'requests': <String, Object>{'cpu': cpuRequest},
+  },
   'ports': <Object>[
     for (final MapEntry<String, int> port in ports.entries)
       <String, Object>{
