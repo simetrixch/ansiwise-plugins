@@ -278,6 +278,16 @@ void main() {
     expect(machine.changing.join('\n'), isNot(contains('delete pod')));
   });
 
+  test('an undo over a cluster nobody could ask throws and changes nothing', () async {
+    final ClusterMachine machine = ClusterMachine()
+      ..cannotBeReached('daemonset', namespace: 'ingress', stderr: 'connection refused');
+    await expectLater(
+      asking().undo(machine.contextFor(under), const ContainerCpuRequest(null)),
+      throwsA(isA<StateError>()),
+    );
+    expect(machine.changing, isEmpty);
+  });
+
   test('a capture over a cluster nobody could ask throws and does not claim none', () async {
     final ClusterMachine machine = ClusterMachine()
       ..cannotBeReached('daemonset', namespace: 'ingress', stderr: 'connection refused');

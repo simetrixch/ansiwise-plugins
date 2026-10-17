@@ -269,8 +269,8 @@ final class PatchContainerResources extends ReversibleStep<ContainerCpuRequest> 
   @override
   Future<void> undo(StepContext context, ContainerCpuRequest captured) async {
     final ({Workload? workload, String? refusal}) reading = await _target.read(context);
-    if (reading.refusal != null) {
-      return;
+    if (reading.refusal case final String refusal) {
+      throw StateError(refusal);
     }
     final Workload? workloadNow = reading.workload;
     final int at = workloadNow?.positionOf(container) ?? -1;
