@@ -381,4 +381,17 @@ void main() {
       contains('{"op":"remove","path":"/spec/template/spec/containers/0/ports/1"}'),
     );
   });
+
+  test('an undo over a cluster nobody could ask throws and changes nothing', () async {
+    final ClusterMachine machine = ClusterMachine()
+      ..cannotBeReached('daemonset', namespace: 'ingress', stderr: 'connection refused');
+    await expectLater(
+      asking().undo(
+        machine.contextFor(under),
+        const ContainerAdditions(arguments: <String>[crossNamespaceArgument], ports: <int>[]),
+      ),
+      throwsA(isA<StateError>()),
+    );
+    expect(machine.changing, isEmpty);
+  });
 }
