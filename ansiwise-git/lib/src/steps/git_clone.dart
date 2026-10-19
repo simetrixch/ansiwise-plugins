@@ -1,7 +1,6 @@
-import 'dart:convert';
-
 import 'package:ansiwise_core/ansiwise_core.dart';
 
+import '../credential_environment.dart';
 import 'recorded_value.dart';
 
 /// Puts a checkout of one repository at a path on this machine, on a stated branch, and moves it to
@@ -13,6 +12,13 @@ import 'recorded_value.dart';
 /// read credential, and under which key each stands. Both files are written by an earlier program
 /// of the same installation, which is also why a run that finds them missing is refused by file and
 /// key rather than sent on to clone nothing.
+///
+/// **The host and the credential may be answers instead.** A program file ships to every
+/// installation and names no installation's host, and the first clone of a machine is made before
+/// any settings file of it exists to hold the credential. So `host_answer` names the answer holding
+/// the host, as `branch_answer` names the one holding the branch, and `credential_answer` names the
+/// answer holding the credential, as `origin_answer` does for the repository. The credential read
+/// from an answer travels exactly as one read from a file does.
 ///
 /// **The credential travels in the environment and is at rest nowhere this step writes.** A
 /// credential in a command's arguments is in the process listing and in the record; one written
@@ -39,14 +45,16 @@ final class GitClone extends IrreversibleStep {
   /// Clones into [repository] the repository the machine's own settings name, on [branch].
   const GitClone({
     required this.repository,
-    required this.host,
     required this.runAnswer,
+    this.host,
+    this.hostAnswer,
     this.branch,
     this.branchAnswer,
     this.ownerAnswer,
     this.originFile,
     this.originKey,
     this.originAnswer,
+    this.credentialAnswer,
     this.credentialFile,
     this.credentialKey,
     this.credentialUser,
@@ -56,13 +64,15 @@ final class GitClone extends IrreversibleStep {
   /// Builds the step from what the program gave it.
   factory GitClone.fromArguments(Arguments arguments) => GitClone(
     repository: arguments.text('repository'),
-    host: arguments.text('host'),
+    host: arguments.optionalText('host'),
+    hostAnswer: arguments.optionalText('host_answer'),
     branch: arguments.optionalText('branch'),
     branchAnswer: arguments.optionalText('branch_answer'),
     ownerAnswer: arguments.optionalText('owner_answer'),
     originFile: arguments.optionalText('origin_file'),
     originKey: arguments.optionalText('origin_key'),
     originAnswer: arguments.optionalText('origin_answer'),
+    credentialAnswer: arguments.optionalText('credential_answer'),
     credentialFile: arguments.optionalText('credential_file'),
     credentialKey: arguments.optionalText('credential_key'),
     credentialUser: arguments.optionalText('credential_user'),
@@ -77,12 +87,25 @@ final class GitClone extends IrreversibleStep {
       kind: ArgumentKind.text,
       describes: 'where the checkout stands on this machine',
     ),
+    // THE HOST IS EITHER WRITTEN OR ANSWERED, for the same reason the branch is. A program file
+    // ships to every installation, so where the repository is served from one installation's own
+    // host — a forge it runs itself — the file cannot write it, and host_answer names the answer
+    // holding it. A host every installation shares stays written in the row.
     ArgumentSpec(
       name: 'host',
       kind: ArgumentKind.text,
       describes:
           'the https host the repository is served from, which with the recorded owner/name '
-          'composes the address the clone reads',
+          'composes the address the clone reads. Give this or host_answer, never both',
+      required: false,
+    ),
+    ArgumentSpec(
+      name: 'host_answer',
+      kind: ArgumentKind.answerName,
+      describes:
+          'the name of the answer holding that host, where it is one installation\'s own and '
+          'cannot be written into a file that ships to every installation',
+      required: false,
     ),
     // THE BRANCH IS EITHER WRITTEN OR ANSWERED, for the same reason the origin is. A checkout of
     // one product's own tree stands on a branch that tree defines, and the row writes it. A
@@ -163,15 +186,30 @@ final class GitClone extends IrreversibleStep {
     ),
     // THE CREDENTIAL IS A GROUP AND IT IS OPTIONAL AS A GROUP. A public repository is read with
     // none, and handing one over anyway would put a credential on the network for a server that
-    // never asked. A row giving some of the three and not the others is refused rather than read
-    // as either: a credential with no account name is a credential nothing can present.
+    // never asked. A row giving some of the group and not the rest is refused rather than read as
+    // either: a credential with no account name is a credential nothing can present.
+    //
+    // WHERE IT COMES FROM IS EITHER A FILE OR AN ANSWER, AND EXACTLY ONE OF THEM PER ROW. A machine
+    // that already stands records it in a file, and the value correct there is the one somebody may
+    // have rotated by hand. The FIRST clone of a machine precedes every file of it, and a machine
+    // that never has one is given it as an answer. Both are two answers to one question.
+    ArgumentSpec(
+      name: 'credential_answer',
+      kind: ArgumentKind.answerName,
+      describes:
+          'the name of the answer holding the credential the repository is read with, for a run '
+          'that has it before any file of this machine records it. Give this with '
+          'credential_user, or give the credential_file pair instead — never both',
+      required: false,
+    ),
     ArgumentSpec(
       name: 'credential_file',
       kind: ArgumentKind.text,
       describes:
           'the file of this machine that holds the credential the repository is read with. It may '
-          'carry the slot named by run_answer. Leave the three credential arguments off together '
-          'for a repository that is served to anybody',
+          'carry the slot named by run_answer. Give this with credential_key and credential_user, '
+          'or give credential_answer instead; leave all of them off together for a repository '
+          'that is served to anybody',
       required: false,
     ),
     ArgumentSpec(
@@ -210,8 +248,11 @@ final class GitClone extends IrreversibleStep {
   /// Where the checkout stands.
   final String repository;
 
-  /// The https host the repository is served from.
-  final String host;
+  /// The https host the repository is served from, where the row writes it.
+  final String? host;
+
+  /// The answer holding that host, where it is one installation's own.
+  final String? hostAnswer;
 
   /// The branch the checkout stands on, where the row writes it.
   final String? branch;
@@ -230,6 +271,9 @@ final class GitClone extends IrreversibleStep {
 
   /// The answer holding owner/name, where no file of this machine records it yet.
   final String? originAnswer;
+
+  /// The answer holding the read credential, where no file of this machine records it.
+  final String? credentialAnswer;
 
   /// The file holding the read credential, and its key.
   final String? credentialFile;
@@ -341,17 +385,24 @@ final class GitClone extends IrreversibleStep {
 
     // The remote is asked where the branch stands, which is the only way "current" means anything:
     // deciding on the local tip alone would report a checkout that fell behind as finished forever.
-    final CommandResult published = await _observe(context, <String>[
-      'ls-remote',
-      '--heads',
-      url,
-      standsOn,
-    ], environment: source.credentialEnvironment(host));
+    final CommandResult published = await _observe(
+      context,
+      <String>['ls-remote', '--heads', url, standsOn],
+      environment: credentialEnvironment(
+        host: source.host!,
+        credential: source.credential,
+        credentialUser: source.credentialUser,
+      ),
+    );
     if (!published.ok) {
+      final String? credentialSource = source.credentialSource;
+      final String asked = credentialSource == null
+          ? 'no credential was presented to it, so it is the network or a repository that is not '
+                'served to anybody'
+          : '$credentialSource is what it was asked with, so it is that or the network';
       return CheckResult.blocked(
-        'the repository at $url could not be asked where $standsOn stands — the credential '
-        'under $credentialKey of ${source.credentialPath} is what it was asked with, so it is that '
-        'or the network: ${published.stderr.trim()}',
+        'the repository at $url could not be asked where $standsOn stands — $asked: '
+        '${published.stderr.trim()}',
       );
     }
     final String tip = published.trimmed.split(RegExp(r'\s+')).first;
@@ -426,7 +477,11 @@ final class GitClone extends IrreversibleStep {
     }
     final String url = source.url ?? '';
     final String standsOn = source.branch ?? '';
-    final Map<String, String> reaching = source.credentialEnvironment(host);
+    final Map<String, String> reaching = credentialEnvironment(
+      host: source.host!,
+      credential: source.credential,
+      credentialUser: source.credentialUser,
+    );
 
     // THE DIRECTORY IS MADE AND HANDED OVER BEFORE GIT IS ASKED ANYTHING. A checkout under a path
     // only root may write cannot be created by the account that has to use it, and one created as
@@ -547,45 +602,91 @@ final class GitClone extends IrreversibleStep {
       );
     }
 
+    final String? servedFrom = host ?? context.answers.optionalText(hostAnswer!);
+    if (servedFrom == null) {
+      return _Reading.unreadable(
+        'this run holds no value under the answer "${hostAnswer!}", and that answer is the host '
+        'the repository is served from — an installation states its own, because a host written '
+        'into a program file would be the host of one installation used by every other',
+      );
+    }
+
     final String? ownerName = await _ownerName(context);
     if (ownerName == null) {
       return _Reading.unreadable(_originRefusal(context));
     }
-    final String url = 'https://$host/$ownerName.git';
+    final String url = 'https://$servedFrom/$ownerName.git';
 
     // NO CREDENTIAL IS A STATE AND NOT AN OMISSION. A repository served to anybody is read with
-    // none, and the row said so by leaving all three off — which the shape check above has already
-    // held it to.
-    if (credentialFile == null) {
-      return _Reading.open(url: url, branch: standsOn);
+    // none, and the row said so by leaving every credential argument off — which the shape check
+    // above has already held it to.
+    if (credentialAnswer == null && credentialFile == null) {
+      return _Reading.open(url: url, branch: standsOn, host: servedFrom);
+    }
+
+    final ({String? credential, String? source, String? refusal}) held = await _credential(context);
+    if (held.refusal case final String refusal) {
+      return _Reading.unreadable(refusal);
+    }
+    return _Reading.of(
+      url: url,
+      branch: standsOn,
+      host: servedFrom,
+      credentialUser: credentialUser!,
+      credential: held.credential!,
+      credentialSource: held.source!,
+    );
+  }
+
+  /// The credential out of whichever source the row named, where it came from, or why there is none.
+  Future<({String? credential, String? source, String? refusal})> _credential(
+    StepContext context,
+  ) async {
+    if (credentialAnswer case final String name) {
+      final String? held = context.answers.optionalText(name);
+      if (held == null || held.isEmpty) {
+        return (
+          credential: null,
+          source: null,
+          refusal:
+              'this run holds no value under the answer "$name", and that answer is what the '
+              'repository is read with — the run is given it, because a credential written into a '
+              'program file would be the same credential on every installation',
+        );
+      }
+      return (credential: held, source: 'the credential of the answer "$name"', refusal: null);
     }
 
     final String? credentialPath = filledPath(context, credentialFile!, runAnswer);
     if (credentialPath == null) {
-      return const _Reading.unreadable(
-        'a path of this row still carries a slot nothing filled — the row names run_answer for '
-        'the answer that fills it, and this run holds no value under that name',
+      return (
+        credential: null,
+        source: null,
+        refusal:
+            'a path of this row still carries a slot nothing filled — the row names run_answer for '
+            'the answer that fills it, and this run holds no value under that name',
       );
     }
-    final String? credential = await recordedValue(
+    final String? held = await recordedValue(
       context,
       credentialPath,
       credentialKey!,
       elevated: elevated,
     );
-    if (credential == null) {
-      return _Reading.unreadable(
-        '${credentialKey!} of $credentialPath is what the repository is read with, and it is not '
-        'there — it is obtained once, from whoever serves the repository, and filled into that '
-        'file',
+    if (held == null) {
+      return (
+        credential: null,
+        source: null,
+        refusal:
+            '${credentialKey!} of $credentialPath is what the repository is read with, and it is '
+            'not there — it is obtained once, from whoever serves the repository, and filled into '
+            'that file',
       );
     }
-    return _Reading.of(
-      url: url,
-      branch: standsOn,
-      credentialUser: credentialUser!,
-      credential: credential,
-      credentialPath: credentialPath,
+    return (
+      credential: held,
+      source: 'the credential under ${credentialKey!} of $credentialPath',
+      refusal: null,
     );
   }
 
@@ -598,6 +699,14 @@ final class GitClone extends IrreversibleStep {
     if (branch == null && branchAnswer == null) {
       return 'this row names neither branch nor branch_answer, so nothing says which branch this '
           'checkout stands on';
+    }
+    if (host != null && hostAnswer != null) {
+      return 'this row names both host and host_answer, which are two answers to which host serves '
+          'the repository this checkout is cloned from';
+    }
+    if (host == null && hostAnswer == null) {
+      return 'this row names neither host nor host_answer, so nothing says which host serves the '
+          'repository this checkout is cloned from';
     }
     final bool byFile = originFile != null || originKey != null;
     final bool byAnswer = originAnswer != null;
@@ -614,6 +723,19 @@ final class GitClone extends IrreversibleStep {
       return 'this row names one of origin_file and origin_key and not the other, and a file with '
           'no key names no value in it';
     }
+    final bool credentialByFile = credentialFile != null || credentialKey != null;
+    if (credentialAnswer != null && credentialByFile) {
+      return 'this row names both credential_answer and credential_file, which are two answers to '
+          'where the credential the repository is read with comes from. Whichever a reader took '
+          'first would be the one that decided, and the other would sit there looking like it had '
+          'been read';
+    }
+    if (credentialAnswer != null) {
+      return credentialUser == null
+          ? 'this row names credential_answer and not credential_user, and a credential with no '
+                'account name is one nothing can present'
+          : null;
+    }
     final int credentialParts = <String?>[
       credentialFile,
       credentialKey,
@@ -621,9 +743,10 @@ final class GitClone extends IrreversibleStep {
     ].where((String? each) => each != null).length;
     if (credentialParts != 0 && credentialParts != 3) {
       return 'this row names $credentialParts of the three credential arguments. They are a group: '
-          'all three for a repository read with a credential, none for one served to anybody. A '
-          'credential with no account name is one nothing can present, and an account name with no '
-          'credential is a word with nothing behind it';
+          'all three for a repository read with a credential from a file, or credential_answer '
+          'with credential_user for one read with a credential from an answer, none for one served '
+          'to anybody. A credential with no account name is one nothing can present, and an account '
+          'name with no credential is a word with nothing behind it';
     }
     return null;
   }
@@ -805,30 +928,38 @@ final class _Reading {
   const _Reading.of({
     required String this.url,
     required String this.branch,
+    required String this.host,
     required String this.credentialUser,
     required String this.credential,
-    required String this.credentialPath,
+    required String this.credentialSource,
   }) : refusal = null;
 
   /// A repository served to anybody: an address and no credential at all.
-  const _Reading.open({required String this.url, required String this.branch})
-    : credentialUser = null,
-      credential = null,
-      credentialPath = null,
-      refusal = null;
+  const _Reading.open({
+    required String this.url,
+    required String this.branch,
+    required String this.host,
+  }) : credentialUser = null,
+       credential = null,
+       credentialSource = null,
+       refusal = null;
 
   const _Reading.unreadable(String this.refusal)
     : url = null,
       branch = null,
+      host = null,
       credentialUser = null,
       credential = null,
-      credentialPath = null;
+      credentialSource = null;
 
   /// The address of the repository, with no credential in it.
   final String? url;
 
   /// The branch this checkout stands on, out of whichever source the row named.
   final String? branch;
+
+  /// The host the repository is served from, out of whichever source the row named.
+  final String? host;
 
   /// The account name the credential is presented under.
   final String? credentialUser;
@@ -837,22 +968,8 @@ final class _Reading {
   final String? credential;
 
   /// Where the credential was read from, for a refusal that has to name it.
-  final String? credentialPath;
+  final String? credentialSource;
 
   /// Why nothing can be read, or null when it can.
   final String? refusal;
-
-  /// The credential as git takes it without it appearing in any argument: an authorization header,
-  /// set through git's configuration-by-environment for every address on [host].
-  /// EMPTY WHERE THERE IS NO CREDENTIAL, which is not the same as an empty one. A header carrying
-  /// `null:null` would be sent to a server that never asked for one and would be refused by some
-  /// of them; no header at all is what a public repository is read with.
-  Map<String, String> credentialEnvironment(String host) => credential == null
-      ? const <String, String>{}
-      : <String, String>{
-          'GIT_CONFIG_COUNT': '1',
-          'GIT_CONFIG_KEY_0': 'http.https://$host/.extraHeader',
-          'GIT_CONFIG_VALUE_0':
-              'Authorization: Basic ${base64Encode(utf8.encode('$credentialUser:$credential'))}',
-        };
 }

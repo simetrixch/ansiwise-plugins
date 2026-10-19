@@ -65,7 +65,7 @@ const Map<StepName, RegisteredStep> gitSteps = <StepName, RegisteredStep>{
   ),
   StepName('git_clone'): RegisteredStep(
     name: StepName('git_clone'),
-    source: 'lib/src/steps/git_clone.dart:38',
+    source: 'lib/src/steps/git_clone.dart:44',
     create: GitClone.fromArguments,
     arguments: GitClone.arguments,
   ),
@@ -148,14 +148,14 @@ const Map<StepName, RegisteredStep> gitSteps = <StepName, RegisteredStep>{
 const Map<PredicateName, RegisteredPredicate> gitConditions = <PredicateName, RegisteredPredicate>{
   PredicateName('remote_has_branch'): RegisteredPredicate.taking(
     name: PredicateName('remote_has_branch'),
-    source: 'lib/src/conditions/remote_has_branch.dart:34',
+    source: 'lib/src/conditions/remote_has_branch.dart:43',
     create: RemoteHasBranch.carrying,
     describes: 'whether a remote publishes the branch this run names',
     arguments: RemoteHasBranch.arguments,
   ),
   PredicateName('remote_lacks_branch'): RegisteredPredicate.taking(
     name: PredicateName('remote_lacks_branch'),
-    source: 'lib/src/conditions/remote_has_branch.dart:34',
+    source: 'lib/src/conditions/remote_has_branch.dart:43',
     create: RemoteHasBranch.lacking,
     describes: 'whether a remote publishes no branch of the name this run holds',
     arguments: RemoteHasBranch.arguments,

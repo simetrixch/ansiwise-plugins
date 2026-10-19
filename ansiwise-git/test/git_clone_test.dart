@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:ansiwise_core/ansiwise_core.dart';
 import 'package:ansiwise_core/testing.dart';
 import 'package:ansiwise_git/ansiwise_git.dart';
@@ -52,14 +54,15 @@ void main() {
     return shell;
   }
 
-  /// A machine whose checkout stands exactly where the remote publishes the branch.
-  FakeShell standing({String localTip = tip}) {
+  /// A machine whose checkout stands exactly where the remote, served at [address], publishes the
+  /// branch.
+  FakeShell standing({String localTip = tip, String address = url}) {
     final FakeShell shell = FakeShell();
     shell
       ..answers('git -c safe.directory=$path -C $path rev-parse --is-inside-work-tree', 'true\n')
-      ..answers('git -c safe.directory=$path -C $path remote get-url origin', '$url\n')
+      ..answers('git -c safe.directory=$path -C $path remote get-url origin', '$address\n')
       ..answers('git -c safe.directory=$path -C $path rev-parse --abbrev-ref HEAD', '$base\n')
-      ..answers('git ls-remote --heads $url $base', '$tip\trefs/heads/$base\n')
+      ..answers('git ls-remote --heads $address $base', '$tip\trefs/heads/$base\n')
       ..answers('git -c safe.directory=$path -C $path rev-parse HEAD', '$localTip\n');
     return shell;
   }
@@ -478,22 +481,259 @@ void main() {
     });
   });
 
+  // ---------------------------------------------------------------------------------------------
+  // A REPOSITORY WHOSE HOST AND WHOSE CREDENTIAL ARE ANSWERS. A program file ships to every
+  // installation and so names no installation's host; and the first clone of a machine precedes any
+  // settings file that could hold the credential, so the run is given it. The two travel like the
+  // origin and the branch already do: the row names the answer, the run holds the value.
+  // ---------------------------------------------------------------------------------------------
+  group('a repository whose host and credential are answers', () {
+    const String hostAnswer = 'platform_host';
+    const String originAnswer = 'platform_repo';
+    const String credentialAnswer = 'platform_token';
+    const String forgeHost = 'forge.example.com';
+    const String forgeOwnerName = 'acme/acme-platform';
+    const String forgeUrl = 'https://$forgeHost/$forgeOwnerName.git';
+
+    const GitClone answered = GitClone(
+      repository: path,
+      hostAnswer: hostAnswer,
+      branch: base,
+      originAnswer: originAnswer,
+      credentialAnswer: credentialAnswer,
+      credentialUser: 'reader',
+      runAnswer: null,
+    );
+
+    final String authorization = base64Encode(utf8.encode('reader:$credential'));
+    const Map<String, Object> everything = <String, Object>{
+      hostAnswer: forgeHost,
+      originAnswer: forgeOwnerName,
+      credentialAnswer: credential,
+    };
+
+    /// A run holding [held], against [shell].
+    StepContext holding(Map<String, Object> held, {Shell? shell}) =>
+        contextOn(shell: shell ?? bare(), files: FakeFiles(), name: null, also: held);
+
+    Map<String, Object> without(String answer) => <String, Object>{...everything}..remove(answer);
+
+    /// The first command of [shell] that passed git [verb].
+    Command commandOf(FakeShell shell, String verb) =>
+        shell.commands.firstWhere((Command each) => each.arguments.contains(verb));
+
+    test(
+      'INNOCENT CASE: the address is composed from the answered host and the recorded owner/name',
+      () async {
+        final FakeShell shell = bare();
+        await answered.apply(holding(everything, shell: shell));
+
+        expect(shell.ran, contains('git clone --branch $base $forgeUrl $path'));
+      },
+    );
+
+    test('INNOCENT CASE: the credential stands in the environment of the clone, keyed on the '
+        'answered host', () async {
+      final FakeShell shell = bare();
+      await answered.apply(holding(everything, shell: shell));
+
+      expect(commandOf(shell, 'clone').environment, <String, String>{
+        'GIT_CONFIG_COUNT': '1',
+        'GIT_CONFIG_KEY_0': 'http.https://$forgeHost/.extraHeader',
+        'GIT_CONFIG_VALUE_0': 'Authorization: Basic $authorization',
+      });
+    });
+
+    test('INNOCENT CASE: a checkout on another address is moved to the plain one, and only the '
+        'commands that reach the network carry the credential', () async {
+      final FakeShell shell = standing(
+        localTip: 'f6c1a2d90b7e8f3a4c5d6e7f8a9b0c1d2e3f4a5b',
+        address: 'https://$forgeHost/somebody/else.git',
+      );
+      await answered.apply(holding(everything, shell: shell));
+
+      expect(
+        shell.ran,
+        contains('git -c safe.directory=$path -C $path remote set-url origin $forgeUrl'),
+      );
+      for (final Command command in shell.commands) {
+        final bool reachesNetwork = command.arguments.contains('fetch');
+        expect(
+          command.environment.containsKey('GIT_CONFIG_VALUE_0'),
+          reachesNetwork,
+          reason: '${command.argv.join(' ')} reaches the network: $reachesNetwork',
+        );
+      }
+    });
+
+    test(
+      'INNOCENT CASE: a checkout on the published tip is asked with the credential and finished',
+      () async {
+        final FakeShell shell = standing(address: forgeUrl);
+        final CheckResult result = await answered.check(holding(everything, shell: shell));
+
+        expect(result, isA<Satisfied>());
+        expect(
+          commandOf(shell, 'ls-remote').environment['GIT_CONFIG_KEY_0'],
+          'http.https://$forgeHost/.extraHeader',
+        );
+      },
+    );
+
+    test(
+      'INNOCENT CASE: the credential is in no argument, in no plan and in no remote address',
+      () async {
+        final FakeShell shell = bare();
+        final StepContext context = holding(everything, shell: shell);
+        final StepPlan plan = await answered.plan(context);
+        await answered.apply(context);
+
+        for (final String command in <String>[...shell.ran, ...(plan as ArgvPlan).argv]) {
+          expect(command, isNot(contains(credential)));
+          expect(command, isNot(contains(authorization)));
+        }
+      },
+    );
+
+    test('INNOCENT CASE: the record of the run does not contain the credential', () async {
+      final MemoryRecorder recorder = MemoryRecorder(FakeClock());
+      await answered.apply(holding(everything, shell: recording(bare(), recorder)));
+
+      final List<String> record = <String>[
+        for (final CommandStarted started in recorder.only<CommandStarted>()) ...started.argv,
+        ...recorder.output,
+        ...recorder.logLines,
+      ];
+      expect(record, isNotEmpty, reason: 'a record that holds nothing proves nothing about it');
+      for (final String line in record) {
+        expect(line, isNot(contains(credential)));
+        expect(line, isNot(contains(authorization)));
+      }
+    });
+
+    test(
+      'INNOCENT CASE: a literal host with an answered credential keys the header on that host',
+      () async {
+        const GitClone literalHost = GitClone(
+          repository: path,
+          host: host,
+          branch: base,
+          originAnswer: originAnswer,
+          credentialAnswer: credentialAnswer,
+          credentialUser: 'reader',
+          runAnswer: null,
+        );
+        final FakeShell shell = bare();
+        await literalHost.apply(holding(everything, shell: shell));
+
+        expect(
+          commandOf(shell, 'clone').environment['GIT_CONFIG_KEY_0'],
+          'http.https://$host/.extraHeader',
+        );
+        expect(
+          shell.ran,
+          contains('git clone --branch $base https://$host/$forgeOwnerName.git $path'),
+        );
+      },
+    );
+
+    test('INNOCENT CASE: an answered host with the credential read from a file keys the header on '
+        'the answered host', () async {
+      const GitClone fromFile = GitClone(
+        repository: path,
+        hostAnswer: hostAnswer,
+        branch: base,
+        originFile: settingsFile,
+        originKey: settingsKey,
+        credentialFile: credentialFile,
+        credentialKey: credentialKey,
+        credentialUser: 'reader',
+        runAnswer: null,
+      );
+      final FakeShell shell = bare();
+      await fromFile.apply(
+        contextOn(shell: shell, files: settings(), name: forgeHost, answerName: hostAnswer),
+      );
+
+      expect(
+        shell.ran,
+        contains('git clone --branch $base https://$forgeHost/$ownerName.git $path'),
+      );
+      expect(
+        commandOf(shell, 'clone').environment['GIT_CONFIG_KEY_0'],
+        'http.https://$forgeHost/.extraHeader',
+      );
+    });
+
+    test('PLANTED DEFECT: a run holding no value under host_answer is refused, naming the answer, '
+        'and nothing is asked', () async {
+      final FakeShell shell = bare();
+      final CheckResult result = await answered.check(holding(without(hostAnswer), shell: shell));
+
+      expect(result, isA<Blocked>());
+      expect((result as Blocked).reason, contains(hostAnswer));
+      expect(shell.ran, isEmpty);
+
+      await expectLater(
+        answered.apply(holding(without(hostAnswer), shell: shell)),
+        throwsA(isA<StateError>()),
+      );
+      expect(shell.ran, isEmpty, reason: 'a run that does not know the host clones from nowhere');
+    });
+
+    for (final (String why, Map<String, Object> held) in <(String, Map<String, Object>)>[
+      ('holding none', without(credentialAnswer)),
+      ('holding an empty one', <String, Object>{...everything, credentialAnswer: ''}),
+    ]) {
+      test('PLANTED DEFECT: a run $why under credential_answer is refused, naming the answer and '
+          'no file, and nothing is asked', () async {
+        final FakeShell shell = bare();
+        final CheckResult result = await answered.check(holding(held, shell: shell));
+
+        expect(result, isA<Blocked>());
+        expect(
+          (result as Blocked).reason,
+          allOf(contains(credentialAnswer), isNot(contains('.dev'))),
+        );
+        expect(shell.ran, isEmpty);
+      });
+    }
+
+    test('PLANTED DEFECT: a clone refused by the remote names the answer the credential came from, '
+        'not a file', () async {
+      final FakeShell shell = standing(address: forgeUrl)
+        ..fails('git ls-remote --heads $forgeUrl $base', stderr: 'fatal: Authentication failed');
+      final CheckResult result = await answered.check(holding(everything, shell: shell));
+
+      expect(result, isA<Blocked>());
+      expect(
+        (result as Blocked).reason,
+        allOf(contains(credentialAnswer), isNot(contains('null')), isNot(contains(credential))),
+      );
+    });
+  });
+
   group('COUNTER-PROBE: a row whose own shape is wrong is refused before a machine is asked', () {
     /// The row as it would stand with [named] given and everything else left off.
     GitClone rowWith({
+      String? hostName = host,
+      String? hostAnswer,
       String? originFile,
       String? originKey,
       String? originAnswer,
+      String? credentialAnswer,
       String? credentialFile,
       String? credentialKey,
       String? credentialUser,
     }) => GitClone(
       repository: path,
-      host: host,
+      host: hostName,
+      hostAnswer: hostAnswer,
       branch: base,
       originFile: originFile,
       originKey: originKey,
       originAnswer: originAnswer,
+      credentialAnswer: credentialAnswer,
       credentialFile: credentialFile,
       credentialKey: credentialKey,
       credentialUser: credentialUser,
@@ -558,6 +798,82 @@ void main() {
         await refusalOf(rowWith(originFile: settingsFile)),
         allOf(contains('origin_file'), contains('origin_key')),
       );
+    });
+
+    test(
+      'PLANTED DEFECT: both host and host_answer — two answers to which host serves it',
+      () async {
+        expect(
+          await refusalOf(rowWith(hostAnswer: 'platform_host', originAnswer: 'platform_repo')),
+          allOf(contains('host'), contains('host_answer'), contains('both')),
+        );
+      },
+    );
+
+    test('PLANTED DEFECT: neither host nor host_answer — nothing says who serves it', () async {
+      final String refusal = await refusalOf(
+        rowWith(hostName: null, originAnswer: 'platform_repo'),
+      );
+      expect(refusal, allOf(contains('host'), contains('host_answer'), contains('neither')));
+    });
+
+    test('PLANTED DEFECT: credential_answer beside the credential file pair — two answers to where '
+        'the credential comes from', () async {
+      expect(
+        await refusalOf(
+          rowWith(
+            originAnswer: 'platform_repo',
+            credentialAnswer: 'platform_token',
+            credentialFile: credentialFile,
+            credentialKey: credentialKey,
+            credentialUser: 'reader',
+          ),
+        ),
+        allOf(contains('credential_answer'), contains('credential_file'), contains('both')),
+      );
+    });
+
+    test(
+      'PLANTED DEFECT: credential_answer beside a lone credential_key is the same two answers',
+      () async {
+        expect(
+          await refusalOf(
+            rowWith(
+              originAnswer: 'platform_repo',
+              credentialAnswer: 'platform_token',
+              credentialKey: credentialKey,
+              credentialUser: 'reader',
+            ),
+          ),
+          allOf(contains('credential_answer'), contains('credential_file'), contains('both')),
+        );
+      },
+    );
+
+    test('PLANTED DEFECT: credential_answer without credential_user — a credential nothing can '
+        'present', () async {
+      expect(
+        await refusalOf(rowWith(originAnswer: 'platform_repo', credentialAnswer: 'platform_token')),
+        allOf(contains('credential_answer'), contains('credential_user')),
+      );
+    });
+
+    test('INNOCENT CASE: credential_answer with credential_user is a whole row', () async {
+      final FakeShell shell = bare();
+      final CheckResult result =
+          await rowWith(
+            originAnswer: 'platform_repo',
+            credentialAnswer: 'platform_token',
+            credentialUser: 'reader',
+          ).check(
+            contextOn(
+              shell: shell,
+              name: 'acme/whatever',
+              answerName: 'platform_repo',
+              also: const <String, Object>{'platform_token': credential},
+            ),
+          );
+      expect(result, isA<Ready>());
     });
 
     for (final (String half, GitClone Function() row) in <(String, GitClone Function())>[
