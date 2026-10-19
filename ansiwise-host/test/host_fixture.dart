@@ -30,12 +30,16 @@ final class HostMachine {
   /// [answers] carries what an operator stated about this installation, and every step gets them
   /// whether or not it reads any: a step reads its answers BY NAME out of the run, so a context
   /// built without them would measure the step against an empty bag rather than an installation.
+  ///
+  /// [realShell] replaces the fake machine's shell, for the one test that needs a command to really
+  /// run — a download against a server of its own. Nothing else in the context changes.
   StepContext contextFor(
     StepName step, [
     Arguments arguments = Arguments.none,
     Arguments answers = hostAnswers,
+    Shell? realShell,
   ]) => StepContext(
-    shell: _OneMachine(shell, files),
+    shell: realShell ?? _OneMachine(shell, files),
     files: files,
     http: FakeHttp(),
     clock: clock,
