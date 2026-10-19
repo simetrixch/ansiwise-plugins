@@ -72,12 +72,13 @@ void main() {
         }),
       );
 
-  /// The row register-slave writes: the answer holding the machine and the one holding its key.
+  /// The row register-slave writes: the answers holding the machine, its port and its key.
   Step shippedKnownHostRow() => hostRegistry
       .step(const StepName('install_known_host'))!
       .create(
         const Arguments(<String, Object>{
           'host_answer': 'slave_ssh_host',
+          'host_port_answer': 'slave_ssh_port',
           'host_public_key_answer': 'slave_host_key',
         }),
       );
@@ -147,6 +148,7 @@ void main() {
       'operator_user': user,
       'operator_public_key': key,
       'slave_ssh_host': machineName,
+      'slave_ssh_port': '22',
       'slave_host_key': machineKey,
     }),
     facts: Facts.none,

@@ -26,6 +26,7 @@ void main() {
 
   const InstallKnownHost step = InstallKnownHost(
     hostAnswer: 'slave_ssh_host',
+    hostPortAnswer: 'slave_ssh_port',
     keyAnswer: 'slave_host_key',
   );
 
@@ -40,13 +41,18 @@ void main() {
 
   tearDown(() => scratch.deleteSync(recursive: true));
 
-  StepContext contextOf({String? name = host, String? key = newKey}) => HostMachine().contextFor(
-    const StepName('install_known_host'),
-    Arguments.none,
-    hostAnswering(<String, Object>{'slave_ssh_host': ?name, 'slave_host_key': ?key}),
-    _AccountAt(scratch.path),
-    const RealFiles(),
-  );
+  StepContext contextOf({String? name = host, String? port = '22', String? key = newKey}) =>
+      HostMachine().contextFor(
+        const StepName('install_known_host'),
+        Arguments.none,
+        hostAnswering(<String, Object>{
+          'slave_ssh_host': ?name,
+          'slave_ssh_port': ?port,
+          'slave_host_key': ?key,
+        }),
+        _AccountAt(scratch.path),
+        const RealFiles(),
+      );
 
   String held() => File(knownHosts).readAsStringSync();
 
@@ -58,6 +64,11 @@ void main() {
     expect(hashed.exitCode, 0, reason: '${hashed.stderr}');
     File('$knownHosts.old').deleteSync();
   }
+
+  /// Whether the real tool finds a line for [name] in the file, which is the question `ssh` asks of it
+  /// under the name it was asked to dial.
+  bool findsUnder(String name) =>
+      Process.runSync('ssh-keygen', <String>['-F', name, '-f', knownHosts]).exitCode == 0;
 
   /// The first line of the file that carries [key], which for a hashed name is not recognisable by
   /// its text.
@@ -194,6 +205,111 @@ void main() {
     },
   );
 
+  group('the name ssh looks the machine up under', () {
+    test(
+      'THE PLANTED DEFECT: a machine on another port than 22 is written as [host]:port, which is the only name ssh consults for it',
+      () async {
+        await step.apply(contextOf(port: '2222'));
+
+        expect(held(), '[$host]:2222 $newKey\n');
+        expect(findsUnder('[$host]:2222'), isTrue);
+        expect(findsUnder(host), isFalse, reason: 'a plain name is consulted for port 22 alone');
+      },
+    );
+
+    test('port 22 is the plain name', () async {
+      await step.apply(contextOf());
+
+      expect(held(), '$host $newKey\n');
+      expect(findsUnder(host), isTrue);
+      expect(findsUnder('[$host]:22'), isFalse);
+    });
+
+    test(
+      'THE PLANTED DEFECT: the old key of a machine on another port is replaced, plain and hashed',
+      () async {
+        hold('other.example.org $otherKey\n[$host]:2222 $oldKey\n');
+        hashTheNames();
+        hold('${held()}[$host]:2222 $oldKey\n');
+
+        expect(await step.check(contextOf(port: '2222')), isA<Ready>());
+        await step.apply(contextOf(port: '2222'));
+
+        expect(held(), isNot(contains(oldKey)));
+        expect(held().trim().split('\n').last, '[$host]:2222 $newKey');
+        expect(findsUnder('[$host]:2222'), isTrue);
+        expect(await step.check(contextOf(port: '2222')), isA<Satisfied>());
+      },
+    );
+
+    test('THE INNOCENT CASE: the key already there under [host]:port changes nothing', () async {
+      hold('other.example.org $otherKey\n[$host]:2222 $newKey\n');
+
+      expect(await step.check(contextOf(port: '2222')), isA<Satisfied>());
+      await step.apply(contextOf(port: '2222'));
+
+      expect(held(), 'other.example.org $otherKey\n[$host]:2222 $newKey\n');
+    });
+
+    test(
+      'THE INNOCENT NEIGHBOUR: one name on two ports is two machines, and each keeps its own key',
+      () async {
+        await step.apply(contextOf());
+        await step.apply(contextOf(port: '2222', key: otherKey));
+
+        expect(held(), '$host $newKey\n[$host]:2222 $otherKey\n');
+        expect(await step.check(contextOf()), isA<Satisfied>());
+        expect(await step.check(contextOf(port: '2222', key: otherKey)), isA<Satisfied>());
+      },
+    );
+
+    test('a machine moved from port 22 to another keeps its old port\'s line', () async {
+      // The line for the old port is another machine's entry as far as this step can tell, and it
+      // fails closed: ssh to the old port is refused, never trusted for the new key.
+      hold('$host $oldKey\n');
+
+      await step.apply(contextOf(port: '2222'));
+
+      expect(held(), '$host $oldKey\n[$host]:2222 $newKey\n');
+    });
+  });
+
+  group('every form of machine name a slave row may carry', () {
+    const String ipv4 = '203.0.113.7';
+    const String ipv6 = '2001:db8::7';
+
+    for (final String name in <String>[ipv4, 'apps2', ipv6]) {
+      test(
+        'THE PLANTED DEFECT: $name is written, found by the tool and replaced on a new key',
+        () async {
+          await step.apply(contextOf(name: name, key: oldKey));
+          expect(held(), '$name $oldKey\n');
+          expect(findsUnder(name), isTrue);
+
+          await step.apply(contextOf(name: name));
+
+          expect(held(), '$name $newKey\n');
+          expect(await step.check(contextOf(name: name)), isA<Satisfied>());
+        },
+      );
+
+      test('$name on another port is written as [$name]:port', () async {
+        await step.apply(contextOf(name: name, port: '2222'));
+
+        expect(held(), '[$name]:2222 $newKey\n');
+        expect(findsUnder('[$name]:2222'), isTrue);
+      });
+    }
+
+    test('THE INNOCENT NEIGHBOUR: the address of one machine is not the name of another', () async {
+      hold('$ipv4 $otherKey\n$ipv6 $otherKey\n');
+
+      await step.apply(contextOf());
+
+      expect(held(), '$ipv4 $otherKey\n$ipv6 $otherKey\n$host $newKey\n');
+    });
+  });
+
   test('a key answer with a comment is written without it', () async {
     await step.apply(contextOf(key: '$newKey operator@somewhere'));
 
@@ -249,6 +365,7 @@ void main() {
 
     test('THE PLANTED DEFECT: an answer this run does not hold is refused by name', () async {
       await refused(contextOf(name: null), 'slave_ssh_host');
+      await refused(contextOf(port: null), 'slave_ssh_port');
       await refused(contextOf(key: null), 'slave_host_key');
     });
 
@@ -262,11 +379,45 @@ void main() {
           '!$host',
           '$host other.example.org',
           '-$host',
+          '[2001:db8::7]',
+          'fe80::1%eth0',
+          '2001:db8::7,203.0.113.7',
+          '2001:db8::g',
+          '1::2::3',
+          '$host:2222',
         ]) {
           await refused(contextOf(name: pattern), 'slave_ssh_host');
         }
       },
     );
+
+    test('THE PLANTED DEFECT: something that is not a port number is refused', () async {
+      // A port that the line could not carry as ssh spells it would write a line ssh never reads and
+      // report the machine registered.
+      for (final String notAPort in <String>[
+        '',
+        '0',
+        '65536',
+        '99999',
+        '100000',
+        '22x',
+        '-1',
+        '0x16',
+        '022',
+        '2 2',
+        '22.0',
+        'ssh',
+      ]) {
+        await refused(contextOf(port: notAPort), 'slave_ssh_port');
+      }
+    });
+
+    test('THE INNOCENT CASE: the lowest and the highest port are taken', () async {
+      await step.apply(contextOf(port: '1'));
+      await step.apply(contextOf(port: '65535'));
+
+      expect(held(), '[$host]:1 $newKey\n[$host]:65535 $newKey\n');
+    });
 
     test('THE PLANTED DEFECT: something that is not one public key is refused', () async {
       for (final String notAKey in <String>[
@@ -285,6 +436,7 @@ void main() {
     expect(InstallKnownHost.answers, same(InstallAuthorizedKey.answers));
     expect(InstallKnownHost.arguments.map((ArgumentSpec spec) => spec.name), <String>[
       'host_answer',
+      'host_port_answer',
       'host_public_key_answer',
     ]);
   });

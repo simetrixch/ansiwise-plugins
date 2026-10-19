@@ -145,7 +145,7 @@ const Map<StepName, RegisteredStep> hostSteps = <StepName, RegisteredStep>{
   // The same account's record of the machines it trusts, written from a key the caller proved.
   StepName('install_known_host'): RegisteredStep(
     name: StepName('install_known_host'),
-    source: 'lib/src/steps/host/install_known_host.dart:122',
+    source: 'lib/src/steps/host/install_known_host.dart:173',
     create: InstallKnownHost.fromArguments,
     arguments: InstallKnownHost.arguments,
     answers: InstallKnownHost.answers,

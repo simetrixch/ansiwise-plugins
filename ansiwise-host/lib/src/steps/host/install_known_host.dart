@@ -4,7 +4,7 @@ import 'install_authorized_key.dart';
 
 /// The one machine and the one key a row means, or why it means none.
 ///
-/// **Both reach the row as ANSWERS, and nothing here looks a key up.** A scan of the machine would
+/// **All three reach the row as ANSWERS, and nothing here looks a key up.** A scan of the machine would
 /// record whatever answered, and a key nobody proved is exactly what a host key check exists to
 /// refuse. The caller holds the proof, because it only got this key out of a connection that was
 /// refused unless the key matched what it had recorded, and it hands the result over.
@@ -12,20 +12,28 @@ import 'install_authorized_key.dart';
 /// **A public key is not a secret.** It is what a machine hands to everybody who connects, so
 /// nothing here is redacted and the value may stand in a plan an operator reads.
 final class KnownHost {
-  /// Records the machine [host] and its key, as the one `<type> <base64>` pair a file line carries.
+  /// Records the machine [host] listening on [port] and its key, as the one `<type> <base64>` pair a
+  /// file line carries.
   const KnownHost.of({
     required String this.host,
+    required int this.port,
     required String this.keyType,
     required String this.keyBlob,
   }) : refusal = null;
 
   /// Records that the answers name no machine and key, because [refusal].
-  const KnownHost.unnamed(String this.refusal) : host = null, keyType = null, keyBlob = null;
+  const KnownHost.unnamed(String this.refusal)
+    : host = null,
+      port = null,
+      keyType = null,
+      keyBlob = null;
 
-  /// Reads the machine and the key out of the answers [hostAnswer] and [keyAnswer] name.
+  /// Reads the machine and the key out of the answers [hostAnswer], [hostPortAnswer] and [keyAnswer]
+  /// name.
   factory KnownHost.fromAnswers(
     StepContext context, {
     required String hostAnswer,
+    required String hostPortAnswer,
     required String keyAnswer,
   }) {
     final String? host = context.answers.optionalText(hostAnswer)?.trim();
@@ -34,11 +42,27 @@ final class KnownHost {
         'this run holds no answer "$hostAnswer", and the machine is read from it',
       );
     }
-    if (!_hostName.hasMatch(host)) {
+    if (!_hostName.hasMatch(host) && !_isIpv6Address(host)) {
       return KnownHost.unnamed(
-        'the answer "$hostAnswer" is "$host", which is not a plain host name — a known_hosts line '
-        'reads a comma, a star, a question mark or a leading bang as a pattern, and a pattern would '
-        'trust this key for machines nobody named',
+        'the answer "$hostAnswer" is "$host", which is not a plain host name or an address — a '
+        'known_hosts line reads a comma, a star, a question mark or a leading bang as a pattern, and '
+        'a pattern would trust this key for machines nobody named; the port and the brackets of an '
+        'address belong to the answer "$hostPortAnswer" and not to this one',
+      );
+    }
+    final String? heldPort = context.answers.optionalText(hostPortAnswer)?.trim();
+    if (heldPort == null || heldPort.isEmpty) {
+      return KnownHost.unnamed(
+        'this run holds no answer "$hostPortAnswer", and the port the machine\'s ssh listens on is '
+        'read from it',
+      );
+    }
+    final int? port = _portNumber.hasMatch(heldPort) ? int.parse(heldPort) : null;
+    if (port == null || port > _highestPort) {
+      return KnownHost.unnamed(
+        'the answer "$hostPortAnswer" is "$heldPort", which is not a port number from 1 to '
+        '$_highestPort — the name a known_hosts line carries for a machine depends on the port, and a '
+        'line under the wrong name is one ssh never reads',
       );
     }
     final String? held = context.answers.optionalText(keyAnswer)?.trim();
@@ -57,15 +81,36 @@ final class KnownHost {
         'fields of what the machine\'s own .pub file holds',
       );
     }
-    return KnownHost.of(host: host, keyType: fields[0], keyBlob: fields[1]);
+    return KnownHost.of(host: host, port: port, keyType: fields[0], keyBlob: fields[1]);
   }
 
   static final RegExp _hostName = RegExp(r'^[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?$');
+  static final RegExp _portNumber = RegExp(r'^[1-9][0-9]{0,4}$');
+  static const int _highestPort = 65535;
+
+  /// Whether [host] is an IPv6 address written bare: no brackets, no zone, no port.
+  static bool _isIpv6Address(String host) {
+    if (!host.contains(':')) {
+      return false;
+    }
+    try {
+      Uri.parseIPv6Address(host);
+      return true;
+    } on FormatException {
+      return false;
+    }
+  }
+
+  /// The port `ssh` leaves out of the name it looks a machine up under.
+  static const int _defaultPort = 22;
   static final RegExp _keyType = RegExp(r'^[a-z][a-z0-9@.-]*$');
   static final RegExp _base64 = RegExp(r'^[A-Za-z0-9+/]+={0,2}$');
 
-  /// The machine's name, as a client dials it, or null where the answers name none.
+  /// The machine's name or address, as a client dials it, or null where the answers name none.
   final String? host;
+
+  /// The port the machine's ssh listens on, or null where the answers name none.
+  final int? port;
 
   /// The key's algorithm, as the first field of its public line, or null where there is none.
   final String? keyType;
@@ -76,8 +121,13 @@ final class KnownHost {
   /// Why the answers name no machine and key, or null when they do.
   final String? refusal;
 
+  /// The name `ssh` looks this machine up under in `known_hosts`, which is how OpenSSH spells it: the
+  /// bare name for port 22 and `[name]:port` for any other, so a line under the bare name is never
+  /// consulted for a machine on another port.
+  String get name => port == _defaultPort ? '$host' : '[$host]:$port';
+
   /// The line a `known_hosts` file carries for this machine and key.
-  String get line => '$host $keyType $keyBlob';
+  String get line => '$name $keyType $keyBlob';
 }
 
 /// What `known_hosts` held before this step, as far as the step could look.
@@ -111,7 +161,8 @@ final class KnownHostsBefore {
 /// hashed it can tell whether a hashed line is this machine. It runs as `-F`, which only reads and
 /// names the matching line numbers; `-R` would do the removing itself and leave a `known_hosts.old`
 /// beside the file on every run, and it would be a command that a dry run has to refuse. A plain
-/// name matches port 22 only: a `[name]:port` line is another machine's entry and is not touched.
+/// name matches port 22 only, so the machine is looked up under the name `ssh` uses for its port
+/// and a line under the same host name and another port is another machine's entry, not touched.
 ///
 /// **A marker line (`@revoked`, `@cert-authority`) is somebody's deliberate statement and is left
 /// alone**, and it does not count as the machine's key either.
@@ -120,12 +171,17 @@ final class KnownHostsBefore {
 /// account's own. A run that is neither the account nor root cannot read `.ssh`, which is `0700`,
 /// and says so rather than reading the file as absent.
 final class InstallKnownHost extends ReversibleStep<KnownHostsBefore> {
-  /// Installs the key of the machine the two answers name.
-  const InstallKnownHost({required this.hostAnswer, required this.keyAnswer});
+  /// Installs the key of the machine the three answers name.
+  const InstallKnownHost({
+    required this.hostAnswer,
+    required this.hostPortAnswer,
+    required this.keyAnswer,
+  });
 
   /// Builds the step from what the program gave it.
   factory InstallKnownHost.fromArguments(Arguments arguments) => InstallKnownHost(
     hostAnswer: arguments.text('host_answer'),
+    hostPortAnswer: arguments.text('host_port_answer'),
     keyAnswer: arguments.text('host_public_key_answer'),
   );
 
@@ -134,7 +190,16 @@ final class InstallKnownHost extends ReversibleStep<KnownHostsBefore> {
     ArgumentSpec(
       name: 'host_answer',
       kind: ArgumentKind.answerName,
-      describes: 'the name of the answer holding the machine, as the account\'s ssh dials it',
+      describes:
+          'the name of the answer holding the machine, a host name or an address, as the account\'s '
+          'ssh dials it',
+    ),
+    ArgumentSpec(
+      name: 'host_port_answer',
+      kind: ArgumentKind.answerName,
+      describes:
+          'the name of the answer holding the port the machine\'s ssh listens on, which is part of '
+          'the name the account\'s ssh looks the machine up under',
     ),
     ArgumentSpec(
       name: 'host_public_key_answer',
@@ -153,6 +218,9 @@ final class InstallKnownHost extends ReversibleStep<KnownHostsBefore> {
   /// The name of the answer holding the machine.
   final String hostAnswer;
 
+  /// The name of the answer holding the machine's ssh port.
+  final String hostPortAnswer;
+
   /// The name of the answer holding the machine's key.
   final String keyAnswer;
 
@@ -166,7 +234,7 @@ final class InstallKnownHost extends ReversibleStep<KnownHostsBefore> {
       return const CheckResult.ready();
     }
     return reading.holdsKey && reading.removed.isEmpty
-        ? CheckResult.satisfied('${reading.path} already holds the key of ${reading.wanted.host}')
+        ? CheckResult.satisfied('${reading.path} already holds the key of ${reading.wanted.name}')
         : const CheckResult.ready();
   }
 
@@ -227,6 +295,7 @@ final class InstallKnownHost extends ReversibleStep<KnownHostsBefore> {
     final KnownHost wanted = KnownHost.fromAnswers(
       context,
       hostAnswer: hostAnswer,
+      hostPortAnswer: hostPortAnswer,
       keyAnswer: keyAnswer,
     );
     if (wanted.refusal case final String refusal) {
@@ -255,13 +324,13 @@ final class InstallKnownHost extends ReversibleStep<KnownHostsBefore> {
       );
     }
     final CommandResult found = await context.shell.run(
-      Command.observing('ssh-keygen', arguments: <String>['-F', wanted.host!, '-f', path]),
+      Command.observing('ssh-keygen', arguments: <String>['-F', wanted.name, '-f', path]),
     );
     // Exit 1 is "no line names this machine"; anything else is a question it could not answer, and
     // a file it could not read must not be taken for one with no entry.
     if (!found.ok && found.exitCode != _notFound) {
       return _Reading.refused(
-        '$path could not be searched for ${wanted.host}, so what it holds for that machine was not '
+        '$path could not be searched for ${wanted.name}, so what it holds for that machine was not '
         'measured — ssh-keygen exited ${found.exitCode}${InstallAuthorizedKey.said(found)}',
       );
     }
@@ -314,7 +383,7 @@ final class _Reading {
     for (final int number in lines) {
       if (number > held.length) {
         return _Reading.refused(
-          '$directory/known_hosts changed while it was searched for ${wanted.host}: ssh-keygen named '
+          '$directory/known_hosts changed while it was searched for ${wanted.name}: ssh-keygen named '
           'line $number and the file has ${held.length}',
         );
       }
