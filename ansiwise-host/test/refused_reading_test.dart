@@ -43,6 +43,11 @@ void main() {
   const String keyFile = '$directory/authorized_keys';
   const String key = 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIExampleKeyForThisTest operator';
 
+  const String knownHostsFile = '$directory/known_hosts';
+  const String machineName = 'host-2.example.org';
+  const String machineKey =
+      'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIO+yarTCqTJqZvrbh838TZX3/vyXyI2j2c9k/NdRKUib';
+
   /// A key somebody else already depends on, standing in the same file.
   const String colleague = 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAnotherPersonsKey colleague';
 
@@ -64,6 +69,16 @@ void main() {
         const Arguments(<String, Object>{
           'public_key_answer': 'operator_public_key',
           'elevated': true,
+        }),
+      );
+
+  /// The row register-slave writes: the answer holding the machine and the one holding its key.
+  Step shippedKnownHostRow() => hostRegistry
+      .step(const StepName('install_known_host'))!
+      .create(
+        const Arguments(<String, Object>{
+          'host_answer': 'slave_ssh_host',
+          'host_public_key_answer': 'slave_host_key',
         }),
       );
 
@@ -128,13 +143,21 @@ void main() {
     log: log,
     step: step,
     arguments: Arguments.none,
-    answers: const Arguments(<String, Object>{'operator_user': user, 'operator_public_key': key}),
+    answers: const Arguments(<String, Object>{
+      'operator_user': user,
+      'operator_public_key': key,
+      'slave_ssh_host': machineName,
+      'slave_host_key': machineKey,
+    }),
     facts: Facts.none,
     measurements: const _DiscardedMeasurements(),
   );
 
   StepContext installingOn(_Session session, _Lookups files, {Logger log = const _SilentLog()}) =>
       contextOn(session, files, step: const StepName('install_authorized_key'), log: log);
+
+  StepContext knownHostsOn(_Session session, _Lookups files, {Logger log = const _SilentLog()}) =>
+      contextOn(session, files, step: const StepName('install_known_host'), log: log);
 
   /// A file system holding the key file, with everything under [directory] refused to a run that is
   /// neither its owner nor root.
@@ -362,6 +385,93 @@ void main() {
       expect((answer as Blocked).reason, contains('there is no account'));
     },
   );
+
+  test(
+    'THE PLANTED DEFECT: a known_hosts that could not be looked at is not an absent one',
+    () async {
+      // The step that gives the account its trust in a machine rewrites the whole file. Told by a
+      // refused listing that no known_hosts is there, it would write one holding the new key alone
+      // over a file that carries every other machine the account has ever trusted.
+      final _Session session = machine(keyDirectoryHolds: const <String>['known_hosts']);
+      final _Lookups files = _Lookups(<String, String>{
+        home: '',
+        directory: '',
+        knownHostsFile: 'other.example.org $machineKey\n',
+      }, refusedUnder: directory);
+      final _NotedLog log = _NotedLog();
+      final ReversibleStep<Object?> step = shippedKnownHostRow() as ReversibleStep<Object?>;
+
+      final CheckResult answer = await step.check(knownHostsOn(session, files));
+      final StepPlan plan = await step.plan(knownHostsOn(session, files));
+      final Object? captured = await step.capture(knownHostsOn(session, files, log: log));
+      await step.undo(knownHostsOn(session, files, log: log), captured);
+
+      expect(answer, isA<Blocked>(), reason: answer is Blocked ? answer.reason : '$answer');
+      expect(plan, isA<NothingPlan>(), reason: '$plan');
+      expect(
+        files.lookedFor,
+        isNot(contains(knownHostsFile)),
+        reason: 'the file was looked for under a directory this run could not read',
+      );
+      await expectLater(step.apply(knownHostsOn(session, files)), throwsStateError);
+      expect(
+        captured,
+        isA<KnownHostsBefore>().having(
+          (KnownHostsBefore found) => found.measured,
+          'measured',
+          false,
+        ),
+      );
+      expect(files.written, isEmpty, reason: 'nothing may be written over a file nobody read');
+      expect(log.warned, isNotEmpty, reason: 'a capture that is not a measurement says so');
+    },
+  );
+
+  test('THE PLANTED DEFECT: a search that could not be made is not a file with no entry', () async {
+    // ssh-keygen exits 1 for a file in which no line names the machine, and something else for a
+    // file it could not read. Both are non-zero, and only the first is an answer.
+    final _Session session = machine(
+      startedAs: user,
+      keyDirectoryHolds: const <String>['known_hosts'],
+    )..exits('ssh-keygen -F $machineName -f $knownHostsFile', 255);
+    final _Lookups files = _Lookups(<String, String>{
+      home: '',
+      directory: '',
+      knownHostsFile: '',
+    }, refusedUnder: null);
+
+    final CheckResult answer = await shippedKnownHostRow().check(knownHostsOn(session, files));
+
+    expect(answer, isA<Blocked>(), reason: answer is Blocked ? answer.reason : '$answer');
+    expect((answer as Blocked).reason, contains('could not be searched'));
+  });
+
+  test('THE INNOCENT CASE: a run that IS the account reads its own known_hosts', () async {
+    final _Session session = machine(
+      startedAs: user,
+      keyDirectoryHolds: const <String>['known_hosts'],
+    );
+    final _Lookups files = _Lookups(<String, String>{
+      home: '',
+      directory: '',
+      knownHostsFile: '',
+    }, refusedUnder: null);
+
+    final CheckResult answer = await shippedKnownHostRow().check(knownHostsOn(session, files));
+
+    expect(answer, isA<Ready>(), reason: answer is Blocked ? answer.reason : '$answer');
+    expect(session.refused, isEmpty);
+    expect(session.carriedOut, contains('ssh-keygen -F $machineName -f $knownHostsFile'));
+  });
+
+  test('THE INNOCENT CASE: an account with no .ssh yet is ready to have a known_hosts', () async {
+    final _Session session = machine();
+    final _Lookups files = _Lookups(const <String, String>{home: ''}, refusedUnder: directory);
+
+    final CheckResult answer = await shippedKnownHostRow().check(knownHostsOn(session, files));
+
+    expect(answer, isA<Ready>(), reason: answer is Blocked ? answer.reason : '$answer');
+  });
 
   test('THE INNOCENT NEIGHBOUR: what any account may read is read under either row', () async {
     // `getent passwd` reads the account database every account on the machine may read, so it comes
