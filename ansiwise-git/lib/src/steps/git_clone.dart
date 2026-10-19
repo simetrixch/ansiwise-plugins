@@ -32,8 +32,8 @@ import 'recorded_value.dart';
 /// **An elevated command is the exception, and the row says so by being refused.** ansiwise-core
 /// runs an elevated command as `sudo env NAME=value git …`, which writes every variable into sudo's
 /// own arguments: into the process listing while git runs, and into the journal's line for the
-/// command. So `credential_answer` beside `elevated` is refused. A credential read from a file
-/// beside `elevated` is not refused here, and stands in those arguments.
+/// command. So `elevated` beside any credential argument — `credential_answer`, or the
+/// `credential_file`, `credential_key` and `credential_user` group — is refused.
 ///
 /// **A checkout that is already there is moved, not replaced.** The check reads what is there — is
 /// it a checkout, does its remote point where this row says, is it on the branch, is it at the tip
@@ -738,18 +738,25 @@ final class GitClone extends IrreversibleStep {
           'first would be the one that decided, and the other would sit there looking like it had '
           'been read';
     }
+    if (elevated && (credentialAnswer != null || credentialByFile || credentialUser != null)) {
+      final String named = <String>[
+        if (credentialAnswer != null) 'credential_answer',
+        if (credentialFile != null) 'credential_file',
+        if (credentialKey != null) 'credential_key',
+        if (credentialUser != null) 'credential_user',
+      ].join(', ');
+      return 'this row names $named beside elevated, and ansiwise-core runs an elevated command '
+          'through sudo with the command\'s variables written into sudo\'s own arguments — where '
+          'the credential would stand in the process listing while git runs and in the journal\'s '
+          'line for the command. This step keeps the credential out of every argument, so the row '
+          'is refused rather than run';
+    }
     if (credentialAnswer != null) {
       if (credentialUser == null) {
         return 'this row names credential_answer and not credential_user, and a credential with no '
             'account name is one nothing can present';
       }
-      return elevated
-          ? 'this row names credential_answer beside elevated, and ansiwise-core runs an elevated '
-                'command through sudo with the command\'s variables written into sudo\'s own '
-                'arguments — where the credential would stand in the process listing while git runs '
-                'and in the journal\'s line for the command. This step keeps the credential out of '
-                'every argument, so the row is refused rather than run'
-          : null;
+      return null;
     }
     final int credentialParts = <String?>[
       credentialFile,

@@ -944,6 +944,43 @@ void main() {
       );
     });
 
+    test('PLANTED DEFECT: the credential_file group beside elevated is refused in check, plan and '
+        'apply, and no command reaches the machine', () async {
+      final GitClone row = rowWith(
+        originAnswer: 'platform_repo',
+        credentialFile: '/etc/acme/secrets.yaml',
+        credentialKey: 'token',
+        credentialUser: 'reader',
+        elevated: true,
+      );
+      expect(
+        await refusalOf(row),
+        allOf(contains('credential_file'), contains('elevated'), contains('sudo')),
+      );
+
+      final FakeShell shell = bare();
+      final StepContext context = contextOn(
+        shell: shell,
+        files: settings(),
+        name: 'acme/whatever',
+        answerName: 'platform_repo',
+      );
+      final StepPlan plan = await row.plan(context);
+      expect(plan, isA<NothingPlan>());
+      expect(plan.summary, allOf(contains('credential_file'), contains('elevated')));
+      await expectLater(row.apply(context), throwsA(isA<StateError>()));
+      expect(shell.commands, isEmpty);
+    });
+
+    test('PLANTED DEFECT: a lone credential_user beside elevated is refused', () async {
+      expect(
+        await refusalOf(
+          rowWith(originAnswer: 'platform_repo', credentialUser: 'reader', elevated: true),
+        ),
+        allOf(contains('credential_user'), contains('elevated')),
+      );
+    });
+
     test('PLANTED DEFECT: credential_answer without credential_user — a credential nothing can '
         'present', () async {
       expect(
