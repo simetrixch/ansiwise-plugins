@@ -30,6 +30,7 @@ export 'src/steps/host/mask_automatic_upgrades.dart';
 export 'src/steps/host/export_kubeconfig.dart';
 export 'src/steps/host/fill_key_value_file.dart';
 export 'src/steps/host/install_authorized_key.dart';
+export 'src/steps/host/install_known_host.dart';
 export 'src/steps/host/install_packages.dart';
 export 'src/steps/host/install_pinned_tool.dart';
 export 'src/steps/host/install_snap.dart';

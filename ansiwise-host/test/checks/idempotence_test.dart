@@ -56,6 +56,10 @@ const Set<String> notCoveredByAFakeMachine = <String>{
   // its directory, and a fake shell records that command rather than carrying it out. The fixture
   // gets it as far as being applied; nothing here can make the ownership afterwards true.
   'install_authorized_key',
+  // Which lines of a known_hosts name the machine is what the real ssh-keygen says, and a fake shell
+  // answers whatever it was told to: a fixture would show the step reading the output the fixture
+  // wrote. It is driven over real files and the real tool instead, twice, in known_host_test.
+  'install_known_host',
   'install_pinned_tool',
   'install_snap',
   'install_tailscale_client',

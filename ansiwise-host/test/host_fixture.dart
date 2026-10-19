@@ -33,14 +33,18 @@ final class HostMachine {
   ///
   /// [realShell] replaces the fake machine's shell, for the one test that needs a command to really
   /// run — a download against a server of its own. Nothing else in the context changes.
+  ///
+  /// [realFiles] replaces the fake machine's file system, for a test that has a real tool read the
+  /// very files the step writes.
   StepContext contextFor(
     StepName step, [
     Arguments arguments = Arguments.none,
     Arguments answers = hostAnswers,
     Shell? realShell,
+    Files? realFiles,
   ]) => StepContext(
     shell: realShell ?? _OneMachine(shell, files),
-    files: files,
+    files: realFiles ?? files,
     http: FakeHttp(),
     clock: clock,
     entropy: FakeEntropy(),

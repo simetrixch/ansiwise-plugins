@@ -21,6 +21,7 @@ import 'steps/host/export_kubeconfig.dart';
 import 'steps/host/fill_key_value_file.dart';
 import 'steps/host/hand_directory_to_account.dart';
 import 'steps/host/install_authorized_key.dart';
+import 'steps/host/install_known_host.dart';
 import 'steps/host/install_packages.dart';
 import 'steps/host/install_pinned_tool.dart';
 import 'steps/host/install_snap.dart';
@@ -140,6 +141,14 @@ const Map<StepName, RegisteredStep> hostSteps = <StepName, RegisteredStep>{
     create: InstallAuthorizedKey.fromArguments,
     arguments: InstallAuthorizedKey.arguments,
     answers: InstallAuthorizedKey.answers,
+  ),
+  // The same account's record of the machines it trusts, written from a key the caller proved.
+  StepName('install_known_host'): RegisteredStep(
+    name: StepName('install_known_host'),
+    source: 'lib/src/steps/host/install_known_host.dart:173',
+    create: InstallKnownHost.fromArguments,
+    arguments: InstallKnownHost.arguments,
+    answers: InstallKnownHost.answers,
   ),
   StepName('require_key_login_possible'): RegisteredStep(
     name: StepName('require_key_login_possible'),
