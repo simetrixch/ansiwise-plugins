@@ -216,7 +216,8 @@ final class GitClone extends IrreversibleStep {
           'the file of this machine that holds the credential the repository is read with. It may '
           'carry the slot named by run_answer. Give this with credential_key and credential_user, '
           'or give credential_answer instead; leave all of them off together for a repository '
-          'that is served to anybody',
+          'that is served to anybody. Not with elevated: sudo writes an elevated command\'s '
+          'variables into its own arguments',
       required: false,
     ),
     ArgumentSpec(
@@ -246,8 +247,9 @@ final class GitClone extends IrreversibleStep {
       name: 'elevated',
       kind: ArgumentKind.flag,
       describes:
-          'whether the checkout and the two files belong to root, so reading and writing them '
-          'needs elevation. Leave it off for paths this account owns',
+          'whether the checkout and origin_file belong to root, so reading and writing them '
+          'needs elevation. Leave it off for paths this account owns. Not with any credential '
+          'argument',
       required: false,
     ),
   ];
@@ -294,7 +296,7 @@ final class GitClone extends IrreversibleStep {
   /// The name of the answer that fills the slot of the same name in the two file paths.
   final String? runAnswer;
 
-  /// Whether the checkout and the two files belong to root.
+  /// Whether the checkout and `origin_file` belong to root.
   final bool elevated;
 
   @override
@@ -678,7 +680,7 @@ final class GitClone extends IrreversibleStep {
       context,
       credentialPath,
       credentialKey!,
-      elevated: elevated,
+      elevated: false,
     );
     if (held == null) {
       return (
@@ -856,7 +858,7 @@ final class GitClone extends IrreversibleStep {
   /// in it, so a mismatch on EITHER is a hand-over that has to happen.
   ///
   /// **ASKED AS ROOT, and not at this row's elevation.** The row's flag says whether the checkout
-  /// and the two settings files are root's to read; this question is a different one, and the two
+  /// and `origin_file` are root's to read; this question is a different one, and the two
   /// commands that answer it in [apply] — `install -d` and `chown -R` — are already elevated
   /// whatever the row said. A checkout inside a directory only root may enter answers `stat` with
   /// "Permission denied" to anybody else, and to anything that does not check, that empty answer

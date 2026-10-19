@@ -981,6 +981,24 @@ void main() {
       );
     });
 
+    // The text is what a program's author reads to learn what the flag is for, so it must not offer
+    // the file that the code refuses beside it.
+    String described(String name) =>
+        GitClone.arguments.firstWhere((ArgumentSpec each) => each.name == name).describes;
+
+    test('PLANTED DEFECT: the text of elevated offers the credential file, which the code refuses '
+        'beside it', () {
+      expect(described('elevated'), isNot(contains('two files')));
+      expect(described('elevated'), isNot(contains('credential_file')));
+      expect(described('elevated'), contains('origin_file'));
+    });
+
+    test('INNOCENT CASE: credential_file says it is not for an elevated row, as credential_answer '
+        'does', () {
+      expect(described('credential_file'), contains('Not with elevated'));
+      expect(described('credential_answer'), contains('Not with elevated'));
+    });
+
     test('PLANTED DEFECT: credential_answer without credential_user — a credential nothing can '
         'present', () async {
       expect(
