@@ -277,7 +277,7 @@ void main() {
       expect(
         machine.shell.ran,
         contains(
-          'curl --silent --show-error --fail --location --output '
+          'curl --silent --show-error --fail --location --continue-at - --output '
           '${blobCli.directory}/blob-cli.incoming $filled',
         ),
       );
@@ -453,7 +453,7 @@ void main() {
       machine.shell
         ..fails(onThePathKey('yq'))
         ..fails(
-          'curl --silent --show-error --fail --location --output '
+          'curl --silent --show-error --fail --location --continue-at - --output '
           '${yqCli.directory}/yq.incoming ${yqCli.fetchedFrom}',
         );
 
@@ -505,7 +505,7 @@ void main() {
         expect(
           machine.shell.ran,
           containsAllInOrder(<String>[
-            'curl --silent --show-error --fail --location --output $target.incoming '
+            'curl --silent --show-error --fail --location --continue-at - --output $target.incoming '
                 '${yqCli.fetchedFrom}',
             'sha256sum $target.incoming',
           ]),

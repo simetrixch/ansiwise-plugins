@@ -34,6 +34,15 @@ import 'require_cli_tool_versions.dart';
 /// writes an archive into a program row is the one who holds this, and the [archive] argument says
 /// so where that row is written.
 ///
+/// **A broken download is continued, not started over, and it is said out loud.** A registry that
+/// ends a response part-way (a write limit on one response, a restart) leaves curl with a partial
+/// file and an error, and eight machines fetching one large file at once make that the ordinary
+/// case. Each failed attempt is logged with curl's own sentence, the address without a credential,
+/// and the attempt's number, and the next attempt asks the host for the rest of the file only
+/// (`--continue-at -`). After [fetchAttempts] the step fails with the last attempt's output. The
+/// digest is checked once, on the file the last attempt left: a resumed file that is not the pinned
+/// one is refused exactly as a file fetched in one piece is.
+///
 /// **It cannot be taken back, although a run that only created the file could be.** The fetch
 /// writes over whatever [path] held, and keeping the replaced binary would mean copying it aside
 /// before the apply — a change to the machine made by the capture, which is the one part of a
@@ -146,6 +155,16 @@ final class InstallPinnedTool extends IrreversibleStep {
     ),
     elevationArgument,
   ];
+
+  /// How many times the fetch is started before the step gives up.
+  ///
+  /// A constant and not a setting: a download broken by the registry restarting or by a cut
+  /// response is mended by trying again, and nobody will want the number different per environment.
+  static const int fetchAttempts = 5;
+
+  /// How long the step waits after a failed attempt, so a registry that is rolling out is asked
+  /// again once it is up and not five times in a second.
+  static const Duration pauseBetweenAttempts = Duration(seconds: 15);
 
   /// Where the tool goes.
   static const String defaultDirectory = '/usr/local/bin';
@@ -291,7 +310,7 @@ final class InstallPinnedTool extends IrreversibleStep {
       // from until its unit is restarted, and no step of this framework restarts one — see the
       // issue this comment's neighbour names.
       try {
-        await _mustRun(context, _fetch);
+        await _fetchResuming(context, incoming);
         await _holdAgainstDigest(context, incoming);
         // A file curl wrote carries no execute bit, and one unzip wrote carries the mode the
         // archive recorded — so this is on the unpacked path only. 755: a tool every account on
@@ -306,7 +325,7 @@ final class InstallPinnedTool extends IrreversibleStep {
       return;
     }
     try {
-      await _mustRun(context, _fetch);
+      await _fetchResuming(context, packed);
       await _holdAgainstDigest(context, packed);
       await _mustRun(context, <String>['unzip', '-o', '-d', directory, packed]);
     } finally {
@@ -328,10 +347,46 @@ final class InstallPinnedTool extends IrreversibleStep {
     '--show-error',
     '--fail',
     '--location',
+    '--continue-at',
+    '-',
     '--output',
     archive ?? incoming,
     fetchedFrom,
   ];
+
+  /// Fetches into [target] until the file is whole or [fetchAttempts] attempts have failed.
+  ///
+  /// [target] is removed first: `--continue-at -` takes whatever the file holds as the start of the
+  /// download, and a file left by a run that was killed holds bytes of nobody's release.
+  Future<void> _fetchResuming(StepContext context, String target) async {
+    await context.files.delete(target, elevated: elevated);
+    for (int attempt = 1; ; attempt++) {
+      final CommandResult answer = await context.shell.run(
+        Command.detailed(_fetch.first, arguments: _fetch.sublist(1), elevated: true),
+      );
+      if (answer.ok) return;
+      context.log.warn(
+        'fetching $tool from $_fetchedFromWithoutCredential failed on attempt $attempt of '
+        '$fetchAttempts: ${answer.stderr.trim()}',
+      );
+      if (attempt == fetchAttempts) {
+        throw CommandFailed(
+          argv: _fetch,
+          exitCode: answer.exitCode,
+          stdout: answer.stdout,
+          stderr: answer.stderr,
+        );
+      }
+      await context.clock.sleep(pauseBetweenAttempts);
+    }
+  }
+
+  /// [fetchedFrom] with a user and password written in front of the host taken out, for a line a
+  /// person reads.
+  String get _fetchedFromWithoutCredential => fetchedFrom.replaceFirstMapped(
+    RegExp(r'^([a-z][a-z0-9+.-]*://)[^/@]*@', caseSensitive: false),
+    (Match found) => found.group(1)!,
+  );
 
   /// Refuses [fetched] unless its SHA-256 is [sha256].
   ///
