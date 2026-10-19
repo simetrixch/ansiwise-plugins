@@ -1,5 +1,7 @@
 import 'package:ansiwise_core/ansiwise_core.dart';
 
+import '../credential_environment.dart';
+
 /// Whether a remote publishes the branch this run names.
 ///
 /// ONE condition, pointed at a checkout and a remote by the installation that uses it, and
@@ -31,6 +33,13 @@ import 'package:ansiwise_core/ansiwise_core.dart';
 /// A run holding no answer under the name the configuration points at is refused the same way: the
 /// condition was pointed at a name nothing answers, and both directions would be a claim about a
 /// branch nobody named.
+///
+/// **A REMOTE THAT IS NOT SERVED TO ANYBODY IS ASKED WITH THE CREDENTIAL THE RUN HOLDS.**
+/// `credential_answer` names the answer holding it and `credential_user` the account it is
+/// presented under; they are given together or not at all. It rides the environment of the one
+/// `ls-remote`, as `git_clone` hands it to a clone: in no argument, in no address and in no record.
+/// A run holding no value under that name asks as a run always did, so a condition written once
+/// serves the installations that give the answer and the ones that do not.
 final class RemoteHasBranch implements Predicate {
   /// Asks whether [remote] publishes the branch this run answered under [nameAnswer], as seen from
   /// the checkout at [repository].
@@ -42,6 +51,8 @@ final class RemoteHasBranch implements Predicate {
     required this.remote,
     required this.nameAnswer,
     this.holdsWhenPublished = true,
+    this.credentialAnswer,
+    this.credentialUser,
   });
 
   /// The shape that holds where the remote publishes the branch.
@@ -59,6 +70,8 @@ final class RemoteHasBranch implements Predicate {
         remote: values.optionalText('remote') ?? 'origin',
         nameAnswer: values.text('name_answer'),
         holdsWhenPublished: holdsWhenPublished,
+        credentialAnswer: values.optionalText('credential_answer'),
+        credentialUser: values.optionalText('credential_user'),
       );
 
   /// What this condition has to be told before a program row may name it.
@@ -86,6 +99,24 @@ final class RemoteHasBranch implements Predicate {
           'the condition asks about whatever this run answered for "fqdn". The same word the '
           'branch rows gated on this condition write, so one installation names it once',
     ),
+    ArgumentSpec(
+      name: 'credential_answer',
+      kind: ArgumentKind.answerName,
+      required: false,
+      describes:
+          'the name of the answer holding the credential the remote is asked with, for a remote '
+          'that is not served to anybody. A run holding no value under it asks with none. Give '
+          'this with credential_user, or neither',
+    ),
+    ArgumentSpec(
+      name: 'credential_user',
+      kind: ArgumentKind.text,
+      required: false,
+      describes:
+          'the account name that credential is presented under. What the host wants here is the '
+          "host's own convention, so it is stated by the row rather than known by this condition. "
+          'Give this with credential_answer, or neither',
+    ),
   ];
 
   /// The checkout the remote is asked from.
@@ -101,8 +132,22 @@ final class RemoteHasBranch implements Predicate {
   /// bound as `remote_lacks_branch`.
   final bool holdsWhenPublished;
 
+  /// The name of the answer holding the credential the remote is asked with, where it needs one.
+  final String? credentialAnswer;
+
+  /// The account name that credential is presented under.
+  final String? credentialUser;
+
   @override
   Future<PredicateResult> evaluate(PredicateContext context) async {
+    if ((credentialAnswer == null) != (credentialUser == null)) {
+      throw ConditionUnanswerable(
+        'this condition names ${credentialAnswer == null ? 'credential_user' : 'credential_answer'} '
+        'and not ${credentialAnswer == null ? 'credential_answer' : 'credential_user'}\n'
+        'they are given together or not at all: a credential with no account name is one nothing '
+        'can present, and an account name with no credential is a word with nothing behind it',
+      );
+    }
     if (!context.answers.has(nameAnswer)) {
       throw ConditionUnanswerable(
         'this run holds no answer called "$nameAnswer", and that is where this condition was told '
@@ -113,9 +158,11 @@ final class RemoteHasBranch implements Predicate {
     }
     final String branch = context.answers.text(nameAnswer);
     final CommandResult listed = await context.shell.run(
-      Command.observing(
+      Command.detailed(
         'git',
         arguments: <String>['-C', repository, 'ls-remote', '--heads', remote, 'refs/heads/$branch'],
+        environment: await _credentialEnvironment(context),
+        observes: true,
       ),
     );
     if (!listed.ok) {
@@ -142,6 +189,48 @@ final class RemoteHasBranch implements Predicate {
                 ? '$remote publishes refs/heads/$branch'
                 : '$remote publishes no branch called $branch',
           );
+  }
+
+  /// What the one `ls-remote` is handed to present the credential, or nothing where the run holds
+  /// none.
+  ///
+  /// The host is read off the checkout's own remote, because the header git matches on is keyed on
+  /// the address it is about to ask, and no argument of this condition names one. A remote that is
+  /// not an https address cannot be shown a credential, and asking it without one would answer for
+  /// a program that declared one, so it is refused.
+  Future<Map<String, String>> _credentialEnvironment(PredicateContext context) async {
+    final String? credential = credentialAnswer == null
+        ? null
+        : context.answers.optionalText(credentialAnswer!);
+    if (credential == null || credential.isEmpty) {
+      return const <String, String>{};
+    }
+    final CommandResult stored = await context.shell.run(
+      Command.observing('git', arguments: <String>['-C', repository, 'remote', 'get-url', remote]),
+    );
+    if (!stored.ok) {
+      throw ConditionUnanswerable(
+        'the address of $remote could not be read from $repository, and the credential this run '
+        'holds under "$credentialAnswer" is presented to that address: git exited '
+        '${stored.exitCode}'
+        '${stored.stderr.trim().isEmpty ? ' and wrote nothing' : ': ${stored.stderr.trim()}'}',
+      );
+    }
+    final Uri? address = Uri.tryParse(stored.trimmed);
+    if (address == null || address.scheme != 'https' || address.host.isEmpty) {
+      // The address itself stays out of this sentence: an https address may carry a credential of
+      // its own, and a refusal is a line of the record.
+      throw ConditionUnanswerable(
+        '$remote of $repository is not an https address, and the credential this run holds under '
+        '"$credentialAnswer" can be presented to an https address and nothing else\n'
+        'asking it without the credential would answer for a program that declared one',
+      );
+    }
+    return credentialEnvironment(
+      host: address.hasPort ? '${address.host}:${address.port}' : address.host,
+      credential: credential,
+      credentialUser: credentialUser,
+    );
   }
 
   /// Whether [answer] names `refs/heads/[branch]` exactly.
