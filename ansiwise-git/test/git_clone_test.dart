@@ -711,6 +711,78 @@ void main() {
         allOf(contains(credentialAnswer), isNot(contains('null')), isNot(contains(credential))),
       );
     });
+
+    test('PLANTED DEFECT: a clone git refuses is reported without the credential and without the '
+        'variables it rode in', () async {
+      final FakeShell shell = bare()
+        ..fails(
+          'git clone --branch $base $forgeUrl $path',
+          exitCode: 128,
+          stderr: 'fatal: Authentication failed',
+        );
+
+      await expectLater(
+        answered.apply(holding(everything, shell: shell)),
+        throwsA(
+          isA<CommandFailed>().having(
+            (CommandFailed failure) => failure.message,
+            'message',
+            allOf(
+              contains('Authentication failed'),
+              contains(forgeUrl),
+              isNot(contains(credential)),
+              isNot(contains(authorization)),
+              isNot(contains('GIT_CONFIG')),
+            ),
+          ),
+        ),
+      );
+    });
+
+    // ansiwise-core hands root an elevated command's variables through `sudo env NAME=value`, which
+    // writes them into sudo's own arguments: in the process listing while git runs, and at rest in
+    // the journal's line for the command. FakeShell keeps elevation as a flag and never builds that
+    // argument list, so what is measured is that no command carrying the credential is elevated.
+    test('PLANTED DEFECT: an elevated row holding the credential is refused, and no command of it '
+        'reaches the machine', () async {
+      const GitClone elevatedRow = GitClone(
+        repository: path,
+        hostAnswer: hostAnswer,
+        branch: base,
+        originAnswer: originAnswer,
+        credentialAnswer: credentialAnswer,
+        credentialUser: 'reader',
+        runAnswer: null,
+        elevated: true,
+      );
+      final FakeShell shell = bare();
+
+      await expectLater(
+        elevatedRow.apply(holding(everything, shell: shell)),
+        throwsA(isA<StateError>()),
+      );
+      expect(shell.commands, isEmpty);
+    });
+
+    test('INNOCENT CASE: an elevated row with no credential still runs elevated, and sudo is given '
+        'no variables for it', () async {
+      const GitClone elevatedOpen = GitClone(
+        repository: path,
+        host: host,
+        branch: base,
+        originAnswer: originAnswer,
+        runAnswer: null,
+        elevated: true,
+      );
+      final FakeShell shell = bare();
+      await elevatedOpen.apply(holding(everything, shell: shell));
+
+      final List<Command> elevated = shell.commands.where((Command each) => each.elevated).toList();
+      expect(elevated, isNotEmpty, reason: 'a row that never ran elevated proves nothing about it');
+      for (final Command command in elevated) {
+        expect(elevatedArgumentsFor(command), isNot(contains('env')));
+      }
+    });
   });
 
   group('COUNTER-PROBE: a row whose own shape is wrong is refused before a machine is asked', () {
@@ -725,6 +797,7 @@ void main() {
       String? credentialFile,
       String? credentialKey,
       String? credentialUser,
+      bool elevated = false,
     }) => GitClone(
       repository: path,
       host: hostName,
@@ -738,6 +811,7 @@ void main() {
       credentialKey: credentialKey,
       credentialUser: credentialUser,
       runAnswer: null,
+      elevated: elevated,
     );
 
     Future<String> refusalOf(GitClone row) async {
@@ -845,10 +919,30 @@ void main() {
               credentialUser: 'reader',
             ),
           ),
-          allOf(contains('credential_answer'), contains('credential_file'), contains('both')),
+          allOf(
+            contains('credential_answer'),
+            contains('credential_key'),
+            isNot(contains('credential_file')),
+            contains('both'),
+          ),
         );
       },
     );
+
+    test('PLANTED DEFECT: credential_answer beside elevated — an elevated command\'s variables are '
+        'written into the arguments of sudo', () async {
+      expect(
+        await refusalOf(
+          rowWith(
+            originAnswer: 'platform_repo',
+            credentialAnswer: 'platform_token',
+            credentialUser: 'reader',
+            elevated: true,
+          ),
+        ),
+        allOf(contains('credential_answer'), contains('elevated'), contains('sudo')),
+      );
+    });
 
     test('PLANTED DEFECT: credential_answer without credential_user — a credential nothing can '
         'present', () async {

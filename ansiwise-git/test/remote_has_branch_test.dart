@@ -360,7 +360,12 @@ void main() {
               isA<ConditionUnanswerable>().having(
                 (ConditionUnanswerable refusal) => refusal.because,
                 'because',
-                allOf(contains(remote), contains('https'), isNot(contains(credential))),
+                allOf(
+                  contains(remote),
+                  contains('https'),
+                  isNot(contains(address)),
+                  isNot(contains(credential)),
+                ),
               ),
             ),
           );

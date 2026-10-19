@@ -65,7 +65,7 @@ const Map<StepName, RegisteredStep> gitSteps = <StepName, RegisteredStep>{
   ),
   StepName('git_clone'): RegisteredStep(
     name: StepName('git_clone'),
-    source: 'lib/src/steps/git_clone.dart:44',
+    source: 'lib/src/steps/git_clone.dart:50',
     create: GitClone.fromArguments,
     arguments: GitClone.arguments,
   ),
