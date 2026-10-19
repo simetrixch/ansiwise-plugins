@@ -260,18 +260,29 @@ void main() {
     });
   });
 
-  test('a file missing a line its template declares is refused, not silently left short', () async {
-    // Found by a test of this suite that was wrong about something else. Filling happens IN PLACE,
-    // so a key whose line is gone from the file has nothing to rewrite: the write would leave it
-    // out, the check afterwards would say there is still work, and the row would report doing
-    // something it did not do.
-    final HostMachine machine = machineWith(existing: 'DEPLOY_ENV="mine"\n');
-    final CheckResult answer = await stepWith().check(contextOn(machine));
+  test(
+    'a file missing lines its template declares, which this run fills, gains them and is filled',
+    () async {
+      // An installation made before its template gained a key this run fills: refusing it stopped
+      // every existing machine, while apply adds the line under its paragraph before it fills.
+      final HostMachine machine = machineWith(existing: 'DEPLOY_ENV="mine"\n');
+      expect(await stepWith().check(contextOn(machine)), isA<Ready>());
 
-    expect(answer, isA<Blocked>());
-    expect((answer as Blocked).reason, contains('DOMAIN_SUFFIX'));
-    expect(answer.reason, contains('ALERT_RECIPIENTS'));
-  });
+      await stepWith().apply(contextOn(machine));
+
+      final String written = machine.files.contents[path]!;
+      expect(
+        written,
+        contains('# What this installation answers on.\nDOMAIN_SUFFIX="m1.example.com"'),
+      );
+      expect(
+        written,
+        contains('# The mailboxes an alert with no recipients of its own is delivered to.\n'),
+      );
+      expect(written, contains('ALERT_RECIPIENTS="a@example.com,b@example.com"'));
+      expect(await stepWith().check(contextOn(machine)), isA<Satisfied>());
+    },
+  );
 
   group('a template that is not there yet', () {
     test('is refused rather than treated as an empty one', () async {
@@ -421,6 +432,26 @@ void main() {
       final HostMachine machine = grown();
       await stepWith().apply(contextOn(machine));
       expect(await stepWith().check(contextOn(machine)), isA<Satisfied>());
+    });
+
+    test('a dry run plans the file as apply writes it: the gained key added and filled', () async {
+      final FillKeyValueFile fillsTheGainedKey = stepWith(
+        values: const <String, KeyBinding>{'OBSERVABILITY_ADMIN_USER': KeyBinding(answer: 'stage')},
+      );
+      final HostMachine machine = grown();
+      final StepPlan plan = await fillsTheGainedKey.plan(contextOn(machine));
+      await fillsTheGainedKey.apply(contextOn(machine));
+
+      expect(plan, isA<DiffPlan>());
+      expect((plan as DiffPlan).before, older);
+      expect(plan.after, machine.files.contents[path]);
+      expect(plan.after, contains('${gainedParagraph}OBSERVABILITY_ADMIN_USER="dev"'));
+    });
+
+    test('a row holding credentials plans the gained key by name', () async {
+      final StepPlan plan = await stepWith(holdsCredentials: true).plan(contextOn(grown()));
+
+      expect(plan.summary, contains('add OBSERVABILITY_ADMIN_USER'));
     });
 
     test('COUNTER-PROBE: a file that already carries every key gains nothing', () async {

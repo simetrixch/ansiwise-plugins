@@ -198,28 +198,9 @@ final class FillKeyValueFile extends ReversibleStep<String?> {
       );
     }
 
-    // A key the TEMPLATE declares whose line is not in the FILE. Filling happens in place, so
-    // there would be no line to rewrite: the write would leave the key out, the check afterwards
-    // would say there is still work, and the row would report doing something it did not do. It is
-    // refused instead, because a file missing a line its template declares is not a file this
-    // template made.
-    final List<String> lost = <String>[
-      for (final String key in _toFill(file, wanted).keys)
-        if (!file.declares(key)) key,
-    ];
-    if (lost.isNotEmpty) {
-      return CheckResult.blocked(
-        '$path carries no line for ${lost.join(', ')}, which $templatePath declares — filling '
-        'happens in place, so there is nothing here to rewrite. Take the file away and let this '
-        'row make it again from the template, or put the line back under its paragraph',
-      );
-    }
-
-    // A KEY THE TEMPLATE GAINED AFTER THIS FILE WAS MADE. Keys are added as the product is built,
-    // and the file of an installation made before one was added simply has no line for it. Nothing
-    // reported that: the refusal above only ever looked at keys THIS RUN fills, and the keys an
-    // operator fills by hand — most of this file — went unexamined. Whatever needed one read
-    // nothing, and every step on the way said it was finished.
+    // A KEY THE TEMPLATE GAINED AFTER THIS FILE WAS MADE, whether this run fills it or an operator
+    // does: the file of an installation made before the key was added has no line for it, and apply
+    // adds that line under its paragraph before it fills anything.
     if (file.keysTheTemplateGained.isNotEmpty) {
       return const CheckResult.ready();
     }
@@ -241,16 +222,22 @@ final class FillKeyValueFile extends ReversibleStep<String?> {
         'earlier row',
       );
     }
-    final KeyValueFile file = await _read(context);
+    final KeyValueFile read = await _read(context);
+    final List<String> gained = read.keysTheTemplateGained;
+    final KeyValueFile file = _grown(read);
     final Map<String, String> filling = _toFill(file, await _wanted(context));
-    if (filling.isEmpty) {
+    if (filling.isEmpty && gained.isEmpty) {
       return StepPlan.nothing('every $subject value this file declares was already answered');
     }
     // A plan is read out of the run record. Where the row says the file holds credentials, what
-    // goes in is which keys would be filled — never what they would be filled with.
+    // goes in is which keys would be added and filled — never what they would be filled with.
+    final String acts = <String>[
+      if (gained.isNotEmpty) 'add ${gained.join(', ')}',
+      if (filling.isNotEmpty) 'fill ${filling.keys.join(', ')}',
+    ].join(' and ');
     return holdsCredentials
-        ? StepPlan.nothing('would fill ${filling.keys.join(', ')} in $path')
-        : StepPlan.diff(path, before: file.current, after: file.filled(filling));
+        ? StepPlan.nothing('would $acts in $path')
+        : StepPlan.diff(path, before: read.current, after: file.filled(filling));
   }
 
   @override
@@ -264,9 +251,7 @@ final class FillKeyValueFile extends ReversibleStep<String?> {
     // holds values somebody typed and values something minted once and keeps nowhere else, so the
     // repair for a missing key must never be "take the file away".
     final List<String> gained = read.keysTheTemplateGained;
-    final KeyValueFile file = gained.isEmpty
-        ? read
-        : KeyValueFile(template: read.template, current: read.grownWith(gained));
+    final KeyValueFile file = _grown(read);
     if (gained.isNotEmpty) {
       context.log.info(
         '$path gained ${gained.join(', ')} from $templatePath, each under its own paragraph',
@@ -294,6 +279,14 @@ final class FillKeyValueFile extends ReversibleStep<String?> {
       return;
     }
     await context.files.write(path, file.filled(filling), mode: fileMode, elevated: elevated);
+  }
+
+  /// [read] with every key its template gained added under its paragraph, as apply writes it.
+  KeyValueFile _grown(KeyValueFile read) {
+    final List<String> gained = read.keysTheTemplateGained;
+    return gained.isEmpty
+        ? read
+        : KeyValueFile(template: read.template, current: read.grownWith(gained));
   }
 
   /// The file as it stood, or null where there was none.
