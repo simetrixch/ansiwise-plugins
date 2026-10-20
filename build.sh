@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # =============================================================================
 # build.sh — prove every package of this repository locally. It is the one
-# runner: the ci of the master calls this file rather than spelling a
-# loop of its own.
+# runner: scripts/check.sh and the release of ansiwise-cli call this file
+# rather than spelling a loop of their own.
 # =============================================================================
 #
 # THIS REPOSITORY BUILDS NOTHING. It holds the steps that touch a real machine,
@@ -21,11 +21,11 @@
 # together those waits overlap instead of adding up, and the tree is judged in a
 # fraction of the time without one package boundary moving.
 #
-# BUT ONLY A FEW AT A TIME, BECAUSE EACH ONE HOLDS MEMORY. The ci of the master
-# gives the check 3 GiB. With all eleven started at once the kernel killed some
+# BUT ONLY A FEW AT A TIME, BECAUSE EACH ONE HOLDS MEMORY. The build of the
+# binaries of ansiwise-cli runs this file in a pod of 3 GiB. With all eleven started at once the kernel killed some
 # of them, and the run said a package was red that was only out of memory. So at
 # most $jobs packages are judged at once; scripts/build.test.sh holds the number
-# to the budget of the ci.
+# to that budget.
 #
 # THE RESOLVER RUNS ALONE, BECAUSE THE PUB CACHE IS ONE DIRECTORY. pub keeps a
 # git dependency as one checkout per ref under $PUB_CACHE/git and holds git's

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # build.sh against a tree of stand-in packages and a stand-in dart: how many packages it judges at once, and that it still judges every
-# one of them. The ci of the master gives the check 3 GiB, and an analyzer, a formatter and a test runner of one package each hold
+# one of them. The build of the binaries of ansiwise-cli runs build.sh in a pod of 3 GiB, and an analyzer, a formatter and a test runner of one package each hold
 # memory; a bound read from here is what keeps all of them inside it.
 #
 #   ./scripts/build.test.sh
@@ -57,7 +57,7 @@ everything="pkg-01 pkg-02 pkg-03 pkg-04 pkg-05 pkg-06 pkg-07 pkg-08 "
 
 run_build "$root/build.sh"
 [ "$status" -eq 0 ] || fail "build.sh of a tree of green packages ended with $status: $out"
-[ "$peak" -le "$most" ] || fail "build.sh analysed $peak packages at once, more than the $most the memory of the ci holds"
+[ "$peak" -le "$most" ] || fail "build.sh analysed $peak packages at once, more than the $most the 3 GiB of the release build holds"
 [ "$peak" -ge 2 ] || fail "build.sh analysed $peak package at once, so the packages no longer overlap their waits"
 [ "$tested" = "$everything" ] || fail "build.sh tested '$tested', not every package that carries tests and no other"
 [ "$(grep -o '^build: pkg-[0-9]*' <<<"$out" | sed 's/^build: //' | tr '\n' ' ')" = "$everything" ] || fail "build.sh did not print the log of every package in directory order"

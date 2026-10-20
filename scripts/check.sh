@@ -4,9 +4,9 @@
 #   ./scripts/check.sh
 #
 # Two steps, and a red one stops the run: scripts/build.test.sh holds build.sh to the memory of
-# the ci, then build.sh in the root analyses, formats and tests every package of this tree,
-# which is what the ci of the master runs on a push and what the release of ansiwise-cli runs
-# once more before it builds a binary.
+# the release build, then build.sh in the root analyses, formats and tests every package of this
+# tree, which is what the push gate runs and what the release of ansiwise-cli runs once more
+# before it builds a binary.
 set -uo pipefail
 
 root="$(git rev-parse --show-toplevel)" || exit 1
@@ -23,7 +23,7 @@ echo "check: every package analysed, formatted and tested."
 command -v dart >/dev/null 2>&1 \
   || fail "bash build.sh — dart is not on this machine, so no package was analysed, formatted or tested. The version this organisation pins stands in ../ansiwise-checks/gate/lib/src/pins.dart."
 
-bash scripts/build.test.sh || fail "bash scripts/build.test.sh — build.sh no longer judges every package within the memory of the ci."
+bash scripts/build.test.sh || fail "bash scripts/build.test.sh — build.sh no longer judges every package within the memory of the release build."
 
 bash build.sh || fail "bash build.sh — a package above is red."
 
