@@ -226,7 +226,15 @@ final class VaultKvEntryFromCommand extends IrreversibleStep {
     } on TimeoutException {
       throw const _ExchangeRefused('the credential producer exceeded its 120 second deadline');
     }
-    if (!result.ok) throw CommandFailed.withheldOutput(argv: argv, exitCode: result.exitCode);
+    if (!result.ok) {
+      final List<String> reasons = _refusalReasons(result.stderr);
+      if (reasons.isEmpty) {
+        throw CommandFailed.withheldOutput(argv: argv, exitCode: result.exitCode);
+      }
+      throw _ExchangeRefused(
+        'the credential producer refused with exit ${result.exitCode}: ${reasons.join('; ')}',
+      );
+    }
     final Map<String, Object?>? decoded = decodedObject(result.stdout);
     if (decoded == null) {
       throw const _ExchangeRefused(
@@ -288,6 +296,22 @@ final class VaultKvEntryFromCommand extends IrreversibleStep {
     }
     return _Entry(profile.url!, dataPath, token.value!, values, version);
   }
+}
+
+// A producer discloses a reason by writing it after this marker at column zero of a stderr line.
+const String _refusalMarker = 'refused: ';
+
+// Controls and the separators that end a line in a record: a reason stays one plain line.
+final RegExp _notOneLine = RegExp(r'[\u0000-\u001f\u007f-\u009f\u2028\u2029]');
+
+List<String> _refusalReasons(String stderr) {
+  final List<String> reasons = <String>[];
+  for (final String line in stderr.split('\n')) {
+    if (!line.startsWith(_refusalMarker)) continue;
+    final String reason = line.substring(_refusalMarker.length);
+    if (reason.trim().isNotEmpty && !_notOneLine.hasMatch(reason)) reasons.add(reason.trim());
+  }
+  return reasons;
 }
 
 final class _Entry {
